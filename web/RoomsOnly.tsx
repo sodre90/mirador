@@ -83,8 +83,8 @@ export function RoomsOnlyApp({ state, dispatch, outOfRooms, banner }: { state: A
             people={state.people}
             ownerId={state.ownerId}
             ownerPicture={null}
-            approvals={[]}
-            tasks={[]}
+            approvals={state.roomApprovals.filter(({ roomId }) => roomId === room.id)}
+            tasks={state.roomTasksWaiting.filter(({ roomId }) => roomId === room.id)}
             heldChanges={[]}
             holdsTooMany={false}
             homeDir=""

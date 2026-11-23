@@ -55,7 +55,7 @@ function fakeMachine(port = 0) {
 
 const conversation = (id: string, waitingFor: string | null) => ({ id, waitingFor });
 
-const joined = (id: string, name: string) => ({ id, name, unread: 0, mentions: 0, toConfirm: 0, muted: false });
+const joined = (id: string, name: string) => ({ id, name, unread: 0, mentions: 0, toConfirm: 0, toApprove: 0, muted: false });
 
 let cleanUp: (() => void)[] = [];
 afterEach(() => {
@@ -252,10 +252,10 @@ describe("MachineWatch", () => {
     await eventually(() => expect(machine.sockets).toHaveLength(1));
 
     machine.send("/ws", { type: "snapshot", conversations: [], machines: [], rooms: [{ id: "r1", name: "Launch" }] } as never);
-    machine.send("/ws", { type: "rooms.reading", personId: "ann", readings: [{ roomId: "r1", unread: 3, mentions: 1, toConfirm: 1e6, muted: false }, { roomId: "r2", unread: 9 }] } as never);
-    await eventually(() => expect(watch.statuses()[0]!.rooms).toEqual([{ ...joined("r1", "Launch"), unread: 3, mentions: 1, toConfirm: 999 }]));
+    machine.send("/ws", { type: "rooms.reading", personId: "ann", readings: [{ roomId: "r1", unread: 3, mentions: 1, toConfirm: 1e6, toApprove: 2, muted: false }, { roomId: "r2", unread: 9 }] } as never);
+    await eventually(() => expect(watch.statuses()[0]!.rooms).toEqual([{ ...joined("r1", "Launch"), unread: 3, mentions: 1, toConfirm: 999, toApprove: 2 }]));
     machine.send("/ws", { type: "room.upserted", room: { id: "r1", name: "Launch day" } } as never);
-    await eventually(() => expect(store.machineRooms("m1")).toEqual([{ ...joined("r1", "Launch day"), unread: 3, mentions: 1, toConfirm: 999 }]));
+    await eventually(() => expect(store.machineRooms("m1")).toEqual([{ ...joined("r1", "Launch day"), unread: 3, mentions: 1, toConfirm: 999, toApprove: 2 }]));
   });
 
   test("joined as a person, words a room's call itself, from its own record of the room, and passes on only calls of a room it lists, not muted, cleaned, once until the room is opened here", async () => {
@@ -287,6 +287,12 @@ describe("MachineWatch", () => {
     await Bun.sleep(100);
     expect(roomCalls).toHaveLength(2);
     expect(roomCalls[1]).toMatchObject({ kind: "question", roomId: "r1", body: "Waits for you to confirm the answer: Which plan?" });
+
+    watch.roomOpened("m1", "r1");
+    call("r1", { about: "approve", what: 7 });
+    call("r1", { about: "approve", what: "Run ls\nin the project" });
+    await eventually(() => expect(roomCalls).toHaveLength(3));
+    expect(roomCalls[2]).toMatchObject({ kind: "question", roomId: "r1", body: "Waits for your approval: Run ls in the project", about: { kind: "room", alert: { about: "approve", what: "Run ls in the project" } } });
     expect(notifications).toEqual([]);
   });
 

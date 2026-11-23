@@ -10,17 +10,20 @@ export interface RoomReading {
   mentions: number;
   /** Its agents' questions that wait for you to confirm their answer. */
   toConfirm: number;
+  /** For an approver of the room other than its owner: its agents' requests, and people's tasks, that wait for an approver. */
+  toApprove: number;
   /** Nothing in it notifies you; it still counts what you have not read. */
   muted: boolean;
 }
 
 /**
- * Why a room calls you while you look elsewhere: someone tagged you, or a question waits for you to confirm its answer;
- * for its owner alone, someone an invite let knock waits for them to let them in.
+ * Why a room calls you while you look elsewhere: someone tagged you, a question waits for you to confirm its answer, or,
+ * as an approver, an agent's request or someone's task waits for your approval; for its owner alone, someone an invite
+ * let knock waits for them to let them in.
  */
-export type RoomAlert = { about: "mention"; by: string; text: string } | { about: "confirm"; question: string } | { about: "knock"; by: string };
+export type RoomAlert = { about: "mention"; by: string; text: string } | { about: "confirm"; question: string } | { about: "approve"; what: string } | { about: "knock"; by: string };
 
-export const ROOM_ALERT_KINDS = ["mention", "confirm"] as const satisfies readonly RoomAlert["about"][];
+export const ROOM_ALERT_KINDS = ["mention", "confirm", "approve"] as const satisfies readonly RoomAlert["about"][];
 
 /** The most of a message or question an alert says, so that it fits on a notification. */
 export const ROOM_ALERT_TEXT_MOST = 120;

@@ -3,7 +3,7 @@ import { HostProblemError } from "../shared/host-problems.ts";
 import type { AskAnswerEntry, AskItem, AskQuestion } from "../shared/model.ts";
 import { PERSON_WITHOUT_A_NAME, personGoesBy } from "../shared/people.ts";
 import { MOST_OWN_ANSWER_CHARACTERS, type RoomConfirmedAnswer, type RoomQuestionVotes } from "../shared/room-votes.ts";
-import { asksAgentsAs, taskOf, type Room } from "../shared/rooms.ts";
+import { approvesIn, asksAgentsAs, taskOf, type Room } from "../shared/rooms.ts";
 import { shownAsWritten } from "../shared/written-text.ts";
 import type { CanvasService, RoomAnswerer } from "./canvas/service.ts";
 import type { Hub } from "./hub.ts";
@@ -114,14 +114,17 @@ export class RoomQuestions {
     return { author: { role, name }, ownWords: answers.map((answer) => "own" in answer) };
   }
 
-  /** An option by its place, or the confirmer's own words where the question takes them and nobody else's tasks wait for approval in the room but the owner's. */
+  /**
+   * An option by its place, or the confirmer's own words where the question takes them and their own tasks wait for no
+   * approval: the owner's and an approver's never do, and nobody's in a room whose people's tasks start by themselves.
+   */
   private entryOf(room: Room, question: AskQuestion, answer: RoomConfirmedAnswer, personId: string): AskAnswerEntry {
     if ("option" in answer) {
       if (!isOptionOf(question, answer.option)) throw new Error("That question has no such option.");
       return { label: question.options[answer.option]!.label };
     }
     const isOwner = personId === this.store.ownerId();
-    if (!question.allowOther || !(isOwner || !room.peoplesTasksWait)) throw new HostProblemError({ code: "room-own-answer-not-taken" });
+    if (!question.allowOther || !(isOwner || approvesIn(room, personId) || !room.peoplesTasksWait)) throw new HostProblemError({ code: "room-own-answer-not-taken" });
     const own = (isOwner ? answer.own : shownAsWritten(answer.own)).trim();
     if (!own) throw new Error("An answer in your own words needs words.");
     if (own.length > MOST_OWN_ANSWER_CHARACTERS) throw new HostProblemError({ code: "room-message-too-long", most: MOST_OWN_ANSWER_CHARACTERS });

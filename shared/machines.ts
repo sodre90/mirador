@@ -180,10 +180,10 @@ export const isRoomId = (id: unknown): id is string => typeof id === "string" &&
  */
 export function joinedRoomIn(listed: unknown): JoinedRoom | null {
   if (typeof listed !== "object" || listed === null) return null;
-  const { id, name, unread, mentions, toConfirm, muted } = listed as Record<string, unknown>;
+  const { id, name, unread, mentions, toConfirm, toApprove, muted } = listed as Record<string, unknown>;
   if (!isRoomId(id) || typeof name !== "string") return null;
   const shownName = oneLine(shownAsWritten(name.slice(0, LONGEST_JOINED_ROOM_NAME * 4))).slice(0, LONGEST_JOINED_ROOM_NAME).trim();
-  return shownName ? { id, name: shownName, unread: countFrom(unread), mentions: countFrom(mentions), toConfirm: countFrom(toConfirm), muted: muted === true } : null;
+  return shownName ? { id, name: shownName, unread: countFrom(unread), mentions: countFrom(mentions), toConfirm: countFrom(toConfirm), toApprove: countFrom(toApprove), muted: muted === true } : null;
 }
 
 /** The rooms someone else's machine lists for this computer's owner, each once, at most MOST_JOINED_ROOMS of them, as display data only. */
@@ -206,7 +206,7 @@ export function withReadings(rooms: JoinedRoom[], readings: unknown): JoinedRoom
   const said = Array.isArray(readings) ? readings.slice(0, MOST_JOINED_ROOMS * 2).filter((reading): reading is Record<string, unknown> => typeof reading === "object" && reading !== null) : [];
   return rooms.map((room) => {
     const reading = said.find(({ roomId }) => roomId === room.id) ?? {};
-    return { ...room, unread: countFrom(reading.unread), mentions: countFrom(reading.mentions), toConfirm: countFrom(reading.toConfirm), muted: reading.muted === true };
+    return { ...room, unread: countFrom(reading.unread), mentions: countFrom(reading.mentions), toConfirm: countFrom(reading.toConfirm), toApprove: countFrom(reading.toApprove), muted: reading.muted === true };
   });
 }
 

@@ -187,6 +187,8 @@ conversations.followsRoomRulesOf(rooms);
 const roomQuestions = new RoomQuestions(store, hub, canvas);
 const roomReading = new RoomReadingService(store, hub, notifications);
 rooms.hearPostsWith((message, newlyTagged, by) => roomReading.posted(message, newlyTagged, by));
+rooms.hearWaitingWith((roomId, approvals, tasks) => roomReading.waitingChanged(roomId, approvals, tasks));
+roomReading.countsWaitingWith((roomId) => rooms.countWaiting(roomId));
 canvas.hearRoomQuestionsWith((roomId, item, startsWaiting) => {
   const room = store.findRoom(roomId);
   if (!room) return;

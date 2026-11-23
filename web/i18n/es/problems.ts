@@ -43,7 +43,7 @@ export const problems: Messages["problems"] = {
     "job-wait-gone": "Mirador ya no espera ese trabajo.",
     "conversation-workspace-gone": "El espacio de trabajo de esta conversación ya no existe.",
     "permission-no-longer-pending": "Esta solicitud de permiso ya no está pendiente.",
-    "room-approval-not-yours": "Solo el propietario de la sala puede responder a las solicitudes de sus agentes.",
+    "room-approval-not-yours": "Solo el propietario de la sala y sus aprobadores pueden responder a las solicitudes de sus agentes.",
     "only-the-owner": "Solo el propietario de la máquina puede hacer eso.",
     "room-guests-only-write": "Un invitado de la sala escribe en ella, pero no etiqueta agentes ni responde en hilos.",
     "room-person-unknown": "Esta máquina no conoce a esa persona, o es su propietario, que está en todas las salas.",

@@ -118,11 +118,17 @@ function RoomMark({ style }: { style: CSSProperties }) {
   );
 }
 
-type ReadingCounts = Pick<RoomReading, "unread" | "mentions" | "toConfirm" | "muted">;
+type ReadingCounts = Pick<RoomReading, "unread" | "mentions" | "toConfirm" | "toApprove" | "muted">;
 
-const NOTHING_UNREAD: ReadingCounts = { unread: 0, mentions: 0, toConfirm: 0, muted: false };
+const NOTHING_UNREAD: ReadingCounts = { unread: 0, mentions: 0, toConfirm: 0, toApprove: 0, muted: false };
 
-const needsYou = (waiting: RoomWait | undefined, { toConfirm }: ReadingCounts) => waiting !== undefined || toConfirm > 0;
+const needsYou = (waiting: RoomWait | undefined, { toConfirm, toApprove }: ReadingCounts) => waiting !== undefined || toConfirm > 0 || toApprove > 0;
+
+/** What the pill says waits: what the room's own host tells this page, or else what another machine counted for you. */
+function needsYouHint(waiting: RoomWait | undefined, { toApprove }: ReadingCounts) {
+  if (waiting) return roomWaitHints[waiting];
+  return toApprove > 0 ? words.answerWaits : words.waitsForYourConfirm;
+}
 
 const readingClasses = ({ unread, muted }: ReadingCounts) => [unread > 0 && "unread", muted && "muted"];
 
@@ -147,7 +153,7 @@ function ReadingMarks({ reading, waiting }: { reading: ReadingCounts; waiting?: 
         </span>
       )}
       {needsYou(waiting, reading) && (
-        <span className="waiting-pill tone-decision" data-hint={waiting ? roomWaitHints[waiting] : words.waitsForYourConfirm}>
+        <span className="waiting-pill tone-decision" data-hint={needsYouHint(waiting, reading)}>
           {waitingLabels.decision}
         </span>
       )}

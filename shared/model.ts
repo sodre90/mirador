@@ -105,6 +105,7 @@ export interface JoinedRoom {
   unread: number;
   mentions: number;
   toConfirm: number;
+  toApprove: number;
   muted: boolean;
 }
 

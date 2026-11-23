@@ -485,8 +485,8 @@ export type ClientMessage =
   | { type: "room.let-in"; roomId: string; personId: string }
   /** Turns someone who waits to join the room away: in no room then, they lose their devices here too. */
   | { type: "room.turn-away"; roomId: string; personId: string }
-  /** Answers a request a room's agent waits on; allowing it for the task lets the same again through until the turn ends. */
-  | { type: "room.approve"; conversationId: string; permissionId: string; answer: RoomApprovalAnswer }
+  /** Answers a request a room's own agent, by its profile, waits on; allowing it for the task lets the same again through until the turn ends. */
+  | { type: "room.approve"; roomId: string; profileId: string; permissionId: string; answer: RoomApprovalAnswer }
   /** Answers a task of a person other than the owner that waits: allowing sends it to its agents, denying tells the room it was declined. */
   | { type: "room.answer-task"; roomId: string; messageId: string; answer: "allow" | "deny" }
   /** Whether the tasks people other than the owner give the room's agents wait for an approver, from the next one on. */

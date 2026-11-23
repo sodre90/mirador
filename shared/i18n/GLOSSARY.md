@@ -78,6 +78,7 @@ These terms stay the same everywhere:
 | bring (an agent of your own into a room of someone else's machine) | behoz | traer | 带入 | mitbringen |
 | take out (an agent someone brought, out of the room) | kivisz | sacar | 带出 | herausnehmen |
 | member's agent (the role of an agent a member brought) | tag ágense | agente de un miembro | 成员的 Agent | Agent eines Mitglieds |
+| approver (a room role: asks the agents as a member does, and approves their requests and people's tasks) | jóváhagyó | aprobador | 批准人 | Genehmiger |
 | sandbox (a light VM a room's agents run in on a Mac, a Podman container on Linux) | sandbox | sandbox | 沙箱 | Sandbox (die) |
 | Podman container (the sandbox on Linux, which shares this computer's kernel, weaker than a VM) | Podman-konténer | contenedor de Podman | Podman 容器 | Podman-Container (der) |
 | kernel (the Linux kernel a Podman container shares) | kernel | kernel | 内核 | Kernel (der) |

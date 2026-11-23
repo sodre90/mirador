@@ -43,7 +43,7 @@ export const problems: Messages["problems"] = {
     "job-wait-gone": "A Mirador már nem vár erre a feladatra.",
     "conversation-workspace-gone": "Ennek a beszélgetésnek a munkaterülete már nem létezik.",
     "permission-no-longer-pending": "Ez az engedélykérés már nem vár válaszra.",
-    "room-approval-not-yours": "A szoba ágenseinek kéréseire csak a szoba tulajdonosa válaszolhat.",
+    "room-approval-not-yours": "A szoba ágenseinek kéréseire csak a szoba tulajdonosa és jóváhagyói válaszolhatnak.",
     "only-the-owner": "Ezt csak a gép tulajdonosa teheti meg.",
     "room-guests-only-write": "A szoba vendége írhat a szobában, de nem jelölhet meg ágenst, és nem válaszolhat szálban.",
     "room-person-unknown": "Ezt a személyt nem ismeri ez a gép, vagy ő a gép tulajdonosa, aki minden szobában benne van.",

@@ -22,6 +22,7 @@ export const desktop: Messages["desktop"] = {
   notifications: {
     tagged: (name: string, text: string) => `${name} hat dich markiert: ${text}`,
     waitsToConfirm: (question: string) => `Wartet darauf, dass du die Antwort bestätigst: ${question}`,
+    waitsToApprove: (what: string) => `Wartet auf deine Genehmigung: ${what}`,
     waitsToBeLetIn: (name: string) => `Jemand wartet darauf, hereingelassen zu werden, mit dem Namen „${name}“`,
     someoneWaitsToBeLetIn: "Jemand wartet darauf, hereingelassen zu werden",
     asks: (question) => `Fragt: ${question}`,

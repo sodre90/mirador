@@ -116,6 +116,8 @@ function roomAlertText(alert: RoomAlert) {
       return `${alert.by} tagged you: ${alert.text}`;
     case "confirm":
       return `Waits for you to confirm the answer: ${alert.question}`;
+    case "approve":
+      return `Waits for your approval: ${alert.what}`;
     case "knock":
       return alert.by ? `Someone waits for you to let them in, giving the name “${alert.by}”` : "Someone waits for you to let them in";
   }

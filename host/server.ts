@@ -2184,7 +2184,7 @@ export function startServer(services: HostServices) {
       case "room.turn-away":
         return turnAwayFromRoom(message.roomId, message.personId);
       case "room.approve":
-        return rooms.approve(message.conversationId, message.permissionId, message.answer, socket.data.personId);
+        return rooms.approve(message.roomId, message.profileId, message.permissionId, message.answer, socket.data.personId);
       case "room.answer-task":
         rooms.answerTask(message.roomId, message.messageId, message.answer, socket.data.personId);
         return notifications.roomRead(message.roomId);

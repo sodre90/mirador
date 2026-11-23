@@ -43,7 +43,7 @@ export const problems = {
     "job-wait-gone": "Mirador no longer waits for that job.",
     "conversation-workspace-gone": "This conversation's workspace no longer exists.",
     "permission-no-longer-pending": "This permission request is no longer pending.",
-    "room-approval-not-yours": "Only the room's owner can answer its agents' requests.",
+    "room-approval-not-yours": "Only the room's owner and its approvers can answer its agents' requests.",
     "only-the-owner": "Only the machine's owner can do that.",
     "room-guests-only-write": "A guest of the room writes in it, but tags no agent and follows up in no thread.",
     "room-person-unknown": "That person is not known on this machine, or is its owner, who is in every room.",

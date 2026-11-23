@@ -6,7 +6,8 @@ import { isRoomId } from "../shared/machines.ts";
 import { harnessIds } from "../shared/model.ts";
 import { LONGEST_PERSON_NAME } from "../shared/people.ts";
 import { MOST_OWN_ANSWER_CHARACTERS } from "../shared/room-votes.ts";
-import { asksAgentsAs, isBroughtAnswerEnd, mayWriteAs, ROOM_MESSAGE_MOST_CHARACTERS, type RoomRole } from "../shared/rooms.ts";
+import { isRoomApprovalAnswer } from "../shared/room-permissions.ts";
+import { approvesAs, asksAgentsAs, isBroughtAnswerEnd, mayWriteAs, ROOM_MESSAGE_MOST_CHARACTERS, type RoomRole } from "../shared/rooms.ts";
 
 /** A signed-in person other than the machine's owner, as far as what they send goes: the role they have in each room they are in. */
 export interface PersonInRooms {
@@ -256,8 +257,15 @@ const admissions: { [K in ClientMessage["type"]]: K extends PersonMessageType ? 
   "room.withdraw-invite": OWNER_ONLY,
   "room.let-in": OWNER_ONLY,
   "room.turn-away": OWNER_ONLY,
-  "room.approve": OWNER_ONLY,
-  "room.answer-task": OWNER_ONLY,
+  /** Only an approver of the room answers what its agents ask; the room's host checks the request still waits. */
+  "room.approve": ({ roomId, profileId, permissionId, answer }, person) => {
+    if (typeof profileId !== "string" || typeof permissionId !== "string" || !isRoomApprovalAnswer(answer)) throw unreadable();
+    if (!approvesAs(roleOf(person, roomId))) throw new HostProblemError({ code: "room-approval-not-yours" });
+  },
+  "room.answer-task": ({ roomId, messageId, answer }, person) => {
+    if (typeof messageId !== "string" || (answer !== "allow" && answer !== "deny")) throw unreadable();
+    if (!approvesAs(roleOf(person, roomId))) throw new HostProblemError({ code: "room-approval-not-yours" });
+  },
   "room.set-peoples-tasks-wait": OWNER_ONLY,
   "room.set-claude-setup": OWNER_ONLY,
   "room.set-sandbox": OWNER_ONLY,

@@ -173,8 +173,9 @@ const READ_OF_WHAT_IS_SAID = ROOM_ALERT_TEXT_MOST * 4;
 /** Why another machine's room calls you, made safe to show: a kind of call this computer knows, its words cleaned and cut as `alertText` does; null for anything else. */
 export function roomAlertIn(said: unknown): RoomAlert | null {
   if (typeof said !== "object" || said === null) return null;
-  const { about, by, text, question } = said as Record<string, unknown>;
+  const { about, by, text, question, what } = said as Record<string, unknown>;
   if (about === "confirm" && typeof question === "string") return { about, question: alertText(question.slice(0, READ_OF_WHAT_IS_SAID)) };
+  if (about === "approve" && typeof what === "string") return { about, what: alertText(what.slice(0, READ_OF_WHAT_IS_SAID)) };
   if (about !== "mention" || typeof by !== "string" || typeof text !== "string") return null;
   const name = cleanedPersonName(by);
   return name ? { about, by: name, text: alertText(text.slice(0, READ_OF_WHAT_IS_SAID)) } : null;

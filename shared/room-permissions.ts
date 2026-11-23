@@ -10,6 +10,10 @@ export const DEFAULT_PERMISSION_PRESET: PermissionPreset = "read-freely";
 
 export type RoomApprovalAnswer = "allow" | "allow-for-task" | "deny";
 
+const ROOM_APPROVAL_ANSWERS: RoomApprovalAnswer[] = ["allow", "allow-for-task", "deny"];
+
+export const isRoomApprovalAnswer = (value: unknown): value is RoomApprovalAnswer => ROOM_APPROVAL_ANSWERS.includes(value as RoomApprovalAnswer);
+
 export const isPermissionPreset = (value: unknown): value is PermissionPreset => PERMISSION_PRESETS.includes(value as PermissionPreset);
 
 /**

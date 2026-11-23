@@ -41,7 +41,7 @@ export const rooms: Messages["rooms"] = {
   inviteSomeone: "Jemanden einladen",
   inviteTo: (room) => `Jemanden in ${room} einladen`,
   joinsAs: "Tritt bei als",
-  roleChoices: { member: "Mitglied: kann die Agenten beauftragen", guest: "Gast: kann chatten" },
+  roleChoices: { approver: "Genehmiger: kann die Agenten beauftragen und ihre Anfragen genehmigen", member: "Mitglied: kann die Agenten beauftragen", guest: "Gast: kann chatten" },
   connect: "Verbindung",
   connectsBy: (way) => `Verbindung: ${way}`,
   connectChoices: {
@@ -129,7 +129,7 @@ export const rooms: Messages["rooms"] = {
   emptyForGuest: "Als Gast schreibst du hier mit allen anderen mit. Aufgaben an die Agenten geben die Mitglieder.",
   guestPlaceholder: (room) => `Schreib in ${room}…`,
   people: "Personen",
-  peopleHint: "Ein Mitglied schreibt, markiert die Agenten und antwortet in ihren Threads; ein Gast schreibt nur. Keiner von beiden beantwortet die Anfragen der Agenten oder ändert den Raum.",
+  peopleHint: "Ein Mitglied schreibt, markiert die Agenten und antwortet in ihren Threads; ein Gast schreibt nur. Ein Genehmiger kann alles, was ein Mitglied kann, beantwortet außerdem die Anfragen der Agenten und genehmigt die Aufgaben anderer; seine eigenen Aufgaben warten nie. Nur du änderst den Raum.",
   noPeople: "Noch ist niemand sonst in diesem Raum.",
   peopleReach: {
     "ask-everything": "Über die Agenten erreichen Personen hier, was du erlaubst: Lesen, Änderungen und Befehle fragen dich zuerst.",
@@ -285,8 +285,8 @@ export const rooms: Messages["rooms"] = {
     discard: "Verwerfen",
   },
   peoplesTasksHint: "Sonst erreicht die Markierung oder Nachfrage eines Mitglieds keinen Agenten, bis du sie erlaubst.",
-  roles: { member: "Mitglied", guest: "Gast" },
-  authorRoles: { owner: "Besitzer", member: "Mitglied", guest: "Gast", agent: "Agent", "member's agent": "Agent eines Mitglieds" },
+  roles: { approver: "Genehmiger", member: "Mitglied", guest: "Gast" },
+  authorRoles: { owner: "Besitzer", approver: "Genehmiger", member: "Mitglied", guest: "Gast", agent: "Agent", "member's agent": "Agent eines Mitglieds" },
   roleOf: (person) => `Rolle von ${person}`,
   nameless: "Jemand ohne Namen",
   inNoRoom: "Du bist noch in keinem Raum. Sobald dich der Besitzer dieses Rechners in einen aufnimmt, erscheint er hier.",

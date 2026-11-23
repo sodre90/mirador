@@ -9,6 +9,7 @@ import { withTagAtCaret, type TaggablePerson } from "../shared/room-mentions.ts"
 import type { RoomQuestionVotes } from "../shared/room-votes.ts";
 import {
   AGENT_TAGGED_TURNS_AFTER_A_PERSON,
+  approvesIn,
   askedInThread,
   broughtAgentName,
   canvasItemsOfAnswers,
@@ -320,8 +321,8 @@ function WritingLine({ writing, threadId, you }: { writing: RoomWriter[]; thread
   );
 }
 
-const approve = ({ conversationId, request }: RoomApproval, answer: RoomApprovalAnswer) =>
-  connection.send({ type: "room.approve", conversationId, permissionId: request.permissionId, answer });
+const approve = ({ roomId, profileId, request }: RoomApproval, answer: RoomApprovalAnswer) =>
+  connection.send({ type: "room.approve", roomId, profileId, permissionId: request.permissionId, answer });
 
 const answerTask = ({ roomId, messageId }: RoomTaskApproval, answer: "allow" | "deny") => connection.send({ type: "room.answer-task", roomId, messageId, answer });
 
@@ -867,7 +868,7 @@ export function RoomView({
     [timeline, room.agents],
   );
   const votesOf = new Map(timeline?.votes.map((votes): [string, RoomQuestionVotes] => [votes.itemId, votes]));
-  const voteOn = (item: AskItem) => <RoomVote key={item.id} roomId={room.id} item={item} votes={votesOf.get(item.id)} you={you} takesOwnWords={owns || !room.peoplesTasksWait} />;
+  const voteOn = (item: AskItem) => <RoomVote key={item.id} roomId={room.id} item={item} votes={votesOf.get(item.id)} you={you} takesOwnWords={owns || approvesIn(room, you) || !room.peoplesTasksWait} />;
   const pending = timeline ? workPending(timeline, room.agents) : [];
   const writing = presence?.writing ?? [];
   const timelineEnd = useRef<HTMLDivElement>(null);

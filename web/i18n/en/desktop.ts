@@ -23,6 +23,7 @@ export const desktop = {
   notifications: {
     tagged: (name: string, text: string) => `${name} tagged you: ${text}`,
     waitsToConfirm: (question: string) => `Waits for you to confirm the answer: ${question}`,
+    waitsToApprove: (what: string) => `Waits for your approval: ${what}`,
     waitsToBeLetIn: (name: string) => `Someone waits for you to let them in, giving the name “${name}”`,
     someoneWaitsToBeLetIn: "Someone waits for you to let them in",
     asks: (question: string) => `Asks: ${question}`,

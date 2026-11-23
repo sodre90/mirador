@@ -132,6 +132,8 @@ function roomWithPeople() {
     new SenderLimit(() => clock.now, MOST_ALERTS_A_MINUTE),
   );
   rooms.hearPostsWith((message, newlyTagged, by) => reading.posted(message, newlyTagged, by));
+  rooms.hearWaitingWith((roomId, approvals, tasks) => reading.waitingChanged(roomId, approvals, tasks));
+  reading.countsWaitingWith((roomId) => rooms.countWaiting(roomId));
   canvas.hearRoomQuestionsWith((roomId, item, startsWaiting) => {
     const room = store.findRoom(roomId)!;
     questions.changed(room, item);
@@ -481,7 +483,7 @@ describe("what a person has not read in their rooms", () => {
     rooms.write(room.id, ownerId, "hello", [], null);
     rooms.write(room.id, "gus", "@Mia look", [], null);
     rooms.write(room.id, "mia", "mine", [], null);
-    expect(reading.readingsOf("mia")).toEqual([{ roomId: room.id, unread: 2, mentions: 1, toConfirm: 0, muted: false }]);
+    expect(reading.readingsOf("mia")).toEqual([{ roomId: room.id, unread: 2, mentions: 1, toConfirm: 0, toApprove: 0, muted: false }]);
     askedOnTaskOf("mia");
     expect(reading.readingsOf("mia")[0]).toMatchObject({ unread: 2, toConfirm: 1 });
     expect(reading.readingsOf(ownerId)[0]).toMatchObject({ toConfirm: 1 });
@@ -496,7 +498,7 @@ describe("what a person has not read in their rooms", () => {
     expect(store.roomReadThrough(room.id, "mia")).toBe(0);
     pages.mia.looksAt(room.id);
     expect(store.roomReadThrough(room.id, "mia")).toBe(store.lastRoomSeq(room.id));
-    expect(pages.mia.lastOf("rooms.reading")).toEqual({ type: "rooms.reading", personId: "mia", readings: [{ roomId: room.id, unread: 0, mentions: 0, toConfirm: 0, muted: false }] });
+    expect(pages.mia.lastOf("rooms.reading")).toEqual({ type: "rooms.reading", personId: "mia", readings: [{ roomId: room.id, unread: 0, mentions: 0, toConfirm: 0, toApprove: 0, muted: false }] });
     expect(pages.gus.lastOf("rooms.reading")?.personId).toBe("gus");
 
     pages.olga.looksAt(room.id);
@@ -540,7 +542,7 @@ describe("what a person has not read in their rooms", () => {
 
   test("calls a person once for tags in a room until they read it, however many people tag them there, and from one sender a few times a minute, which leaves other senders' calls through", () => {
     const { rooms, room, ownerId, clock, pages, ownerCalled } = roomWithPeople();
-    const gusCalls = () => pages.gus.allOf("room.alert").map(({ alert }) => (alert.about === "mention" ? `${alert.by}: ${alert.text}` : alert.about === "confirm" ? alert.question : alert.by));
+    const gusCalls = () => pages.gus.allOf("room.alert").map(({ alert }) => (alert.about === "mention" ? `${alert.by}: ${alert.text}` : alert.about === "confirm" ? alert.question : alert.about === "approve" ? alert.what : alert.by));
     rooms.write(room.id, ownerId, "@Gus one", [], null);
     rooms.write(room.id, ownerId, "@Gus two", [], null);
     rooms.write(room.id, "mia", "@Gus three", [], null);
@@ -586,6 +588,40 @@ describe("what a person has not read in their rooms", () => {
     ]);
   });
 
+  test("counts for an approver what waits for approval, and calls them once that something starts waiting until they read the room; nobody else, and never for their own tasks, which wait for nobody", () => {
+    const { rooms, reading, room, ownerId, pages, ownerCalled } = roomWithPeople();
+    rooms.setPersonRole(room.id, "stan", "approver");
+    rooms.setPeoplesTasksWait(room.id, true);
+    expect(rooms.write(room.id, "stan", "@Builder Stan's own", ["p1"], null).taskHeld).toBeUndefined();
+    const first = rooms.write(room.id, "mia", "@Builder first task", ["p1"], null);
+    rooms.write(room.id, "mia", "@Builder second task", ["p1"], null);
+    expect(first.taskHeld).toBe("waiting");
+    expect(rooms.tasksWaiting(room.id).map(({ approvers }) => approvers)).toEqual([
+      [ownerId, "stan"],
+      [ownerId, "stan"],
+    ]);
+    expect(reading.readingsOf("stan")[0]).toMatchObject({ toApprove: 2 });
+    expect(pages.stan.lastOf("rooms.reading")?.readings[0]).toMatchObject({ toApprove: 2 });
+    expect([reading.readingsOf("mia")[0], reading.readingsOf(ownerId)[0]]).toMatchObject([{ toApprove: 0 }, { toApprove: 0 }]);
+    expect(pages.stan.allOf("room.alert").map(({ alert }) => alert)).toEqual([{ about: "approve", what: "@Builder first task" }]);
+    expect([pages.mia, pages.gus].flatMap((page) => page.allOf("room.alert"))).toEqual([]);
+    expect(ownerCalled).toEqual([]);
+
+    rooms.answerTask(room.id, first.id, "deny", "stan");
+    expect(reading.readingsOf("stan")[0]).toMatchObject({ toApprove: 1 });
+    pages.stan.looksAt(room.id);
+    pages.stan.looksAt(null);
+    rooms.write(room.id, "mia", "@Builder third task", ["p1"], null);
+    expect(pages.stan.allOf("room.alert").map(({ alert }) => alert)).toEqual([
+      { about: "approve", what: "@Builder first task" },
+      { about: "approve", what: "@Builder third task" },
+    ]);
+
+    rooms.setPersonRole(room.id, "stan", "member");
+    expect(reading.readingsOf("stan")[0]).toMatchObject({ toApprove: 0 });
+    expect(pages.stan.lastOf("rooms.reading")?.readings[0]).toMatchObject({ toApprove: 0 });
+  });
+
   test("a question that opens calls the person whose task it is, not the owner, whom its agent's conversation already tells", () => {
     const { pages, askedOnTaskOf, ownerCalled } = roomWithPeople();
     askedOnTaskOf("mia");
@@ -610,7 +646,7 @@ describe("what a person has not read in their rooms", () => {
 describe("what a person other than the owner hears of votes, counts and calls", () => {
   test("only the votes of rooms they are in, only their own counts of those rooms, and only calls to them from those rooms", () => {
     const { hub, room, pages } = roomWithPeople();
-    const reading = { roomId: room.id, unread: 1, mentions: 0, toConfirm: 0, muted: false };
+    const reading = { roomId: room.id, unread: 1, mentions: 0, toConfirm: 0, toApprove: 0, muted: false };
     pages.olga.socket.data.roomSubscriptions.add(room.id);
     hub.publishToRoom(room.id, { type: "room.votes", roomId: room.id, votes: { itemId: "q1", ballots: [], confirmers: [] } });
     hub.publishWhere(() => true, { type: "rooms.reading", personId: "mia", readings: [reading, { ...reading, roomId: "payroll" }] });

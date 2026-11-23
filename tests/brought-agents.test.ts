@@ -64,7 +64,7 @@ function miasMirador({ lettingInMs = 1_000 } = {}) {
   store.insertMachine({ id: "ann", name: "Ann's Mac", origin: "https://ann.example", createdAt: 1 });
   store.setMachineDeviceToken("ann", "token");
   store.setMachineJoinedAs("ann", { asPerson: true, relayKey: null });
-  store.setMachineRooms("ann", [{ id: "r1", name: "Launch", unread: 0, mentions: 0, toConfirm: 0, muted: false }]);
+  store.setMachineRooms("ann", [{ id: "r1", name: "Launch", unread: 0, mentions: 0, toConfirm: 0, toApprove: 0, muted: false }]);
   store.saveProfile(profile("p1", "Coder"));
   store.insertWorkspace({ id: "w1", name: "mine", path: "/tmp/mine", defaultLaunch: { harness: "claude", profileId: "p1" }, createdAt: 1 });
   const toAnn: ClientMessage[] = [];
@@ -129,7 +129,7 @@ describe("bringing an agent of your own into a room of someone else's machine", 
     const { brought, store } = miasMirador();
     store.insertMachine({ id: "own", name: "Own", origin: "https://own.example", createdAt: 1 });
     store.setMachineDeviceToken("own", "token");
-    store.setMachineRooms("own", [{ id: "r1", name: "Mine", unread: 0, mentions: 0, toConfirm: 0, muted: false }]);
+    store.setMachineRooms("own", [{ id: "r1", name: "Mine", unread: 0, mentions: 0, toConfirm: 0, toApprove: 0, muted: false }]);
     expect(() => brought.bring("ann", "r2", "p1", "w1", "after-ok")).toThrow();
     expect(() => brought.bring("own", "r1", "p1", "w1", "after-ok")).toThrow();
     expect(() => brought.bring("ann", "r1", "p9", "w1", "after-ok")).toThrow();

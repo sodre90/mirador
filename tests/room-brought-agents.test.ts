@@ -367,6 +367,14 @@ describe("a brought agent's answer is its bringer's word", () => {
     expect(sent).toEqual([]);
   });
 
+  test("its bringer an approver, its tag of the owner's agent asks it at once, while people's tasks wait", () => {
+    const fixture = roomWithMia({ peoplesTasksWait: true });
+    fixture.rooms.setPersonRole(fixture.room.id, "m1", "approver");
+    const { answer } = coderAnswers(fixture, "@Builder review it", { taskBy: "m1" });
+    expect(answer.taskHeld).toBeUndefined();
+    expect(fixture.sent).toHaveLength(1);
+  });
+
   test("its tag of another agent its bringer brought goes at once, while people's tasks wait", () => {
     const fixture = roomWithMia({ peoplesTasksWait: true });
     const { rooms, room, ownerId, tasksToMia, miaArrives } = fixture;

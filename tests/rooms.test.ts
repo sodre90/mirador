@@ -1146,7 +1146,7 @@ describe("a room's agents' requests", () => {
     rooms.write(room.id, ownerId, "@Builder build it", ["p1"], null);
     const builder = conversationOf("p1");
     waiting.set(builder, [waitingRequest("q1", runs("bun run test")), waitingRequest("q2", runs("bun run test")), waitingRequest("q3", runs("bun run build"))]);
-    rooms.approve(builder, "q1", "allow-for-task", ownerId);
+    rooms.approve(room.id, "p1", "q1", "allow-for-task", ownerId);
     expect(answered).toEqual([
       { conversationId: builder, permissionId: "q1", allowed: true },
       { conversationId: builder, permissionId: "q2", allowed: true },
@@ -1175,7 +1175,7 @@ describe("a room's agents' requests", () => {
       ["q2", true],
       ["q3", false],
     ]);
-    rooms.approve(builder!, "q1", "allow-for-task", ownerId);
+    rooms.approve(room.id, "p1", "q1", "allow-for-task", ownerId);
     expect(answered.map(({ permissionId }) => permissionId)).toEqual(["q1"]);
     expect([edits(join(folder, "b.ts")), edits("src/c.ts"), edits(join(outside, "c.ts")), edits("~/.bashrc"), edits()].map((asked) => rooms.allowsByItself(builder!, asked))).toEqual([true, true, false, false, false]);
     expect(rooms.allowsByItself(reviewer!, edits(join(folder, "b.ts")))).toBe(false);
@@ -1218,7 +1218,7 @@ describe("a room's agents' requests", () => {
     const builder = store.findRoom(room.id)!.agents[0]!.conversationId!;
     turnOnLastSent(builder);
     waiting.set(builder, [waitingRequest("q1", edits(join(folder, "a.ts")))]);
-    rooms.approve(builder, "q1", "allow-for-task", ownerId);
+    rooms.approve(room.id, "p1", "q1", "allow-for-task", ownerId);
     expect([edits(join(folder, "b.ts")), edits(join(folder, ".claude", "settings.json")), edits(join(folder, "CLAUDE.md"))].map((asked) => rooms.allowsByItself(builder, asked))).toEqual([true, false, false]);
   });
 
@@ -1227,8 +1227,8 @@ describe("a room's agents' requests", () => {
     rooms.write(room.id, ownerId, "@Builder build it", ["p1"], null);
     const builder = conversationOf("p1");
     waiting.set(builder, [waitingRequest("q1", runs("ls")), waitingRequest("q2", runs("ls"))]);
-    rooms.approve(builder, "q1", "allow", ownerId);
-    rooms.approve(builder, "q2", "deny", ownerId);
+    rooms.approve(room.id, "p1", "q1", "allow", ownerId);
+    rooms.approve(room.id, "p1", "q2", "deny", ownerId);
     expect(answered.map(({ permissionId, allowed }) => [permissionId, allowed])).toEqual([
       ["q1", true],
       ["q2", false],
@@ -1241,13 +1241,13 @@ describe("a room's agents' requests", () => {
     rooms.write(room.id, ownerId, "@Builder build it", ["p1"], null);
     const builder = conversationOf("p1");
     waiting.set(builder, [waitingRequest("q1", runs("ls"))]);
-    expect(problemOf(() => rooms.approve(builder, "q1", "allow", "someone-else"))).toBe("room-approval-not-yours");
+    expect(problemOf(() => rooms.approve(room.id, "p1", "q1", "allow", "someone-else"))).toBe("room-approval-not-yours");
     expect(problemOf(() => rooms.assertMayApproveIn(builder, "someone-else"))).toBe("room-approval-not-yours");
     expect(problemOf(() => rooms.assertMayApproveIn(builder, ownerId))).toBeNull();
     const ownConversation = store.insertConversation(conversationIn(undefined, "w1", { harness: "opencode", profileId: "p1" }, "Mine"));
     expect(problemOf(() => rooms.assertMayApproveIn(ownConversation.id, "someone-else"))).toBeNull();
     expect(answered).toEqual([]);
-    expect(problemOf(() => rooms.approve(builder, "gone", "allow", ownerId))).toBe("permission-no-longer-pending");
+    expect(problemOf(() => rooms.approve(room.id, "p1", "gone", "allow", ownerId))).toBe("permission-no-longer-pending");
   });
 
   test("wait oldest first across the agents, each with its file or command, its thread, and whose task it is", () => {
@@ -1481,22 +1481,22 @@ describe("what a room's agents read without asking", () => {
   });
 
   test("an approver's allowance for the task lets reads through only inside the workspace, and none of Mirador's data, not even one already waiting", () => {
-    const { rooms, ownerId, builder, waiting, answered, folder, dataDir, passes } = roomReading("ask-everything");
+    const { rooms, room, ownerId, builder, waiting, answered, folder, dataDir, passes } = roomReading("ask-everything");
     waiting.set(builder, [
       waitingRequest("q1", reads(join(folder, "src", "a.ts"))),
       waitingRequest("q2", reads(join(dataDir, "browser-token"))),
       waitingRequest("q3", reads(join(folder, "src", "b.ts"))),
     ]);
-    rooms.approve(builder, "q1", "allow-for-task", ownerId);
+    rooms.approve(room.id, "p1", "q1", "allow-for-task", ownerId);
     expect(answered.map(({ permissionId }) => permissionId)).toEqual(["q1", "q3"]);
     expect([reads(join(folder, "src", "c.ts")), reads("/etc/hosts"), reads(join(dataDir, "state.sqlite")), reads(join(folder, "leads-to-data", "browser-token")), readsNothingNamed].map(passes)).toEqual([true, false, false, false, false]);
 
     waiting.set(builder, [waitingRequest("q4", searches(join(folder, "src"))), waitingRequest("q5", searches())]);
-    rooms.approve(builder, "q4", "allow-for-task", ownerId);
+    rooms.approve(room.id, "p1", "q4", "allow-for-task", ownerId);
     expect(answered.map(({ permissionId }) => permissionId)).toEqual(["q1", "q3", "q4"]);
     expect([searches(folder), searches(join(dataDir)), searches()].map(passes)).toEqual([false, false, false]);
     expect(passes(runs("bun run test"))).toBe(false);
-    rooms.approve(builder, "q5", "allow-for-task", ownerId);
+    rooms.approve(room.id, "p1", "q5", "allow-for-task", ownerId);
     expect(passes(searches())).toBe(false);
   });
 
@@ -1763,6 +1763,14 @@ describe("a task a person other than the owner asks of a room's agents", () => {
     const readByAgents = readByAgentsOf({ ...store.findRoom(room.id)!, agentsReadGuests: false }, ownerId);
     expect([ofGil, ofOwner, ofMia].filter(readByAgents).map(({ text }) => text)).toEqual(["from the owner", "from Mia"]);
     expect([ofGil].filter(readByAgentsOf(store.findRoom(room.id)!, ownerId))).toHaveLength(1);
+  });
+
+  test("written by an approver reaches the agents however the room reads guests, as a member's does", () => {
+    const { store, rooms, room, ownerId } = roomWithMia();
+    rooms.setPersonRole(room.id, "m1", "approver");
+    const ofMia = rooms.write(room.id, "m1", "from Mia, approving", [], null);
+    expect(ofMia.authorRole).toBe("approver");
+    expect([ofMia].filter(readByAgentsOf({ ...store.findRoom(room.id)!, agentsReadGuests: false }, ownerId))).toHaveLength(1);
   });
 
   test("allowed, is sent with just the messages the approver was shown riding along", () => {

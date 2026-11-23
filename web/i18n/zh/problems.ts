@@ -43,7 +43,7 @@ export const problems: Messages["problems"] = {
     "job-wait-gone": "Mirador 已不再等待该作业。",
     "conversation-workspace-gone": "此对话的工作区已不存在。",
     "permission-no-longer-pending": "此权限请求已不再等待处理。",
-    "room-approval-not-yours": "只有房间的所有者才能回应其 Agent 的请求。",
+    "room-approval-not-yours": "只有房间的所有者和批准人才能回应其 Agent 的请求。",
     "only-the-owner": "只有这台机器的所有者才能这样做。",
     "room-guests-only-write": "房间的访客可以在房间里发言，但不能标记 Agent，也不能在话题中跟进。",
     "room-person-unknown": "这台机器不认识此人，或此人是机器的所有者，所有者在每个房间里。",

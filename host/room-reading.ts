@@ -2,7 +2,7 @@ import { HostProblemError } from "../shared/host-problems.ts";
 import type { AskItem } from "../shared/model.ts";
 import type { RoomMention } from "../shared/room-mentions.ts";
 import { alertText, ROOM_ALERT_KINDS, type RoomAlert, type RoomReading } from "../shared/room-reading.ts";
-import { agentStandIn, writtenByAgent, type Room, type RoomMessage } from "../shared/rooms.ts";
+import { agentStandIn, approvesIn, writtenByAgent, type Room, type RoomApproval, type RoomMessage, type RoomTaskApproval } from "../shared/rooms.ts";
 import type { Hub, SocketData } from "./hub.ts";
 import { SenderLimit } from "./join-requests.ts";
 import { confirmersOf, questionsIn, type QuestionsStore } from "./room-questions.ts";
@@ -26,12 +26,28 @@ const senderOf = ({ roomId, author }: RoomMessage) => (writtenByAgent(author) ? 
 
 const calledKey = (roomId: string, personId: string, about: RoomAlert["about"]) => JSON.stringify([roomId, personId, about]);
 
+/** How many of its agents' requests and people's tasks wait in a room for an approver. */
+export type CountsWaiting = (roomId: string) => number;
+
+/** Something that waits for an approver, as a call tells of it: what it is, and who it comes from. */
+interface WaitingItem {
+  key: string;
+  what: string;
+  sender: string;
+}
+
+const itemsWaiting = (approvals: RoomApproval[], tasks: RoomTaskApproval[]): WaitingItem[] => [
+  ...approvals.map(({ request, conversationId }) => ({ key: request.permissionId, what: request.title, sender: conversationId })),
+  ...tasks.map(({ messageId, text, personId }) => ({ key: messageId, what: text, sender: personId })),
+];
+
 /**
  * How far each person has read each of their rooms, and what waits for them there: a person has read a room through its
  * latest message while a page of theirs in sight shows it. A room calls a person who looks elsewhere when someone tags
- * them, or when one of its agents' questions waits for them to confirm its answer, unless they muted it: the owner through
- * this machine's notifications, anyone else through their own Mirador, which this host tells only that it happened. It
- * calls them once for tags and once for questions until they read it, and each sender a few times a minute at most.
+ * them, when one of its agents' questions waits for them to confirm its answer, or, for its approvers other than the
+ * owner, when a request or a task starts waiting for approval, unless they muted it: the owner through this machine's
+ * notifications, anyone else through their own Mirador, which this host tells only that it happened. It calls them once
+ * for each of those until they read it, and each sender a few times a minute at most.
  */
 export class RoomReadingService {
   constructor(
@@ -44,6 +60,13 @@ export class RoomReadingService {
   ) {}
 
   private readonly calledUntilRead = new Set<string>();
+  /** What waited for approval in each room as last told, so that only what starts waiting calls its approvers. */
+  private readonly waitingSeen = new Map<string, Set<string>>();
+  private countsWaiting: CountsWaiting = () => 0;
+
+  countsWaitingWith(counts: CountsWaiting) {
+    this.countsWaiting = counts;
+  }
 
   /** Each room of the person's, as it stands for them. */
   readingsOf(personId: string): RoomReading[] {
@@ -84,6 +107,23 @@ export class RoomReadingService {
       .forEach((personId) => this.call(room, personId, alert, item.conversationId));
   }
 
+  /**
+   * What waits in the room for an approver changed: its approvers' counts change, and the first of what just started
+   * waiting calls those of them other than the owner, whom this machine notifies already.
+   */
+  waitingChanged(roomId: string, approvals: RoomApproval[], tasks: RoomTaskApproval[]) {
+    const room = this.store.findRoom(roomId);
+    if (!room) return;
+    this.tellRoom(room);
+    const waiting = itemsWaiting(approvals, tasks);
+    const seenBefore = this.waitingSeen.get(roomId) ?? new Set();
+    this.waitingSeen.set(roomId, new Set(waiting.map(({ key }) => key)));
+    const started = waiting.find(({ key }) => !seenBefore.has(key));
+    if (!started) return;
+    const alert: RoomAlert = { about: "approve", what: alertText(started.what) };
+    room.people.filter(({ personId }) => approvesIn(room, personId)).forEach(({ personId }) => this.call(room, personId, alert, started.sender));
+  }
+
   /** Who is in the room, and who confirms its questions, changed. */
   peopleChanged(roomId: string) {
     const room = this.store.findRoom(roomId);
@@ -101,7 +141,8 @@ export class RoomReadingService {
   private readingOf(room: Room, personId: string): RoomReading {
     const { unread, mentions } = this.store.countRoomUnread(room.id, personId, this.store.roomReadThrough(room.id, personId));
     const toConfirm = questionsIn(this.store, room).filter((item) => confirmersOf(this.store, room, item).includes(personId)).length;
-    return { roomId: room.id, unread, mentions, toConfirm, muted: this.store.roomMuted(room.id, personId) };
+    const toApprove = approvesIn(room, personId) ? this.countsWaiting(room.id) : 0;
+    return { roomId: room.id, unread, mentions, toConfirm, toApprove, muted: this.store.roomMuted(room.id, personId) };
   }
 
   private tellRoom(room: Room) {

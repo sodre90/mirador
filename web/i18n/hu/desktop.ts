@@ -20,6 +20,7 @@ export const desktop: Messages["desktop"] = {
   notifications: {
     tagged: (name: string, text: string) => `${name} megjelölt téged: ${text}`,
     waitsToConfirm: (question: string) => `Arra vár, hogy megerősítsd a választ: ${question}`,
+    waitsToApprove: (what: string) => `A jóváhagyásodra vár: ${what}`,
     waitsToBeLetIn: (name: string) => `Valaki arra vár, hogy beengedd, ezzel a névvel: „${name}”`,
     someoneWaitsToBeLetIn: "Valaki arra vár, hogy beengedd",
     asks: (question) => `Kérdezi: ${question}`,

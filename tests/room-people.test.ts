@@ -262,7 +262,7 @@ const EVERY_CLIENT_MESSAGE: Record<ClientMessage["type"], true> = {
 };
 
 /** All a person other than the owner may get from the host. */
-const SHOWN_TO_PEOPLE = new Set<ServerMessage["type"]>(["snapshot", "people.listed", "profile.upserted", "room.upserted", "room.deleted", "room.timeline", "room.message", "room.presence", "canvas.upserted", "settings.saved", "error", "pong", "room.votes", "rooms.reading", "room.alert", "room.agent-brought", "room.brought-task", "rooms.waiting-to-join"]);
+const SHOWN_TO_PEOPLE = new Set<ServerMessage["type"]>(["snapshot", "people.listed", "profile.upserted", "room.upserted", "room.deleted", "room.timeline", "room.message", "room.presence", "canvas.upserted", "settings.saved", "error", "pong", "room.votes", "rooms.reading", "room.alert", "room.agent-brought", "room.brought-task", "rooms.waiting-to-join", "room.approvals"]);
 
 type Snapshot = Extract<ServerMessage, { type: "snapshot" }>;
 type SettingsSaved = Extract<ServerMessage, { type: "settings.saved" }>;
@@ -610,7 +610,9 @@ describe("a person other than the owner", () => {
     const refusing = miaPage.mark;
     miaPage.send({ type: "room.answer-task", roomId: roomA.id, messageId: posted.id, answer: "allow" });
     miaPage.send({ type: "room.set-peoples-tasks-wait", roomId: roomA.id, wait: false });
-    await miaPage.waitForErrors("only-the-owner", 2, refusing);
+    await miaPage.waitForErrors("room-approval-not-yours", 1, refusing);
+    await miaPage.waitForErrors("only-the-owner", 1, refusing);
+    expect(miaPage.received.slice(miaMark).filter(isType("room.approvals")).flatMap(({ approvals, tasks }) => [...approvals, ...tasks])).toEqual([]);
     await Bun.sleep(SETTLE_MS);
     expect(readFileSync(promptsFile, "utf8")).not.toContain("Mia's task answered");
 
@@ -669,23 +671,93 @@ describe("a person other than the owner", () => {
 
   test("approves nothing a room's agent asks, as a member or as a guest", async () => {
     const ownerMark = owner.mark;
+    const marks = new Map([miaPage, gusPage].map((page) => [page, page.mark]));
     const asked = JSON.stringify([{ kind: "execute", title: "Run ls", command: "ls" }]);
     miaPage.send({ type: "room.write", roomId: roomA.id, text: `@Builder ASK ${asked}`, tags: [profile.id], threadId: null });
     const { approvals } = await owner.waitFor(isType("room.approvals", ({ roomId, approvals }) => roomId === roomA.id && approvals.length === 1), ownerMark);
     const { conversationId, request } = approvals[0]!;
     for (const page of [miaPage, gusPage]) {
       const mark = page.mark;
-      page.send({ type: "room.approve", conversationId, permissionId: request.permissionId, answer: "allow" });
+      page.send({ type: "room.approve", roomId: roomA.id, profileId: profile.id, permissionId: request.permissionId, answer: "allow" });
       page.send({ type: "permission.respond", conversationId, permissionId: request.permissionId, optionId: request.options[0]?.optionId ?? null });
-      await page.waitForErrors("only-the-owner", 2, mark);
+      await page.waitForErrors("room-approval-not-yours", 1, mark);
+      await page.waitForErrors("only-the-owner", 1, mark);
     }
     expect((await owner.settledSince(ownerMark)).some(isType("room.approvals", ({ approvals }) => approvals.length === 0))).toBe(false);
+    const toldOf = [...marks].flatMap(([page, mark]) => page.received.slice(mark).filter(isType("room.approvals")));
+    expect(toldOf.length).toBeGreaterThan(0);
+    expect(toldOf.flatMap(({ approvals, tasks }) => [...approvals, ...tasks])).toEqual([]);
     const answered = owner.mark;
     const miaAnswered = miaPage.mark;
-    owner.send({ type: "room.approve", conversationId, permissionId: request.permissionId, answer: "deny" });
+    owner.send({ type: "room.approve", roomId: roomA.id, profileId: profile.id, permissionId: request.permissionId, answer: "deny" });
     await owner.waitFor(isType("room.approvals", ({ approvals }) => approvals.length === 0), answered);
     await miaPage.waitFor(roomMessageSaying("Run ls: reject"), miaAnswered);
   }, 40_000);
+
+  test("as an approver answers what a room's agent asks and the tasks people give it, told of each by its agent's stand-in, while their own tasks wait for nobody; no longer one, is told of none", async () => {
+    const roleOf = (room: Room, personId: string) => room.people.find((person) => person.personId === personId)?.role;
+    let [miaMark, gusMark] = [miaPage.mark, gusPage.mark];
+    owner.send({ type: "room.set-peoples-tasks-wait", roomId: roomA.id, wait: true });
+    owner.send({ type: "room.set-person-role", roomId: roomA.id, personId: mia.id, role: "approver" });
+    owner.send({ type: "room.set-person-role", roomId: roomA.id, personId: gus.id, role: "member" });
+    await miaPage.waitFor(isType("room.upserted", ({ room }) => room.peoplesTasksWait && roleOf(room, mia.id) === "approver" && roleOf(room, gus.id) === "member"), miaMark);
+
+    miaMark = miaPage.mark;
+    const asked = JSON.stringify([{ kind: "execute", title: "Run pwd", command: "pwd" }]);
+    miaPage.send({ type: "room.write", roomId: roomA.id, text: `@Builder ASK ${asked}`, tags: [profile.id], threadId: null });
+    const own = (await miaPage.waitFor(isType("room.message", ({ message }) => message.text.includes("Run pwd") && message.tags.length === 1), miaMark)).message;
+    expect(own).toMatchObject({ authorRole: "approver" });
+    expect(own.taskHeld).toBeUndefined();
+    const { approvals } = await miaPage.waitFor(isType("room.approvals", ({ roomId, approvals }) => roomId === roomA.id && approvals.length === 1), miaMark);
+    const { request } = approvals[0]!;
+    expect(approvals[0]).toMatchObject({ conversationId: agentStandIn(roomA.id, profile.id), profileId: profile.id, approvers: expect.arrayContaining([mia.id]) });
+    await miaPage.waitFor(isType("rooms.reading", ({ readings }) => readings.some(({ roomId, toApprove }) => roomId === roomA.id && toApprove === 1)), miaMark);
+    await miaPage.waitFor(isType("room.alert", ({ roomId, alert }) => roomId === roomA.id && alert.about === "approve" && alert.what === "Run pwd"), miaMark);
+    const miaOpensAgain = await Page.open(port, tokens[mia.id]!);
+    const { roomApprovals } = await miaOpensAgain.waitFor(isType("snapshot"));
+    miaOpensAgain.close();
+    expect(roomApprovals.map(({ conversationId, request: { permissionId } }) => [conversationId, permissionId])).toEqual([[agentStandIn(roomA.id, profile.id), request.permissionId]]);
+
+    gusPage.send({ type: "room.approve", roomId: roomA.id, profileId: profile.id, permissionId: request.permissionId, answer: "allow" });
+    await gusPage.waitForError("room-approval-not-yours", gusMark);
+    expect(gusPage.received.slice(gusMark).filter(isType("room.approvals")).flatMap(({ approvals, tasks }) => [...approvals, ...tasks])).toEqual([]);
+    miaMark = miaPage.mark;
+    miaPage.send({ type: "room.approve", roomId: roomA.id, profileId: profile.id, permissionId: request.permissionId, answer: "allow" });
+    await miaPage.waitFor(roomMessageSaying("Run pwd: allow"), miaMark);
+    expect(readFileSync(promptsFile, "utf8")).toMatch(/#\d+ \[approver\] Mia, .*\n> @Builder ASK .*Run pwd/);
+
+    [miaMark, gusMark] = [miaPage.mark, gusPage.mark];
+    const gusTask = "@Builder SAY Gus's task Mia allows";
+    gusPage.send({ type: "room.write", roomId: roomA.id, text: gusTask, tags: [profile.id], threadId: null });
+    const held = (await gusPage.waitFor(roomMessageSaying(gusTask), gusMark)).message;
+    expect(held).toMatchObject({ authorRole: "member", taskHeld: "waiting" });
+    const { tasks } = await miaPage.waitFor(isType("room.approvals", ({ tasks }) => tasks.some(({ messageId }) => messageId === held.id)), miaMark);
+    expect(tasks).toEqual([expect.objectContaining({ personId: gus.id, role: "member", text: gusTask })]);
+    miaPage.send({ type: "room.answer-task", roomId: roomA.id, messageId: held.id, answer: "allow" });
+    await gusPage.waitFor(isType("room.message", ({ message }) => message.answers === held.id && message.text === "Gus's task Mia allows"), gusMark);
+
+    [miaMark, gusMark] = [miaPage.mark, gusPage.mark];
+    const leftWaiting = "@Builder SAY Gus's task Mia no longer approves";
+    gusPage.send({ type: "room.write", roomId: roomA.id, text: leftWaiting, tags: [profile.id], threadId: null });
+    const stillHeld = (await gusPage.waitFor(roomMessageSaying(leftWaiting), gusMark)).message;
+    await miaPage.waitFor(isType("room.approvals", ({ tasks }) => tasks.some(({ messageId }) => messageId === stillHeld.id)), miaMark);
+    [miaMark, gusMark] = [miaPage.mark, gusPage.mark];
+    const ownerMark = owner.mark;
+    owner.send({ type: "room.set-person-role", roomId: roomA.id, personId: mia.id, role: "member" });
+    await miaPage.waitFor(isType("room.approvals", ({ roomId, tasks }) => roomId === roomA.id && tasks.length === 0), miaMark);
+    const { tasks: ownersTasks } = await owner.waitFor(isType("room.approvals", ({ roomId, tasks }) => roomId === roomA.id && tasks.length === 1), ownerMark);
+    expect(ownersTasks[0]!.approvers).toEqual([owner.snapshot.ownerId]);
+    miaPage.send({ type: "room.answer-task", roomId: roomA.id, messageId: stillHeld.id, answer: "allow" });
+    await miaPage.waitForError("room-approval-not-yours", miaMark);
+    owner.send({ type: "room.answer-task", roomId: roomA.id, messageId: stillHeld.id, answer: "deny" });
+    await gusPage.waitFor(isType("room.message", ({ message }) => message.answers === stillHeld.id && message.ended === "declined"), gusMark);
+
+    miaMark = miaPage.mark;
+    owner.send({ type: "room.set-person-role", roomId: roomA.id, personId: gus.id, role: "guest" });
+    owner.send({ type: "room.set-peoples-tasks-wait", roomId: roomA.id, wait: false });
+    await miaPage.waitFor(isType("room.upserted", ({ room }) => !room.peoplesTasksWait && roleOf(room, mia.id) === "member" && roleOf(room, gus.id) === "guest"), miaMark);
+    await Promise.all([miaPage, gusPage].map((page) => page.settledSince(page.mark)));
+  }, 60_000);
 
   test("is refused every message type but their own few, whatever it names", async () => {
     await refusesAllButTheirOwnMessages([miaPage, gusPage, stanPage]);

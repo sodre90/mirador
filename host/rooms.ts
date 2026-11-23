@@ -33,6 +33,8 @@ import {
 import {
   AGENT_TAGGED_TURNS_AFTER_A_PERSON,
   agentTaggedTurnsAfter,
+  approvesAs,
+  approvesIn,
   asksAgentsAs,
   authorRoleOf,
   broughtAgentName,
@@ -146,6 +148,8 @@ function cutToRoomMessage(text: string) {
 /** Told of each message that goes up in a room: the people it tags that it didn't tag before, and its author's name. */
 export type PostListener = (message: RoomMessage, newlyTagged: RoomMention[], by: string) => void;
 
+export type WaitingListener = (roomId: string, approvals: RoomApproval[], tasks: RoomTaskApproval[]) => void;
+
 export type TaskAnswer = "allow" | "deny";
 
 const distinct = (ids: string[]) => [...new Set(ids)];
@@ -235,6 +239,7 @@ export class RoomService implements RoomRules, TurnListener {
   private readonly allowedForTurn = new Map<string, Set<string>>();
   private outOfEveryRoom: (personIds: string[]) => void = () => {};
   private postListener: PostListener = () => {};
+  private waitingListener: WaitingListener = () => {};
   private sandboxes = NO_SANDBOX_CONTROL;
 
   constructor(
@@ -267,6 +272,11 @@ export class RoomService implements RoomRules, TurnListener {
 
   hearPostsWith(listener: PostListener) {
     this.postListener = listener;
+  }
+
+  /** Told each time what waits in a room for its approvers changes. */
+  hearWaitingWith(listener: WaitingListener) {
+    this.waitingListener = listener;
   }
 
   /** A person an invite just let into the room: pages hear of them as of one the owner let in. */
@@ -475,6 +485,7 @@ export class RoomService implements RoomRules, TurnListener {
   /**
    * Lets the person into the room with the role, unless their name reads as one already there, or gives them that role
    * there, from their next message on; made a guest, they ask the agents nothing, so their tasks still waiting are declined.
+   * Who approves follows their role, so what waits in the room is told again.
    */
   setPersonRole(roomId: string, personId: string, role: RoomRole) {
     const room = this.existingRoom(roomId);
@@ -486,6 +497,7 @@ export class RoomService implements RoomRules, TurnListener {
     if (!asksAgentsAs(role)) this.takeOutAgentsOf(roomId, personId);
     this.peopleChanged(roomId);
     this.declineTasksNoLongerAsked(roomId);
+    this.waitingChanged(roomId);
   }
 
   /** The person's open pages lose the room at once, and their tasks still waiting are declined; out of their last room, they lose their devices here too. */
@@ -496,6 +508,7 @@ export class RoomService implements RoomRules, TurnListener {
     this.store.removeRoomPerson(roomId, personId);
     this.peopleChanged(roomId);
     this.declineTasksNoLongerAsked(roomId);
+    this.waitingChanged(roomId);
     this.tellOfPeopleInNoRoom([personId]);
   }
 
@@ -618,10 +631,10 @@ export class RoomService implements RoomRules, TurnListener {
     else passedOn.forEach((profileId) => this.ask(room, profileId, answer, undefined));
   }
 
-  /** While people's tasks wait, a brought agent's answer that tags any agent but those its bringer brought waits as their task. */
+  /** While people's tasks wait, a brought agent's answer that tags any agent but those its bringer brought waits as their task, unless its bringer approves. */
   private waitsAsBringersTask(room: Room, bringerId: string, tagged: string[]) {
     const theirs = new Set(room.agents.filter(broughtBy(bringerId)).map(({ profileId }) => profileId));
-    return room.peoplesTasksWait && tagged.some((profileId) => !theirs.has(profileId));
+    return room.peoplesTasksWait && !approvesIn(room, bringerId) && tagged.some((profileId) => !theirs.has(profileId));
   }
 
   /**
@@ -638,7 +651,10 @@ export class RoomService implements RoomRules, TurnListener {
   }
 
   waitingChanged(roomId: string) {
-    this.hub.broadcast({ type: "room.approvals", roomId, approvals: this.approvals(roomId), tasks: this.tasksWaiting(roomId) });
+    const approvals = this.approvals(roomId);
+    const tasks = this.tasksWaiting(roomId);
+    this.hub.broadcast({ type: "room.approvals", roomId, approvals, tasks });
+    this.waitingListener(roomId, approvals, tasks);
   }
 
   /** The tasks of people other than the owner, or of the agents they brought, that wait for an approver, oldest first. */
@@ -689,15 +705,28 @@ export class RoomService implements RoomRules, TurnListener {
       .toSorted((a, b) => a.at - b.at);
   }
 
+  /** How many of the requests the room's agents wait on, and of people's tasks, wait there for an approver. */
+  countWaiting(roomId: string): number {
+    const room = this.store.findRoom(roomId);
+    if (!room) return 0;
+    const requests = room.agents.flatMap(({ conversationId }) => (conversationId ? this.sessions.waitingPermissions(conversationId) : []));
+    return requests.length + this.store.listRoomTasksWaiting(roomId).length;
+  }
+
   allApprovals(): RoomApproval[] {
     return this.list().flatMap(({ id }) => this.approvals(id));
   }
 
-  /** Allowing for the task lets the same kind of request through until the turn ends, the ones already waiting in it too; one that reads or changes files outside the workspace still asks. */
-  approve(conversationId: string, permissionId: string, answer: RoomApprovalAnswer, personId: string) {
-    const room = this.roomOf(conversationId);
-    if (!room) throw new HostProblemError({ code: "room-gone" });
+  /**
+   * Answers a request of the room's own agent, named by its profile, as people other than the owner never learn its
+   * conversation. Allowing for the task lets the same kind of request through until the turn ends, the ones already
+   * waiting in it too; one that reads or changes files outside the workspace still asks.
+   */
+  approve(roomId: string, profileId: string, permissionId: string, answer: RoomApprovalAnswer, personId: string) {
+    const room = this.existingRoom(roomId);
     this.assertMayApprove(room, personId);
+    const conversationId = room.agents.find((agent) => agent.profileId === profileId && !agent.brought)?.conversationId;
+    if (!conversationId) throw new HostProblemError({ code: "permission-no-longer-pending" });
     const waiting = this.sessions.waitingPermissions(conversationId).find(({ request }) => request.permissionId === permissionId);
     if (!waiting) throw new HostProblemError({ code: "permission-no-longer-pending" });
     if (answer === "allow-for-task") this.allowForTurn(conversationId, waiting);
@@ -738,7 +767,7 @@ export class RoomService implements RoomRules, TurnListener {
   /**
    * A person's message, in the room or as a follow-up in a thread. Each agent it tags gets a thread of its own for it,
    * and with the thread's agent of a follow-up, is sent what it has missed of the room; unless a person other than the
-   * owner wrote it in a room whose people's tasks wait, when it waits for an approver instead.
+   * owner or an approver wrote it in a room whose people's tasks wait, when it waits for an approver instead.
    */
   write(roomId: string, personId: string, text: string, tags: string[], threadId: string | null): RoomMessage {
     const room = this.existingRoom(roomId);
@@ -750,7 +779,7 @@ export class RoomService implements RoomRules, TurnListener {
     if (tagged.some((profileId) => !this.answers(room, profileId))) throw new HostProblemError({ code: "room-message-misaddressed" });
     if (role !== null && !this.writing.allows(personId)) throw new HostProblemError({ code: "room-writing-too-fast" });
     const asked = thread ? [thread.profileId] : tagged;
-    const waits = role !== null && room.peoplesTasksWait && asked.length > 0;
+    const waits = role !== null && !approvesAs(role) && room.peoplesTasksWait && asked.length > 0;
     const message = this.store.appendRoomMessage({
       id: crypto.randomUUID(),
       roomId,
@@ -805,7 +834,7 @@ export class RoomService implements RoomRules, TurnListener {
     const posted = unfinished ? this.store.rewriteRoomMessage({ ...answer, id: unfinished.id }) : this.store.appendRoomMessage({ ...answer, id: crypto.randomUUID() });
     this.post(posted, passedOn, unfinished?.mentions ?? []);
     passedOn.forEach((profileId) => this.ask(room, profileId, posted, undefined));
-    if (finished && this.writtenByAnApprover(room, asked)) this.notifications.notify(conversationId, { kind: "finished" });
+    if (finished && this.writtenByTheOwner(asked)) this.notifications.notify(conversationId, { kind: "finished" });
   }
 
   /**
@@ -882,9 +911,9 @@ export class RoomService implements RoomRules, TurnListener {
     };
   }
 
-  /** Today the owner alone answers what a room's agents ask. */
-  private approversOf(_room: Room) {
-    return [this.store.ownerId()];
+  /** The owner, and the room's approvers, answer what its agents ask. */
+  private approversOf(room: Room) {
+    return [this.store.ownerId(), ...room.people.filter(({ role }) => approvesAs(role)).map(({ personId }) => personId)];
   }
 
   private assertMayApprove(room: Room, personId: string) {
@@ -903,9 +932,9 @@ export class RoomService implements RoomRules, TurnListener {
     return role;
   }
 
-  /** Someone waits for the answer: an approver who tagged the agent, or followed up in its thread. */
-  private writtenByAnApprover(room: Room, asked: RoomMessage) {
-    return !writtenByAgent(asked.author) && this.approversOf(room).includes(asked.author.personId);
+  /** The owner waits for the answer: they tagged the agent, or followed up in its thread, and this machine tells them. */
+  private writtenByTheOwner(asked: RoomMessage) {
+    return !writtenByAgent(asked.author) && asked.author.personId === this.store.ownerId();
   }
 
   private allowForTurn(conversationId: string, answered: WaitingPermission) {

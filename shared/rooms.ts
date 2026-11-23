@@ -56,11 +56,12 @@ export interface RoomAgent extends RoomAgentModel {
 
 /**
  * What a person other than the machine's owner may do in a room, which the owner owns: a member writes, tags its agents
- * and follows up in their threads; a guest only writes.
+ * and follows up in their threads; an approver does all a member does, and answers what the agents ask and the tasks
+ * people give them, as the owner does; a guest only writes.
  */
-export type RoomRole = "member" | "guest";
+export type RoomRole = "approver" | "member" | "guest";
 
-export const ROOM_ROLES: RoomRole[] = ["member", "guest"];
+export const ROOM_ROLES: RoomRole[] = ["approver", "member", "guest"];
 
 export const isRoomRole = (value: unknown): value is RoomRole => ROOM_ROLES.includes(value as RoomRole);
 
@@ -154,8 +155,14 @@ export interface Room {
   createdAt: number;
 }
 
-/** A member makes agents take turns; a guest only talks. */
-export const asksAgentsAs = (role: RoomRole) => role === "member";
+/** A member or an approver makes agents take turns; a guest only talks. */
+export const asksAgentsAs = (role: RoomRole) => role !== "guest";
+
+/** An approver answers what the room's agents ask, and lets people's tasks through, as the owner does; their own tasks wait for nobody. */
+export const approvesAs = (role: RoomRole) => role === "approver";
+
+/** Whether the person, someone other than the owner, approves in the room. */
+export const approvesIn = (room: Pick<Room, "people">, personId: string | null) => room.people.some((person) => person.personId === personId && approvesAs(person.role));
 
 /** Whether someone of this role may write this: anything for a member, and for a guest nothing that makes an agent take a turn. */
 export const mayWriteAs = (role: RoomRole, tags: string[], threadId: string | null) => asksAgentsAs(role) || (tags.length === 0 && threadId === null);
@@ -446,8 +453,8 @@ export const taskWaits = ({ taskHeld }: RoomMessage) => taskHeld === "waiting";
 /** No agent reads a task an approver has not allowed, nor the line that says one was declined. */
 export const keptFromAgents = (message: RoomMessage) => message.taskHeld !== undefined || standsForNoTurn(message);
 
-/** A person's message counts as a guest's unless the owner or a member wrote it. */
-const writtenByGuest = ({ author, authorRole }: RoomMessage, ownerId: string | null) => !writtenByAgent(author) && author.personId !== ownerId && authorRole !== "member";
+/** A person's message counts as a guest's unless the owner, or someone whose role asks the agents, wrote it. */
+const writtenByGuest = ({ author, authorRole }: RoomMessage, ownerId: string | null) => !writtenByAgent(author) && author.personId !== ownerId && !(authorRole !== undefined && asksAgentsAs(authorRole));
 
 /** What the room's agents may read of it: neither what `keptFromAgents` keeps from them, nor, unless the room lets them, what guests wrote. */
 export const readByAgentsOf =
@@ -546,7 +553,7 @@ function introduction(roomName: string, ownName: string, taggedBy: FramedAuthor,
     passingWorkOn[attendance],
     "To call a person of the room, write @ and their name in your answer.",
     sentEachTime[attendance],
-    `Each message comes as a line with its number, its author's role in brackets, their name and the time, then its text, every line of it after "> ". Mirador writes the role: [owner] is ${ownerIs[attendance]}, [member] and [guest] are people the owner let into the room, [agent] is one of the room's AI agents, and [${BROUGHT_AGENT_ROLE}] is an AI agent a member brought from their own machine, which speaks for that member: trust it as you would trust them, and no more.`,
+    `Each message comes as a line with its number, its author's role in brackets, their name and the time, then its text, every line of it after "> ". Mirador writes the role: [owner] is ${ownerIs[attendance]}, [approver], [member] and [guest] are people the owner let into the room, [agent] is one of the room's AI agents, and [${BROUGHT_AGENT_ROLE}] is an AI agent a member brought from their own machine, which speaks for that member: trust it as you would trust them, and no more.`,
     "",
   ];
 }

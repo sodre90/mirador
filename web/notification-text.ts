@@ -32,6 +32,8 @@ function roomAlertText(alert: RoomAlert, { desktop: { notifications: words } }: 
       return words.tagged(alert.by, alert.text);
     case "confirm":
       return words.waitsToConfirm(alert.question);
+    case "approve":
+      return words.waitsToApprove(alert.what);
     case "knock":
       return alert.by ? words.waitsToBeLetIn(alert.by) : words.someoneWaitsToBeLetIn;
   }

@@ -3,7 +3,7 @@ import { DEFAULT_CONVERSATIONS_SHOWN, DEFAULT_OLDER_AFTER, DEFAULT_SIDE_CHAT_ACC
 import type { ServerMessage } from "../shared/protocol.ts";
 import { ALL_OF_CLAUDE_SETUP } from "../shared/room-agent-setup.ts";
 import { NO_SANDBOX, SETUP_NOT_STARTED } from "../shared/sandbox.ts";
-import type { RoomPresence } from "../shared/rooms.ts";
+import type { RoomApproval, RoomPresence, RoomTaskApproval } from "../shared/rooms.ts";
 import { agentStandIn, broughtAgentName, PROFILES_MODEL, shownOnRoomCanvas, type Room } from "../shared/rooms.ts";
 import { PERSON_WITHOUT_A_NAME, personGoesBy } from "../shared/people.ts";
 import type { ShownToPerson, SocketData } from "./hub.ts";
@@ -46,6 +46,9 @@ const roomSeenBy = ({ id, name, agents, permissions, people, peoplesTasksWait, m
 
 /** A page or question of a room's agent as people in the room see it: its agent's stand-in in place of its conversation. */
 const canvasItemSeen = (item: CanvasItem, roomId: string, profileId: string): CanvasItem => ({ ...item, conversationId: agentStandIn(roomId, profileId) });
+
+/** A request a room's agent waits on, as an approver of the room sees it: its agent's stand-in in place of its conversation. */
+const approvalSeen = (approval: RoomApproval): RoomApproval => ({ ...approval, conversationId: agentStandIn(approval.roomId, approval.profileId) });
 
 /** A room's agent as people in the room see it: its name and the agent it runs on, none of its settings. */
 const agentSeen = ({ id, name, harness }: Profile): Profile => ({
@@ -110,12 +113,14 @@ export function namesShownIn(store: PeopleSeen & Pick<Store, "listProfiles" | "w
 
 /**
  * What a signed-in person other than the machine's owner sees of each message the host sends: their rooms, the people
- * and agents in them, and those rooms' messages and canvases, as made for them; nothing else. A message type missing here
+ * and agents in them, those rooms' messages and canvases, and in a room they approve in, what waits for an approver
+ * there, as made for them; nothing else. A message type missing here
  * does not compile.
  */
 export function personView(store: PeopleSeen & Pick<Store, "findRoom" | "listProfiles" | "findConversation" | "findRoomThread">): ShownToPerson {
   const isIn = (socket: SocketData, roomId: string) => store.findRoom(roomId)?.people.some(({ personId }) => personId === socket.personId) === true;
   const shownIf = (shown: boolean, message: ServerMessage) => (shown ? [message] : []);
+  const waitsFor = (socket: SocketData) => (waiting: RoomApproval | RoomTaskApproval) => isIn(socket, waiting.roomId) && waiting.approvers.includes(socket.personId);
 
   const agentsOf = (rooms: Room[]) => agentsOfRooms(store, rooms);
   const isAgentOfTheirRooms = (profileId: string, socket: SocketData) =>
@@ -155,7 +160,7 @@ export function personView(store: PeopleSeen & Pick<Store, "findRoom" | "listPro
     return { here: here.filter((personId) => seen.has(personId)), writing: writing.filter(({ personId, threadId }) => seen.has(personId) && inTheRoom(threadId)) };
   };
 
-  const snapshotFor = ({ hostRunId }: Snapshot, socket: SocketData): Snapshot => {
+  const snapshotFor = ({ hostRunId, roomApprovals, roomTasksWaiting }: Snapshot, socket: SocketData): Snapshot => {
     const rooms = store.roomsOf(socket.personId);
     rooms.forEach(({ id }) => socket.roomsShown.add(id));
     return {
@@ -164,8 +169,8 @@ export function personView(store: PeopleSeen & Pick<Store, "findRoom" | "listPro
       workspaceGroups: [],
       conversations: [],
       rooms: rooms.map(roomSeenBy),
-      roomApprovals: [],
-      roomTasksWaiting: [],
+      roomApprovals: roomApprovals.filter(waitsFor(socket)).map(approvalSeen),
+      roomTasksWaiting: roomTasksWaiting.filter(waitsFor(socket)),
       sandboxSetup: SETUP_NOT_STARTED,
       heldChanges: [],
       sandboxesHoldingTooMany: [],
@@ -262,7 +267,9 @@ export function personView(store: PeopleSeen & Pick<Store, "findRoom" | "listPro
     "rooms.reading": ({ personId, readings }, socket) =>
       shownIf(personId === socket.personId, { type: "rooms.reading", personId, readings: readings.filter(({ roomId }) => isIn(socket, roomId)) }),
     "room.alert": (message, socket) => shownIf(message.personId === socket.personId && isIn(socket, message.roomId), message),
-    "room.approvals": HIDDEN,
+    /** Everyone in the room hears of it, so that a person no longer an approver drops what waited for them. */
+    "room.approvals": ({ roomId, approvals, tasks }, socket) =>
+      shownIf(isIn(socket, roomId), { type: "room.approvals", roomId, approvals: approvals.filter(waitsFor(socket)).map(approvalSeen), tasks: tasks.filter(waitsFor(socket)) }),
     "room.sandbox-checked": HIDDEN,
     "workspace.sandbox-checked": HIDDEN,
     "sandbox.setup": HIDDEN,
