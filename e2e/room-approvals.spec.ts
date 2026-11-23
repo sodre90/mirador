@@ -38,7 +38,7 @@ const edit = { kind: "edit", title: "Edit notes.md", path: "{{folder}}/notes.md"
 const run = (command: string) => ({ kind: "execute", title: `Run ${command}`, command });
 
 const roomComposer = (page: Page, room: string) => page.getByRole("textbox", { name: `Write in ${room}, @ tags an agent…` });
-const answerSaying = (page: Page, text: string) => page.locator(".room-timeline .room-entry").filter({ has: page.locator(".message.agent", { hasText: text }) });
+const answerSaying = (page: Page, text: string | RegExp) => page.locator(".room-timeline .room-entry").filter({ has: page.locator(".message.agent", { hasText: text }) });
 const thread = (page: Page, agent: string) => page.getByRole("complementary", { name: `Thread of ${agent}` });
 const roomStrip = (page: Page) => page.locator(".room-timeline ~ .room-approvals");
 const threadStrip = (page: Page, agent: string) => thread(page, agent).locator(".room-approvals");
@@ -103,7 +103,7 @@ test("each permission preset lets through by itself what it names, and asks for 
     await tag(page, "Free", "Builder", ask([read]));
     await expect(subjectOf(strip)).toHaveText("Permission needed: Read README.md");
     await answer(strip, "Allow");
-    await expect(answerSaying(page, "Read README.md: allow")).toHaveCount(1);
+    await expect(answerSaying(page, /^Read README\.md: allow$/)).toHaveCount(1);
   });
 });
 
