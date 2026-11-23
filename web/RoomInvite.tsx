@@ -1,15 +1,33 @@
 import { useState, type FormEvent } from "react";
-import { inviteConnectFor, machineAddress, type RoomInviteConnect } from "../shared/machines.ts";
-import type { Machine } from "../shared/model.ts";
+import { inviteConnectFor, machineAddress, ROOM_INVITE_CONNECTS, type RoomInviteConnect } from "../shared/machines.ts";
+import type { Machine, Person } from "../shared/model.ts";
+import { personGoesBy } from "../shared/people.ts";
 import type { PeerToPeerStatus } from "../shared/protocol.ts";
-import { defaultLetsIn, ROOM_INVITE_LETS_IN, ROOM_INVITE_SEATS, ROOM_ROLES, type Room, type RoomInviteLetsIn, type RoomInviteSeats, type RoomRole } from "../shared/rooms.ts";
+import { relativeTimeOf } from "../shared/relative-time.ts";
+import {
+  DEFAULT_ROOM_INVITE_LIFETIME,
+  defaultLetsIn,
+  ROOM_INVITE_LETS_IN,
+  ROOM_INVITE_LIFETIMES,
+  ROOM_INVITE_SEATS,
+  ROOM_ROLES,
+  type Room,
+  type RoomInvite,
+  type RoomInviteLetsIn,
+  type RoomInviteLifetime,
+  type RoomInviteSeats,
+  type RoomJoiner,
+  type RoomRole,
+} from "../shared/rooms.ts";
 import { tunnelOrigin } from "../shared/tunnel.ts";
 import { connection } from "./connection.ts";
-import { timeOf } from "./Devices.tsx";
+import { CopyButton } from "./CopyButton.tsx";
 import { replyProblemText } from "./host-error.ts";
-import { t } from "./i18n/index.ts";
+import { locale, t } from "./i18n/index.ts";
+import { useExpired } from "./invite-expiry.ts";
 import { NameToJoinWith, useNameToJoinWith, type JoiningPerson } from "./name-to-join.tsx";
 import { Modal } from "./Palette.tsx";
+import { WaitingToJoin } from "./RoomSettings.tsx";
 import type { DevicesListed } from "./state.ts";
 import { NAME_FIELD_ATTRIBUTES } from "./typing-aids.ts";
 
@@ -26,140 +44,372 @@ function whyNoPeerToPeer(status: PeerToPeerStatus | null) {
   return null;
 }
 
-interface MadeInvite {
-  text: string;
-  expiresAt: number;
+/** Each adds one ability to the one before it. */
+const ROLES_BY_ABILITY = [...ROOM_ROLES].reverse();
+
+interface InviteChoices {
+  role: RoomRole;
   seats: RoomInviteSeats;
+  /** Null until picked, and then as suits how many people come. */
+  letsIn: RoomInviteLetsIn | null;
+  lifetime: RoomInviteLifetime;
+  /** Null until picked, and then the way Settings name where it works, else the other. */
+  connect: RoomInviteConnect | null;
+}
+
+const FIRST_CHOICES: InviteChoices = { role: "member", seats: 1, letsIn: null, lifetime: DEFAULT_ROOM_INVITE_LIFETIME, connect: null };
+
+interface MadeInvite {
+  invite: RoomInvite;
+  text: string;
   copied: boolean;
+  /** What it was made with, which changing it and then thinking better of that goes back to. */
+  choices: InviteChoices;
+  /** Those in the room or at its door before it was made, so that whoever comes after stands out. */
+  alreadyThere: Set<string>;
+}
+
+interface WaysToConnect {
+  works: Record<RoomInviteConnect, boolean>;
+  preferred: RoomInviteConnect;
+  addressHost: string;
+  noPeerToPeer: string | null;
+}
+
+function waysToConnect({ reachability, peerToPeer, roomInvitesConnect }: DevicesListed): WaysToConnect {
+  const publicOrigin = reachability.publicAddress?.origin ?? null;
+  return {
+    works: { "peer-to-peer": peerToPeerWorks(peerToPeer), address: publicOrigin !== null },
+    preferred: roomInvitesConnect,
+    addressHost: publicOrigin ? new URL(publicOrigin).host : "",
+    noPeerToPeer: whyNoPeerToPeer(peerToPeer),
+  };
+}
+
+const connectBy = (picked: RoomInviteConnect | null, { works, preferred }: WaysToConnect) => (picked && works[picked] ? picked : inviteConnectFor(preferred, works));
+
+/** Whether it got there; a page that isn't a secure context has no clipboard at all. */
+async function putOnClipboard(text: string) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+const withdraw = ({ id }: RoomInvite) => connection.send({ type: "room.withdraw-invite", inviteId: id });
+
+function RolePicker({ role, onChange }: { role: RoomRole; onChange: (role: RoomRole) => void }) {
+  const lastGranted = ROLES_BY_ABILITY.indexOf(role);
+  return (
+    <fieldset className="room-field">
+      <legend>{words.joinsAs}</legend>
+      <div className="room-invite-roles">
+        {ROLES_BY_ABILITY.map((each) => (
+          <label key={each} data-chosen={role === each}>
+            <input type="radio" name="room-invite-role" autoFocus={role === each} checked={role === each} onChange={() => onChange(each)} />
+            {words.roles[each]}
+          </label>
+        ))}
+      </div>
+      <ul className="room-invite-abilities">
+        {ROLES_BY_ABILITY.map((each, index) => (
+          <li key={each} aria-hidden={index > lastGranted}>
+            {words.roleAdds[each]}
+          </li>
+        ))}
+      </ul>
+    </fieldset>
+  );
+}
+
+function ChoiceRow<Choice extends string | number>({
+  label,
+  chosen,
+  among,
+  labelOf,
+  onChoose,
+}: {
+  label: string;
+  chosen: Choice;
+  among: readonly Choice[];
+  labelOf: (choice: Choice) => string;
+  onChoose: (choice: Choice) => void;
+}) {
+  return (
+    <label className="room-invite-row">
+      <span>{label}</span>
+      <select value={chosen} onChange={({ target }) => onChoose(among.find((each) => String(each) === target.value)!)}>
+        {among.map((each) => (
+          <option key={each} value={each}>
+            {labelOf(each)}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+/** Shown only where there is something to choose or to know: both ways work, neither does, or not the one Settings name. */
+function ConnectRow({ ways, connect, onChoose }: { ways: WaysToConnect; connect: RoomInviteConnect | null; onChoose: (connect: RoomInviteConnect) => void }) {
+  const { works, preferred, addressHost, noPeerToPeer } = ways;
+  if (!connect)
+    return (
+      <p className="warning" role="alert">
+        {noPeerToPeer} {words.noWayToConnect}
+      </p>
+    );
+  if (ROOM_INVITE_CONNECTS.every((each) => works[each])) {
+    const labels: Record<RoomInviteConnect, string> = { "peer-to-peer": words.connectChoices["peer-to-peer"], address: words.connectChoices.address(addressHost) };
+    return <ChoiceRow label={words.connect} chosen={connect} among={ROOM_INVITE_CONNECTS} labelOf={(each) => labels[each]} onChoose={onChoose} />;
+  }
+  if (connect !== preferred && noPeerToPeer)
+    return (
+      <p className="hint room-invite-connect-instead">
+        {noPeerToPeer} {words.connectsAtAddress(addressHost)}
+      </p>
+    );
+  return null;
+}
+
+/** The role, how many come and how, for how long, and the one way it connects; once copied, the invite takes the form's place. */
+function InviteForm({
+  choices,
+  ways,
+  replaces,
+  withdrawn,
+  making,
+  problem,
+  onChange,
+  onCopy,
+  onCancel,
+}: {
+  choices: InviteChoices;
+  ways: WaysToConnect | null;
+  replaces: boolean;
+  withdrawn: boolean;
+  making: boolean;
+  problem: string | null;
+  onChange: (choices: InviteChoices) => void;
+  onCopy: () => void;
+  onCancel: () => void;
+}) {
+  const change = (changed: Partial<InviteChoices>) => onChange({ ...choices, ...changed });
+  const connect = ways && connectBy(choices.connect, ways);
+  const submit = (event: FormEvent) => {
+    event.preventDefault();
+    onCopy();
+  };
+  return (
+    <form onSubmit={submit}>
+      <RolePicker role={choices.role} onChange={(role) => change({ role })} />
+      <div className="room-invite-rows">
+        <ChoiceRow label={words.howMany} chosen={choices.seats} among={ROOM_INVITE_SEATS} labelOf={words.seatChoices} onChoose={(seats) => change({ seats })} />
+        <ChoiceRow label={words.theyComeIn} chosen={choices.letsIn ?? defaultLetsIn(choices.seats)} among={ROOM_INVITE_LETS_IN} labelOf={(each) => words.letsInChoices[each]} onChoose={(letsIn) => change({ letsIn })} />
+        <ChoiceRow label={words.inviteWorksFor} chosen={choices.lifetime} among={ROOM_INVITE_LIFETIMES} labelOf={(each) => words.inviteLifetimes[each]} onChoose={(lifetime) => change({ lifetime })} />
+        {ways && <ConnectRow ways={ways} connect={connect} onChoose={(picked) => change({ connect: picked })} />}
+      </div>
+      {problem && <p className="warning">{problem}</p>}
+      {replaces && <p className="hint">{words.replacesInvite}</p>}
+      {withdrawn && (
+        <p className="hint" role="status">
+          {words.inviteWithdrawn}
+        </p>
+      )}
+      <div className="form-actions">
+        <button type="button" onClick={onCancel}>
+          {words.cancel}
+        </button>
+        <button type="submit" disabled={!connect || making}>
+          {words.copyInvite}
+        </button>
+      </div>
+    </form>
+  );
+}
+
+const whyOver = (expired: boolean) => (expired ? t.devices.invite.expired : words.inviteOver);
+
+/** An invite while it waits for its people: what it is, how many came, how long it has left, and its text under "Show invite" alone. */
+function WaitingInvite({ made, waiting, shown, onWithdraw }: { made: MadeInvite; waiting: RoomInvite; shown: boolean; onWithdraw: () => void }) {
+  const { role, seats, letsIn, taken, expiresAt } = waiting;
+  const soFar = seats === 1 ? words.waitingForThem : words.seatsTaken(taken, seats);
+  return (
+    <>
+      <div className={`room-invite-sent ${made.copied ? "" : "uncopied"}`}>
+        <strong role="status">{made.copied ? words.inviteCopied : words.sendInvite}</strong>
+        <span className="hint">{words.whereToPasteInvite}</span>
+      </div>
+      <section className="room-invite-waiting" aria-label={words.invite}>
+        <span>
+          <strong>{words.roles[role]}</strong> · {words.seatChoices(seats)} · {words.letsInChoices[letsIn]}
+        </span>
+        <span className="room-invite-so-far">
+          {soFar} · {words.expiresIn(relativeTimeOf(expiresAt, locale))}
+        </span>
+        <button type="button" className="link" onClick={onWithdraw}>
+          {words.withdrawInvite}
+        </button>
+      </section>
+      {shown && <textarea className="room-invite-text" readOnly aria-label={words.invite} value={made.text} onFocus={(event) => event.target.select()} />}
+    </>
+  );
+}
+
+/** A made invite from when it is copied until everyone it is for came, or it can't be used any more. */
+function MadeInviteCard({
+  made,
+  room,
+  people,
+  invites,
+  joiners,
+  onWithdraw,
+  onChange,
+  onAnother,
+  onClose,
+}: {
+  made: MadeInvite;
+  room: Room;
+  people: Person[];
+  invites: RoomInvite[];
+  joiners: RoomJoiner[];
+  onWithdraw: () => void;
+  onChange: () => void;
+  onAnother: () => void;
+  onClose: () => void;
+}) {
+  const [shown, setShown] = useState(!made.copied);
+  const { invite, alreadyThere } = made;
+  const expired = useExpired(invite.expiresAt);
+  const waiting = expired ? undefined : invites.find(({ id }) => id === invite.id);
+  const cameSince = ({ personId, role }: { personId: string; role: RoomRole }) => role === invite.role && !alreadyThere.has(personId);
+  const joined = room.people.filter(cameSince);
+  const atTheDoor = joiners.filter(cameSince);
+  const allCame = joined.length + atTheDoor.length >= invite.seats;
+  const nameOf = (personId: string) => personGoesBy(people.find(({ id }) => id === personId), words.nameless);
+  return (
+    <>
+      {waiting && <WaitingInvite made={made} waiting={waiting} shown={shown} onWithdraw={onWithdraw} />}
+      {!waiting && !allCame && <p role="status">{whyOver(expired)}</p>}
+      <div className="room-invite-joined" role="status">
+        {joined.map(({ personId, role }) => (
+          <p key={personId}>{words.joinedAs(nameOf(personId), words.roles[role])}</p>
+        ))}
+      </div>
+      <WaitingToJoin joiners={atTheDoor} />
+      <div className="form-actions">
+        {waiting ? (
+          <>
+            <CopyButton className="link" text={made.text} label={made.copied ? words.copyInviteAgain : words.copyInvite} />
+            <button type="button" className="link room-invite-show" aria-expanded={shown} onClick={() => setShown(!shown)}>
+              {words.showInvite}
+            </button>
+            <button type="button" onClick={onChange}>
+              {words.changeInvite}
+            </button>
+          </>
+        ) : (
+          <button type="button" onClick={onAnother}>
+            {allCame ? words.inviteSomeoneElse : t.devices.invite.another}
+          </button>
+        )}
+        <button type="button" className={atTheDoor.length > 0 ? undefined : "primary"} autoFocus onClick={onClose}>
+          {words.done}
+        </button>
+      </div>
+    </>
+  );
 }
 
 /**
- * Makes an invite into the room for one person or several, with the role they join as, whether they come in at once or
- * after the owner's OK, and the one way it connects: a single text, a secret until its last use, which "Copy invite"
- * puts on the clipboard and "Show invite" alone shows.
+ * Makes an invite into the room: a single text, a secret until its last use, which "Copy invite" puts on the clipboard.
+ * Then the dialog is that invite, until it is withdrawn, or changed, which makes another and withdraws it.
  */
-export function RoomInviteDialog({ room, devices, onClose }: { room: Room; devices: DevicesListed | null; onClose: () => void }) {
-  const publicOrigin = devices?.reachability.publicAddress?.origin ?? null;
-  const peerToPeer = devices?.peerToPeer ?? null;
-  const works: Record<RoomInviteConnect, boolean> = { "peer-to-peer": peerToPeerWorks(peerToPeer), address: publicOrigin !== null };
-  const [role, setRole] = useState<RoomRole>("member");
-  const [seats, setSeats] = useState<RoomInviteSeats>(1);
-  const [pickedLetsIn, setLetsIn] = useState<RoomInviteLetsIn | null>(null);
-  const letsIn = pickedLetsIn ?? defaultLetsIn(seats);
-  const [picked, setConnect] = useState<RoomInviteConnect | null>(null);
-  const connect = picked && works[picked] ? picked : inviteConnectFor(devices?.roomInvitesConnect ?? "peer-to-peer", works);
+export function RoomInviteDialog({
+  room,
+  people,
+  devices,
+  invites,
+  joiners,
+  onClose,
+}: {
+  room: Room;
+  people: Person[];
+  devices: DevicesListed | null;
+  invites: RoomInvite[];
+  joiners: RoomJoiner[];
+  onClose: () => void;
+}) {
+  const [choices, setChoices] = useState(FIRST_CHOICES);
   const [made, setMade] = useState<MadeInvite | null>(null);
-  const [shown, setShown] = useState(false);
+  const [choosing, setChoosing] = useState(true);
+  const [withdrawn, setWithdrawn] = useState(false);
   const [making, setMaking] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
-  const noPeerToPeer = whyNoPeerToPeer(peerToPeer);
-  const connectLabels: Record<RoomInviteConnect, string> = {
-    "peer-to-peer": words.connectChoices["peer-to-peer"],
-    address: words.connectChoices.address(publicOrigin ? new URL(publicOrigin).host : ""),
-  };
-  const choose = (change: () => void) => {
-    change();
+  const ways = devices && waysToConnect(devices);
+  const connect = ways && connectBy(choices.connect, ways);
+  const chooseAnew = () => {
     setMade(null);
-    setShown(false);
-    setProblem(null);
+    setChoosing(true);
   };
   const copyInvite = async () => {
     if (!connect || making) return;
+    const { role, seats, lifetime } = choices;
+    const letsIn = choices.letsIn ?? defaultLetsIn(seats);
+    const alreadyThere = new Set([...room.people, ...joiners].map(({ personId }) => personId));
     setMaking(true);
     setProblem(null);
+    setWithdrawn(false);
     try {
       const invited = await connection.sendAndAwait(
-        (requestId) => ({ type: "room.invite", requestId, roomId: room.id, role, connect, seats, letsIn }),
+        (requestId) => ({ type: "room.invite", requestId, roomId: room.id, role, connect, seats, letsIn, lifetime }),
         (message, requestId) => (message.type === "room.invited" && message.requestId === requestId ? message : undefined),
       );
       if (!invited.text || !invited.invite) return setProblem(replyProblemText(invited));
-      const copied = await navigator.clipboard.writeText(invited.text).then(
-        () => true,
-        () => false,
-      );
-      setMade({ text: invited.text, expiresAt: invited.invite.expiresAt, seats: invited.invite.seats, copied });
-      setShown(!copied);
+      if (made) withdraw(made.invite);
+      setMade({ invite: invited.invite, text: invited.text, copied: await putOnClipboard(invited.text), choices, alreadyThere });
+      setChoosing(false);
     } catch {
       // Disconnected; the page says so, and the host made no invite
     } finally {
       setMaking(false);
     }
   };
+  const cancel = () => {
+    if (!made) return onClose();
+    setChoices(made.choices);
+    setProblem(null);
+    setChoosing(false);
+  };
   return (
     <Modal label={words.inviteTo(room.name)} className="room-dialog room-invite-dialog" onClose={onClose}>
-      <h2>{words.inviteTo(room.name)}</h2>
-      <fieldset className="room-field">
-        <legend>{words.joinsAs}</legend>
-        {ROOM_ROLES.map((each) => (
-          <label key={each} className="room-agent-choice">
-            <input type="radio" name="room-invite-role" checked={role === each} onChange={() => choose(() => setRole(each))} />
-            {words.roleChoices[each]}
-          </label>
-        ))}
-      </fieldset>
-      <div className="room-invite-seats">
-        <label>
-          {words.howMany}
-          <select value={seats} onChange={(event) => choose(() => setSeats(Number(event.target.value) as RoomInviteSeats))}>
-            {ROOM_INVITE_SEATS.map((each) => (
-              <option key={each} value={each}>
-                {words.seatChoices(each)}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          {words.letThemIn}
-          <select value={letsIn} onChange={(event) => choose(() => setLetsIn(event.target.value as RoomInviteLetsIn))}>
-            {ROOM_INVITE_LETS_IN.map((each) => (
-              <option key={each} value={each}>
-                {words.letsInChoices[each]}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
-      <details className="room-more-options room-invite-connect" open={!connect}>
-        <summary>{connect ? words.connectsBy(connectLabels[connect]) : words.connect}</summary>
-        <fieldset className="room-field">
-          <legend>{words.connect}</legend>
-          <label className="room-agent-choice">
-            <input type="radio" name="room-invite-connect" disabled={!works["peer-to-peer"]} checked={connect === "peer-to-peer"} onChange={() => choose(() => setConnect("peer-to-peer"))} />
-            {connectLabels["peer-to-peer"]}
-          </label>
-          {publicOrigin && (
-            <label className="room-agent-choice">
-              <input type="radio" name="room-invite-connect" checked={connect === "address"} onChange={() => choose(() => setConnect("address"))} />
-              {connectLabels.address}
-            </label>
-          )}
-          {noPeerToPeer && <span className="hint room-invite-no-peer-to-peer">{noPeerToPeer}</span>}
-          {!connect && <span className="warning">{words.noWayToConnect}</span>}
-        </fieldset>
-      </details>
-      <div className="room-invite-copy">
-        <button type="button" className="primary" disabled={!connect || making} onClick={() => void copyInvite()}>
-          {made?.copied ? words.inviteCopied : words.copyInvite}
+      <header>
+        <h2>{words.inviteTo(room.name)}</h2>
+        <button type="button" className="icon" title={t.shell.close} aria-label={t.shell.close} onClick={onClose}>
+          ×
         </button>
-        {made && (
-          <button type="button" className="link" aria-expanded={shown} onClick={() => setShown(!shown)}>
-            {words.showInvite}
-          </button>
-        )}
-      </div>
-      {made && (
-        <div className="room-invite-made" role="status">
-          <p>{words.sendInvite}</p>
-          <p className="hint">{words.inviteWorksUntil(made.seats, timeOf(made.expiresAt))}</p>
-          {shown && <textarea className="room-invite-text" readOnly aria-label={words.invite} value={made.text} onFocus={(event) => event.target.select()} />}
-        </div>
+      </header>
+      {made && !choosing ? (
+        <MadeInviteCard
+          key={made.invite.id}
+          made={made}
+          room={room}
+          people={people}
+          invites={invites}
+          joiners={joiners}
+          onWithdraw={() => {
+            withdraw(made.invite);
+            setWithdrawn(true);
+            chooseAnew();
+          }}
+          onChange={() => setChoosing(true)}
+          onAnother={chooseAnew}
+          onClose={onClose}
+        />
+      ) : (
+        <InviteForm choices={choices} ways={ways} replaces={made !== null} withdrawn={withdrawn} making={making} problem={problem} onChange={setChoices} onCopy={() => void copyInvite()} onCancel={cancel} />
       )}
-      {problem && <p className="warning">{problem}</p>}
-      <div className="form-actions">
-        <button type="button" onClick={onClose}>
-          {words.done}
-        </button>
-      </div>
     </Modal>
   );
 }

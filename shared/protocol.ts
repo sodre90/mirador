@@ -12,6 +12,7 @@ import type {
   RoomAuthorRole,
   RoomInvite,
   RoomInviteLetsIn,
+  RoomInviteLifetime,
   RoomInviteSeats,
   RoomJoiner,
   RoomMessage,
@@ -476,10 +477,10 @@ export type ClientMessage =
   | { type: "room.remove-person"; roomId: string; personId: string }
   /**
    * An invite into the room with the role for as many people as `seats`, which they join this machine with from their
-   * own Mirador, the one way `connect` names, coming in at once or waiting for the owner's OK as `letsIn` says; the host
-   * answers `room.invited`.
+   * own Mirador, the one way `connect` names, coming in at once or waiting for the owner's OK as `letsIn` says, for as
+   * long as `lifetime` says; the host answers `room.invited`.
    */
-  | { type: "room.invite"; requestId: string; roomId: string; role: RoomRole; connect: RoomInviteConnect; seats: RoomInviteSeats; letsIn: RoomInviteLetsIn }
+  | { type: "room.invite"; requestId: string; roomId: string; role: RoomRole; connect: RoomInviteConnect; seats: RoomInviteSeats; letsIn: RoomInviteLetsIn; lifetime: RoomInviteLifetime }
   | { type: "room.withdraw-invite"; inviteId: string }
   /** Lets someone who waits to join the room in, with the role their invite gave. */
   | { type: "room.let-in"; roomId: string; personId: string }

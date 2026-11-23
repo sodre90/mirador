@@ -637,31 +637,33 @@ export async function nameOwnProfile(page: Page, name: string) {
   await settings.getByRole("button", { name: "Close" }).click();
 }
 
-/** Makes an invite into the room from its bar, with the role, how many it lets in, when and the way to connect when given, and reads its one text under "Show invite". */
+/** Makes an invite into the room from its bar, with the role, how many it lets in, when and for how long when given, and reads its one text under "Show invite". */
 export async function inviteIntoRoom(
   page: Page,
   room: string,
-  { role, connect, howMany, letThemIn }: { role?: "Approver" | "Collaborator" | "Member" | "Guest"; connect?: string | RegExp; howMany?: string; letThemIn?: "After my OK" | "At once" } = {},
+  { role, howMany, theyComeIn, worksFor }: { role?: "Approver" | "Collaborator" | "Member" | "Guest"; howMany?: string; theyComeIn?: "After my OK" | "At once"; worksFor?: string } = {},
 ) {
   await roomCard(page, room).click();
-  await page.locator(".room-header").getByRole("button", { name: "Invite someone" }).click();
-  const dialog = page.getByRole("dialog", { name: `Invite someone to ${room}` });
-  if (role) await dialog.getByLabel(new RegExp(`^${role}: `)).check();
+  const dialog = await openInviteDialog(page, room);
+  if (role) await dialog.getByRole("radio", { name: role }).check();
   if (howMany) await dialog.getByLabel("How many people").selectOption({ label: howMany });
-  if (letThemIn) await dialog.getByLabel("Let them in").selectOption({ label: letThemIn });
-  if (connect) {
-    await dialog.locator(".room-invite-connect > summary").click();
-    await dialog.getByLabel(connect).check();
-  }
+  if (theyComeIn) await dialog.getByLabel("They come in").selectOption({ label: theyComeIn });
+  if (worksFor) await dialog.getByLabel("The invite works for").selectOption({ label: worksFor });
   const text = await copiedInvite(dialog);
   await dialog.getByRole("button", { name: "Done" }).click();
   return text;
 }
 
+/** Opens the dialog that makes an invite into the room that is open, from the room's bar. */
+export async function openInviteDialog(page: Page, room: string) {
+  await page.locator(".room-header").getByRole("button", { name: "Invite someone" }).click();
+  return page.getByRole("dialog", { name: `Invite to ${room}` });
+}
+
 /** Copies the invite dialog's invite and reads it under "Show invite", which a page that can't copy has opened already. */
 export async function copiedInvite(dialog: Locator) {
   await dialog.getByRole("button", { name: "Copy invite" }).click();
-  await expect(dialog.getByText("Send it to them. In their Mirador: Rooms → Join a room.")).toBeVisible({ timeout: 60_000 });
+  await expect(dialog.getByText("They paste it in their Mirador under Rooms → Join a room.")).toBeVisible({ timeout: 60_000 });
   const show = dialog.getByRole("button", { name: "Show invite" });
   if ((await show.getAttribute("aria-expanded")) !== "true") await show.click();
   return dialog.getByRole("textbox", { name: "Invite" }).inputValue();

@@ -1093,7 +1093,17 @@ export function App() {
           onClose={closeOverlay}
         />
       )}
-      {invitedRoom && <RoomInviteDialog key={invitedRoom.id} room={invitedRoom} devices={state.devices} onClose={closeOverlay} />}
+      {invitedRoom && (
+        <RoomInviteDialog
+          key={invitedRoom.id}
+          room={invitedRoom}
+          people={state.people}
+          devices={state.devices}
+          invites={state.roomInvites}
+          joiners={state.roomJoiners.filter(({ roomId }) => roomId === invitedRoom.id)}
+          onClose={closeOverlay}
+        />
+      )}
       {bringingInto && <BringAgentDialog machine={bringingInto.machine} room={bringingInto.room} profiles={state.profiles} workspaces={state.workspaces} onClose={closeOverlay} />}
       {overlay?.kind === "join-room" && (
         <JoinRoomDialog machines={state.machines} person={owner} onJoined={joinedRoom} onClose={closeOverlay} />

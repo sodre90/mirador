@@ -1,7 +1,7 @@
 import { HostProblemError } from "../shared/host-problems.ts";
 import { isPastel, type Device, type Pastel } from "../shared/model.ts";
 import { nameRefused, nameTaken, personName, readsAsMiradorsWords } from "../shared/people.ts";
-import { isRoomInviteLetsIn, isRoomInviteSeats, isRoomRole, type RoomInvite, type RoomInviteLetsIn, type RoomInviteSeats, type RoomJoiner, type RoomRole } from "../shared/rooms.ts";
+import { isRoomInviteLetsIn, isRoomInviteLifetime, isRoomInviteSeats, isRoomRole, type RoomInvite, type RoomInviteLetsIn, type RoomInviteLifetime, type RoomInviteSeats, type RoomJoiner, type RoomRole } from "../shared/rooms.ts";
 import { shownAsWritten } from "../shared/written-text.ts";
 import type { InviteTunnel } from "../shared/tunnel.ts";
 import { inviteKey, newRoomInvite, type DeviceService } from "./devices.ts";
@@ -11,6 +11,9 @@ import type { PeerToPeer, TunnelEnd } from "./p2p/service.ts";
 import type { Store, StoredRoomJoiner } from "./store.ts";
 
 const CHALLENGE_LIFETIME_MILLISECONDS = 2 * 60_000;
+const HOUR_MILLISECONDS = 60 * 60_000;
+const DAY_MILLISECONDS = 24 * HOUR_MILLISECONDS;
+const INVITE_LIFETIME_MILLISECONDS: Record<RoomInviteLifetime, number> = { "15-minutes": 15 * 60_000, "1-hour": HOUR_MILLISECONDS, "1-day": DAY_MILLISECONDS, "7-days": 7 * DAY_MILLISECONDS };
 /** Far longer than a name the rules keep, so a longer one is turned away before they read it all. */
 const LONGEST_PRESENTED_NAME = 400;
 
@@ -94,12 +97,13 @@ export class RoomInvites {
     private readonly now: () => number = Date.now,
   ) {}
 
-  invite(roomId: string, role: RoomRole, seats: RoomInviteSeats, letsIn: RoomInviteLetsIn): { invite: RoomInvite; code: string } {
+  invite(roomId: string, role: RoomRole, seats: RoomInviteSeats, letsIn: RoomInviteLetsIn, lifetime: RoomInviteLifetime): { invite: RoomInvite; code: string } {
     if (!this.store.findRoom(roomId)) throw new HostProblemError({ code: "room-gone" });
     if (!isRoomRole(role)) throw new Error(`There is no room role "${role}".`);
     if (!isRoomInviteSeats(seats)) throw new Error(`A room invite can't be for ${seats} people.`);
     if (!isRoomInviteLetsIn(letsIn)) throw new Error(`A room invite can't let people in "${letsIn}".`);
-    const { code, expiresAt } = newRoomInvite(this.now());
+    if (!isRoomInviteLifetime(lifetime)) throw new Error(`A room invite can't work for "${lifetime}".`);
+    const { code, expiresAt } = newRoomInvite(this.now(), INVITE_LIFETIME_MILLISECONDS[lifetime]);
     const invite = { id: crypto.randomUUID(), roomId, role, expiresAt, seats, letsIn, taken: 0 };
     this.store.addRoomInvite(invite, inviteKey(code));
     return { invite, code };

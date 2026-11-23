@@ -1052,7 +1052,7 @@ describe("a person a room invite lets in, from their own Mirador", () => {
   async function ownerInvites(room: Room, role: RoomRole, seats: RoomInviteSeats = 1, letsIn: RoomInviteLetsIn = "at-once") {
     const mark = owner.mark;
     const requestId = crypto.randomUUID();
-    owner.send({ type: "room.invite", requestId, roomId: room.id, role, connect: "address", seats, letsIn });
+    owner.send({ type: "room.invite", requestId, roomId: room.id, role, connect: "address", seats, letsIn, lifetime: "15-minutes" });
     const { invite, text } = await owner.waitFor(isType("room.invited", (invited) => invited.requestId === requestId), mark);
     return { invite: invite!, text: text!, code: inviteIn(text!).code };
   }
@@ -1117,7 +1117,7 @@ describe("a person a room invite lets in, from their own Mirador", () => {
     owner.send({ type: "room.withdraw-invite", inviteId: invite.id });
 
     const mark = owner.mark;
-    owner.send({ type: "room.invite", requestId: "p2p", roomId: roomD.id, role: "guest", connect: "peer-to-peer", seats: 1, letsIn: "at-once" });
+    owner.send({ type: "room.invite", requestId: "p2p", roomId: roomD.id, role: "guest", connect: "peer-to-peer", seats: 1, letsIn: "at-once", lifetime: "15-minutes" });
     const refused = await owner.waitFor(isType("room.invited", ({ requestId }) => requestId === "p2p"), mark);
     expect(refused).toMatchObject({ invite: null, text: null, problemAbout: { code: "room-invite-needs-peer-to-peer" } });
 

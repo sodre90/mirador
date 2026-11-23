@@ -1,7 +1,7 @@
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type Locator, type Page } from "@playwright/test";
-import { addWorkspace, chooseInSettings, createProfile, createRoom, expectPopoverFits, inviteIntoRoom, joinRoom, nameMachine, nameOwnProfile, openRoomSettings, openSettings, reachedAtOwnPort, roomCard, signIn } from "./helpers.ts";
+import { addWorkspace, chooseInSettings, createProfile, createRoom, expectPopoverFits, inviteIntoRoom, joinRoom, nameMachine, nameOwnProfile, openInviteDialog, openRoomSettings, openSettings, reachedAtOwnPort, roomCard, signIn } from "./helpers.ts";
 import { TestHost, writeBunProgram } from "./test-host.ts";
 
 /** The owner's machine, with the room, which other machines reach at its address. */
@@ -52,14 +52,13 @@ test("one invite brings several people to a room's door, where the owner lets ea
   await createRoom(page, "Garden", ["Builder"]);
 
   const invite = await test.step("the owner makes one invite for up to five people, which asks the owner's OK for more than one", async () => {
-    await page.locator(".room-header").getByRole("button", { name: "Invite someone" }).click();
-    const dialog = page.getByRole("dialog", { name: "Invite someone to Garden" });
+    const dialog = await openInviteDialog(page, "Garden");
     await expect(dialog.getByLabel("How many people")).toHaveValue("1");
-    await expect(dialog.getByLabel("Let them in")).toHaveValue("at-once");
+    await expect(dialog.getByLabel("They come in")).toHaveValue("at-once");
     await dialog.getByLabel("How many people").selectOption({ label: "Up to 5" });
-    await expect(dialog.getByLabel("Let them in")).toHaveValue("after-ok");
-    await dialog.getByRole("button", { name: "Done" }).click();
-    const text = await inviteIntoRoom(page, "Garden", { howMany: "Up to 5" });
+    await expect(dialog.getByLabel("They come in")).toHaveValue("after-ok");
+    await dialog.getByRole("button", { name: "Cancel" }).click();
+    const text = await inviteIntoRoom(page, "Garden", { howMany: "Up to 5", worksFor: "15 minutes" });
     const settings = await openRoomSettings(page, "Garden");
     await expect(settings.getByRole("list", { name: "Waiting invites" }).getByRole("listitem")).toHaveText([/^Member · 0 of 5 joined · expires in 1[45] minutes/]);
     await settings.getByRole("button", { name: "Close" }).click();

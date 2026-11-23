@@ -1405,12 +1405,12 @@ export function startServer(services: HostServices) {
    * An invite into the room that carries one way to this machine, the one asked for: its peer-to-peer tunnel and no
    * address, or its address and no tunnel. One that can't be made that way is withdrawn at once, and says why.
    */
-  async function inviteIntoRoom({ roomId, role, connect, seats, letsIn }: Extract<ClientMessage, { type: "room.invite" }>) {
+  async function inviteIntoRoom({ roomId, role, connect, seats, letsIn, lifetime }: Extract<ClientMessage, { type: "room.invite" }>) {
     if (!isRoomInviteConnect(connect)) throw new Error(`There is no way for room invites to connect called "${connect}".`);
     const publicOrigin = config.reachability.publicAddress?.origin ?? null;
     if (connect === "address" && !publicOrigin) throw new HostProblemError({ code: "room-invite-needs-address" });
     if (connect === "peer-to-peer" && !p2p) throw new HostProblemError({ code: "room-invite-needs-peer-to-peer" });
-    const { invite, code } = roomInvites.invite(roomId, role, seats, letsIn);
+    const { invite, code } = roomInvites.invite(roomId, role, seats, letsIn, lifetime);
     sendRoomInvitesToEveryPage();
     if (connect === "address") return { invite, text: roomInviteText(code, { origin: publicOrigin!, authorityFingerprint, machineName: store.machineName() }) };
     const tunnel = await roomInvites.tunnelFor(code, invite.expiresAt, p2p);

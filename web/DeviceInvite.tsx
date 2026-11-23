@@ -1,11 +1,13 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { addressGoesAway, reachSetByEnvironment } from "../shared/reachability.ts";
 import { relativeTimeOf } from "../shared/relative-time.ts";
 import type { ListedDevice, ReachabilitySettings } from "../shared/model.ts";
 import type { PeerToPeerStatus, ServerMessage } from "../shared/protocol.ts";
 import { connection } from "./connection.ts";
+import { CopyButton } from "./CopyButton.tsx";
 import { hints } from "./hints.ts";
 import { locale, t } from "./i18n/index.ts";
+import { useExpired } from "./invite-expiry.ts";
 import { INVITE_JOINS, inviteLinkFor, type InviteJoins } from "./invite-link.ts";
 import { QrCode } from "./QrCode.tsx";
 import { EnvironmentSetsReach, peerToPeerProblem, RestartHostButton, saveRoute } from "./Reachability.tsx";
@@ -43,24 +45,6 @@ export function useDeviceInvite(listed: DevicesListed | null) {
   return { open, making, make, hide: () => setOpen(null) };
 }
 
-/** How often the time an invite has left is told afresh. */
-const EXPIRY_TOLD_EVERY_MS = 30_000;
-
-function useExpired(expiresAt: number) {
-  const [now, setNow] = useState(Date.now);
-  const expired = now >= expiresAt;
-  useEffect(() => {
-    if (expired) return;
-    const timer = setTimeout(() => setNow(Date.now()), expiresAt - Date.now());
-    const clock = setInterval(() => setNow(Date.now()), EXPIRY_TOLD_EVERY_MS);
-    return () => {
-      clearTimeout(timer);
-      clearInterval(clock);
-    };
-  }, [expired, expiresAt]);
-  return expired;
-}
-
 /** The first device to join since the invite was made, remembered even once it is revoked: the invite stays used up. */
 function useJoinedSince(devicesBefore: string[], devices: ListedDevice[]) {
   const [joined, setJoined] = useState<string | null>(null);
@@ -79,24 +63,6 @@ function JoinsChoice({ joins, onChange }: { joins: InviteJoins; onChange: (joins
         </label>
       ))}
     </div>
-  );
-}
-
-function CopyLink({ link }: { link: string }) {
-  const [outcome, setOutcome] = useState<"copied" | "failed" | null>(null);
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(link);
-      setOutcome("copied");
-    } catch {
-      setOutcome("failed");
-    }
-  };
-  const label = outcome === "copied" ? t.chat.entry.copied : outcome === "failed" ? t.chat.entry.copyFailed : words.copyLink;
-  return (
-    <button type="button" onClick={() => void copy()}>
-      {label}
-    </button>
   );
 }
 
@@ -192,7 +158,7 @@ function WaitingInvite({
         )}
         {reached && (
           <div className="invite-ways">
-            <CopyLink key={reached.link} link={reached.link} />
+            <CopyButton key={reached.link} text={reached.link} label={words.copyLink} />
             {joins === "phone" && <FoldedLink {...reached} />}
           </div>
         )}

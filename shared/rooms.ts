@@ -102,6 +102,16 @@ export const isRoomInviteLetsIn = (value: unknown): value is RoomInviteLetsIn =>
 /** One person comes in at once, as they always did; more wait for the owner's OK, unless the owner chooses otherwise. */
 export const defaultLetsIn = (seats: RoomInviteSeats): RoomInviteLetsIn => (seats === 1 ? "at-once" : "after-ok");
 
+/** How long an invite lets people in, the owner's choice as they make it: whoever holds it can use it until then. */
+export const ROOM_INVITE_LIFETIMES = ["15-minutes", "1-hour", "1-day", "7-days"] as const;
+
+export type RoomInviteLifetime = (typeof ROOM_INVITE_LIFETIMES)[number];
+
+export const isRoomInviteLifetime = (value: unknown): value is RoomInviteLifetime => ROOM_INVITE_LIFETIMES.includes(value as RoomInviteLifetime);
+
+/** Long enough for someone who is away from their computer, or has no Mirador yet. */
+export const DEFAULT_ROOM_INVITE_LIFETIME: RoomInviteLifetime = "1-day";
+
 /** A waiting invite into a room, for as many people as its seats with one role; its code is shown once, when it is made. */
 export interface RoomInvite {
   id: string;

@@ -1,7 +1,7 @@
 import type { PermissionPreset } from "../../../shared/room-permissions.ts";
 import type { RoomUsagePeriod } from "../../../shared/room-usage.ts";
 import type { RoomInviteConnect } from "../../../shared/machines.ts";
-import type { RoomAuthorRole, RoomInviteLetsIn, RoomRole } from "../../../shared/rooms.ts";
+import type { RoomAuthorRole, RoomInviteLetsIn, RoomInviteLifetime, RoomRole } from "../../../shared/rooms.ts";
 import type { ClaudeSetupChoice, ClaudeSetupPart } from "../../../shared/room-agent-setup.ts";
 import type { SandboxFolderRefusal, SandboxFolderState, SandboxKind, SandboxSetupStage } from "../../../shared/sandbox.ts";
 import type { OthersTasks } from "../../../shared/brought-agents.ts";
@@ -50,21 +50,30 @@ export const rooms = {
   addPerson: "Add someone you let in before",
   addAgent: "Add an agent",
   inviteSomeone: "Invite someone",
-  inviteTo: (room: string) => `Invite someone to ${room}`,
+  inviteTo: (room: string) => `Invite to ${room}`,
   joinsAs: "They join as",
-  roleChoices: { approver: "Approver: can ask the agents, see their work and approve their requests", collaborator: "Collaborator: can ask the agents and see their work", member: "Member: can ask the agents", guest: "Guest: can chat" } satisfies Record<RoomRole, string>,
+  roleAdds: { guest: "Write in the room", member: "Ask the agents", collaborator: "See the agents' work", approver: "Approve their requests" } satisfies Record<RoomRole, string>,
   connect: "Connect",
-  connectsBy: (way: string) => `Connect: ${way}`,
   connectChoices: {
     "peer-to-peer": "Directly, peer to peer",
     address: (host: string) => `At this machine's address (${host})`,
   } satisfies Record<RoomInviteConnect, unknown>,
   peerToPeerOff: "Peer to peer is off on this machine.",
+  connectsAtAddress: (host: string) => `The invite uses this machine's address instead (${host}).`,
   noWayToConnect: "No other machine reaches this one yet. Give it an address in Settings → Devices.",
   copyInvite: "Copy invite",
-  inviteCopied: "Copied",
-  sendInvite: "Send it to them. In their Mirador: Rooms → Join a room.",
+  inviteCopied: "Copied. Send it to them in any chat.",
+  copyInviteAgain: "Copy again",
+  sendInvite: "Copy this invite and send it to them in any chat.",
+  whereToPasteInvite: "They paste it in their Mirador under Rooms → Join a room.",
   showInvite: "Show invite",
+  changeInvite: "Change",
+  replacesInvite: "Once you copy this one, the invite you copied before stops working.",
+  waitingForThem: "Waiting for them to join",
+  joinedAs: (name: string, role: string) => `${name} joined as ${role}`,
+  inviteOver: "This invite doesn't work any more.",
+  inviteWithdrawn: "The invite was withdrawn.",
+  inviteSomeoneElse: "Invite someone else",
   invite: "Invite",
   pasteInvite: "Paste the invite",
   yourName: "Your name",
@@ -316,14 +325,15 @@ export const rooms = {
   nameless: "Someone without a name",
   inNoRoom: "You are in no room yet. When the owner of this machine adds you to one, it shows here.",
   noRoomOpen: "Pick a room on the left.",
-  inviteWorksUntil: (seats: number, time: string) => (seats === 1 ? `Works once, until ${time}.` : `Works for up to ${seats} people, until ${time}.`),
   waitingInvites: "Waiting invites",
   withdrawInvite: "Withdraw",
   withdrawInviteOf: (role: string, expires: string) => `Withdraw the invite (${role}, ${expires})`,
   howMany: "How many people",
   seatChoices: (seats: number) => (seats === 1 ? "1 person" : `Up to ${seats}`),
-  letThemIn: "Let them in",
+  theyComeIn: "They come in",
   letsInChoices: { "after-ok": "After my OK", "at-once": "At once" } satisfies Record<RoomInviteLetsIn, string>,
+  inviteWorksFor: "The invite works for",
+  inviteLifetimes: { "15-minutes": "15 minutes", "1-hour": "1 hour", "1-day": "1 day", "7-days": "7 days" } satisfies Record<RoomInviteLifetime, string>,
   seatsTaken: (taken: number, seats: number) => `${taken} of ${seats} joined`,
   expiresIn: (relative: string) => `expires ${relative}`,
   waitingToJoin: "Waiting to join",

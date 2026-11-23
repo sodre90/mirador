@@ -3,9 +3,9 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSy
 import { createServer } from "node:net";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 import { machineAddress, roomInviteLink } from "../shared/machines.ts";
-import { addWorkspace, copiedInvite, createProfile, createRoom, inviteIntoRoom, joinRoom, nameOwnProfile, openRoomSettings, openSettings, reachedAtOwnPort, reloadFromRestartedHost, roomCard, signIn } from "./helpers.ts";
+import { addWorkspace, copiedInvite, createProfile, createRoom, inviteIntoRoom, joinRoom, nameOwnProfile, openInviteDialog, openRoomSettings, openSettings, reachedAtOwnPort, reloadFromRestartedHost, roomCard, signIn } from "./helpers.ts";
 import { TestHost, writeBunProgram } from "./test-host.ts";
 
 /** mirador-p2p is built from its own repository, which only the owner's machines have; elsewhere this spec is skipped. */
@@ -102,10 +102,10 @@ test("a room invite's one link, made before the owner's machine restarted and pa
 
   const link = await test.step("the owner makes a room and an invite, whose one link reaches the machine through its tunnel", async () => {
     await createRoom(page, "Garden", ["Builder"]);
-    await page.locator(".room-header").getByRole("button", { name: "Invite someone" }).click();
-    const dialog = page.getByRole("dialog", { name: "Invite someone to Garden" });
-    await expect(dialog.getByLabel("Directly, peer to peer")).toBeChecked();
-    await expect(dialog.getByLabel(/^At this machine's address/)).toHaveCount(0);
+    const dialog = await openInviteDialog(page, "Garden");
+    await expect(dialog.getByRole("radio", { name: "Member" })).toBeChecked();
+    await expect(dialog.getByRole("button", { name: "Copy invite" })).toBeEnabled();
+    await expect(dialog.getByRole("combobox", { name: "Connect" })).toHaveCount(0);
     const shown = await copiedInvite(dialog);
     expect(shown).toMatch(/^mirador:\/\/room-invite\/ROOM-[\w-]+\?tunnel=[\w-]+$/);
     const parsed = machineAddress(shown)!;
@@ -338,19 +338,15 @@ test("on a machine reached both ways, room invites connect peer to peer until Se
   await signIn(page, reachedBothWays);
   await addWorkspace(page, reachedBothWays.projectDir);
   await createRoom(page, "Porch", []);
-  const inviteDialog = async () => {
-    await page.locator(".room-header").getByRole("button", { name: "Invite someone" }).click();
-    return page.getByRole("dialog", { name: "Invite someone to Porch" });
-  };
+  const connectsBy = (dialog: Locator) => dialog.getByRole("combobox", { name: "Connect" }).locator("option:checked");
   const connectChoice = async () => {
     const settings = await openSettings(page, "Devices");
     return { settings, choice: settings.getByLabel("Room invites") };
   };
 
   await test.step("an invite connects peer to peer at first, with no address in it", async () => {
-    const dialog = await inviteDialog();
-    await expect(dialog.getByLabel("Directly, peer to peer")).toBeChecked();
-    await expect(dialog.getByLabel(/^At this machine's address/)).not.toBeChecked();
+    const dialog = await openInviteDialog(page, "Porch");
+    await expect(connectsBy(dialog)).toHaveText("Directly, peer to peer");
     const text = await copiedInvite(dialog);
     expect(machineAddress(text)).toMatchObject({ forRoom: true, name: null });
     expect(machineAddress(text)!.tunnel).not.toBeNull();
@@ -371,9 +367,9 @@ test("on a machine reached both ways, room invites connect peer to peer until Se
 
   await test.step("a new invite connects at the address, with no tunnel in it", async () => {
     await roomCard(page, "Porch").click();
-    const dialog = await inviteDialog();
-    await expect(dialog.getByLabel(/^At this machine's address/)).toBeChecked();
-    await expect(dialog.getByLabel("Directly, peer to peer")).toBeEnabled();
+    const dialog = await openInviteDialog(page, "Porch");
+    await expect(connectsBy(dialog)).toHaveText(`At this machine's address (127.0.0.1:${reachedBothWays.port})`);
+    await expect(dialog.getByRole("option", { name: "Directly, peer to peer" })).toHaveCount(1);
     const text = await copiedInvite(dialog);
     expect(machineAddress(text)).toMatchObject({ origin: reachedBothWays.origin, forRoom: true, tunnel: null });
     await dialog.getByRole("button", { name: "Done" }).click();

@@ -174,8 +174,10 @@ test("a workspace a room works in stays until the room moves to another, where i
     await expect(empty.locator("p")).toHaveText(["Tag an agent to give it a task.", "A message reaches an agent only when it tags it with @."]);
     await expect(empty.getByRole("list", { name: "Tag an agent to give it a task." }).getByRole("button")).toHaveAccessibleName("@Mover");
     await empty.getByRole("button", { name: "Invite people" }).click();
-    const invite = page.getByRole("dialog", { name: "Invite someone to Moving" });
-    await invite.getByRole("button", { name: "Done" }).click();
+    const invite = page.getByRole("dialog", { name: "Invite to Moving" });
+    await expect(invite.getByRole("alert")).toHaveText("Peer to peer is off on this machine. No other machine reaches this one yet. Give it an address in Settings → Devices.");
+    await expect(invite.getByRole("button", { name: "Copy invite" })).toBeDisabled();
+    await invite.getByRole("button", { name: "Cancel" }).click();
     await expect(invite).toHaveCount(0);
     await composer.fill("first ");
     await empty.getByRole("button", { name: "@Mover" }).click();

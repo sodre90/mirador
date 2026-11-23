@@ -3,7 +3,7 @@ import type { Device } from "../shared/model.ts";
 import { oneLine, shownAsWritten } from "../shared/written-text.ts";
 import type { Store } from "./store.ts";
 
-const INVITE_LIFETIME_MILLISECONDS = 15 * 60_000;
+const DEVICE_INVITE_LIFETIME_MILLISECONDS = 15 * 60_000;
 /** Letters and digits nobody mistakes for one another when reading a code out or typing it. */
 const INVITE_ALPHABET = "ABCDEFGHJKMNPQRSTVWXYZ23456789";
 const INVITE_LENGTH = 12;
@@ -27,13 +27,13 @@ export interface Invite {
 }
 
 /** A new invite's code, as it is shown, and when it stops working. */
-export function newInvite(now: number): Invite {
+function newInvite(now: number, lifetimeMilliseconds: number): Invite {
   const code = Array.from({ length: INVITE_LENGTH }, () => INVITE_ALPHABET[randomInt(INVITE_ALPHABET.length)]).join("");
-  return { code: inGroupsOfFour(code), expiresAt: now + INVITE_LIFETIME_MILLISECONDS };
+  return { code: inGroupsOfFour(code), expiresAt: now + lifetimeMilliseconds };
 }
 
-export function newRoomInvite(now: number): Invite {
-  const { code, expiresAt } = newInvite(now);
+export function newRoomInvite(now: number, lifetimeMilliseconds: number): Invite {
+  const { code, expiresAt } = newInvite(now, lifetimeMilliseconds);
   return { code: `${ROOM_INVITE_MARK}-${code}`, expiresAt };
 }
 
@@ -51,7 +51,7 @@ export class DeviceService {
   ) {}
 
   invite(): Invite {
-    const invite = newInvite(this.now());
+    const invite = newInvite(this.now(), DEVICE_INVITE_LIFETIME_MILLISECONDS);
     this.store.addInvite(inviteKey(invite.code), invite.expiresAt);
     return invite;
   }

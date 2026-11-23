@@ -11528,43 +11528,203 @@ button.room-meaning:hover {
   border-color: var(--border);
 }
 
-.room-invite-dialog .form-actions {
-  margin-top: 12px;
-}
-
-.room-invite-dialog .room-field {
+.room-invite-dialog > header {
   margin-bottom: 12px;
 }
 
-.room-invite-copy {
-  display: flex;
-  align-items: center;
-  gap: 10px;
+.room-invite-dialog h2 {
+  margin: 0;
+  overflow-wrap: anywhere;
 }
 
-.room-invite-seats {
+.room-invite-dialog :is(.hint, .warning) {
+  margin: 0;
+}
+
+.room-invite-dialog .form-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  margin-top: 4px;
+}
+
+.room-invite-dialog > .form-actions {
+  margin-top: 16px;
+}
+
+/* The border between the buttons is the box's own colour showing through, so it holds when they wrap. */
+.room-invite-roles {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px 16px;
-  margin-bottom: 12px;
+  gap: 1px;
+  margin-top: 4px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--border);
+  overflow: hidden;
 }
 
-.room-invite-connect {
-  margin-bottom: 12px;
+/* As wide as one another, so that the bold of the chosen one moves none of them. */
+.room-invite-roles label {
+  flex: 1 0 0;
+  min-width: max-content;
+  padding: 6px 10px;
+  background: var(--panel);
+  text-align: center;
+  cursor: pointer;
 }
 
-.room-invite-connect[open] > summary {
-  margin-bottom: 4px;
+.room-invite-roles label:hover {
+  background: var(--panel-2);
 }
 
-.room-invite-connect .room-field {
-  margin-bottom: 0;
+.room-invite-roles label[data-chosen="true"] {
+  background: var(--accent-soft);
+  color: var(--accent-on-soft);
+  font-weight: 600;
 }
 
-.room-invite-seats label {
+.room-invite-roles label:has(:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+/* The buttons show the choice; the radios stay for the keyboard and screen readers. */
+.room-invite-roles input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  opacity: 0;
+}
+
+.room-invite-abilities {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 4px 12px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.room-invite-abilities li {
+  display: flex;
+  gap: 8px;
+}
+
+.room-invite-abilities li::before {
+  flex: none;
+  width: 1em;
+  color: var(--ok);
+  content: "✓";
+  font-weight: 700;
+}
+
+.room-invite-abilities li[aria-hidden="true"] {
+  color: var(--faint);
+}
+
+.room-invite-abilities li[aria-hidden="true"]::before {
+  color: inherit;
+  content: "–";
+}
+
+.room-invite-rows {
+  display: grid;
+}
+
+.room-invite-rows > * {
+  padding: 6px 0;
+  border-top: 1px solid var(--border);
+}
+
+.room-invite-dialog .room-invite-rows > .warning {
+  margin-top: 6px;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--warn) 45%, transparent);
+}
+
+.room-invite-row {
   display: flex;
   align-items: center;
-  gap: 6px;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.room-invite-row select {
+  min-width: 0;
+  max-width: 65%;
+  padding-block: 4px;
+  text-overflow: ellipsis;
+}
+
+.room-invite-sent {
+  display: grid;
+  gap: 2px;
+}
+
+.room-invite-sent strong {
+  color: var(--ok);
+  font-weight: 600;
+}
+
+.room-invite-sent strong::before {
+  content: "✓ ";
+}
+
+.room-invite-sent.uncopied strong {
+  color: inherit;
+}
+
+.room-invite-sent.uncopied strong::before {
+  content: none;
+}
+
+.room-invite-waiting {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px 12px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--panel-2);
+}
+
+.room-invite-waiting > :first-child {
+  grid-column: 1 / -1;
+}
+
+.room-invite-so-far {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.room-invite-so-far::before {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--warn);
+  content: "";
+}
+
+.room-invite-show {
+  margin-right: auto;
+}
+
+.room-invite-joined p {
+  margin: 10px 0 0;
+  color: var(--ok);
+  font-weight: 600;
+}
+
+.room-invite-joined p::before {
+  content: "✓ ";
+}
+
+.room-invite-dialog .room-joiners-heading {
+  margin-bottom: 6px;
 }
 
 .room-joiners {
@@ -11660,10 +11820,6 @@ button.room-meaning:hover {
 
 .room-knock-view button {
   margin-top: 6px;
-}
-
-.room-invite-made p {
-  margin: 10px 0 0;
 }
 
 .room-invite-text {

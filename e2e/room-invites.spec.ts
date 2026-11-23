@@ -1,7 +1,7 @@
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type FrameLocator, type Page } from "@playwright/test";
-import { addWorkspace, createProfile, createRoom, inviteIntoRoom, joinRoom, nameMachine, nameOwnProfile, openRoomSettings, openSettings, primaryModifier, reachedAtOwnPort, reloadFromRestartedHost, roomCard, signIn } from "./helpers.ts";
+import { addWorkspace, createProfile, createRoom, inviteIntoRoom, joinRoom, nameMachine, nameOwnProfile, openInviteDialog, openRoomSettings, openSettings, primaryModifier, reachedAtOwnPort, reloadFromRestartedHost, roomCard, signIn } from "./helpers.ts";
 import { machineAddress, roomInviteLink } from "../shared/machines.ts";
 import { TestHost, writeBunProgram } from "./test-host.ts";
 
@@ -51,21 +51,16 @@ test("a person joins a room from their own Mirador with an invite, works in it w
 
   const invite = await test.step("the owner makes a room and an invite into it for a member, one text at the machine's address, copied", async () => {
     await createRoom(page, "Garden", ["Builder"]);
-    await page.locator(".room-header").getByRole("button", { name: "Invite someone" }).click();
-    const dialog = page.getByRole("dialog", { name: "Invite someone to Garden" });
-    await expect(dialog.getByLabel("Member: can ask the agents")).toBeChecked();
-    const connect = dialog.locator(".room-invite-connect > summary");
-    await expect(connect).toHaveText(`Connect: At this machine's address (127.0.0.1:${owners.port})`);
-    await expect(dialog.getByLabel("Directly, peer to peer")).toBeHidden();
-    await connect.click();
-    await expect(dialog.getByLabel("Directly, peer to peer")).toBeDisabled();
-    await expect(dialog.locator(".room-invite-no-peer-to-peer")).toHaveText("Peer to peer is off on this machine.");
-    await expect(dialog.getByLabel(`At this machine's address (127.0.0.1:${owners.port})`)).toBeChecked();
-    await expect(dialog.getByRole("textbox", { name: "Invite" })).toHaveCount(0);
+    const dialog = await openInviteDialog(page, "Garden");
+    await expect(dialog.getByRole("radio", { name: "Member" })).toBeChecked();
+    await expect(dialog.getByRole("button", { name: "Copy invite" })).toBeEnabled();
+    await expect(dialog.getByRole("combobox", { name: "Connect" })).toHaveCount(0);
+    await expect(dialog.locator(".room-invite-connect-instead")).toHaveText(`Peer to peer is off on this machine. The invite uses this machine's address instead (127.0.0.1:${owners.port}).`);
+    await expect(dialog.getByLabel("The invite works for").locator("option:checked")).toHaveText("1 day");
     await dialog.getByRole("button", { name: "Copy invite" }).click();
-    await expect(dialog.getByRole("button", { name: "Copied" })).toBeVisible();
-    await expect(dialog.getByText("Send it to them. In their Mirador: Rooms → Join a room.")).toBeVisible();
-    await expect(dialog.getByText(/^Works once, until .+\.$/)).toBeVisible();
+    await expect(dialog.getByText("Copied. Send it to them in any chat.")).toBeVisible();
+    await expect(dialog.getByText("They paste it in their Mirador under Rooms → Join a room.")).toBeVisible();
+    await expect(dialog.getByRole("region", { name: "Invite" })).toContainText(/Member · 1 person · At once\s*Waiting for them to join · expires in 24 hours/);
     await expect(dialog.getByRole("textbox", { name: "Invite" })).toHaveCount(0);
     await dialog.getByRole("button", { name: "Show invite" }).click();
     const text = await dialog.getByRole("textbox", { name: "Invite" }).inputValue();
@@ -73,7 +68,7 @@ test("a person joins a room from their own Mirador with an invite, works in it w
     expect(machineAddress(text)).toMatchObject({ origin: owners.origin, forRoom: true, tunnel: null, name: "Ann's machine" });
     await dialog.getByRole("button", { name: "Done" }).click();
     const settings = await openRoomSettings(page, "Garden");
-    await expect(settings.getByRole("list", { name: "Waiting invites" }).getByRole("listitem")).toHaveText([/^Member · expires in 1[45] minutes/]);
+    await expect(settings.getByRole("list", { name: "Waiting invites" }).getByRole("listitem")).toHaveText([/^Member · expires in 24 hours/]);
     await settings.getByRole("button", { name: "Close" }).click();
     return text;
   });
@@ -423,7 +418,7 @@ test("a person joins a room from their own Mirador with an invite, works in it w
 test("an invite leaves the owner's list of waiting invites as it expires", async ({ page }) => {
   await page.clock.install();
   await signIn(page, owners);
-  await inviteIntoRoom(page, "Garden");
+  await inviteIntoRoom(page, "Garden", { worksFor: "15 minutes" });
   const dialog = await openRoomSettings(page, "Garden");
   const waiting = dialog.getByRole("list", { name: "Waiting invites" }).getByRole("listitem");
   await expect(waiting).toHaveText([/^Member · expires in 1[45] minutes/]);

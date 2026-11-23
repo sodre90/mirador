@@ -164,8 +164,6 @@ export function JoinMachine() {
   );
 }
 
-export const timeOf = (at: number) => new Date(at).toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" });
-
 const connectionStatus = ({ pages }: DeviceConnection) => (pages === 0 ? words.list.connectedInBackground : words.list.connectedWithPages(pages));
 
 const deviceStatus = ({ connection, lastSeenAt }: ListedDevice) =>
