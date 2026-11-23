@@ -46,7 +46,7 @@ async function setRoleOfMia(page: Page, room: string, role: "Member" | "Guest") 
   const inRoom = (await dialog.getByLabel("Role of Mia").count()) > 0;
   if (!inRoom) await dialog.getByRole("combobox", { name: "Add someone you let in before" }).selectOption({ label: "Mia" });
   await dialog.getByLabel("Role of Mia").selectOption({ label: role });
-  await dialog.getByRole("button", { name: "Done" }).click();
+  await dialog.getByRole("button", { name: "Close" }).click();
   await expect(dialog).toBeHidden();
 }
 
@@ -87,7 +87,7 @@ test("a person the owner lets into a room sees only that room on their own brows
     await setRoleOfMia(page, "Launch", "Member");
     const settings = await openRoomSettings(page, "Launch");
     await expect(settings.getByLabel("Role of Mia")).toHaveValue("member");
-    await settings.getByRole("button", { name: "Done" }).click();
+    await settings.getByRole("button", { name: "Close" }).click();
     return roomId;
   });
 

@@ -126,8 +126,25 @@ export function ModelChoice({
   );
 }
 
-/** A box to find an agent by name: typing filters the profiles not yet chosen, Enter or a click adds one and closes the list. */
-export function AgentSearch({ profiles, chosenIds, label, onAdd }: { profiles: Profile[]; chosenIds: string[]; label: string; onAdd: (profileId: string) => void }) {
+/**
+ * A box to find an agent by name: typing filters the profiles not yet chosen, Enter or a click adds one and closes the
+ * list. Leaving it, by Esc or for another part of the page, is told to whoever shows it only while it is used.
+ */
+export function AgentSearch({
+  profiles,
+  chosenIds,
+  label,
+  autoFocus = false,
+  onAdd,
+  onLeave = () => {},
+}: {
+  profiles: Profile[];
+  chosenIds: string[];
+  label: string;
+  autoFocus?: boolean;
+  onAdd: (profileId: string) => void;
+  onLeave?: () => void;
+}) {
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const wanted = query.trim().toLowerCase();
@@ -142,13 +159,17 @@ export function AgentSearch({ profiles, chosenIds, label, onAdd }: { profiles: P
       <input
         {...NAME_FIELD_ATTRIBUTES}
         role="combobox"
+        autoFocus={autoFocus}
         aria-label={label}
         aria-expanded={open && matches.length > 0}
         aria-controls="agent-search-matches"
         placeholder={words.findAgentPlaceholder}
         value={query}
         onFocus={() => setOpen(true)}
-        onBlur={() => setOpen(false)}
+        onBlur={() => {
+          setOpen(false);
+          onLeave();
+        }}
         onChange={(event) => {
           setQuery(event.target.value);
           setOpen(true);
@@ -157,6 +178,7 @@ export function AgentSearch({ profiles, chosenIds, label, onAdd }: { profiles: P
           if (event.key === "Escape" && open) {
             event.stopPropagation();
             setOpen(false);
+            onLeave();
           }
           if (event.key !== "Enter") return;
           event.preventDefault();

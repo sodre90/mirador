@@ -7,7 +7,7 @@ import { launchLabel } from "./launch-label.ts";
 import { LineIcon } from "./LineIcon.tsx";
 import { Modal } from "./Palette.tsx";
 import { sandboxBlockerText } from "./problem-text.ts";
-import { WhatItMeans } from "./RoomSettings.tsx";
+import { WhatItMeans } from "./RoomSection.tsx";
 import { HeldChangeCard, SandboxSwitch, type SandboxSwitchWords } from "./Sandbox.tsx";
 import { SandboxFolderList } from "./SandboxFolders.tsx";
 import type { AppAction, AppState } from "./state.ts";

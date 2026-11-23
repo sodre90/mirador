@@ -175,7 +175,7 @@ test("brought to take others' tasks any time, the agent answers without a card; 
     const membersBring = async (allowed: boolean) => {
       const settings = await openRoomSettings(ann, "Garden", "Agents");
       await settings.getByRole("switch", { name: "Members may bring agents of their own" }).setChecked(allowed);
-      await settings.getByRole("button", { name: "Done" }).click();
+      await settings.getByRole("button", { name: "Close" }).click();
     };
     await membersBring(false);
     await expect(agentChip(ann)).toHaveCount(0);
@@ -203,6 +203,6 @@ test("while Mia's Mirador is away, the room says so at once, and Ann takes the a
   await brought.getByRole("button", { name: "Take out Mia's Coder" }).click();
   await brought.getByRole("button", { name: "Take out Mia's Coder" }).click();
   await expect(brought).toHaveCount(0);
-  await settings.getByRole("button", { name: "Done" }).click();
+  await settings.getByRole("button", { name: "Close" }).click();
   await expect(agentChip(ann)).toHaveCount(0);
 });

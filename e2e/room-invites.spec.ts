@@ -36,7 +36,7 @@ async function setRoleOfDora(page: Page, role: "Guest" | "Not in the room") {
     await dialog.getByRole("button", { name: "Remove Dora" }).click();
     await dialog.getByRole("button", { name: "Confirm: Remove Dora" }).click();
   }
-  await dialog.getByRole("button", { name: "Done" }).click();
+  await dialog.getByRole("button", { name: "Close" }).click();
   await expect(dialog).toBeHidden();
 }
 
@@ -74,7 +74,7 @@ test("a person joins a room from their own Mirador with an invite, works in it w
     await dialog.getByRole("button", { name: "Done" }).click();
     const settings = await openRoomSettings(page, "Garden");
     await expect(settings.getByRole("list", { name: "Waiting invites" }).getByRole("listitem")).toHaveText([/^Member · expires in 1[45] minutes/]);
-    await settings.getByRole("button", { name: "Done" }).click();
+    await settings.getByRole("button", { name: "Close" }).click();
     return text;
   });
 
@@ -385,7 +385,7 @@ test("a person joins a room from their own Mirador with an invite, works in it w
     const settings = await openRoomSettings(page, "Shed");
     await settings.getByRole("button", { name: "Remove Dora" }).click();
     await settings.getByRole("button", { name: "Confirm: Remove Dora" }).click();
-    await settings.getByRole("button", { name: "Done" }).click();
+    await settings.getByRole("button", { name: "Close" }).click();
     await expect(roomsListed(frame)).toHaveText(["Garden"]);
     await visitor.getByRole("navigation", { name: "Machines" }).getByRole("button", { name: "This computer" }).click();
     await expect(visitor.locator(".sidebar .rooms li.joined-room .room-card-name")).toHaveText(["Garden"]);

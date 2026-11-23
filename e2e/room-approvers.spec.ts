@@ -33,7 +33,7 @@ async function letIntoLaunch(page: Page, person: string, role: "Approver" | "Mem
   await dialog.getByRole("combobox", { name: "Add someone you let in before" }).selectOption({ label: person });
   await dialog.getByLabel(`Role of ${person}`).selectOption({ label: role });
   await expect(dialog.getByLabel(`Role of ${person}`)).toHaveValue(role.toLowerCase());
-  await dialog.getByRole("button", { name: "Done" }).click();
+  await dialog.getByRole("button", { name: "Close" }).click();
   await expect(dialog).toBeHidden();
 }
 
@@ -90,7 +90,7 @@ test("an approver answers the room's agents' requests and people's tasks from th
   await test.step("made a member, she is shown no request any more, which waits for the owner alone", async () => {
     const settings = await openRoomSettings(page, "Launch");
     await settings.getByLabel("Role of Mia").selectOption({ label: "Member" });
-    await settings.getByRole("button", { name: "Done" }).click();
+    await settings.getByRole("button", { name: "Close" }).click();
     await tagBuilder(asGus.page, "SAY Gus asks again");
     await expect(strip(page).locator(".room-approval-asker")).toHaveText("Gus (Member) gives Builder a task");
     await expect(roomMessages(asMia.page).last()).toHaveText("@Builder SAY Gus asks again");

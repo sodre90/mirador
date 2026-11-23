@@ -41,7 +41,7 @@ async function setRoleInLaunch(page: Page, person: string, role: Role) {
   if ((await dialog.getByLabel(`Role of ${person}`).count()) === 0) await dialog.getByRole("combobox", { name: "Add someone you let in before" }).selectOption({ label: person });
   await dialog.getByLabel(`Role of ${person}`).selectOption({ label: role });
   await expect(dialog.getByLabel(`Role of ${person}`)).toHaveValue(role.toLowerCase());
-  await dialog.getByRole("button", { name: "Done" }).click();
+  await dialog.getByRole("button", { name: "Close" }).click();
   await expect(dialog).toBeHidden();
 }
 

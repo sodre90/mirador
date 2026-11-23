@@ -86,15 +86,22 @@ test("a room's Claude agent loads all of the owner's Claude Code setup until the
 
   await test.step("starting clean waits for the owner to confirm, as the agent at work there starts afresh", async () => {
     const settings = await openRoomSettings(page, "Setup", "Agents");
-    const setup = settings.getByRole("group", { name: "What Claude agents load of your Claude Code setup" });
-    await expect(setup.getByRole("checkbox")).toHaveCount(5);
-    await setup.getByRole("switch", { name: "Start clean" }).check();
+    const load = settings.getByRole("combobox", { name: "Claude agents load" });
+    const parts = settings.getByRole("group", { name: "Your Claude Code setup" });
+    await expect(load).toHaveValue("all");
+    await expect(parts).toHaveCount(0);
+    await load.selectOption({ label: "Chosen parts" });
+    await expect(parts.getByRole("checkbox")).toHaveCount(5);
+    await expect(parts.getByRole("checkbox", { checked: true })).toHaveCount(5);
+    await expect(settings.locator(".room-starts-afresh")).toHaveCount(0);
+    await load.selectOption({ label: "None: start clean" });
     await expect(settings.locator(".room-starts-afresh")).toContainText("Claude stops any turn under way, starts afresh and reads the room again, once.");
     await settings.locator(".room-starts-afresh").getByRole("button", { name: "Change" }).click();
-    await expect(setup.getByRole("switch", { name: "Start clean" })).toBeChecked();
-    await expect(setup.getByRole("checkbox")).toHaveCount(0);
-    expect((await whatItMeans(page, settings.getByRole("tabpanel"))).join("\n")).toContain("The deny and ask rules and the sandbox of settings left out stay.");
-    await settings.getByRole("button", { name: "Done" }).click();
+    await expect(load).toHaveValue("none");
+    await expect(load).toBeEnabled();
+    await expect(parts).toHaveCount(0);
+    expect((await whatItMeans(page, settings, "Your Claude Code setup")).join("\n")).toContain("The deny and ask rules and the sandbox of settings left out stay.");
+    await settings.getByRole("button", { name: "Close" }).click();
   });
 
   rmSync(hooksRan(), { force: true });

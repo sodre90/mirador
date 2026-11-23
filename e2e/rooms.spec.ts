@@ -129,11 +129,11 @@ test("people write in a room, a tagged agent answers in its thread, and another 
     await roomComposer(page).fill("");
   });
 
-  await test.step("the room's settings open from its bar, and deleting the room at their foot, beside Done, takes it away", async () => {
+  await test.step("the room's settings open from its bar, and deleting the room on their General page takes it away", async () => {
     await page.locator(".room-header:visible").getByRole("button", { name: "Room settings" }).click();
     const dialog = page.getByRole("dialog", { name: "Room settings" });
     await expect(dialog.getByRole("tab", { name: "People" })).toHaveAttribute("aria-selected", "true");
-    await expect(dialog.locator(".form-actions").getByRole("button")).toHaveText(["Delete room", "Done"]);
+    await dialog.getByRole("tab", { name: "General" }).click();
     await dialog.getByRole("button", { name: "Delete room" }).click();
     await dialog.getByRole("button", { name: "Confirm: Delete room" }).click();
     await expect(page.locator(".sidebar .rooms li")).toHaveCount(0);
@@ -198,9 +198,9 @@ test("a workspace a room works in stays until the room moves to another, where i
   });
 
   await test.step("the room moves to another workspace, and its old one can go", async () => {
-    const settings = await openRoomSettings(page, "Moving");
+    const settings = await openRoomSettings(page, "Moving", "General");
     await settings.getByRole("combobox", { name: /^Workspace/ }).selectOption({ label: "project" });
-    await settings.getByRole("button", { name: "Done" }).click();
+    await settings.getByRole("button", { name: "Close" }).click();
     await removeWorkspace(workspaceCard(page, elsewhere));
     await expect(workspaceCard(page, elsewhere)).toHaveCount(0);
     await expect(page.getByRole("heading", { name: "# Moving" })).toBeVisible();

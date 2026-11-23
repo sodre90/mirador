@@ -3182,8 +3182,8 @@ input.picker-search {
   margin-top: 0;
 }
 
-/* The dialog's title names the sandbox already; the legend still names the switch's group for screen readers. */
-.modal.workspace-sandbox .room-sandbox > legend {
+/* The title over it names the sandbox already; the legend still names the switch's group for screen readers. */
+.modal:is(.workspace-sandbox, .room-settings) .room-sandbox > legend {
   position: absolute;
   width: 1px;
   height: 1px;
@@ -7081,15 +7081,18 @@ button.plugin-chip:focus-visible {
 
 /* Settings */
 
-.modal.settings {
+.modal:is(.settings, .room-settings) {
   display: flex;
   flex-direction: column;
   width: min(760px, 100%);
   height: min(640px, 100%);
+  overflow: hidden;
+}
+
+.modal.settings {
   min-width: min(520px, 100%);
   min-height: min(360px, 100%);
   max-width: 100%;
-  overflow: hidden;
   resize: both;
 }
 
@@ -10576,23 +10579,10 @@ button.link.more-rows {
 }
 
 .room-invite-make,
-.room-invite-make label,
-.room-invites li {
+.room-invite-make label {
   display: flex;
   align-items: center;
   gap: 8px;
-}
-
-.room-invites {
-  display: grid;
-  gap: 4px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.room-delete {
-  margin-right: auto;
 }
 
 .room-usage-period {
@@ -10723,7 +10713,6 @@ button.link.more-rows {
   opacity: 0.45;
 }
 
-.room-invites-heading,
 .room-joiners-heading {
   margin: 8px 0 0;
   color: var(--muted);
@@ -10891,8 +10880,7 @@ button.link.more-rows {
   gap: 8px;
 }
 
-.room-agent-chips,
-.room-settings-rows {
+.room-agent-chips {
   display: grid;
   gap: 6px;
   margin: 0;
@@ -10955,20 +10943,37 @@ select.room-agent-choice-select:focus-visible {
 }
 
 .room-agent-unconfined-line {
-  flex-basis: 100%;
-  padding-left: 28px;
   color: var(--warn-on-soft);
+}
+
+.room-agent-unconfined-note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
   font-size: calc(12px * var(--font-scale));
 }
 
 .room-agent-values {
-  flex-basis: 100%;
-  padding-left: 28px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
   font-size: calc(12px * var(--font-scale));
 }
 
-.room-agent-values summary {
+.room-agent-values > * {
+  padding: 8px 12px;
+}
+
+.room-agent-values > * + * {
+  border-top: 1px solid var(--border);
+}
+
+.room-agent-values :is(summary, .hint) {
   color: var(--muted);
+  font-size: inherit;
+}
+
+.room-agent-values summary {
   cursor: pointer;
 }
 
@@ -10981,21 +10986,22 @@ select.room-agent-choice-select:focus-visible {
 }
 
 .room-agent-values code {
+  min-width: 0;
   font-family: var(--mono);
+  overflow-wrap: anywhere;
 }
 
-.room-agent-host-environment {
-  margin-top: 6px;
-}
-
-.room-claude-setup legend {
-  margin-bottom: 4px;
-}
-
-.room-claude-setup-parts {
+.settings-rows > li.room-claude-setup-parts {
   display: grid;
-  gap: 4px;
-  padding-left: 22px;
+  gap: 6px;
+}
+
+:is(.room-agent-values, .room-claude-setup-parts) input {
+  margin: 0;
+}
+
+:is(.room-agent-values, .room-claude-setup-parts) .room-agent-choice {
+  gap: 10px;
 }
 
 .room-starts-afresh {
@@ -11312,48 +11318,182 @@ button.link.what-it-means:hover:not(:disabled) {
   gap: 12px;
 }
 
-.room-general {
+.room-settings .settings-page {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  margin-bottom: 12px;
+  gap: 20px;
 }
 
-.room-tabs {
+.room-settings .settings-rows {
+  margin: 0;
+}
+
+.room-settings .settings-rows + .settings-rows,
+.room-section > * + .hint,
+.room-section > .room-add-person {
+  margin-top: 8px;
+}
+
+.room-section-heading,
+.room-agent-page-head {
   display: flex;
-  gap: 2px;
-  margin-bottom: 10px;
-  border-bottom: 1px solid var(--border);
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  margin-bottom: 8px;
 }
 
-.room-tabs button {
-  margin-bottom: -1px;
-  padding: 6px 10px;
-  border: none;
-  border-bottom: 2px solid transparent;
-  border-radius: 0;
-  background: none;
+.room-section-action,
+.room-agent-page-head > :last-child {
+  margin-left: auto;
+}
+
+.room-section-action .agent-search {
+  width: 220px;
+}
+
+.room-settings h3 {
+  min-width: 0;
+  margin: 0;
+  font-size: calc(13px * var(--font-scale));
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.room-agent-page-head {
+  margin-bottom: 0;
+}
+
+.room-agent-page-head .avatar,
+.room-agent-rows .avatar {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  font-size: calc(11px * var(--font-scale));
+}
+
+button.room-meaning {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border-radius: 50%;
   color: var(--muted);
+  cursor: help;
+  font-size: calc(10.5px * var(--font-scale));
 }
 
-.room-tabs button[aria-selected="true"] {
-  border-bottom-color: var(--accent);
+button.room-meaning:hover {
   color: var(--text);
 }
 
-.room-tab-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  min-height: 160px;
+.room-row-words {
+  flex: 1 1 auto;
+  display: grid;
+  gap: 2px;
+  min-width: 0;
 }
 
-.room-settings-rows li {
+.room-row-words .hint {
+  margin: 0;
+}
+
+.room-control-row > .room-row-words {
+  flex: 1 1 220px;
+}
+
+.room-control-row > :is(input, select) {
+  width: 220px;
+  max-width: 100%;
+}
+
+.room-control-row label,
+.room-row-title {
+  font-weight: 600;
+}
+
+.room-switch {
+  flex: 1;
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   min-width: 0;
+}
+
+.room-switch input {
+  flex: none;
+  margin: 0;
+}
+
+.settings-rows > li.room-none {
+  color: var(--muted);
+}
+
+/* The whole row opens the agent; its model and effort lie over what opens it. */
+.settings-rows.room-agent-rows > li {
+  position: relative;
+  padding-right: 32px;
+}
+
+.room-agent-rows > li:hover:has(.room-agent-open) {
+  background: var(--row-hover);
+}
+
+.room-agent-rows > li:has(.room-agent-open)::after {
+  content: "›";
+  position: absolute;
+  right: 14px;
+  color: var(--muted);
+  font-size: calc(16px * var(--font-scale));
+}
+
+.room-agent-open {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  font-weight: inherit;
+  text-align: left;
+}
+
+.room-agent-open:hover {
+  background: none;
+}
+
+.room-agent-open::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 7px;
+}
+
+.room-agent-open:focus-visible {
+  outline: none;
+}
+
+.room-agent-open:focus-visible::after {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.room-settings .room-sandbox {
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+/* A change that waits for a yes is in view wherever the page is scrolled to. */
+.room-settings .room-starts-afresh {
+  position: sticky;
+  bottom: 0;
 }
 
 .room-settings-row-name {
@@ -11364,16 +11504,16 @@ button.link.what-it-means:hover:not(:disabled) {
   white-space: nowrap;
 }
 
-/*
- * An agent's name keeps the room it needs beside its avatar; its model and effort move under it, at the right, before
- * it is cut short.
- */
+/* An agent's model and effort move under its name, at the right, before the name is cut short. */
 .room-settings-agent-name {
-  flex: 1 1 auto;
-  max-width: calc(100% - 28px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .room-settings-agent-choices {
+  position: relative;
+  z-index: 1;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -11381,12 +11521,13 @@ button.link.what-it-means:hover:not(:disabled) {
   margin-left: auto;
 }
 
-.room-add-person,
-.room-invite-someone {
-  align-self: flex-start;
+.room-settings-agent-choices select.room-agent-choice-select {
+  max-width: 220px;
+  padding-block: 3px;
+  padding-left: 8px;
+  border-color: var(--border);
 }
 
-.room-settings .form-actions,
 .room-invite-dialog .form-actions {
   margin-top: 12px;
 }

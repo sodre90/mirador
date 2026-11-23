@@ -63,7 +63,7 @@ async function removeDoraFromGarden(page: Page) {
   const dialog = await openRoomSettings(page, "Garden");
   await dialog.getByRole("button", { name: "Remove Dora" }).click();
   await dialog.getByRole("button", { name: "Confirm: Remove Dora" }).click();
-  await dialog.getByRole("button", { name: "Done" }).click();
+  await dialog.getByRole("button", { name: "Close" }).click();
   await expect(dialog).toBeHidden();
 }
 
@@ -329,7 +329,7 @@ test("one link for several people brings each through the tunnel to the room's d
       await settings.getByRole("button", { name: `Let ${name} in` }).click();
       await expect(visitor.frameLocator('iframe[title="Ann\'s Mac"]').getByRole("heading", { name: "# Garden" })).toBeVisible({ timeout: 60_000 });
     }
-    await settings.getByRole("button", { name: "Done" }).click();
+    await settings.getByRole("button", { name: "Close" }).click();
   });
   await Promise.all(people.map(({ visitor }) => visitor.close()));
 });

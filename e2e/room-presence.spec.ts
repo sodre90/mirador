@@ -166,7 +166,7 @@ test("the owner and a person in the room see who of them is here and who writes,
     ]);
     await dialog.getByLabel("Period").selectOption({ label: "All time" });
     await expect(byAgent.locator("tbody tr").first()).toContainText("Builder");
-    await dialog.getByRole("button", { name: "Done" }).click();
+    await dialog.getByRole("button", { name: "Close" }).click();
     await expect(frame.getByRole("button", { name: "Settings of Garden" })).toHaveCount(0);
     await expect(frame.getByText("Usage")).toHaveCount(0);
   });

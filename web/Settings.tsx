@@ -68,6 +68,7 @@ import { usePulsesOn } from "./pulses.ts";
 import { VoiceSettings } from "./VoiceSettings.tsx";
 import { useTimestampsShown } from "./timestamps.ts";
 import { NAME_FIELD_ATTRIBUTES, setTypingAids, useTypingAids, type TypingAids } from "./typing-aids.ts";
+import { SettingsPageList, settingsPanel } from "./SettingsPages.tsx";
 import { SettingsSearchScope, SettingsSection, useSettingRow } from "./SettingsSection.tsx";
 import { useWaitingStyle, waitingStyleLabels } from "./waiting.ts";
 import { setWorkspaceColorStyle, useWorkspaceColorStyle, workspaceColorStyleLabels } from "./workspace-colors.ts";
@@ -98,7 +99,6 @@ function Thumbnail({ slots, hidden }: { slots: Slots; hidden: LayoutDefault["hid
 
 const pageLabels: Record<SettingsPage, string> = t.labels.settingsPage;
 const settingsPages = Object.keys(pageLabels) as SettingsPage[];
-const pageSteps: Partial<Record<string, 1 | -1>> = { ArrowDown: 1, ArrowUp: -1 };
 
 export function SettingsDialog({
   page: openedAt,
@@ -238,7 +238,7 @@ export function SettingsDialog({
           </button>
         </header>
         <div className="settings-body">
-          <PageList page={searching ? null : page} onChoose={choosePage} />
+          <SettingsPageList pages={settingsPages} labels={pageLabels} label={text.pagesLabel} page={searching ? null : page} onChoose={choosePage} />
           {searching ? (
             <div className="settings-page settings-search-results" role="region" aria-label={text.search.results}>
               {settingsPages.map((id) => (
@@ -252,44 +252,13 @@ export function SettingsDialog({
               <p className="hint settings-nothing-found">{text.search.nothingFound}</p>
             </div>
           ) : (
-            <div className="settings-page" role="tabpanel" id="settings-page" aria-labelledby={`settings-tab-${page}`}>
+            <div className="settings-page" {...settingsPanel(page)}>
               {pages[page]()}
             </div>
           )}
         </div>
       </div>
     </div>
-  );
-}
-
-/** Up and Down move between the pages, as in a list of tabs. No page is chosen while Settings shows what a search found. */
-function PageList({ page, onChoose }: { page: SettingsPage | null; onChoose: (page: SettingsPage) => void }) {
-  const chooseWithArrows = (event: ReactKeyboardEvent<HTMLElement>) => {
-    const step = pageSteps[event.key];
-    if (!step) return;
-    event.preventDefault();
-    const next = page === null ? settingsPages[0]! : settingsPages[(settingsPages.indexOf(page) + step + settingsPages.length) % settingsPages.length]!;
-    onChoose(next);
-    event.currentTarget.querySelector<HTMLElement>(`#settings-tab-${next}`)?.focus();
-  };
-  const reachedByTab = page ?? settingsPages[0];
-  return (
-    <nav className="settings-pages" role="tablist" aria-orientation="vertical" aria-label={text.pagesLabel} onKeyDown={chooseWithArrows}>
-      {settingsPages.map((id) => (
-        <button
-          key={id}
-          type="button"
-          role="tab"
-          id={`settings-tab-${id}`}
-          aria-selected={id === page}
-          aria-controls="settings-page"
-          tabIndex={id === reachedByTab ? 0 : -1}
-          onClick={() => onChoose(id)}
-        >
-          {pageLabels[id]}
-        </button>
-      ))}
-    </nav>
   );
 }
 

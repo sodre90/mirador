@@ -51,7 +51,7 @@ async function letIn(page: Page, room: string, person: string, role: "Member" | 
   const dialog = await openRoomSettings(page, room);
   await dialog.getByRole("combobox", { name: "Add someone you let in before" }).selectOption({ label: person });
   await dialog.getByLabel(`Role of ${person}`).selectOption({ label: role });
-  await dialog.getByRole("button", { name: "Done" }).click();
+  await dialog.getByRole("button", { name: "Close" }).click();
   await expect(dialog).toBeHidden();
 }
 
@@ -178,7 +178,7 @@ test("an agent's several questions are each voted on and confirmed together, onl
     const dialog = await openRoomSettings(page, "Launch");
     await dialog.getByRole("button", { name: "Remove Gus" }).click();
     await dialog.getByRole("button", { name: "Confirm: Remove Gus" }).click();
-    await dialog.getByRole("button", { name: "Done" }).click();
+    await dialog.getByRole("button", { name: "Close" }).click();
     await expect(dialog).toBeHidden();
     await expect(option(page, title, "North").locator(".room-vote-count")).toHaveCount(0);
     await expect(option(page, title, "Beans").locator(".room-vote-count")).toHaveCount(0);

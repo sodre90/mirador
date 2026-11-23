@@ -28,7 +28,7 @@ async function clearOwnName(page: Page) {
 async function expectPeopleInGarden(page: Page, names: string[]) {
   const settings = await openRoomSettings(page, "Garden", "People");
   await expect(settings.locator(".room-settings-row-name")).toHaveText(names);
-  await settings.getByRole("button", { name: "Done" }).click();
+  await settings.getByRole("button", { name: "Close" }).click();
 }
 
 test("someone with no name is asked for one wherever they join a room: under Join a room, adding the machine from a room invite's link, and in its place in the rail; and joins with the name they chose", async ({ page, browser }) => {
@@ -113,7 +113,7 @@ test("someone with no name is asked for one wherever they join a room: under Joi
     const settings = await openRoomSettings(page, "Garden", "People");
     await settings.getByRole("button", { name: "Remove Edie" }).click();
     await settings.getByRole("button", { name: "Confirm: Remove Edie" }).click();
-    await settings.getByRole("button", { name: "Done" }).click();
+    await settings.getByRole("button", { name: "Close" }).click();
     await rail.getByRole("button", { name: "Ann's machine" }).click();
     const joinPanel = visitor.getByRole("region", { name: "Join Ann's machine" });
     await expect(joinPanel.locator(".join-out-of-rooms")).toBeVisible({ timeout: 30_000 });

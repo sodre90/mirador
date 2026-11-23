@@ -557,9 +557,9 @@ export const pressCommandWInTheApp = (page: Page) => page.evaluate(() => window.
 /** What the macOS app's Settings… menu item, ⌘, runs in its window's page. */
 export const pressCommandCommaInTheApp = (page: Page) => page.evaluate(() => window.dispatchEvent(new CustomEvent("mirador:desktop-settings")));
 
-/** The paragraphs a "What does this mean?" marker in the scope tells in its hover hint, which is put away again after. */
-export async function whatItMeans(page: Page, scope: Locator) {
-  await scope.getByRole("button", { name: "What does this mean?" }).hover();
+/** The paragraphs a "What does this mean?" marker in the scope, or the "?" beside the named setting, tells in its hover hint, which is put away again after. */
+export async function whatItMeans(page: Page, scope: Locator, setting?: string) {
+  await scope.getByRole("button", { name: setting ? `What does “${setting}” mean?` : "What does this mean?" }).hover();
   const hint = page.locator(".hint-bubble.long");
   await expect(hint).toBeVisible();
   const paragraphs = await hint.locator("p").allInnerTexts();
@@ -602,14 +602,20 @@ export async function createRoom(scope: Page | FrameLocator, name: string, agent
   await expect(scope.getByRole("heading", { name: `# ${name}` })).toBeVisible();
 }
 
-/** Opens a room's settings from the ⋯ its card shows while pointed at, at a tab of them when given. */
-export async function openRoomSettings(scope: Page | FrameLocator, room: string, tab?: "People" | "Agents" | "Permissions" | "Usage") {
+/** Opens a room's settings from the ⋯ its card shows while pointed at, at a page of them when given. */
+export async function openRoomSettings(scope: Page | FrameLocator, room: string, tab?: "General" | "People" | "Agents" | "Permissions" | "Usage") {
   const card = roomCard(scope, room);
   await card.hover();
   await card.getByRole("button", { name: `Settings of ${room}` }).click();
   const dialog = scope.getByRole("dialog", { name: "Room settings" });
   if (tab) await dialog.getByRole("tab", { name: tab }).click();
   return dialog;
+}
+
+/** Opens an agent's own page from its row in a room's settings. */
+export async function openRoomAgent(settings: Locator, agent: string) {
+  await settings.getByRole("button", { name: `Settings of ${agent}` }).click();
+  await expect(settings.getByRole("heading", { name: agent })).toBeVisible();
 }
 
 /** Names this machine as the machines that join it see it, in Settings → Devices. */

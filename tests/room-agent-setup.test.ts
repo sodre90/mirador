@@ -5,10 +5,13 @@ import { parseEnvironment } from "../shared/profile-environment.ts";
 import { NO_SANDBOX, type SandboxSetting } from "../shared/sandbox.ts";
 import {
   ALL_OF_CLAUDE_SETUP,
+  CLAUDE_SETUP_PARTS,
+  claudeSetupChoiceOf,
   claudeSetupIn,
   environmentInRoom,
   givenByDefault,
   heldToAskingInRooms,
+  NONE_OF_CLAUDE_SETUP,
   profileVariablesInRoom,
   roomSetupFingerprint,
   type ClaudeSetup,
@@ -21,6 +24,15 @@ const CLEAN: ClaudeSetup = { ownSettings: false, workspaceSettings: false, mcpSe
 const optionsWith = (claudeSetup: ClaudeSetup, withoutUserSettings = false) => claudeRoomSessionMeta("often", { claudeSetup, withoutUserSettings }).claudeCode.options;
 
 describe("what a room's Claude agents load of the owner's Claude Code setup", () => {
+  test("reads as all of it, none of it, or the parts chosen", () => {
+    expect(claudeSetupChoiceOf(ALL_OF_CLAUDE_SETUP)).toBe("all");
+    expect(claudeSetupChoiceOf(NONE_OF_CLAUDE_SETUP)).toBe("none");
+    for (const part of CLAUDE_SETUP_PARTS) {
+      expect(claudeSetupChoiceOf({ ...ALL_OF_CLAUDE_SETUP, [part]: false })).toBe("parts");
+      expect(claudeSetupChoiceOf({ ...NONE_OF_CLAUDE_SETUP, [part]: true })).toBe("parts");
+    }
+  });
+
   test("all of it leaves Claude Code to load as in the owner's own conversations", () => {
     const options = optionsWith(ALL_OF_CLAUDE_SETUP);
     expect(options).not.toHaveProperty("settingSources");

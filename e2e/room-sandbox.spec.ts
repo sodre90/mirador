@@ -3,7 +3,7 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, realpathSync, writeFile
 import { release } from "node:os";
 import { dirname, join } from "node:path";
 import { expect, test, type Locator, type Page } from "@playwright/test";
-import { addWorkspace, addWorkspaceFromSidebar, clickWorkspaceButton, createProfile, createRoom, lastAgentMessage, openRoomSettings, roomCard, sendMessage, signIn, waitForTurnToEnd, workspaceCard } from "./helpers.ts";
+import { addWorkspace, addWorkspaceFromSidebar, clickWorkspaceButton, createProfile, createRoom, lastAgentMessage, openRoomAgent, openRoomSettings, roomCard, sendMessage, signIn, waitForTurnToEnd, workspaceCard } from "./helpers.ts";
 import { bunProgramPath, TestHost, writeBunProgram } from "./test-host.ts";
 
 const sandboxesRunHere = process.platform === "darwin" && process.arch === "arm64" && Number(release().split(".")[0]) >= 25;
@@ -79,7 +79,8 @@ const textStart = (shown: Locator) =>
     text.selectNodeContents(element);
     return text.getBoundingClientRect().left;
   });
-const presetsAside = (dialog: Locator) => dialog.getByRole("group", { name: "What the agents may do without asking" }).getByText("Agents in the sandbox work freely there, whatever is chosen here.");
+const PRESETS_ASIDE = "Agents in the sandbox work freely there, whatever is chosen here.";
+const presets = (dialog: Locator) => dialog.getByRole("radiogroup", { name: "What the agents may do without asking" });
 const heldCard = (page: Page) => page.getByRole("region", { name: "Agent config change held for you" });
 
 async function tag(page: Page, room: string, agent: string, rest: string) {
@@ -112,7 +113,7 @@ test("the sandbox switch stays off, with the reason under it, where the computer
     const dialog = await openRoomSettings(page, "Mixed", "Permissions");
     await expect(reasons(dialog)).toHaveText("Stub can't run in a sandbox yet: sandboxes run Claude Code and pi agents for now, other kinds are coming.");
     await expect(sandboxSwitch(dialog)).toBeDisabled();
-    await dialog.getByRole("button", { name: "Done" }).click();
+    await dialog.getByRole("button", { name: "Close" }).click();
   });
   await test.step("a Claude agent that signs in with a subscription", async () => {
     await createRoom(page, "Subscribed", ["Subscriber"]);
@@ -120,7 +121,7 @@ test("the sandbox switch stays off, with the reason under it, where the computer
     await expect(reasons(dialog)).toHaveText(/^Subscriber signs in with a Claude subscription/);
     await expect(sandboxSwitch(dialog)).toBeDisabled();
     await keepScreenshot(dialog, "switch-off-with-reason");
-    await dialog.getByRole("button", { name: "Done" }).click();
+    await dialog.getByRole("button", { name: "Close" }).click();
   });
   await test.step("a workspace that is a git worktree", async () => {
     await addWorkspaceFromSidebar(page, worktree());
@@ -128,7 +129,7 @@ test("the sandbox switch stays off, with the reason under it, where the computer
     const dialog = await openRoomSettings(page, "Branched", "Permissions");
     await expect(reasons(dialog)).toHaveText(/^The workspace is a git worktree/);
     await expect(sandboxSwitch(dialog)).toBeDisabled();
-    await dialog.getByRole("button", { name: "Done" }).click();
+    await dialog.getByRole("button", { name: "Close" }).click();
   });
   expect(containerCalls().filter(([command]) => command !== "system")).toEqual([]);
 });
@@ -144,7 +145,8 @@ test("turned on, the sandbox is set up on this Mac with its progress shown, and 
 
   await expect(dialog.getByText("Network: only the model and Mirador")).toBeVisible();
   await expect(dialog.getByRole("radio", { name: "Agents work freely inside" })).toBeChecked();
-  await expect(presetsAside(dialog)).toBeVisible();
+  await expect(presets(dialog)).toHaveAccessibleDescription(PRESETS_ASIDE);
+  await expect(dialog.getByText(PRESETS_ASIDE)).toBeVisible();
   const setup = dialog.locator(".room-sandbox-setup");
   await expect(setup).toHaveText("Building the agents' image on this Mac: step 2 of 3…");
   await expect(setup.getByRole("progressbar")).toHaveAttribute("value", "2");
@@ -155,13 +157,13 @@ test("turned on, the sandbox is set up on this Mac with its progress shown, and 
   for (const underTheSwitch of [dialog.getByText("Network: only the model and Mirador"), setup]) expect(Math.abs((await textStart(underTheSwitch)) - optionsStart)).toBeLessThan(2);
   await keepScreenshot(dialog, "switch-on");
   expect(containerStateNow()).toMatchObject({ builderRunning: false, images: [expect.stringMatching(/^mirador-room-agent:claude-2\.1\.330-bun-/)] });
-  await dialog.getByRole("button", { name: "Done" }).click();
+  await dialog.getByRole("button", { name: "Close" }).click();
 
   await test.step("the room's bar says it is sandboxed, and opens the sandbox's settings", async () => {
     await page.locator(".room-header:visible").getByRole("button", { name: "Sandboxed", exact: true }).click();
     await expect(dialog.getByRole("tab", { name: "Permissions" })).toHaveAttribute("aria-selected", "true");
     await expect(sandboxSwitch(dialog)).toBeChecked();
-    await dialog.getByRole("button", { name: "Done" }).click();
+    await dialog.getByRole("button", { name: "Close" }).click();
   });
 
   await tag(page, "Sandboxed", "Builder", "ENV ANTHROPIC_API_KEY");
@@ -245,8 +247,9 @@ test("working freely, the agent asks for nothing in its VM; under the room's pre
   await expect(dialog.getByRole("alert")).toContainText("Builder");
   await dialog.getByRole("button", { name: "Change" }).click();
   await expect(dialog.getByRole("radio", { name: "The room's permission preset still applies" })).toBeChecked();
-  await expect(presetsAside(dialog)).toBeHidden();
-  await dialog.getByRole("button", { name: "Done" }).click();
+  await expect(presets(dialog)).toBeVisible();
+  await expect(dialog.getByText(PRESETS_ASIDE)).toBeHidden();
+  await dialog.getByRole("button", { name: "Close" }).click();
 
   await tag(page, "Sandboxed", "Builder", `${runLs} `);
   const strip = page.locator(".room-timeline ~ .room-approvals");
@@ -262,9 +265,9 @@ test("in a sandboxed room's workspace a commit or merge runs none of the reposit
 
   await test.step("the agent's values say this computer's environment is ignored while the room is sandboxed", async () => {
     const settings = await openRoomSettings(page, "Sandboxed", "Agents");
-    await settings.locator(".room-agent-values summary").click();
-    await expect(settings.locator(".room-values-sandboxed")).toHaveText("Ignored while the room is sandboxed: only the values chosen here go into its sandbox.");
-    await settings.getByRole("button", { name: "Done" }).click();
+    await openRoomAgent(settings, "Builder");
+    await expect(settings.getByRole("switch", { name: "Everything from this computer's environment" })).toHaveAccessibleDescription("Ignored while the room is sandboxed: only the values chosen here go into its sandbox.");
+    await settings.getByRole("button", { name: "Close" }).click();
   });
 
   await test.step("a commit from a conversation on this Mac passes a hook that would refuse it, and says why beforehand", async () => {

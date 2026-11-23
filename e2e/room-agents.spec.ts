@@ -231,7 +231,7 @@ test("a new room's agent is found by name and set to a model there, which it ans
   await test.step("a model changed in the room's settings reaches its session at once", async () => {
     const settings = await openRoomSettings(page, "Models", "Agents");
     await settings.getByRole("combobox", { name: "Model of Modeller" }).selectOption({ label: "Haiku" });
-    await settings.getByRole("button", { name: "Done" }).click();
+    await settings.getByRole("button", { name: "Close" }).click();
     await expect(page.locator(".room-agents .room-agent-model")).toHaveText(["Haiku"]);
     await tag(page, "Models", "Modeller", "CHOICES");
     await expect(answerSaying(page, "On model haiku")).toHaveText(/On model haiku, mode default\./);
@@ -374,11 +374,12 @@ test("with a long model, the room's bar keeps to one line by cutting the agent's
   await test.step("the room's settings show the agent's whole name beside its model and effort, and cut it short with a hint only where too narrow", async () => {
     await page.setViewportSize({ width: 1600, height: 1000 });
     const settings = await openRoomSettings(page, "Kimi", "Agents");
-    const name = settings.locator(".room-settings-agent-name", { hasText: agent });
+    const row = settings.getByRole("button", { name: `Settings of ${agent}` });
+    const name = row.locator(".room-settings-agent-name");
     expect(await onOneLineWhole(name)).toBe(true);
-    await expect(name).not.toHaveAttribute("data-hint");
+    await expect(row).not.toHaveAttribute("data-hint");
     await name.evaluate((element) => (element.closest("li")!.style.width = "120px"));
-    await expect(name).toHaveAttribute("data-hint", agent);
+    await expect(row).toHaveAttribute("data-hint", agent);
     expect(await endsInEllipsis(name)).toBe(true);
   });
 });

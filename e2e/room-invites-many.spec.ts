@@ -62,7 +62,7 @@ test("one invite brings several people to a room's door, where the owner lets ea
     const text = await inviteIntoRoom(page, "Garden", { howMany: "Up to 5" });
     const settings = await openRoomSettings(page, "Garden");
     await expect(settings.getByRole("list", { name: "Waiting invites" }).getByRole("listitem")).toHaveText([/^Member · 0 of 5 joined · expires in 1[45] minutes/]);
-    await settings.getByRole("button", { name: "Done" }).click();
+    await settings.getByRole("button", { name: "Close" }).click();
     return text;
   });
 
@@ -142,7 +142,7 @@ test("one invite brings several people to a room's door, where the owner lets ea
     await settings.getByRole("button", { name: "Let Dora in" }).click();
     await expect(waiting.locator(".room-joiner-name")).toHaveText(["Eli", "Hal"]);
     await expect(settings.getByRole("list", { name: "People" }).locator(".room-settings-row-name")).toHaveText(["Gus", "Dora"]);
-    await settings.getByRole("button", { name: "Done" }).click();
+    await settings.getByRole("button", { name: "Close" }).click();
   });
 
   await test.step("the one let in has their Mirador open the room on the owner's machine, in the theme they chose", async () => {
@@ -211,7 +211,7 @@ test("one invite brings several people to a room's door, where the owner lets ea
     const waiting = settings.getByRole("list", { name: "Waiting to join" }).getByRole("listitem");
     await expect(waiting.locator(".room-joiner-name")).toHaveText(["Someone without a name"]);
     await expect(waiting.locator(".room-person-name-clash")).toHaveText(["Gave the name “DORA”, which reads as a name already in the room."]);
-    await settings.getByRole("button", { name: "Done" }).click();
+    await settings.getByRole("button", { name: "Close" }).click();
     await fay.close();
   });
 

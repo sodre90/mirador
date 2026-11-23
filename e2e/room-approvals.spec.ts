@@ -99,7 +99,7 @@ test("each permission preset lets through by itself what it names, and asks for 
     const dialog = await openRoomSettings(page, "Free", "Permissions");
     await expect(dialog.getByLabel("Work freely inside the workspace")).toBeChecked();
     await dialog.getByLabel("Ask for everything").check();
-    await dialog.getByRole("button", { name: "Done" }).click();
+    await dialog.getByRole("button", { name: "Close" }).click();
     await tag(page, "Free", "Builder", ask([read]));
     await expect(subjectOf(strip)).toHaveText("Permission needed: Read README.md");
     await answer(strip, "Allow");
@@ -109,8 +109,8 @@ test("each permission preset lets through by itself what it names, and asks for 
   await test.step("never asking lets a command and an edit outside the workspace through without asking", async () => {
     const dialog = await openRoomSettings(page, "Free", "Permissions");
     await dialog.getByLabel("Never ask, anywhere on this computer").check();
-    await expect(dialog.locator(".room-permissions-field + .what-it-means")).toHaveAttribute("data-hint", /Through the agents, people here can do anything you can on this computer/);
-    await dialog.getByRole("button", { name: "Done" }).click();
+    expect((await whatItMeans(page, dialog, "What the agents may do without asking")).join("\n")).toContain("Through the agents, people here can do anything you can on this computer");
+    await dialog.getByRole("button", { name: "Close" }).click();
     const outside = { kind: "edit", title: "Edit anywhere.md", path: join(host.root, "anywhere.md") };
     await tag(page, "Free", "Builder", ask([read, run("git rebase origin/main"), outside]));
     await expect(answerSaying(page, "Read README.md: allow; Run git rebase origin/main: allow; Edit anywhere.md: allow")).toHaveCount(1);
@@ -244,19 +244,19 @@ test("a member's task waits until the owner, told who asks and as what, allows i
   const openSettings = () => openRoomSettings(page, "People");
   const addMia = () => settings.getByRole("combobox", { name: "Add someone you let in before" }).selectOption({ label: "Mia" });
   await openSettings();
-  expect(await whatItMeans(page, settings.locator(".room-tab-panel"))).toContain(
+  expect(await whatItMeans(page, settings, "People")).toContain(
     "Through the agents, people here read the workspace's files and reach what else you allow: edits and commands ask you first. Everyone in the room reads the agents' answers, so whatever an agent reads, they can read too. Some agents go further without asking: Claude Code reads its workspace, Codex reads any file on this computer, pi and opencode may ask nothing, and your own agent settings can allow commands.",
   );
   await expect(settings.getByLabel("People's tasks start without asking me")).not.toBeChecked();
   await addMia();
   await expect(settings.getByLabel("Role of Mia")).toHaveValue("member");
-  await settings.getByRole("button", { name: "Done" }).click();
+  await settings.getByRole("button", { name: "Close" }).click();
   await expect(settings).toBeHidden();
   await openNewRoom(page, "Lookout", ["Reviewer"]);
   await openRoomSettings(page, "Lookout");
   await addMia();
   await settings.getByLabel("Role of Mia").selectOption({ label: "Guest" });
-  await settings.getByRole("button", { name: "Done" }).click();
+  await settings.getByRole("button", { name: "Close" }).click();
   await expect(settings).toBeHidden();
 
   const miaContext = await browser.newContext();
@@ -323,14 +323,14 @@ test("a member's task waits until the owner, told who asks and as what, allows i
     await openSettings();
     await settings.getByRole("button", { name: "Remove Mia" }).click();
     await settings.getByRole("button", { name: "Confirm: Remove Mia" }).click();
-    await settings.getByRole("button", { name: "Done" }).click();
+    await settings.getByRole("button", { name: "Close" }).click();
     await expect(settings).toBeHidden();
     await expect(page.locator(".room-timeline .notice-line", { hasText: "The task was declined." })).toHaveCount(2);
     await expect(strip).toHaveCount(0);
     expect(builderPrompts()).not.toContain("Left behind");
     await openSettings();
     await addMia();
-    await settings.getByRole("button", { name: "Done" }).click();
+    await settings.getByRole("button", { name: "Close" }).click();
     await expect(settings).toBeHidden();
     await roomCard(miaPage, "People").click();
   });
@@ -338,7 +338,7 @@ test("a member's task waits until the owner, told who asks and as what, allows i
   await test.step("once people's tasks start without asking, Mia's tag starts at once", async () => {
     await openSettings();
     await settings.getByLabel("People's tasks start without asking me").check();
-    await settings.getByRole("button", { name: "Done" }).click();
+    await settings.getByRole("button", { name: "Close" }).click();
     await expect(settings).toBeHidden();
     await tag(miaPage, "People", "Builder", "SAY Straight away");
     await expect(answerSaying(miaPage, "Straight away")).toHaveCount(1);

@@ -5,7 +5,7 @@ import { connection } from "./connection.ts";
 import { replyProblemText } from "./host-error.ts";
 import { t } from "./i18n/index.ts";
 import { Modal } from "./Palette.tsx";
-import { WhatItMeans } from "./RoomSettings.tsx";
+import { WhatItMeans } from "./RoomSection.tsx";
 
 const words = t.rooms;
 

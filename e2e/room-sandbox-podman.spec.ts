@@ -87,7 +87,7 @@ test("a sandbox in a Podman container says it shares this computer's kernel, and
     await expect(warning).toBeHidden();
     await expect(sandboxSwitch(dialog)).toBeChecked();
     await expect(dialog.locator(".room-sandbox-setup")).toHaveText("Set up on this computer.");
-    await dialog.getByRole("button", { name: "Done" }).click();
+    await dialog.getByRole("button", { name: "Close" }).click();
   });
 
   await test.step("and stays on, allowed, when the room's settings open again", async () => {

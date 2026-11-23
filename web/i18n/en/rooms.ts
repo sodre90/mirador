@@ -2,12 +2,12 @@ import type { PermissionPreset } from "../../../shared/room-permissions.ts";
 import type { RoomUsagePeriod } from "../../../shared/room-usage.ts";
 import type { RoomInviteConnect } from "../../../shared/machines.ts";
 import type { RoomAuthorRole, RoomInviteLetsIn, RoomRole } from "../../../shared/rooms.ts";
-import type { ClaudeSetupPart } from "../../../shared/room-agent-setup.ts";
+import type { ClaudeSetupChoice, ClaudeSetupPart } from "../../../shared/room-agent-setup.ts";
 import type { SandboxFolderRefusal, SandboxFolderState, SandboxKind, SandboxSetupStage } from "../../../shared/sandbox.ts";
 import type { OthersTasks } from "../../../shared/brought-agents.ts";
 
-/** The parts of a room's settings, each on a tab of its own. */
-export type RoomSettingsTab = "people" | "agents" | "permissions" | "usage";
+/** The parts of a room's settings, each on a page of its own. */
+export type RoomSettingsTab = "general" | "people" | "agents" | "permissions" | "usage";
 
 const counted = (count: number, one: string, many: string) => (count === 1 ? `1 ${one}` : `${count} ${many}`);
 const listed = (...parts: (string | false)[]) => parts.filter(Boolean).join(", ");
@@ -32,13 +32,15 @@ export const rooms = {
   findAgentPlaceholder: "Type a name, Enter adds it",
   noAgentFound: "No agent by that name.",
   removeAgent: (agent: string) => `Remove ${agent}`,
+  settingsOfAgent: (agent: string) => `Settings of ${agent}`,
   modelOf: (agent: string) => `Model of ${agent}`,
   effortOf: (agent: string) => `Effort of ${agent}`,
   asItsProfile: "As its profile",
   modelFromNextSession: "This agent takes a new model from its next session.",
   moreOptions: "More options",
-  tabs: { people: "People", agents: "Agents", permissions: "Permissions", usage: "Usage" } satisfies Record<RoomSettingsTab, string>,
+  tabs: { general: "General", people: "People", agents: "Agents", permissions: "Permissions", usage: "Usage" } satisfies Record<RoomSettingsTab, string>,
   whatDoesThisMean: "What does this mean?",
+  whatDoesItMean: (setting: string) => `What does “${setting}” mean?`,
   done: "Done",
   remove: "Remove",
   removeArmed: "Remove for good?",
@@ -148,6 +150,7 @@ export const rooms = {
   } satisfies Record<PermissionPreset, string>,
   peopleReachBeyond:
     "Everyone in the room reads the agents' answers, so whatever an agent reads, they can read too. Some agents go further without asking: Claude Code reads its workspace, Codex reads any file on this computer, pi and opencode may ask nothing, and your own agent settings can allow commands.",
+  reachesAgents: "What reaches the agents",
   peoplesTasksStart: "People's tasks start without asking me",
   agentsReadGuests: "Agents read what guests write",
   agentsReadGuestsHint:
@@ -155,17 +158,27 @@ export const rooms = {
   actsUnasked: "Can act without asking",
   actsUnaskedHint:
     "Not every agent can be held to asking in a room: Codex reads any file on this computer unasked, opencode and pi may run tools unasked, and Copilot is untried in rooms. Let only people you trust give such an agent tasks.",
-  environmentGiven: (given: number, all: number, wholeHostEnvironment: boolean) =>
-    `${all > 0 ? `Values from its profile: ${given} of ${all}` : "Its profile sets no values"}${wholeHostEnvironment ? ", and everything from this computer's environment" : ""}`,
+  profileValues: "Values from its profile",
+  profileValuesGiven: (given: number, all: number) => `${given} of ${all} profile values`,
+  profileSetsNoValues: "Its profile sets no values",
+  valuesHeldBack: (count: number) => `Held back (${count})`,
+  valuesHeldBackFrom: (agent: string) => `Values held back from ${agent}`,
+  valuesGiven: (count: number) => `Given (${count})`,
   valuesOf: (agent: string) => `Values ${agent} gets from its profile`,
   valuesReadable: "Anyone who can give this agent a task can make it read a value it gets.",
   wholeHostEnvironment: "Everything from this computer's environment",
+  wholeHostEnvironmentNote: "It can hold tokens and your SSH agent.",
   wholeHostEnvironmentHint: "It can hold tokens and your SSH agent, and anyone who can give this agent a task can make it use them. Turn it on for a proxy, certificates or git over SSH.",
   alwaysGiven: "Always given: it says where the agent's program and files are.",
   valuesHint:
     "An agent gets the basics of this computer's environment, such as PATH, HOME and the language, and what its kind reads for its program, settings, model and sign-in, from its profile and from this computer. Turn on another value of its profile and everyone who can give it a task can make it read that value. A value of its profile that is off stays unset, even with everything from this computer's environment.",
-  claudeSetup: "What Claude agents load of your Claude Code setup",
-  startClean: "Start clean",
+  claudeSetup: "Your Claude Code setup",
+  claudeAgentsLoad: "Claude agents load",
+  claudeSetupChoices: { all: "All of it", none: "None: start clean", parts: "Chosen parts" } satisfies Record<ClaudeSetupChoice, string>,
+  claudeSetupNotes: {
+    all: "Your settings, the workspace's, MCP servers, hooks and CLAUDE.md files",
+    none: "Of your settings, only the deny and ask rules and the sandbox",
+  },
   claudeSetupParts: {
     ownSettings: "Your own settings",
     workspaceSettings: "The workspace's settings",
@@ -388,6 +401,7 @@ export const rooms = {
   takenOut: "It was taken out of the room before it answered.",
   notStartedYet: (agent: string) => `${agent} has not started on it yet.`,
   broughtAgents: "Agents people brought",
+  noneBroughtYet: "Nobody has brought one yet",
   takeOut: "Take out",
   takeOutAgent: (agent: string) => `Take out ${agent}`,
   takeOutArmed: "Take out for good?",

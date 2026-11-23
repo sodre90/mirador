@@ -22,6 +22,18 @@ export const CLAUDE_SETUP_PARTS: ClaudeSetupPart[] = ["ownSettings", "workspaceS
 
 export const ALL_OF_CLAUDE_SETUP: ClaudeSetup = { ownSettings: true, workspaceSettings: true, mcpServers: true, hooks: true, claudeMdAndMemory: true };
 
+/** How much of the owner's Claude Code setup the room's agents load: all of it, none of it, or the parts chosen. */
+export type ClaudeSetupChoice = "all" | "none" | "parts";
+
+export const CLAUDE_SETUP_CHOICES: ClaudeSetupChoice[] = ["all", "none", "parts"];
+
+export const NONE_OF_CLAUDE_SETUP: ClaudeSetup = { ownSettings: false, workspaceSettings: false, mcpServers: false, hooks: false, claudeMdAndMemory: false };
+
+export function claudeSetupChoiceOf(setup: ClaudeSetup): ClaudeSetupChoice {
+  const loaded = CLAUDE_SETUP_PARTS.filter((part) => setup[part]);
+  return loaded.length === CLAUDE_SETUP_PARTS.length ? "all" : loaded.length === 0 ? "none" : "parts";
+}
+
 /** Every part the value names as on or off, the rest as a new room has them. */
 export function claudeSetupIn(value: unknown): ClaudeSetup {
   const named = typeof value === "object" && value !== null ? (value as Record<string, unknown>) : {};

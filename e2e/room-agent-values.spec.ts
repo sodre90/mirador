@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type Locator, type Page } from "@playwright/test";
-import { addWorkspace, createProfile, createRoom, openNewRoom, openRoomSettings, signIn, whatItMeans } from "./helpers.ts";
+import { addWorkspace, createProfile, createRoom, openNewRoom, openRoomAgent, openRoomSettings, signIn, whatItMeans } from "./helpers.ts";
 import { TestHost, writeBunProgram } from "./test-host.ts";
 
 const HOSTS_SECRET = "hosts-own-secret";
@@ -45,10 +45,17 @@ async function tagBuilder(page: Page, room: string, rest: string) {
   await roomComposer(page, room).press("Enter");
 }
 
+const agentRow = (settings: Locator, agent: string) => settings.getByRole("list", { name: "Agents", exact: true }).getByRole("listitem").filter({ hasText: agent });
+
+const heldBackFrom = (settings: Locator, agent: string) => settings.getByRole("list", { name: `Values held back from ${agent}` });
+const givenTo = (settings: Locator, agent: string) => settings.getByRole("list", { name: `Values ${agent} gets from its profile` });
+
+const wholeHostEnvironment = (settings: Locator) => settings.getByRole("switch", { name: "Everything from this computer's environment" });
+
 async function builderValues(page: Page) {
   const settings = await openRoomSettings(page, "Values", "Agents");
-  await settings.locator(".room-agent-values summary").click();
-  return { settings, values: settings.getByRole("list", { name: "Values Builder gets from its profile" }) };
+  await openRoomAgent(settings, "Builder");
+  return { settings, heldBack: heldBackFrom(settings, "Builder") };
 }
 
 const valueSwitch = (values: Locator, name: string) => values.getByRole("switch", { name });
@@ -68,18 +75,24 @@ test("a room's agent gets only the values of its profile it needs to run and tho
   await createRoom(page, "Values", ["Builder"]);
 
   await test.step("the owner sees each value's name with whether the agent gets it, and never a value", async () => {
-    const { settings, values } = await builderValues(page);
-    await expect(settings.locator(".room-settings-rows li").first().getByText("Can act without asking")).toBeVisible();
-    await expect(settings.locator(".room-agent-values summary")).toHaveText("Values from its profile: 1 of 2");
-    await expect(valueSwitch(values, "OPENAI_API_KEY")).toBeChecked();
-    await expect(valueSwitch(values, "DEPLOY_TOKEN")).not.toBeChecked();
+    const { settings, heldBack } = await builderValues(page);
+    await expect(settings.getByText("Can act without asking")).toBeVisible();
+    await expect(heldBack.getByRole("switch")).toHaveCount(1);
+    await expect(valueSwitch(heldBack, "DEPLOY_TOKEN")).not.toBeChecked();
+    await expect(givenTo(settings, "Builder")).toBeHidden();
+    await settings.getByText("Given (1)").click();
+    await expect(valueSwitch(givenTo(settings, "Builder"), "OPENAI_API_KEY")).toBeChecked();
     expect(await settings.innerHTML()).not.toMatch(new RegExp(`${MODEL_KEY}|${DEPLOY_TOKEN}`));
-    await valueSwitch(values, "DEPLOY_TOKEN").check();
-    await expect(settings.locator(".room-agent-values summary")).toHaveText("Values from its profile: 2 of 2");
-    await valueSwitch(values, "DEPLOY_TOKEN").uncheck();
-    await expect(settings.locator(".room-agent-values summary")).toHaveText("Values from its profile: 1 of 2");
+    await valueSwitch(heldBack, "DEPLOY_TOKEN").check();
+    await expect(settings.getByText("Held back (0)")).toBeVisible();
+    await expect(settings.getByText("Given (2)")).toBeVisible();
+    await expect(valueSwitch(heldBack, "DEPLOY_TOKEN")).toBeChecked();
+    await valueSwitch(heldBack, "DEPLOY_TOKEN").uncheck();
+    await expect(settings.getByText("Held back (1)")).toBeVisible();
     await expect(settings.locator(".room-starts-afresh")).toHaveCount(0);
-    await settings.getByRole("button", { name: "Done" }).click();
+    await settings.getByRole("button", { name: "Agents", exact: true }).click();
+    await expect(agentRow(settings, "Builder")).toContainText("Can act without asking · 1 of 2 profile values");
+    await settings.getByRole("button", { name: "Close" }).click();
   });
 
   await tagBuilder(page, "Values", "ENV DEPLOY_TOKEN");
@@ -89,17 +102,18 @@ test("a room's agent gets only the values of its profile it needs to run and tho
   expect(introductions()).toBe(1);
 
   await test.step("turning one on for an agent at work there waits for the owner to confirm what it costs", async () => {
-    const { settings, values } = await builderValues(page);
-    await valueSwitch(values, "DEPLOY_TOKEN").check();
+    const { settings, heldBack } = await builderValues(page);
+    await valueSwitch(heldBack, "DEPLOY_TOKEN").check();
     const warning = settings.locator(".room-starts-afresh");
     await expect(warning).toContainText("Builder starts afresh and reads the room again, once.");
     await warning.getByRole("button", { name: "Cancel" }).click();
-    await expect(valueSwitch(values, "DEPLOY_TOKEN")).not.toBeChecked();
-    await valueSwitch(values, "DEPLOY_TOKEN").check();
+    await expect(valueSwitch(heldBack, "DEPLOY_TOKEN")).not.toBeChecked();
+    await valueSwitch(heldBack, "DEPLOY_TOKEN").check();
     await warning.getByRole("button", { name: "Change" }).click();
     await expect(warning).toHaveCount(0);
-    await expect(settings.locator(".room-agent-values summary")).toHaveText("Values from its profile: 2 of 2");
-    await settings.getByRole("button", { name: "Done" }).click();
+    await settings.getByRole("tab", { name: "Agents" }).click();
+    await expect(agentRow(settings, "Builder")).toContainText("2 of 2 profile values");
+    await settings.getByRole("button", { name: "Close" }).click();
   });
 
   await tagBuilder(page, "Values", "ENV DEPLOY_TOKEN");
@@ -119,13 +133,14 @@ test("a room's agent gets this computer's environment only when the owner turns 
 
   await test.step("turning on everything from this computer's environment starts the agent afresh, once the owner confirms", async () => {
     const settings = await openRoomSettings(page, "Hosts", "Agents");
-    await settings.locator(".room-agent-values summary").click();
+    await openRoomAgent(settings, "Builder");
     await expect(settings.locator("label", { hasText: "Everything from this computer's environment" })).toHaveAttribute("data-hint", /^It can hold tokens and your SSH agent/);
-    await settings.getByRole("switch", { name: "Everything from this computer's environment" }).check();
+    await wholeHostEnvironment(settings).check();
     await expect(settings.locator(".room-starts-afresh")).toContainText("Builder starts afresh and reads the room again, once.");
     await settings.locator(".room-starts-afresh").getByRole("button", { name: "Change" }).click();
-    await expect(settings.locator(".room-agent-values summary")).toHaveText("Values from its profile: 1 of 2, and everything from this computer's environment");
-    await settings.getByRole("button", { name: "Done" }).click();
+    await settings.getByRole("button", { name: "Agents", exact: true }).click();
+    await expect(agentRow(settings, "Builder")).toContainText("1 of 2 profile values · Everything from this computer's environment");
+    await settings.getByRole("button", { name: "Close" }).click();
   });
 
   await tagBuilder(page, "Hosts", "ENV HOSTS_SECRET");
@@ -137,11 +152,11 @@ test("a room's agent gets this computer's environment only when the owner turns 
     await tagBuilder(page, "Hosts", `WAIT ${heldUntil()} SAY Held answer`);
     await expect.poll(() => builderWorking(page)).toBe(true);
     const settings = await openRoomSettings(page, "Hosts", "Agents");
-    await settings.locator(".room-agent-values summary").click();
-    await settings.getByRole("switch", { name: "Everything from this computer's environment" }).uncheck();
+    await openRoomAgent(settings, "Builder");
+    await wholeHostEnvironment(settings).uncheck();
     await expect(settings.locator(".room-starts-afresh")).toContainText("Builder stops any turn under way, starts afresh and reads the room again, once.");
     await settings.locator(".room-starts-afresh").getByRole("button", { name: "Change" }).click();
-    await settings.getByRole("button", { name: "Done" }).click();
+    await settings.getByRole("button", { name: "Close" }).click();
     await expect.poll(() => builderWorking(page)).toBe(false);
     writeFileSync(heldUntil(), "");
   });
@@ -155,13 +170,15 @@ test("a value that says where an agent's files are is always given, and an agent
   await signIn(page, host);
   await createRoom(page, "Kinds", ["Plain", "Located"]);
   const settings = await openRoomSettings(page, "Kinds", "Agents");
-  const rowOf = (agent: string) => settings.locator(".room-settings-rows > li", { hasText: agent });
-  await expect(rowOf("Plain").locator(".room-agent-values summary")).toHaveText("Its profile sets no values");
-  await rowOf("Plain").locator(".room-agent-values summary").click();
-  await expect(rowOf("Plain").getByRole("switch", { name: "Everything from this computer's environment" })).not.toBeChecked();
-  await expect(rowOf("Located").locator(".room-agent-values summary")).toHaveText("Values from its profile: 1 of 1");
-  await rowOf("Located").locator(".room-agent-values summary").click();
-  const located = rowOf("Located").getByRole("list", { name: "Values Located gets from its profile" }).getByRole("switch", { name: "XDG_CACHE_HOME" });
+  await expect(agentRow(settings, "Plain")).toContainText("Its profile sets no values");
+  await openRoomAgent(settings, "Plain");
+  await expect(settings.getByText("Its profile sets no values")).toBeVisible();
+  await expect(wholeHostEnvironment(settings)).not.toBeChecked();
+  await settings.getByRole("button", { name: "Agents", exact: true }).click();
+  await expect(agentRow(settings, "Located")).toContainText("1 of 1 profile values");
+  await openRoomAgent(settings, "Located");
+  await settings.getByText("Given (1)").click();
+  const located = valueSwitch(givenTo(settings, "Located"), "XDG_CACHE_HOME");
   await expect(located).toBeChecked();
   await expect(located).toBeDisabled();
 });
@@ -173,10 +190,10 @@ test("whether a room's agents read what guests write stays as the owner set it",
   const readsGuests = settings.getByRole("switch", { name: "Agents read what guests write" });
   await expect(readsGuests).toBeChecked();
   await readsGuests.uncheck();
-  await settings.getByRole("button", { name: "Done" }).click();
+  await settings.getByRole("button", { name: "Close" }).click();
   const again = await openRoomSettings(page, "Guests", "People");
   await expect(again.getByRole("switch", { name: "Agents read what guests write" })).not.toBeChecked();
-  expect((await whatItMeans(page, again.getByRole("tabpanel"))).join("\n")).toContain("Turned off, no agent reads it");
+  expect((await whatItMeans(page, again, "What reaches the agents")).join("\n")).toContain("Turned off, no agent reads it");
 });
 
 test("an agent the host can't hold to asking carries a warning when a room is made with it, and a room without Claude agents offers no Claude setup", async ({ page }) => {
@@ -190,6 +207,6 @@ test("an agent the host can't hold to asking carries a warning when a room is ma
   await dialog.getByLabel("Room name").fill("Marks");
   await dialog.getByRole("button", { name: "Create room" }).click();
   const settings = await openRoomSettings(page, "Marks", "Agents");
-  await expect(settings.getByText("What Claude agents load of your Claude Code setup")).toHaveCount(0);
-  expect((await whatItMeans(page, settings.getByRole("tabpanel"))).join("\n")).toContain("Codex reads any file on this computer unasked");
+  await expect(settings.getByText("Your Claude Code setup")).toHaveCount(0);
+  expect((await whatItMeans(page, settings, "Agents")).join("\n")).toContain("Codex reads any file on this computer unasked");
 });

@@ -154,7 +154,7 @@ test("a sandboxed room's Claude agent works in the workspace from its VM, reache
   await dialog.getByRole("switch", { name: "Run the agents in a sandbox" }).check();
   await expect(dialog.locator(".room-sandbox-setup")).toHaveText("Set up on this Mac.", { timeout: 25 * 60_000 });
   timings.setupSeconds = Math.round((Date.now() - settingUp) / 1000);
-  await dialog.getByRole("button", { name: "Done" }).click();
+  await dialog.getByRole("button", { name: "Close" }).click();
 
   await expect.poll(modelServerStatus, { message: "the model server answers", timeout: 180_000, intervals: [5_000] }).toBe(200);
   const turn = Date.now();
@@ -303,7 +303,7 @@ test("a sandboxed room's Claude agent works in the workspace from its VM, reache
     const repositoryRow = folders.locator(`li[data-folder-path="${repositoryOfThisMac}"]`);
     await expect(repositoryRow.locator(".sandbox-folder-access")).toHaveValue("read-and-write");
     await expect(repositoryRow.locator(".sandbox-folder-state")).toHaveText("In the sandbox");
-    await settings.getByRole("button", { name: "Done" }).click();
+    await settings.getByRole("button", { name: "Close" }).click();
 
     const answers = page.locator(".room-timeline .room-entry .message.agent");
     const answersBefore = await answers.count();
