@@ -10907,9 +10907,23 @@ select.room-agent-choice-select:focus-visible {
 
 .room-joiners li {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: 4px 8px;
+  gap: 12px;
+}
+
+.room-joiner-who {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.room-joiner-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
 }
 
 .room-joiner-name {
@@ -10925,14 +10939,16 @@ select.room-agent-choice-select:focus-visible {
 }
 
 .room-joiner-device {
-  flex: 1;
-  min-width: 0;
   color: var(--muted);
-  font-style: italic;
+  font-size: calc(12px * var(--font-scale));
+  overflow-wrap: anywhere;
 }
 
-.room-joiners .room-person-name-clash {
-  flex-basis: 100%;
+.room-joiner-actions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .rooms li.room-knock {

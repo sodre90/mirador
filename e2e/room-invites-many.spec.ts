@@ -1,7 +1,7 @@
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type Locator, type Page } from "@playwright/test";
-import { addWorkspace, chooseInSettings, createProfile, createRoom, inviteIntoRoom, joinRoom, nameMachine, openRoomSettings, openSettings, reachedAtOwnPort, roomCard, signIn } from "./helpers.ts";
+import { addWorkspace, chooseInSettings, createProfile, createRoom, expectPopoverFits, inviteIntoRoom, joinRoom, nameMachine, openRoomSettings, openSettings, reachedAtOwnPort, roomCard, signIn } from "./helpers.ts";
 import { TestHost, writeBunProgram } from "./test-host.ts";
 
 /** The owner's machine, with the room, which other machines reach at its address. */
@@ -35,6 +35,18 @@ async function nameOwnProfile(page: Page, name: string) {
 
 const knockCard = (page: Page) => page.locator(".sidebar .rooms li.room-knock");
 const readsWhole = (label: Locator) => label.evaluate((element) => element.scrollWidth <= element.clientWidth);
+
+/** Each waiting person's device reads whole on a line of its own, under their name and role and clear of their buttons. */
+async function expectDevicesOnTheirOwnLines(waiting: Locator) {
+  for (const row of await waiting.all()) {
+    const [name, role, device, letIn] = await Promise.all(
+      [row.locator(".room-joiner-name"), row.locator(".room-joiner-role"), row.locator(".room-joiner-device"), row.getByRole("button", { name: /^Let .+ in$/ })].map((each) => each.boundingBox()),
+    );
+    expect(device!.y).toBeGreaterThanOrEqual(Math.max(name!.y + name!.height, role!.y + role!.height) - 1);
+    expect(device!.x + device!.width).toBeLessThanOrEqual(letIn!.x);
+    expect(await readsWhole(row.locator(".room-joiner-device"))).toBe(true);
+  }
+}
 
 test("one invite brings several people to a room's door, where the owner lets each in or turns them away", async ({ page, browser }) => {
   await signIn(page, owners);
@@ -119,6 +131,7 @@ test("one invite brings several people to a room's door, where the owner lets ea
     await expect(waiting.locator(".room-joiner-name")).toHaveText(["Dora", "Eli", "Hal"]);
     await expect(waiting.locator(".room-joiner-role")).toHaveText(["Member", "Member", "Member"]);
     await expect(waiting.locator(".room-joiner-device")).toHaveText([/^from “Mirador on .+”$/, /^from “Mirador on .+”$/, /^from “Mirador on .+”$/]);
+    await expectDevicesOnTheirOwnLines(waiting);
     await expect(settings.getByRole("combobox", { name: "Add someone you let in before" })).toHaveCount(0);
     await settings.getByRole("button", { name: "Let Dora in" }).click();
     await expect(waiting.locator(".room-joiner-name")).toHaveText(["Eli", "Hal"]);
@@ -142,12 +155,16 @@ test("one invite brings several people to a room's door, where the owner lets ea
 
   await test.step("the owner turns the others away from the room's list of people and from the banner, each after a second click", async () => {
     await roomCard(page, "Garden").click();
+    await page.setViewportSize({ width: 1024, height: 768 });
     const count = page.locator(".room-header .room-here-count");
     await expect(count.locator(".room-door-waiting")).toHaveText("2 waiting");
     await expect(count).toHaveAccessibleName(/^\d+ here 2 waiting$/);
     await count.click();
     const people = page.getByRole("dialog", { name: "People in the room" });
     await expect(people.getByRole("list", { name: "Waiting to join" }).locator(".room-joiner-name")).toHaveText(["Eli", "Hal"]);
+    await expectPopoverFits(people);
+    await expectDevicesOnTheirOwnLines(people.getByRole("list", { name: "Waiting to join" }).getByRole("listitem"));
+    await expectDevicesOnTheirOwnLines(page.getByRole("region", { name: "People waiting to join" }).getByRole("listitem"));
     await people.getByRole("button", { name: "Turn Eli away" }).click();
     await people.getByRole("button", { name: "Confirm: Turn Eli away" }).click();
     await expect(people.getByRole("list", { name: "Waiting to join" }).locator(".room-joiner-name")).toHaveText(["Hal"]);

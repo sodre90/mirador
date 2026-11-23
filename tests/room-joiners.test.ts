@@ -10,7 +10,7 @@ const ENTITIES: Record<string, string> = { "&amp;": "&", "&lt;": "<", "&gt;": ">
 
 /** The text of each element of the door list with the class, as the owner reads it. */
 const textsOf = (markup: string, className: string) =>
-  Array.from(markup.matchAll(new RegExp(`<span class="[^"]*\\b${className}\\b[^"]*"[^>]*>(.*?)</span>`, "g")), ([, text]) => text!.replace(/&[#\w]+;/g, (entity) => ENTITIES[entity] ?? entity));
+  Array.from(markup.matchAll(new RegExp(`<(span|div) class="[^"]*\\b${className}\\b[^"]*"[^>]*>(.*?)</\\1>`, "g")), ([, , text]) => text!.replace(/&[#\w]+;/g, (entity) => ENTITIES[entity] ?? entity));
 
 const doorList = (joiners: RoomJoiner[]) => renderToStaticMarkup(createElement(WaitingToJoin, { joiners }));
 
