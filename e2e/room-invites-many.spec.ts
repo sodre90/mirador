@@ -1,6 +1,6 @@
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 import { addWorkspace, createProfile, createRoom, inviteIntoRoom, joinRoom, nameMachine, openRoomSettings, openSettings, reachedAtOwnPort, roomCard, signIn } from "./helpers.ts";
 import { TestHost, writeBunProgram } from "./test-host.ts";
 
@@ -32,6 +32,7 @@ async function nameOwnProfile(page: Page, name: string) {
 }
 
 const knockCard = (page: Page) => page.locator(".sidebar .rooms li.room-knock");
+const readsWhole = (label: Locator) => label.evaluate((element) => element.scrollWidth <= element.clientWidth);
 
 test("one invite brings several people to a room's door, where the owner lets each in or turns them away", async ({ page, browser }) => {
   await signIn(page, owners);
@@ -71,6 +72,7 @@ test("one invite brings several people to a room's door, where the owner lets ea
       const join = await joinRoom(visitor, invite);
       await expect(join).toHaveCount(0);
       await expect(knockCard(visitor).locator(".room-card-name")).toHaveText("Waiting for Ann to let you in");
+      expect(await readsWhole(knockCard(visitor).locator(".room-card-name"))).toBe(true);
       await expect(knockCard(visitor).locator(".room-card-subline")).toHaveText("on Ann's machine");
       await expect(visitor.locator(".sidebar .rooms li.joined-room")).toHaveCount(0);
     }
@@ -121,6 +123,7 @@ test("one invite brings several people to a room's door, where the owner lets ea
 
   await test.step("the one turned away is told so, and puts it away", async () => {
     await expect(knockCard(eli).locator(".room-card-name")).toHaveText("Ann turned you away");
+    expect(await readsWhole(knockCard(eli).locator(".room-card-name"))).toBe(true);
     await knockCard(eli).getByRole("button", { name: "Dismiss" }).click();
     await expect(knockCard(eli)).toHaveCount(0);
     await expect(eli.locator(".sidebar .rooms li.joined-room")).toHaveCount(0);

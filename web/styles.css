@@ -10890,6 +10890,12 @@ select.room-agent-choice-select:focus-visible {
 
 .rooms li.room-knock .room-card-name {
   font-style: italic;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.rooms li.room-knock .link {
+  flex: none;
 }
 
 .room-invite-made p {
