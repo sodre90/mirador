@@ -66,7 +66,7 @@ export class WorkspaceSandboxes {
     this.conversations.startAfreshInWorkspace(workspaceId, { stopsTurn: narrowsSandbox(workspace.sandbox, sandbox) });
     if (turnsOn) this.ownConversationsOf(workspaceId).forEach(({ id }) => this.terminals.closeAgentPrograms(id));
     const startsOn = this.startsOnProfile(workspaceId);
-    if (sandbox.on) this.sandboxes.prepare(startsOn ? [startsOn] : []);
+    if (sandbox.on) this.sandboxes.prepare(startsOn && workspaceProfileBlocker(startsOn) === null ? [startsOn] : []);
   }
 
   private ownConversationsOf(workspaceId: string) {

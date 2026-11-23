@@ -104,9 +104,10 @@ function sandboxedWorkspace(sandbox: SandboxSetting = SANDBOX_ON) {
   const sandboxes = new Sandboxes(launcher, host, 60_000);
   sandboxesMade.push(sandboxes);
   conversations.startsSandboxedAgentsIn(sandboxes);
+  const preparedFor: string[][] = [];
   const control: SandboxControl = {
     availability: () => sandboxes.availability(),
-    prepare: () => {},
+    prepare: (profiles) => void preparedFor.push(profiles.map(({ id }) => id)),
     answerHeldChange: (owner, changeId, answer) => sandboxes.answerHeldChange(owner, changeId, answer),
     workspaceRefusal: (workspace, turningOn) => sandboxes.workspaceRefusal(workspace, turningOn),
     ownerGone: (owner) => sandboxes.ownerGone(owner),
@@ -115,7 +116,7 @@ function sandboxedWorkspace(sandbox: SandboxSetting = SANDBOX_ON) {
   const workspaceSandboxes = new WorkspaceSandboxes(store, hub, conversations, { closeAgentPrograms: (conversationId) => void agentTabsClosed.push(conversationId) });
   workspaceSandboxes.keepsSandboxesWith(control);
   const turnFailure = (conversationId: string) => store.listEvents(conversationId).findLast(({ event }) => event.type === "error" && event.endsTurn)?.event as { problem?: HostProblem } | undefined;
-  return { store, config, conversations, conversationsOnThisHost, launcher, sandboxes, workspaceSandboxes, agentTabsClosed, claude, project, other, turnFailure };
+  return { store, config, conversations, conversationsOnThisHost, launcher, sandboxes, workspaceSandboxes, agentTabsClosed, claude, project, other, turnFailure, preparedFor };
 }
 
 type Inside = {
@@ -310,6 +311,15 @@ test("a sandboxed workspace's side chats and forks start in its VM too", async (
   expect(launcher.agents.length).toBeGreaterThan(launchedBeforeFork);
   expect(claude.ranHere()).toBe(false);
   await conversations.shutdown();
+});
+
+test("turned on, the workspace's sandbox prepares the image of the profile its new conversations start on, only where that one can run there", async () => {
+  const { store, workspaceSandboxes, preparedFor } = sandboxedWorkspace(NO_SANDBOX);
+  await workspaceSandboxes.setSandbox("w1", SANDBOX_ON);
+  await workspaceSandboxes.setSandbox("w1", NO_SANDBOX);
+  store.setWorkspaceDefaultLaunch("w1", { harness: "claude", profileId: "subscriber" });
+  await workspaceSandboxes.setSandbox("w1", SANDBOX_ON);
+  expect(preparedFor).toEqual([["builder"], []]);
 });
 
 test("a session started on this computer before the workspace was sandboxed is not resumed: the conversation starts afresh in the VM", async () => {
