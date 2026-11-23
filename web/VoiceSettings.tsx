@@ -18,6 +18,7 @@ import {
 import { hints } from "./hints.ts";
 import { t } from "./i18n/index.ts";
 import { saveSetting } from "./saved-setting.ts";
+import { SettingsSection, useSettingRow } from "./SettingsSection.tsx";
 import { modelOffer } from "./voice-models.ts";
 import { ModelBeside, ModelsOnThisMac, ServerState, VoiceEngineSetupPanel } from "./VoiceEngineSetup.tsx";
 
@@ -380,12 +381,11 @@ export function VoiceSettings({ settings, engine, profiles }: { settings: Settin
   const idleMinutes = shown.engineIdleMinutes;
   const voiceModelSet = shown.voiceModel.kind !== "off";
   const speaking = saveIn("speaking");
+  const row = useSettingRow();
   return (
-    <>
-      <h3>{t.labels.settingsPage.voice}</h3>
-      <p className="hint">{words.intro}</p>
+    <SettingsSection title={t.labels.settingsPage.voice} hint={words.intro}>
       <VoiceEngineSetupPanel engine={engine} />
-      <fieldset className="voice-service">
+      <fieldset className="voice-service" {...row(words.whenYouSpeak, undefined, words.youSpeak, words.translateIntoEnglish, words.speechRecognition, words.sendRightAway)}>
         <legend>{words.whenYouSpeak}</legend>
         <div className="sending-settings">
           <label data-hint={hints.voiceLanguage}>
@@ -420,12 +420,12 @@ export function VoiceSettings({ settings, engine, profiles }: { settings: Settin
         </div>
         <SavedStatus section="speaking" outcome={outcome} />
       </fieldset>
-      <fieldset className="voice-service">
+      <fieldset className="voice-service" {...row(words.translatingAndSummingUp, undefined, words.voiceModel, words.askNotToThink)}>
         <legend>{words.translatingAndSummingUp}</legend>
         <VoiceModelChoice saved={shown.voiceModel} engine={engine} idleMinutes={idleMinutes} profiles={profiles} save={saveIn("voiceModel")} />
         <SavedStatus section="voiceModel" outcome={outcome} />
       </fieldset>
-      <fieldset className="voice-service">
+      <fieldset className="voice-service" {...row(words.whenTheAgentReplies, undefined, t.dictation.readAloud, words.language, words.voice, words.keepTalking)}>
         <legend>{words.whenTheAgentReplies}</legend>
         <ReplyChoice saved={shown.replyVoice} language={shown.replyLanguage} engine={engine} idleMinutes={idleMinutes} voiceModelSet={voiceModelSet} save={saveIn("replies")} />
         {speaksReplies(shown) && (
@@ -445,6 +445,6 @@ export function VoiceSettings({ settings, engine, profiles }: { settings: Settin
         onIdleMinutes={(engineIdleMinutes) => saveIn("models")({ engineIdleMinutes })}
         status={<SavedStatus section="models" outcome={outcome} />}
       />
-    </>
+    </SettingsSection>
   );
 }

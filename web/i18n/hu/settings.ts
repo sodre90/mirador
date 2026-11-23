@@ -4,6 +4,12 @@ export const settings: Messages["settings"] = {
   title: "Beállítások",
   close: "Bezárás",
   pagesLabel: "Beállítási oldalak",
+  search: {
+    label: "Keresés a beállításokban",
+    placeholder: "Keresés a beállításokban",
+    results: "Talált beállítások",
+    nothingFound: "Egy beállítás sem illik rá.",
+  },
   rememberedInBrowser: "Ez a böngésző megjegyzi.",
   fontRefused: "Egy betűtípus neve betűkből, számjegyekből, szóközökből, idézőjelekből, vesszőkből, pontokból és kötőjelekből állhat.",
   resetFont: "Betűtípus visszaállítása",

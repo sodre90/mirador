@@ -46,6 +46,72 @@ test("Settings shows one page at a time, chosen from the list on the left by cli
   await expect(settings.getByRole("heading", { name: "Default layout" })).toBeVisible();
 });
 
+test("searching Settings shows what it finds on every page under its headings, and Esc or a page clears the search", async ({ page }) => {
+  await signIn(page, host);
+  const settings = await openSettings(page);
+  const search = settings.getByRole("searchbox", { name: "Search settings" });
+  const found = settings.getByRole("region", { name: "Settings found" });
+  const heading = (name: string) => found.getByRole("heading", { name, exact: true });
+  const pageName = (name: string) => found.locator(".settings-search-page-name", { hasText: name });
+
+  await search.pressSequentially("side chat");
+  await expect(search).toBeFocused();
+  await expect(search).toHaveValue("side chat");
+  await expect(pageName("Conversations")).toBeVisible();
+  await expect(heading("Side chats")).toBeVisible();
+  await expect(found.getByRole("combobox", { name: "New side chats" })).toBeVisible();
+  await expect(pageName("Appearance")).toBeHidden();
+  await expect(found.getByRole("radiogroup", { name: "Theme" })).toBeHidden();
+  await expect(settings.getByRole("tab", { selected: true })).toHaveCount(0);
+
+  await search.fill("long lists");
+  await expect(heading("Long lists")).toBeVisible();
+  await expect(found.getByRole("combobox", { name: "Conversations per workspace" })).toBeVisible();
+
+  await search.fill("THEME");
+  await expect(pageName("Appearance")).toBeVisible();
+  await expect(found.getByRole("radiogroup", { name: "Theme" })).toBeVisible();
+  await expect(found.getByRole("heading", { name: "Appearance" })).toHaveCount(1);
+  await expect(found.getByRole("radiogroup", { name: "Text size" })).toBeHidden();
+  await expect(heading("Side chats")).toBeHidden();
+
+  await search.fill("zqxwv");
+  await expect(found.getByText("No setting matches that.")).toBeVisible();
+  await expect(found.getByRole("heading")).toHaveCount(0);
+
+  await search.press("Escape");
+  await expect(search).toHaveValue("");
+  await expect(found).toHaveCount(0);
+  await expect(settings.getByRole("tab", { name: "Appearance" })).toHaveAttribute("aria-selected", "true");
+  await expect(settings.getByRole("radiogroup", { name: "Text size" })).toBeVisible();
+  await search.press("Escape");
+  await expect(settings).toHaveCount(0);
+
+  await openSettings(page);
+  await search.fill("side chat");
+  await settings.getByRole("tab", { name: "Devices" }).click();
+  await expect(search).toHaveValue("");
+  await expect(settings.getByRole("button", { name: "Invite a device" })).toBeVisible();
+});
+
+test("on a narrow window the search of Settings stays within it, and what it finds fits its width", async ({ page }) => {
+  await signIn(page, host);
+  await page.setViewportSize({ width: 560, height: 760 });
+  const settings = await openSettings(page);
+  const search = settings.getByRole("searchbox", { name: "Search settings" });
+  await search.fill("side chat");
+  await expect(settings.getByRole("combobox", { name: "New side chats" })).toBeVisible();
+
+  const searchBox = (await search.boundingBox())!;
+  const closeBox = (await settings.getByRole("button", { name: "Close" }).boundingBox())!;
+  const dialogBox = (await settings.boundingBox())!;
+  expect(searchBox.width).toBeGreaterThan(80);
+  expect(searchBox.x).toBeGreaterThanOrEqual(dialogBox.x);
+  expect(searchBox.x + searchBox.width).toBeLessThanOrEqual(closeBox.x);
+  const found = settings.getByRole("region", { name: "Settings found" });
+  expect(await found.evaluate((area) => area.scrollWidth - area.clientWidth)).toBeLessThanOrEqual(0);
+});
+
 test("a chosen option in the left column keeps its whole ring, not cut by the edge of the page", async ({ page }) => {
   await signIn(page, host);
   const settings = await openSettings(page);

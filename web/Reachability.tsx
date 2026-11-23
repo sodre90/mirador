@@ -8,6 +8,7 @@ import { hints } from "./hints.ts";
 import { describedText } from "./host-error.ts";
 import { t } from "./i18n/index.ts";
 import { saveSetting } from "./saved-setting.ts";
+import { SettingsSection } from "./SettingsSection.tsx";
 import { useSentChoice } from "./sent-choice.ts";
 import type { DevicesListed } from "./state.ts";
 
@@ -426,8 +427,12 @@ export function ConnectionSettings({
 }) {
   const peerToPeerOn = peerToPeer !== null;
   return (
-    <section className="connection-settings" aria-label={words.reach.title}>
-      <h3>{words.reach.title}</h3>
+    <SettingsSection
+      className="connection-settings"
+      aria-label={words.reach.title}
+      title={words.reach.title}
+      foundAlsoBy={[words.reach.peerToPeer, words.reach.peerToPeerAbout, words.reach.addressAbout, words.roomInvites.title, words.roomInvites.about]}
+    >
       <ul className="settings-rows">
         <PeerToPeerRow status={peerToPeer} />
         {changingAddress ? (
@@ -438,6 +443,6 @@ export function ConnectionSettings({
         {reachability.restartNeeded && <RestartRow settings={reachability} />}
         <RoomInvitesRow connect={roomInvitesConnect} />
       </ul>
-    </section>
+    </SettingsSection>
   );
 }

@@ -2,6 +2,12 @@ export const settings = {
   title: "Settings",
   close: "Close",
   pagesLabel: "Settings pages",
+  search: {
+    label: "Search settings",
+    placeholder: "Search settings",
+    results: "Settings found",
+    nothingFound: "No setting matches that.",
+  },
   rememberedInBrowser: "Remembered in this browser.",
   fontRefused: "A font name takes letters, digits, spaces, quotes, commas, dots and hyphens.",
   resetFont: "Reset font",

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent, type R
 import type { PromptTemplate } from "../shared/model.ts";
 import { filledIn, matchingTemplates, parametersOf, promptTemplateProblem } from "../shared/prompt-templates.ts";
 import { ConfirmButton } from "./ConfirmButton.tsx";
+import { SettingsSection } from "./SettingsSection.tsx";
 import { connection } from "./connection.ts";
 import { hints } from "./hints.ts";
 import { t } from "./i18n/index.ts";
@@ -253,11 +254,15 @@ export function PromptTemplateSettings({ templates }: { templates: PromptTemplat
   }, [createdId, selectedId, selected, templates]);
 
   return (
-    <>
-      <h3>{t.chat.templates.title}</h3>
-      <p className="hint">
-        {t.chat.templates.hintBefore} <code>{t.chat.templates.example}</code> {t.chat.templates.hintAfter}
-      </p>
+    <SettingsSection
+      title={t.chat.templates.title}
+      hint={
+        <>
+          {t.chat.templates.hintBefore} <code>{t.chat.templates.example}</code> {t.chat.templates.hintAfter}
+        </>
+      }
+      foundAlsoBy={[t.chat.templates.hintBefore, t.chat.templates.hintAfter, ...templates.map(({ name }) => name)]}
+    >
       <div className="profiles-body">
         <ul className="profile-list" aria-label={t.chat.templates.label}>
           {templates.map((template) => (
@@ -271,6 +276,6 @@ export function PromptTemplateSettings({ templates }: { templates: PromptTemplat
         </ul>
         <TemplateEditor key={selected?.id ?? NEW_TEMPLATE} template={selected} onCreated={setCreatedId} />
       </div>
-    </>
+    </SettingsSection>
   );
 }

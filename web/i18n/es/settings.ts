@@ -4,6 +4,12 @@ export const settings: Messages["settings"] = {
   title: "Configuración",
   close: "Cerrar",
   pagesLabel: "Páginas de ajustes",
+  search: {
+    label: "Buscar en la configuración",
+    placeholder: "Buscar en la configuración",
+    results: "Ajustes encontrados",
+    nothingFound: "Ningún ajuste coincide con eso.",
+  },
   rememberedInBrowser: "Se recuerda en este navegador.",
   fontRefused: "El nombre de una fuente admite letras, dígitos, espacios, comillas, comas, puntos y guiones.",
   resetFont: "Restablecer la fuente",

@@ -5,6 +5,7 @@ import { ConfirmButton } from "./ConfirmButton.tsx";
 import { connection } from "./connection.ts";
 import { hints } from "./hints.ts";
 import { describedText } from "./host-error.ts";
+import { useSettingRow } from "./SettingsSection.tsx";
 import { t } from "./i18n/index.ts";
 import { gigabytes, modelChoice, modelState, tooLittleMemoryForVoiceModel } from "./voice-models.ts";
 
@@ -221,10 +222,11 @@ export function ModelsOnThisMac({
   status: ReactNode;
 }) {
   const { setup } = engine;
+  const row = useSettingRow();
   if (setup.state === "unsupported" || engine.onDisk.length === 0) return null;
   const listed = choosableModels.filter(({ id }) => engine.onDisk.includes(id) || (setup.state === "setting-up" && setup.models.includes(id)));
   return (
-    <fieldset className="voice-service">
+    <fieldset className="voice-service" {...row(words.modelsOnThisMac)}>
       <legend>{words.modelsOnThisMac}</legend>
       <table className="voice-engine-models" aria-label={words.modelsOnThisMac}>
         <thead>

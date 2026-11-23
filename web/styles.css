@@ -7103,8 +7103,55 @@ button.plugin-chip:focus-visible {
   padding: 0 6px 2px 2px;
 }
 
-.settings-page > h3:first-child {
+.settings-page > .settings-section:first-child > h3.settings-section-heading {
   margin-top: 0;
+}
+
+.modal.settings > header {
+  gap: 12px;
+}
+
+.settings-search {
+  flex: 0 1 260px;
+  min-width: 0;
+  margin-left: auto;
+}
+
+.settings-search-results {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.modal.settings h3.settings-search-page-name {
+  margin: 0;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
+  font-size: calc(12px * var(--font-scale));
+}
+
+/* In what a search found, a section shows its heading and the settings found in it, unless the search found the section itself */
+.settings-search-page > :not(.settings-search-page-name, .settings-section),
+.settings-search-results .settings-section:not([data-found]):not(:has([data-setting][data-found])),
+.settings-search-results
+  .settings-section:not([data-found])
+  :not(
+    .settings-section-heading,
+    .settings-section-heading *,
+    .settings-section-hint,
+    .settings-section-hint *,
+    [data-setting][data-found],
+    [data-setting][data-found] *,
+    :has([data-setting][data-found])
+  ),
+.settings-search-page:not(:has([data-found])),
+.settings-search-results:has([data-found]) .settings-nothing-found {
+  display: none !important;
+}
+
+.settings-nothing-found {
+  margin: 0;
 }
 
 @media (max-width: 640px) {

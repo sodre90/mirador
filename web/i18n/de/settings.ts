@@ -4,6 +4,12 @@ export const settings: Messages["settings"] = {
   title: "Einstellungen",
   close: "Schließen",
   pagesLabel: "Seiten der Einstellungen",
+  search: {
+    label: "Einstellungen durchsuchen",
+    placeholder: "Einstellungen durchsuchen",
+    results: "Gefundene Einstellungen",
+    nothingFound: "Keine Einstellung passt dazu.",
+  },
   rememberedInBrowser: "Wird in diesem Browser gespeichert.",
   fontRefused: "Ein Schriftname darf Buchstaben, Ziffern, Leerzeichen, Anführungszeichen, Kommas, Punkte und Bindestriche enthalten.",
   resetFont: "Schrift zurücksetzen",

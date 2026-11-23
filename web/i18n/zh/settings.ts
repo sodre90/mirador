@@ -4,6 +4,12 @@ export const settings: Messages["settings"] = {
   title: "设置",
   close: "关闭",
   pagesLabel: "设置页面",
+  search: {
+    label: "搜索设置",
+    placeholder: "搜索设置",
+    results: "找到的设置",
+    nothingFound: "没有匹配的设置。",
+  },
   rememberedInBrowser: "保存在这个浏览器中。",
   fontRefused: "字体名称只能包含字母、数字、空格、引号、逗号、点和连字符。",
   resetFont: "重置字体",

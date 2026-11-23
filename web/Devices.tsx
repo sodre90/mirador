@@ -15,6 +15,7 @@ import { refusalText } from "./host-error.ts";
 import { locale, t } from "./i18n/index.ts";
 import type { InviteJoins } from "./invite-link.ts";
 import { ConnectionSettings } from "./Reachability.tsx";
+import { SettingsSection, useSettingRow } from "./SettingsSection.tsx";
 import type { DevicesListed } from "./state.ts";
 
 const words = t.devices;
@@ -203,40 +204,48 @@ export function DeviceSettings({ listed, people, ownerId }: { listed: DevicesLis
   const [joins, setJoins] = useState<InviteJoins>("phone");
   const [changingAddress, setChangingAddress] = useState(false);
   const shownInSidebar = useConnectedDevicesInSidebar();
+  const row = useSettingRow();
   const whose = ({ personId }: ListedDevice) =>
     personId === ownerId ? null : words.list.personsDevice(personGoesBy(people.find(({ id }) => id === personId), t.rooms.nameless));
 
   return (
     <>
-      <div className="devices-heading">
-        <h3>{words.list.title}</h3>
-        <button type="button" className="primary" disabled={!listed || making} onClick={() => void make()} data-hint={hints.inviteDevice}>
-          {words.invite.button}
-        </button>
-      </div>
-      <p className="hint">{words.list.intro}</p>
-      {listed && open && (
-        <DeviceInviteCard
-          key={open.invite.code}
-          open={open}
-          listed={listed}
-          ownerId={ownerId}
-          joins={joins}
-          onJoins={setJoins}
-          onAnother={() => void make()}
-          onChooseAddress={() => setChangingAddress(true)}
-          onHide={hide}
-        />
-      )}
-      {making && !open && <InviteBeingMade />}
-      <ul className="settings-rows device-list" aria-label={words.list.title}>
-        {listed && connectedFirst(listed.devices).map((device) => <DeviceRow key={device.id} device={device} isThisDevice={device.id === listed.thisDeviceId} whose={whose(device)} />)}
-        {listed?.devices.length === 0 && <li className="device-none">{words.list.none}</li>}
-      </ul>
-      <label className="connected-devices-switch" data-hint={hints.connectedDevicesInSidebar}>
-        <input type="checkbox" checked={shownInSidebar} onChange={(event) => setConnectedDevicesInSidebar(event.target.checked)} />
-        {words.list.showInSidebar}
-      </label>
+      <SettingsSection
+        title={words.list.title}
+        hint={words.list.intro}
+        foundAlsoBy={[words.invite.button, hints.inviteDevice]}
+        heading={
+          <div className="devices-heading">
+            <h3>{words.list.title}</h3>
+            <button type="button" className="primary" disabled={!listed || making} onClick={() => void make()} data-hint={hints.inviteDevice}>
+              {words.invite.button}
+            </button>
+          </div>
+        }
+      >
+        {listed && open && (
+          <DeviceInviteCard
+            key={open.invite.code}
+            open={open}
+            listed={listed}
+            ownerId={ownerId}
+            joins={joins}
+            onJoins={setJoins}
+            onAnother={() => void make()}
+            onChooseAddress={() => setChangingAddress(true)}
+            onHide={hide}
+          />
+        )}
+        {making && !open && <InviteBeingMade />}
+        <ul className="settings-rows device-list" aria-label={words.list.title}>
+          {listed && connectedFirst(listed.devices).map((device) => <DeviceRow key={device.id} device={device} isThisDevice={device.id === listed.thisDeviceId} whose={whose(device)} />)}
+          {listed?.devices.length === 0 && <li className="device-none">{words.list.none}</li>}
+        </ul>
+        <label className="connected-devices-switch" {...row(words.list.showInSidebar, hints.connectedDevicesInSidebar)}>
+          <input type="checkbox" checked={shownInSidebar} onChange={(event) => setConnectedDevicesInSidebar(event.target.checked)} />
+          {words.list.showInSidebar}
+        </label>
+      </SettingsSection>
       {listed && <ConnectionSettings listed={listed} changingAddress={changingAddress} onChangeAddress={setChangingAddress} />}
     </>
   );

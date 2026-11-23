@@ -67,7 +67,8 @@ import { themeLabels, useTheme } from "./theme.ts";
 import { usePulsesOn } from "./pulses.ts";
 import { VoiceSettings } from "./VoiceSettings.tsx";
 import { useTimestampsShown } from "./timestamps.ts";
-import { setTypingAids, useTypingAids, type TypingAids } from "./typing-aids.ts";
+import { NAME_FIELD_ATTRIBUTES, setTypingAids, useTypingAids, type TypingAids } from "./typing-aids.ts";
+import { SettingsSearchScope, SettingsSection, useSettingRow } from "./SettingsSection.tsx";
 import { useWaitingStyle, waitingStyleLabels } from "./waiting.ts";
 import { setWorkspaceColorStyle, useWorkspaceColorStyle, workspaceColorStyleLabels } from "./workspace-colors.ts";
 
@@ -161,11 +162,17 @@ export function SettingsDialog({
   onClose: () => void;
 }) {
   const [page, setPage] = useState<SettingsPage>(openedAt ?? "appearance");
+  const [query, setQuery] = useState("");
+  const searching = query.trim() !== "";
   useEffect(() => {
-    const closeOnEscape = (event: KeyboardEvent) => event.key === "Escape" && onClose();
+    const closeOnEscape = (event: KeyboardEvent) => event.key === "Escape" && !event.defaultPrevented && onClose();
     window.addEventListener("keydown", closeOnEscape);
     return () => window.removeEventListener("keydown", closeOnEscape);
   }, [onClose]);
+  const choosePage = (chosen: SettingsPage) => {
+    setQuery("");
+    setPage(chosen);
+  };
 
   const pages: Record<SettingsPage, () => ReactNode> = {
     appearance: () => (
@@ -225,31 +232,47 @@ export function SettingsDialog({
       <div className="modal settings" role="dialog" aria-label={text.title} ref={rememberSettingsSize}>
         <header>
           <h2>{text.title}</h2>
+          <SearchField query={query} onSearch={setQuery} />
           <button className="icon" title={text.close} aria-label={text.close} onClick={onClose}>
             ×
           </button>
         </header>
         <div className="settings-body">
-          <PageList page={page} onChoose={setPage} />
-          <div className="settings-page" role="tabpanel" id="settings-page" aria-labelledby={`settings-tab-${page}`}>
-            {pages[page]()}
-          </div>
+          <PageList page={searching ? null : page} onChoose={choosePage} />
+          {searching ? (
+            <div className="settings-page settings-search-results" role="region" aria-label={text.search.results}>
+              {settingsPages.map((id) => (
+                <SettingsSearchScope key={id} query={query} page={pageLabels[id]}>
+                  <div className="settings-search-page">
+                    <h3 className="settings-search-page-name">{pageLabels[id]}</h3>
+                    {pages[id]()}
+                  </div>
+                </SettingsSearchScope>
+              ))}
+              <p className="hint settings-nothing-found">{text.search.nothingFound}</p>
+            </div>
+          ) : (
+            <div className="settings-page" role="tabpanel" id="settings-page" aria-labelledby={`settings-tab-${page}`}>
+              {pages[page]()}
+            </div>
+          )}
         </div>
       </div>
     </div>
   );
 }
 
-/** Up and Down move between the pages, as in a list of tabs. */
-function PageList({ page, onChoose }: { page: SettingsPage; onChoose: (page: SettingsPage) => void }) {
+/** Up and Down move between the pages, as in a list of tabs. No page is chosen while Settings shows what a search found. */
+function PageList({ page, onChoose }: { page: SettingsPage | null; onChoose: (page: SettingsPage) => void }) {
   const chooseWithArrows = (event: ReactKeyboardEvent<HTMLElement>) => {
     const step = pageSteps[event.key];
     if (!step) return;
     event.preventDefault();
-    const next = settingsPages[(settingsPages.indexOf(page) + step + settingsPages.length) % settingsPages.length]!;
+    const next = page === null ? settingsPages[0]! : settingsPages[(settingsPages.indexOf(page) + step + settingsPages.length) % settingsPages.length]!;
     onChoose(next);
     event.currentTarget.querySelector<HTMLElement>(`#settings-tab-${next}`)?.focus();
   };
+  const reachedByTab = page ?? settingsPages[0];
   return (
     <nav className="settings-pages" role="tablist" aria-orientation="vertical" aria-label={text.pagesLabel} onKeyDown={chooseWithArrows}>
       {settingsPages.map((id) => (
@@ -260,7 +283,7 @@ function PageList({ page, onChoose }: { page: SettingsPage; onChoose: (page: Set
           id={`settings-tab-${id}`}
           aria-selected={id === page}
           aria-controls="settings-page"
-          tabIndex={id === page ? 0 : -1}
+          tabIndex={id === reachedByTab ? 0 : -1}
           onClick={() => onChoose(id)}
         >
           {pageLabels[id]}
@@ -270,14 +293,40 @@ function PageList({ page, onChoose }: { page: SettingsPage; onChoose: (page: Set
   );
 }
 
+/** Finds settings on every page by their words; Esc empties it, and only then closes Settings. */
+function SearchField({ query, onSearch }: { query: string; onSearch: (query: string) => void }) {
+  const emptyOnEscape = (event: ReactKeyboardEvent<HTMLInputElement>) => {
+    if (event.key !== "Escape" || query === "") return;
+    event.preventDefault();
+    onSearch("");
+  };
+  return (
+    <input
+      type="search"
+      className="settings-search"
+      value={query}
+      placeholder={text.search.placeholder}
+      aria-label={text.search.label}
+      onChange={(event) => onSearch(event.target.value)}
+      onKeyDown={emptyOnEscape}
+      {...NAME_FIELD_ATTRIBUTES}
+    />
+  );
+}
+
 function LayoutSettings({ layoutDefault, onChange }: { layoutDefault: LayoutDefault; onChange: (layoutDefault: LayoutDefault) => void }) {
   const startHidden = (pane: HideablePane, hidden: boolean) => onChange({ ...layoutDefault, hidden: { ...layoutDefault.hidden, [pane]: hidden } });
+  const row = useSettingRow();
   return (
-    <>
-      <h3>{text.layout.title}</h3>
-      <p className="hint">
-        {text.layout.hintStart} <em>{text.layout.resetCommand}</em> {text.layout.hintEnd}
-      </p>
+    <SettingsSection
+      title={text.layout.title}
+      hint={
+        <>
+          {text.layout.hintStart} <em>{text.layout.resetCommand}</em> {text.layout.hintEnd}
+        </>
+      }
+      foundAlsoBy={[text.layout.hintStart, text.layout.resetCommand, text.layout.hintEnd, text.layout.arrangement]}
+    >
       <div className="arrangements" role="radiogroup" aria-label={text.layout.arrangement}>
         {arrangements.map((slots) => {
           const chosen = sameSlots(slots, layoutDefault.slots);
@@ -298,13 +347,13 @@ function LayoutSettings({ layoutDefault, onChange }: { layoutDefault: LayoutDefa
       </div>
       <div className="start-hidden">
         {(["canvas", "terminals"] as const).map((pane) => (
-          <label key={pane}>
+          <label key={pane} {...row(startHiddenLabels[pane])}>
             <input type="checkbox" checked={layoutDefault.hidden[pane]} onChange={(event) => startHidden(pane, event.target.checked)} />
             {startHiddenLabels[pane]}
           </label>
         ))}
       </div>
-    </>
+    </SettingsSection>
   );
 }
 
@@ -326,8 +375,9 @@ function PictureChoice<Option extends string>({
   onChoose: (option: Option) => void;
   preview: (option: Option) => ReactNode;
 }) {
+  const row = useSettingRow();
   return (
-    <div className="picture-choice" data-hint={hint}>
+    <div className="picture-choice" {...row(name, hint, ...Object.values<string>(labels))}>
       <div className="picture-choice-name">{name}</div>
       <div
         className="picture-options"
@@ -364,12 +414,11 @@ export function OwnProfileSettings({ person, nameless }: { person: Person; namel
   const saveName = () => {
     if (personName(name) !== person.name) void save({ name, color: person.color });
   };
+  const row = useSettingRow();
   return (
-    <section className="own-profile">
-      <h3>{text.ownProfile.title}</h3>
-      <p className="hint">{text.ownProfile.hint(nameless)}</p>
+    <SettingsSection className="own-profile" title={text.ownProfile.title} hint={text.ownProfile.hint(nameless)}>
       <div className="sending-settings">
-        <label>
+        <label {...row(text.ownProfile.name)}>
           {text.ownProfile.name}
           <input
             type="text"
@@ -381,7 +430,7 @@ export function OwnProfileSettings({ person, nameless }: { person: Person; namel
             onKeyDown={(event) => event.key === "Enter" && saveName()}
           />
         </label>
-        <div className="own-profile-colour">
+        <div className="own-profile-colour" {...row(text.ownProfile.colour)}>
           {text.ownProfile.colour}
           <ColorSwatches label={text.ownProfile.colour} chosen={person.color} focusChosen={false} onChoose={(color) => void save({ name, color })} />
         </div>
@@ -391,7 +440,7 @@ export function OwnProfileSettings({ person, nameless }: { person: Person; namel
           {refusal}
         </p>
       )}
-    </section>
+    </SettingsSection>
   );
 }
 
@@ -407,9 +456,7 @@ function ProfilePictureSettings({ picture }: { picture: string | null }) {
     }
   };
   return (
-    <section data-hint={hints.profilePicture}>
-      <h3>{text.profilePicture.title}</h3>
-      <p className="hint">{text.profilePicture.hint}</p>
+    <SettingsSection data-hint={hints.profilePicture} title={text.profilePicture.title} hint={text.profilePicture.hint} foundAlsoBy={[hints.profilePicture]}>
       <div className="profile-picture">
         {picture && <img className="profile-picture-preview" src={picture} alt="" />}
         <input
@@ -428,7 +475,7 @@ function ProfilePictureSettings({ picture }: { picture: string | null }) {
           </p>
         )}
       </div>
-    </section>
+    </SettingsSection>
   );
 }
 
@@ -442,10 +489,9 @@ function AppearanceSettings() {
   const machineColorStyle = useMachineColorStyle();
   const shellOutputStyle = useShellOutputStyle();
   const shellAppearance = useShellAppearance();
+  const row = useSettingRow();
   return (
-    <>
-      <h3>{text.appearance.title}</h3>
-      <p className="hint">{text.rememberedInBrowser}</p>
+    <SettingsSection title={text.appearance.title} hint={text.rememberedInBrowser}>
       <LanguageSetting />
       <PictureChoice
         name={text.appearance.textSize}
@@ -500,23 +546,24 @@ function AppearanceSettings() {
       />
       <ShellLookSettings />
       <div className="appearance-settings">
-        <label data-hint={hints.timestamps}>
+        <label {...row(text.appearance.showTimestamps, hints.timestamps)}>
           <input type="checkbox" checked={timestampsShown} onChange={(event) => setTimestampsShown(event.target.checked)} />
           {text.appearance.showTimestamps}
         </label>
-        <label data-hint={hints.pulses}>
+        <label {...row(text.appearance.pulseStatusDots, hints.pulses)}>
           <input type="checkbox" checked={pulsesOn} onChange={(event) => setPulsesOn(event.target.checked)} />
           {text.appearance.pulseStatusDots}
         </label>
       </div>
-    </>
+    </SettingsSection>
   );
 }
 
 function LanguageSetting() {
+  const row = useSettingRow();
   return (
     <div className="sending-settings">
-      <label data-hint={text.appearance.languageHint}>
+      <label {...row(text.appearance.language, text.appearance.languageHint)}>
         {text.appearance.language}
         <select value={language} onChange={(event) => chooseLanguage(event.target.value as Language)}>
           {Object.entries(languageNames).map(([value, name]) => (
@@ -539,10 +586,11 @@ function ShellLookSettings() {
     changeShellAppearance({ font: typed });
   };
   const fontAsDefault = font === DEFAULT_SHELL_APPEARANCE.font && size === DEFAULT_SHELL_APPEARANCE.size;
+  const row = useSettingRow();
   return (
     <div className="appearance-settings shell-look-settings">
       {look === "custom" && (
-        <div className="shell-colours">
+        <div className="shell-colours" {...row(text.appearance.shellColours, undefined, ...Object.values(shellColourLabels))}>
           {(Object.keys(shellColourLabels) as (keyof ShellColours)[]).map((part) => (
             <label key={part}>
               <input type="color" value={custom[part]} onChange={(event) => changeShellAppearance({ custom: { ...custom, [part]: event.target.value } })} />
@@ -554,11 +602,11 @@ function ShellLookSettings() {
           </button>
         </div>
       )}
-      <label data-hint={hints.shellFont}>
+      <label {...row(text.appearance.shellFont, hints.shellFont)}>
         {text.appearance.shellFont}
         <input type="text" value={fontTyped} placeholder={text.appearance.shellFontPlaceholder} spellCheck={false} aria-invalid={fontRefused} onChange={(event) => typeFont(event.target.value)} />
       </label>
-      <label data-hint={hints.shellFontSize}>
+      <label {...row(text.appearance.shellTextSize, hints.shellFontSize)}>
         {text.appearance.shellTextSize}
         <select value={size} onChange={(event) => changeShellAppearance({ size: event.target.value as ShellFontSize })}>
           {Object.entries(shellFontSizeLabels).map(([value, label]) => (
@@ -588,47 +636,49 @@ function SendingSettings() {
   const enterWhileBusy = useEnterWhileBusy();
   const messageBox = useMessageBox();
   const formatBar = useFormatBar();
+  const row = useSettingRow();
   return (
     <>
-      <h3>{text.sending.messageBox}</h3>
-      <div className="sending-settings">
-        <label data-hint={hints.messageBox}>
-          {text.sending.box}
-          <select value={messageBox} onChange={(event) => setMessageBox(event.target.value as MessageBox)}>
-            {Object.entries(messageBoxLabels).map(([value, label]) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
-            ))}
-          </select>
-        </label>
-        {messageBox === "formatted" && (
-          <label data-hint={hints.formatBarSetting}>
-            {text.sending.formattingButtons}
-            <select value={formatBar} onChange={(event) => setFormatBar(event.target.value as FormatBarChoice)}>
-              {Object.entries(formatBarLabels).map(([value, label]) => (
+      <SettingsSection title={text.sending.messageBox}>
+        <div className="sending-settings">
+          <label {...row(text.sending.box, hints.messageBox)}>
+            {text.sending.box}
+            <select value={messageBox} onChange={(event) => setMessageBox(event.target.value as MessageBox)}>
+              {Object.entries(messageBoxLabels).map(([value, label]) => (
                 <option key={value} value={value}>
                   {label}
                 </option>
               ))}
             </select>
           </label>
-        )}
-      </div>
-      <h3>{text.sending.whileAgentWorks}</h3>
-      <p className="hint">{text.sending.whileAgentWorksHint}</p>
-      <div className="sending-settings">
-        <label data-hint={hints.enterWhileBusy}>
-          {text.sending.enter}
-          <select value={enterWhileBusy} onChange={(event) => setEnterWhileBusy(event.target.value as EnterWhileBusy)}>
-            {Object.entries(enterWhileBusyLabels).map(([value, label]) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
+          {messageBox === "formatted" && (
+            <label {...row(text.sending.formattingButtons, hints.formatBarSetting)}>
+              {text.sending.formattingButtons}
+              <select value={formatBar} onChange={(event) => setFormatBar(event.target.value as FormatBarChoice)}>
+                {Object.entries(formatBarLabels).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+        </div>
+      </SettingsSection>
+      <SettingsSection title={text.sending.whileAgentWorks} hint={text.sending.whileAgentWorksHint}>
+        <div className="sending-settings">
+          <label {...row(text.sending.enter, hints.enterWhileBusy)}>
+            {text.sending.enter}
+            <select value={enterWhileBusy} onChange={(event) => setEnterWhileBusy(event.target.value as EnterWhileBusy)}>
+              {Object.entries(enterWhileBusyLabels).map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+      </SettingsSection>
     </>
   );
 }
@@ -636,6 +686,7 @@ function SendingSettings() {
 const trimmed = (value: number) => value.toFixed(2).replace(/0+$/, "").replace(/\.$/, "");
 
 function TerminalSettings() {
+  const row = useSettingRow();
   const settings = useTerminalSettings();
   const [fontTyped, setFontTyped] = useState(settings.fontFamily);
   useEffect(() => setFontTyped(settings.fontFamily), [settings.fontFamily]);
@@ -645,11 +696,9 @@ function TerminalSettings() {
     if (typed.trim() === "" || isFontFamily(typed)) setTerminalSettings({ fontFamily: typed });
   };
   return (
-    <>
-      <h3>{text.terminal.title}</h3>
-      <p className="hint">{text.rememberedInBrowser}</p>
+    <SettingsSection title={text.terminal.title} hint={text.rememberedInBrowser}>
       <div className="terminal-settings">
-        <label data-hint={hints.terminalPreset}>
+        <label {...row(text.terminal.colourPreset, hints.terminalPreset)}>
           {text.terminal.colourPreset}
           <select value={settings.preset} onChange={(event) => setTerminalSettings({ preset: event.target.value as TerminalPreset })}>
             {Object.entries(terminalPresetLabels).map(([value, label]) => (
@@ -659,7 +708,7 @@ function TerminalSettings() {
             ))}
           </select>
         </label>
-        <label data-hint={hints.terminalFontFamily}>
+        <label {...row(text.terminal.font, hints.terminalFontFamily)}>
           {text.terminal.font}
           <input
             type="text"
@@ -686,7 +735,7 @@ function TerminalSettings() {
           {text.terminal.fontPreview}
         </div>
         {fontRefused && <p className="hint terminal-font-refused">{text.fontRefused}</p>}
-        <label data-hint={hints.terminalFontSize}>
+        <label {...row(text.terminal.fontSize, hints.terminalFontSize)}>
           {text.terminal.fontSize}
           <select value={settings.fontSize} onChange={(event) => setTerminalSettings({ fontSize: Number(event.target.value) })}>
             {TERMINAL_FONT_SIZES.map((size) => (
@@ -696,7 +745,7 @@ function TerminalSettings() {
             ))}
           </select>
         </label>
-        <label data-hint={hints.terminalLineHeight}>
+        <label {...row(text.terminal.lineHeight, hints.terminalLineHeight)}>
           {text.terminal.lineHeight}
           <input
             type="range"
@@ -708,7 +757,7 @@ function TerminalSettings() {
           />
           <span className="terminal-setting-value" aria-hidden="true">{trimmed(settings.lineHeight)}×</span>
         </label>
-        <label data-hint={hints.terminalLetterSpacing}>
+        <label {...row(text.terminal.letterSpacing, hints.terminalLetterSpacing)}>
           {text.terminal.letterSpacing}
           <input
             type="range"
@@ -720,7 +769,7 @@ function TerminalSettings() {
           />
           <span className="terminal-setting-value" aria-hidden="true">{trimmed(settings.letterSpacing)} px</span>
         </label>
-        <label data-hint={hints.terminalCursorStyle}>
+        <label {...row(text.terminal.cursorStyle, hints.terminalCursorStyle)}>
           {text.terminal.cursorStyle}
           <select value={settings.cursorStyle} onChange={(event) => setTerminalSettings({ cursorStyle: event.target.value as TerminalCursorStyle })}>
             {Object.entries(cursorStyleLabels).map(([value, label]) => (
@@ -730,11 +779,11 @@ function TerminalSettings() {
             ))}
           </select>
         </label>
-        <label data-hint={hints.terminalCursorBlink}>
+        <label {...row(text.terminal.cursorBlink, hints.terminalCursorBlink)}>
           <input type="checkbox" checked={settings.cursorBlink} onChange={(event) => setTerminalSettings({ cursorBlink: event.target.checked })} />
           {text.terminal.cursorBlink}
         </label>
-        <label data-hint={hints.terminalFontWeightBold}>
+        <label {...row(text.terminal.boldWeight, hints.terminalFontWeightBold)}>
           {text.terminal.boldWeight}
           <select value={settings.fontWeightBold} onChange={(event) => setTerminalSettings({ fontWeightBold: Number(event.target.value) })}>
             {TERMINAL_FONT_WEIGHTS_BOLD.map((weight) => (
@@ -744,7 +793,7 @@ function TerminalSettings() {
             ))}
           </select>
         </label>
-        <label data-hint={hints.terminalScrollback}>
+        <label {...row(text.terminal.scrollback, hints.terminalScrollback)}>
           {text.terminal.scrollback}
           <select value={settings.scrollback} onChange={(event) => setTerminalSettings({ scrollback: Number(event.target.value) })}>
             {TERMINAL_SCROLLBACKS.map((lines) => (
@@ -754,7 +803,7 @@ function TerminalSettings() {
             ))}
           </select>
         </label>
-        <label data-hint={hints.copyOnSelect}>
+        <label {...row(text.terminal.copyOnSelect, hints.copyOnSelect)}>
           <input type="checkbox" checked={settings.copyOnSelect} onChange={(event) => setCopyOnSelect(event.target.checked)} />
           {text.terminal.copyOnSelect}
         </label>
@@ -762,19 +811,17 @@ function TerminalSettings() {
           {text.terminal.resetToDefaults}
         </button>
       </div>
-    </>
+    </SettingsSection>
   );
 }
 
 function AboutSettings({ version, newerVersion, claudeProgram }: { version: string; newerVersion: NewerVersion | null; claudeProgram: ClaudeProgram }) {
   return (
-    <>
-      <h3>{text.about.title}</h3>
-      <p className="hint">Mirador {version}</p>
+    <SettingsSection title={text.about.title} hint={`Mirador ${version}`}>
       <NewerVersionNote newerVersion={newerVersion} />
       <UpdateCheckButton version={version} newerVersion={newerVersion} />
       <p className="hint">Claude Code: {foundClaudeProgram(claudeProgram)}</p>
-    </>
+    </SettingsSection>
   );
 }
 
@@ -785,17 +832,16 @@ function foundClaudeProgram({ configured, found, version, installCommand }: Clau
 }
 
 function AgentSettings({ claudeProgram }: { claudeProgram: ClaudeProgram }) {
+  const row = useSettingRow();
   const [path, setPath] = useState(claudeProgram.configured);
   useEffect(() => setPath(claudeProgram.configured), [claudeProgram.configured]);
   const save = () => {
     if (path.trim() !== claudeProgram.configured) connection.send({ type: "settings.set-claude-program", path: path.trim() });
   };
   return (
-    <>
-      <h3>Claude Code</h3>
-      <p className="hint">{text.agents.hint}</p>
+    <SettingsSection title="Claude Code" hint={text.agents.hint}>
       <div className="sending-settings">
-        <label data-hint={hints.claudeProgram(claudeProgram.installFolders)}>
+        <label {...row(text.program, hints.claudeProgram(claudeProgram.installFolders))}>
           {text.program}
           <input
             type="text"
@@ -812,38 +858,36 @@ function AgentSettings({ claudeProgram }: { claudeProgram: ClaudeProgram }) {
       <p className="hint claude-program-found" role="status">
         {foundClaudeProgram(claudeProgram)}
       </p>
-    </>
+    </SettingsSection>
   );
 }
 
 const timeOfDay = (minutes: number) => `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
 
 function ReminderSettings({ morning }: { morning: number }) {
+  const row = useSettingRow();
   const setMorning = (value: string) => {
     const [hours, minutes] = value.split(":").map(Number);
     if (hours !== undefined && minutes !== undefined) connection.send({ type: "settings.set-reminder-morning", minutes: hours * 60 + minutes });
   };
   return (
-    <>
-      <h3>{t.reminders.settingsTitle}</h3>
-      <p className="hint">{t.reminders.morningHint}</p>
+    <SettingsSection title={t.reminders.settingsTitle} hint={t.reminders.morningHint}>
       <div className="sending-settings">
-        <label>
+        <label {...row(t.reminders.morning)}>
           {t.reminders.morning}
           <input type="time" className="reminder-morning" value={timeOfDay(morning)} onChange={(event) => event.target.value && setMorning(event.target.value)} />
         </label>
       </div>
-    </>
+    </SettingsSection>
   );
 }
 
 function ConversationsShownSettings({ shown }: { shown: ConversationsShown }) {
+  const row = useSettingRow();
   return (
-    <>
-      <h3>{text.conversationsShown.title}</h3>
-      <p className="hint">{text.conversationsShown.hint}</p>
+    <SettingsSection title={text.conversationsShown.title} hint={text.conversationsShown.hint}>
       <div className="sending-settings">
-        <label>
+        <label {...row(text.conversationsShown.atMost)}>
           {text.conversationsShown.atMost}
           <select className="conversations-shown" value={shown} onChange={(event) => connection.send({ type: "settings.set-conversations-shown", shown: event.target.value as ConversationsShown })}>
             {CONVERSATIONS_SHOWN_CHOICES.map((choice) => (
@@ -854,17 +898,16 @@ function ConversationsShownSettings({ shown }: { shown: ConversationsShown }) {
           </select>
         </label>
       </div>
-    </>
+    </SettingsSection>
   );
 }
 
 function SideChatSettings({ access }: { access: SideChatAccess }) {
+  const row = useSettingRow();
   return (
-    <>
-      <h3>{text.sideChats.title}</h3>
-      <p className="hint">{text.sideChats.hint}</p>
+    <SettingsSection title={text.sideChats.title} hint={text.sideChats.hint}>
       <div className="sending-settings">
-        <label data-hint={hints.sideChatAccess}>
+        <label {...row(text.sideChats.access, hints.sideChatAccess)}>
           {text.sideChats.access}
           <select
             className="side-chat-access-setting"
@@ -879,17 +922,16 @@ function SideChatSettings({ access }: { access: SideChatAccess }) {
           </select>
         </label>
       </div>
-    </>
+    </SettingsSection>
   );
 }
 
 function OlderConversationSettings({ olderAfter }: { olderAfter: OlderAfter }) {
+  const row = useSettingRow();
   return (
-    <>
-      <h3>{text.olderConversations.title}</h3>
-      <p className="hint">{text.olderConversations.hint}</p>
+    <SettingsSection title={text.olderConversations.title} hint={text.olderConversations.hint}>
       <div className="sending-settings">
-        <label>
+        <label {...row(text.olderConversations.after)}>
           {text.olderConversations.after}
           <select className="older-after" value={olderAfter} onChange={(event) => connection.send({ type: "settings.set-older-after", olderAfter: event.target.value as OlderAfter })}>
             {OLDER_AFTER_CHOICES.map((choice) => (
@@ -900,17 +942,16 @@ function OlderConversationSettings({ olderAfter }: { olderAfter: OlderAfter }) {
           </select>
         </label>
       </div>
-    </>
+    </SettingsSection>
   );
 }
 
 function KeepAwakeSettings({ keepAwake }: { keepAwake: KeepAwake }) {
+  const row = useSettingRow();
   return (
-    <>
-      <h3>{text.sleep.title}</h3>
-      <p className="hint">{text.sleep.hint}</p>
+    <SettingsSection title={text.sleep.title} hint={text.sleep.hint}>
       <div className="sending-settings">
-        <label data-hint={hints.keepAwake}>
+        <label {...row(text.sleep.keepAwake, hints.keepAwake)}>
           {text.sleep.keepAwake}
           <select value={keepAwake} onChange={(event) => connection.send({ type: "settings.set-keep-awake", keepAwake: event.target.value as KeepAwake })}>
             {Object.entries(t.labels.keepAwake).map(([value, label]) => (
@@ -921,17 +962,16 @@ function KeepAwakeSettings({ keepAwake }: { keepAwake: KeepAwake }) {
           </select>
         </label>
       </div>
-    </>
+    </SettingsSection>
   );
 }
 
 function CanvasSettings({ canvasUse, keepDeletedCanvas }: { canvasUse: CanvasUse; keepDeletedCanvas: KeepDeletedCanvas }) {
+  const row = useSettingRow();
   return (
-    <>
-      <h3>{text.canvas.title}</h3>
-      <p className="hint">{text.canvas.hint}</p>
+    <SettingsSection title={text.canvas.title} hint={text.canvas.hint}>
       <div className="sending-settings">
-        <label data-hint={hints.canvasUse}>
+        <label {...row(text.canvas.use, hints.canvasUse)}>
           {text.canvas.use}
           <select value={canvasUse} onChange={(event) => connection.send({ type: "settings.set-canvas-use", canvasUse: event.target.value as CanvasUse })}>
             {Object.entries(t.labels.canvasUse).map(([value, label]) => (
@@ -941,7 +981,7 @@ function CanvasSettings({ canvasUse, keepDeletedCanvas }: { canvasUse: CanvasUse
             ))}
           </select>
         </label>
-        <label data-hint={hints.keepDeletedCanvas}>
+        <label {...row(text.canvas.keepDeleted, hints.keepDeletedCanvas)}>
           {text.canvas.keepDeleted}
           <select value={keepDeletedCanvas} onChange={(event) => connection.send({ type: "settings.set-keep-deleted-canvas", keep: event.target.value as KeepDeletedCanvas })}>
             {Object.entries(t.labels.keepDeletedCanvas).map(([value, label]) => (
@@ -952,18 +992,17 @@ function CanvasSettings({ canvasUse, keepDeletedCanvas }: { canvasUse: CanvasUse
           </select>
         </label>
       </div>
-    </>
+    </SettingsSection>
   );
 }
 
 function SavedPageSettings() {
+  const row = useSettingRow();
   const libraries = usePageLibraries();
   return (
-    <>
-      <h3>{text.savedPages.title}</h3>
-      <p className="hint">{text.savedPages.hint}</p>
+    <SettingsSection title={text.savedPages.title} hint={text.savedPages.hint}>
       <div className="sending-settings">
-        <label data-hint={hints.pageLibrariesSetting}>
+        <label {...row(text.savedPages.libraries, hints.pageLibrariesSetting)}>
           {text.savedPages.libraries}
           <select value={libraries} onChange={(event) => setPageLibraries(event.target.value as PageLibraries)}>
             {Object.entries(t.labels.pageLibraries).map(([value, label]) => (
@@ -974,23 +1013,22 @@ function SavedPageSettings() {
           </select>
         </label>
       </div>
-    </>
+    </SettingsSection>
   );
 }
 
 function EditApprovalSettings() {
+  const row = useSettingRow();
   const editsInCanvas = useEditsInCanvas();
   return (
-    <>
-      <h3>{text.editApprovals.title}</h3>
-      <p className="hint">{text.editApprovals.hint}</p>
+    <SettingsSection title={text.editApprovals.title} hint={text.editApprovals.hint}>
       <div className="sending-settings">
-        <label data-hint={hints.editsInCanvasSetting}>
+        <label {...row(text.editApprovals.inCanvas, hints.editsInCanvasSetting)}>
           <input type="checkbox" checked={editsInCanvas} onChange={(event) => setEditsInCanvas(event.target.checked)} />
           {text.editApprovals.inCanvas}
         </label>
       </div>
-    </>
+    </SettingsSection>
   );
 }
 
@@ -1000,22 +1038,16 @@ const blockedNotice: Partial<Record<NotificationSetting["permission"], string>> 
 };
 
 function NotificationSettings() {
+  const row = useSettingRow();
   const setting = useNotificationSetting();
   if (inDesktopApp()) {
-    return (
-      <>
-        <h3>{text.notifications.title}</h3>
-        <p className="hint">{text.notifications.desktopApp}</p>
-      </>
-    );
+    return <SettingsSection title={text.notifications.title} hint={text.notifications.desktopApp} />;
   }
   const notice = blockedNotice[setting.permission];
   return (
-    <>
-      <h3>{text.notifications.title}</h3>
-      <p className="hint">{text.notifications.browser}</p>
+    <SettingsSection title={text.notifications.title} hint={text.notifications.browser}>
       <div className="notification-settings">
-        <label>
+        <label {...row(text.notifications.notifyInBrowser)}>
           <input
             type="checkbox"
             checked={notifies(setting)}
@@ -1026,19 +1058,18 @@ function NotificationSettings() {
         </label>
       </div>
       {notice && <p className="hint">{notice}</p>}
-    </>
+    </SettingsSection>
   );
 }
 
 function ExternalImageSettings() {
+  const row = useSettingRow();
   const choice = externalImages.use();
   const stillBlocked = useExternalImagesBlocked();
   return (
-    <>
-      <h3>{text.externalImages.title}</h3>
-      <p className="hint">{text.externalImages.hint}</p>
+    <SettingsSection title={text.externalImages.title} hint={text.externalImages.hint}>
       <div className="external-images">
-        <label>
+        <label {...row(text.externalImages.asLinks)}>
           <input type="checkbox" checked={choice === "blocked"} onChange={(event) => setExternalImages(event.target.checked ? "blocked" : "shown")} />
           {text.externalImages.asLinks}
         </label>
@@ -1051,7 +1082,7 @@ function ExternalImageSettings() {
           </button>
         </p>
       )}
-    </>
+    </SettingsSection>
   );
 }
 
@@ -1060,6 +1091,7 @@ type ScriptOpener = "text-editor" | "program";
 const scriptOpenerLabels: Record<ScriptOpener, string> = { "text-editor": text.fileLinks.textEditor, program: text.fileLinks.programYouName };
 
 function FileLinkSettings({ scriptProgram }: { scriptProgram: string }) {
+  const row = useSettingRow();
   const [opener, setOpener] = useState<ScriptOpener>(scriptProgram ? "program" : "text-editor");
   const [program, setProgram] = useState(scriptProgram);
   useEffect(() => {
@@ -1074,11 +1106,9 @@ function FileLinkSettings({ scriptProgram }: { scriptProgram: string }) {
     if (chosen === "text-editor") save("");
   };
   return (
-    <>
-      <h3>{text.fileLinks.title}</h3>
-      <p className="hint">{text.fileLinks.hint}</p>
+    <SettingsSection title={text.fileLinks.title} hint={text.fileLinks.hint}>
       <div className="sending-settings">
-        <label data-hint={hints.scriptProgram}>
+        <label {...row(text.fileLinks.scriptsOpenIn, hints.scriptProgram)}>
           {text.fileLinks.scriptsOpenIn}
           <select value={opener} onChange={(event) => choose(event.target.value as ScriptOpener)}>
             {Object.entries(scriptOpenerLabels).map(([value, label]) => (
@@ -1089,7 +1119,7 @@ function FileLinkSettings({ scriptProgram }: { scriptProgram: string }) {
           </select>
         </label>
         {opener === "program" && (
-          <label>
+          <label {...row(text.program)}>
             {text.program}
             <input
               type="text"
@@ -1104,13 +1134,14 @@ function FileLinkSettings({ scriptProgram }: { scriptProgram: string }) {
           </label>
         )}
       </div>
-    </>
+    </SettingsSection>
   );
 }
 
 type EditorChoice = EditorSetting["editor"];
 
 function EditorSettings({ editor }: { editor: EditorState }) {
+  const row = useSettingRow();
   const [choice, setChoice] = useState<EditorChoice>(editor.setting.editor);
   const savedCommand = editor.setting.editor === "custom" ? editor.setting.command : "";
   const [command, setCommand] = useState(savedCommand);
@@ -1132,11 +1163,9 @@ function EditorSettings({ editor }: { editor: EditorState }) {
     if (command.trim() !== savedCommand) connection.send({ type: "settings.set-editor", setting: { editor: "custom", command } });
   };
   return (
-    <>
-      <h3>{text.editor.title}</h3>
-      <p className="hint">{text.editor.hint}</p>
+    <SettingsSection title={text.editor.title} hint={text.editor.hint}>
       <div className="sending-settings">
-        <label data-hint={hints.editor}>
+        <label {...row(text.editor.opensIn, hints.editor)}>
           {text.editor.opensIn}
           <select className="editor-choice" value={choice} onChange={(event) => choose(event.target.value as EditorChoice)}>
             {(["first-found", ...knownEditorIds, "custom"] as const).map((option) => (
@@ -1147,7 +1176,7 @@ function EditorSettings({ editor }: { editor: EditorState }) {
           </select>
         </label>
         {choice === "custom" && (
-          <label data-hint={hints.editorCommand}>
+          <label {...row(text.editor.commandLine, hints.editorCommand)}>
             {text.editor.commandLine}
             <input
               type="text"
@@ -1162,21 +1191,21 @@ function EditorSettings({ editor }: { editor: EditorState }) {
           </label>
         )}
       </div>
-    </>
+    </SettingsSection>
   );
 }
 
 function MachineNameSettings({ machineName, computerName }: { machineName: string | null; computerName: string }) {
+  const row = useSettingRow();
   const [name, setName] = useState(machineName ?? "");
   useEffect(() => setName(machineName ?? ""), [machineName]);
   const save = () => {
     if (name.trim() !== (machineName ?? "")) connection.send({ type: "settings.set-machine-name", machineName: name });
   };
   return (
-    <>
-      <h3>{text.machine.title}</h3>
+    <SettingsSection title={text.machine.title}>
       <div className="sending-settings">
-        <label data-hint={hints.machineName}>
+        <label {...row(text.machine.name, hints.machineName)}>
           {text.machine.name}
           <input
             type="text"
@@ -1191,11 +1220,12 @@ function MachineNameSettings({ machineName, computerName }: { machineName: strin
           />
         </label>
       </div>
-    </>
+    </SettingsSection>
   );
 }
 
 function PushRelaySettings({ pushRelay }: { pushRelay: PushRelaySetting }) {
+  const row = useSettingRow();
   const savedChoice = pushRelayChoiceOf(pushRelay);
   const miradorRelay = pushRelayHost(pushRelay.miradorRelay);
   const [choice, setChoice] = useState<PushRelayChoice>(savedChoice);
@@ -1217,11 +1247,9 @@ function PushRelaySettings({ pushRelay }: { pushRelay: PushRelaySetting }) {
   };
   const labelOf = (option: PushRelayChoice) => (option === "mirador" ? text.pushRelay.choices.mirador(miradorRelay ?? "") : text.pushRelay.choices[option]);
   return (
-    <>
-      <h3>{text.pushRelay.title}</h3>
-      <p className="hint">{text.pushRelay.hint}</p>
+    <SettingsSection title={text.pushRelay.title} hint={text.pushRelay.hint}>
       <div className="sending-settings push-relay">
-        <label data-hint={hints.pushRelayChoice}>
+        <label {...row(text.pushRelay.relay, hints.pushRelayChoice)}>
           {text.pushRelay.relay}
           <select className="push-relay-choice" value={choice} onChange={(event) => choose(event.target.value as PushRelayChoice)}>
             {PUSH_RELAY_CHOICES.filter((option) => option !== "mirador" || miradorRelay).map((option) => (
@@ -1233,11 +1261,11 @@ function PushRelaySettings({ pushRelay }: { pushRelay: PushRelaySetting }) {
         </label>
         {choice === "own" && (
           <>
-            <label data-hint={hints.pushRelayAddress}>
+            <label {...row(text.pushRelay.address, hints.pushRelayAddress)}>
               {text.pushRelay.address}
               <input type="url" className="push-relay-address" value={address} placeholder="https://push.example.com" spellCheck={false} onChange={(event) => setAddress(event.target.value)} />
             </label>
-            <label data-hint={hints.pushRelayToken}>
+            <label {...row(text.pushRelay.token, hints.pushRelayToken)}>
               {text.pushRelay.token}
               <input
                 type="password"
@@ -1257,24 +1285,23 @@ function PushRelaySettings({ pushRelay }: { pushRelay: PushRelaySetting }) {
       </div>
       <p className="hint push-relay-hint">{text.pushRelay.chosen[choice]}</p>
       {problem && <p className="push-relay-problem">{problem}</p>}
-    </>
+    </SettingsSection>
   );
 }
 
 function TypingSettings() {
+  const row = useSettingRow();
   const typingAids = useTypingAids();
   return (
-    <>
-      <h3>{text.typing.title}</h3>
-      <p className="hint">{text.typing.hint}</p>
+    <SettingsSection title={text.typing.title} hint={text.typing.hint}>
       <div className="typing-aids">
         {(["autocorrect", "predictions"] as const).map((aid) => (
-          <label key={aid}>
+          <label key={aid} {...row(typingAidLabels[aid])}>
             <input type="checkbox" checked={typingAids[aid]} onChange={(event) => setTypingAids({ ...typingAids, [aid]: event.target.checked })} />
             {typingAidLabels[aid]}
           </label>
         ))}
       </div>
-    </>
+    </SettingsSection>
   );
 }
