@@ -146,6 +146,7 @@ test("two agents' requests queue oldest first, the room and the sidebar say what
   await expect(workingLine(page, "Reviewer is waiting for approval…")).toBeVisible();
   await expect(roomCard(page, "Queue")).toHaveAttribute("data-waiting-tone", "decision");
   await expect(roomCard(page, "Queue").locator(".waiting-pill")).toHaveText("Needs you");
+  await expect(roomCard(page, "Queue").locator(".waiting-pill")).toHaveAttribute("data-hint", "Needs you: an agent waits for your answer, or someone's task for your OK.");
 
   await workingLine(page, "Builder is waiting for approval…").getByRole("button", { name: "Open thread" }).click();
   await expect(threadStrip(page, "Builder").locator(".room-approval-asker")).toHaveText("Builder asks");

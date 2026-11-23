@@ -10,10 +10,11 @@ import { RoomCanvas, RoomView } from "./Room.tsx";
 import { RoomsSection } from "./RoomsSidebar.tsx";
 import { OwnProfileSettings } from "./Settings.tsx";
 import type { AppAction, AppState } from "./state.ts";
+import type { RoomWait } from "./waiting.ts";
 import { WorkspaceArea } from "./Workspace.tsx";
 
 const words = t.rooms;
-const NO_ROOMS_WAITING = new Set<string>();
+const NO_ROOMS_WAITING: ReadonlyMap<string, RoomWait> = new Map();
 
 /** Signed in as a person other than the machine's owner, the page shows the rooms they are in, and nothing else of the machine. */
 export const seesOnlyTheirRooms = ({ you, ownerId }: Pick<AppState, "you" | "ownerId">) => you !== null && ownerId !== null && you !== ownerId;
@@ -113,7 +114,7 @@ export function RoomsOnlyApp({ state, dispatch, outOfRooms, banner }: { state: A
         {!sidebarHidden && (
           <nav className="sidebar">
             <div className="sidebar-scroll">
-              <RoomsSection rooms={state.rooms} profiles={state.profiles} selectedRoomId={state.selectedRoomId} waitingRoomIds={NO_ROOMS_WAITING} readings={state.roomReadings} people={state.people} manages={false} dispatch={dispatch} />
+              <RoomsSection rooms={state.rooms} profiles={state.profiles} selectedRoomId={state.selectedRoomId} roomsWaiting={NO_ROOMS_WAITING} readings={state.roomReadings} people={state.people} manages={false} dispatch={dispatch} />
             </div>
             <footer>
               <button type="button" className="link" onClick={() => setOwnProfileOpen(true)}>

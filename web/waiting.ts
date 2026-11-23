@@ -7,6 +7,7 @@ export {
   waitingByUrgency,
   waitingShowsOnDot,
   waitingTones,
+  type RoomWait,
   type WaitingTone,
 } from "../shared/waiting.ts";
 import type { WaitingTone } from "../shared/waiting.ts";

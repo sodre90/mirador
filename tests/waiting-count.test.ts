@@ -13,7 +13,8 @@ import {
   type WaitingSummary,
   type WaitingTone,
 } from "../shared/waiting.ts";
-import type { RoomApproval, RoomTaskApproval } from "../shared/rooms.ts";
+import type { RoomApproval, RoomJoiner, RoomTaskApproval } from "../shared/rooms.ts";
+import type { HeldChange } from "../shared/sandbox.ts";
 import { tabTitle } from "../web/tab-title.ts";
 
 const c = (waitingFor: Conversation["waitingFor"]) => ({ waitingFor }) as Conversation;
@@ -24,18 +25,22 @@ test("counts every conversation waiting for you, whatever it waits for, your own
   expect(countWaiting([c(null)])).toBe(0);
 });
 
-test("a room waits for you while one of its agents' requests or questions, or a person's task, waits for you to answer it", () => {
+test("a room waits for you while one of its agents' requests or questions, or a person's task, waits for you to answer it, a change its sandbox holds waits for your OK, or someone waits at its door", () => {
   const approval = (roomId: string, approvers: string[]) => ({ roomId, approvers }) as RoomApproval;
   const task = (roomId: string, approvers: string[]) => ({ roomId, approvers }) as RoomTaskApproval;
   const inRoom = (roomId: string, waitingFor: Conversation["waitingFor"]) => ({ roomId, waitingFor }) as Conversation;
+  const joiner = (roomId: string) => ({ roomId }) as RoomJoiner;
+  const held = (roomId: string) => ({ roomId }) as HeldChange;
   const owner = {
     you: "owner",
     roomApprovals: [approval("asks", ["owner"]), approval("asks-another", ["someone else"])],
     roomTasksWaiting: [task("task", ["owner"]), task("asks", ["owner"])],
     roomConversations: [inRoom("question", "question"), inRoom("permission-only", "permission"), inRoom("finished", "finished")],
+    roomJoiners: [joiner("door"), joiner("held"), joiner("asks")],
+    heldChanges: [held("held"), held("question")],
   };
-  expect([...roomsWaitingFor(owner)].toSorted()).toEqual(["asks", "question", "task"]);
-  expect(roomsWaitingFor({ you: "mia", roomApprovals: [], roomTasksWaiting: [], roomConversations: [] }).size).toBe(0);
+  expect(Object.fromEntries(roomsWaitingFor(owner))).toEqual({ asks: "answer", task: "answer", question: "answer", held: "held-change", door: "door" });
+  expect(roomsWaitingFor({ you: "mia", roomApprovals: [], roomTasksWaiting: [], roomConversations: [], roomJoiners: [], heldChanges: [] }).size).toBe(0);
 });
 
 test("an Unread mark comes after everything the agent waits on, and opening clears it as it clears Done and Failed", () => {

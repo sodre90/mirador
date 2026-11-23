@@ -76,6 +76,12 @@ test("one invite brings several people to a room's door, where the owner lets ea
     }
   });
 
+  await test.step("the owner's room says it needs them while people wait at its door", async () => {
+    const needsYou = roomCard(page, "Garden").locator(".waiting-pill");
+    await expect(needsYou).toHaveText("Needs you");
+    await expect(needsYou).toHaveAttribute("data-hint", "Needs you: someone is waiting to join, for you to let them in or turn them away.");
+  });
+
   await test.step("the owner sees how many came, and who waits at the door, by name, role and device", async () => {
     const settings = await openRoomSettings(page, "Garden");
     await expect(settings.getByRole("list", { name: "Waiting invites" }).getByRole("listitem")).toHaveText([/^Member · 2 of 5 joined · expires in /]);
@@ -110,6 +116,7 @@ test("one invite brings several people to a room's door, where the owner lets ea
     await people.getByRole("button", { name: "Confirm: Turn Eli away" }).click();
     await expect(people.getByRole("list", { name: "Waiting to join" })).toHaveCount(0);
     await expect(count).not.toContainText("waiting");
+    await expect(roomCard(page, "Garden").locator(".waiting-pill")).toHaveCount(0);
   });
 
   await test.step("the one turned away is told so, and puts it away", async () => {

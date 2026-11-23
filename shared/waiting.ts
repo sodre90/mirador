@@ -1,5 +1,6 @@
 import type { Conversation, WaitingFor } from "./model.ts";
-import type { RoomApproval, RoomTaskApproval } from "./rooms.ts";
+import type { RoomApproval, RoomJoiner, RoomTaskApproval } from "./rooms.ts";
+import type { HeldChange } from "./sandbox.ts";
 
 export type WaitingTone = "decision" | "failed" | "done" | "unread";
 
@@ -55,16 +56,26 @@ export interface RoomsWaiting {
   roomApprovals: RoomApproval[];
   roomTasksWaiting: RoomTaskApproval[];
   roomConversations: Conversation[];
+  roomJoiners: RoomJoiner[];
+  heldChanges: HeldChange[];
 }
 
+/** What a room waits on you for, the most pressing first: an answer an agent or a person's task is stuck on, an agent config change its sandbox holds, then someone at its door. */
+export type RoomWait = "answer" | "held-change" | "door";
+
+const mostPressingPerRoom = (waits: [string, RoomWait][]): ReadonlyMap<string, RoomWait> => new Map(waits.toReversed());
+
 /**
- * The rooms where an agent waits for you to answer its request or question, or a person's task waits for you to allow
- * it. Only the owner's page holds the agents' conversations, whose questions the owner alone answers.
+ * The rooms that wait for you, each with what it waits for most: an agent's request or question for you to answer, a
+ * person's task for you to allow, a change its sandbox holds, or someone at its door. Only the owner's page holds the
+ * agents' conversations, whose questions the owner alone answers, and is told of held changes and of the door.
  */
-export const roomsWaitingFor = ({ you, roomApprovals, roomTasksWaiting, roomConversations }: RoomsWaiting) =>
-  new Set([
-    ...[...roomApprovals, ...roomTasksWaiting].filter(({ approvers }) => you !== null && approvers.includes(you)).map(({ roomId }) => roomId),
-    ...roomConversations.flatMap(({ roomId, waitingFor }) => (roomId && waitingFor === "question" ? [roomId] : [])),
+export const roomsWaitingFor = ({ you, roomApprovals, roomTasksWaiting, roomConversations, roomJoiners, heldChanges }: RoomsWaiting) =>
+  mostPressingPerRoom([
+    ...[...roomApprovals, ...roomTasksWaiting].filter(({ approvers }) => you !== null && approvers.includes(you)).map(({ roomId }): [string, RoomWait] => [roomId, "answer"]),
+    ...roomConversations.flatMap(({ roomId, waitingFor }): [string, RoomWait][] => (roomId && waitingFor === "question" ? [[roomId, "answer"]] : [])),
+    ...heldChanges.map(({ roomId }): [string, RoomWait] => [roomId, "held-change"]),
+    ...roomJoiners.map(({ roomId }): [string, RoomWait] => [roomId, "door"]),
   ]);
 
 /** Decisions first, since those agents are stuck until you answer; otherwise in the order given. */

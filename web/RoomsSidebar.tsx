@@ -7,12 +7,11 @@ import type { RoomReading } from "../shared/room-reading.ts";
 import { broughtAgentName, type Room } from "../shared/rooms.ts";
 import { placedBelow, useClosing } from "./BarMenu.tsx";
 import { connection } from "./connection.ts";
-import { waitingHints } from "./hints.ts";
 import { formatNumber, t } from "./i18n/index.ts";
 import { LineIcon } from "./LineIcon.tsx";
 import { pastelVariables } from "./pastels.ts";
 import type { AppAction } from "./state.ts";
-import { waitingLabels } from "./waiting.ts";
+import { waitingLabels, type RoomWait } from "./waiting.ts";
 
 const words = t.rooms;
 
@@ -88,12 +87,18 @@ type ReadingCounts = Pick<RoomReading, "unread" | "mentions" | "toConfirm" | "mu
 
 const NOTHING_UNREAD: ReadingCounts = { unread: 0, mentions: 0, toConfirm: 0, muted: false };
 
-const needsYou = (waiting: boolean, { toConfirm }: ReadingCounts) => waiting || toConfirm > 0;
+const needsYou = (waiting: RoomWait | undefined, { toConfirm }: ReadingCounts) => waiting !== undefined || toConfirm > 0;
 
 const readingClasses = ({ unread, muted }: ReadingCounts) => [unread > 0 && "unread", muted && "muted"];
 
+const roomWaitHints: Record<RoomWait, string> = {
+  answer: words.answerWaits,
+  "held-change": words.heldChangeWaits,
+  door: words.doorWaits,
+};
+
 /** What a room holds for you: a mark where you were tagged, how many messages you have not read, and "Needs you" where something waits for you. */
-function ReadingMarks({ reading, waiting }: { reading: ReadingCounts; waiting: boolean }) {
+function ReadingMarks({ reading, waiting }: { reading: ReadingCounts; waiting?: RoomWait }) {
   return (
     <>
       {reading.mentions > 0 && (
@@ -107,7 +112,7 @@ function ReadingMarks({ reading, waiting }: { reading: ReadingCounts; waiting: b
         </span>
       )}
       {needsYou(waiting, reading) && (
-        <span className="waiting-pill tone-decision" data-hint={waiting ? waitingHints.permission : words.waitsForYourConfirm}>
+        <span className="waiting-pill tone-decision" data-hint={waiting ? roomWaitHints[waiting] : words.waitsForYourConfirm}>
           {waitingLabels.decision}
         </span>
       )}
@@ -218,7 +223,7 @@ export function RoomsSection({
   rooms,
   profiles,
   selectedRoomId,
-  waitingRoomIds,
+  roomsWaiting,
   readings,
   roomsWithPeopleHere = [],
   joinedRooms = [],
@@ -232,7 +237,7 @@ export function RoomsSection({
   rooms: Room[];
   profiles: Profile[];
   selectedRoomId: string | null;
-  waitingRoomIds: Set<string>;
+  roomsWaiting: ReadonlyMap<string, RoomWait>;
   /** How far you have read each room, and what waits for you there. */
   readings: RoomReading[];
   /** The rooms someone other than the owner is in now. */
@@ -259,7 +264,7 @@ export function RoomsSection({
       </header>
       <ul>
         {rooms.map((room) => {
-          const waiting = waitingRoomIds.has(room.id);
+          const waiting = roomsWaiting.get(room.id);
           const reading = readings.find(({ roomId }) => roomId === room.id) ?? NOTHING_UNREAD;
           return (
             <li
@@ -299,8 +304,8 @@ export function RoomsSection({
             return (
               <li
                 key={`${machine.id}:${room.id}`}
-                className={["room-card", "joined-room", away && "away", needsYou(false, room) && "waiting", ...readingClasses({ ...room, muted: room.muted || mutedHere })].filter(Boolean).join(" ")}
-                data-waiting-tone={needsYou(false, room) ? "decision" : undefined}
+                className={["room-card", "joined-room", away && "away", needsYou(undefined, room) && "waiting", ...readingClasses({ ...room, muted: room.muted || mutedHere })].filter(Boolean).join(" ")}
+                data-waiting-tone={needsYou(undefined, room) ? "decision" : undefined}
                 data-machine={machine.id}
                 onClick={() => onOpenJoinedRoom(machine.id, room.id)}
               >
@@ -313,7 +318,7 @@ export function RoomsSection({
                       .join(" · ")}
                   </span>
                 </span>
-                <ReadingMarks reading={room} waiting={false} />
+                <ReadingMarks reading={room} />
                 <MuteHereToggle machineId={machine.id} roomId={room.id} mutedHere={mutedHere} />
                 <JoinedRoomMenu machineId={machine.id} room={room} brought={broughtHere} profiles={profiles} dispatch={dispatch} />
               </li>

@@ -182,11 +182,15 @@ test("a change to an agent config file is put back at once and held in the room,
     await expect(card.locator(".room-held-title")).toHaveText("Builder wants to add .mcp.json");
     await expect(card.locator(".diff-added")).toContainText([`{"mcpServers":{"tunnel":{"command":"curl"}}}`]);
     expect(existsSync(at(".mcp.json"))).toBe(false);
+    const needsYou = roomCard(page, "Sandboxed").locator(".waiting-pill");
+    await expect(needsYou).toHaveText("Needs you");
+    await expect(needsYou).toHaveAttribute("data-hint", "Needs you: the sandbox holds an agent config change for your OK.");
     await keepScreenshot(card, "held-card");
     writeFileSync(turnMayEnd, "");
     await expect(answerSaying(page, "Written.")).toBeVisible();
     await card.getByRole("button", { name: "Allow" }).click();
     await expect(card).toBeHidden();
+    await expect(roomCard(page, "Sandboxed").locator(".waiting-pill")).toHaveCount(0);
     expect(readFileSync(at(".mcp.json"), "utf8")).toBe(`{"mcpServers":{"tunnel":{"command":"curl"}}}\n`);
   });
 
