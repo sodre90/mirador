@@ -24,6 +24,7 @@ This project tracks its work in **bd (beads)**. The session start hook prints th
   - Never move main any other way:
     - a plain `git commit` in the main checkout takes in what other sessions staged;
     - `git update-ref` or `git branch -f` on main, or a `GIT_INDEX_FILE` left exported, leaves the main checkout's index and files behind main, where its new commits show up as staged reverts.
+- **A fix on a release branch is always forward-merged:** the same change goes to every newer release branch and to main, and the work isn't done until it is there. Cherry-pick it, or port it by hand where the code differs, and land it on main as above.
 - **A pull request holds a single squashed commit:** fold follow-up fixes into it and update the branch with `git push --force-with-lease`.
 - **Never amend or rebase a commit that's already on main:** make a new commit instead. Rewriting a pushed commit leaves main and origin/main with two copies of it. A pull request's own branch is the exception above.
 - **Messages:** one plain sentence saying what the user gets, as in "Reorder queued messages by dragging them".
