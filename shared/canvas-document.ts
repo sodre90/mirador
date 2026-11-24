@@ -862,6 +862,27 @@ function pageDrawing(assetsOrigin: string) {
       });
     });
   const isMiradorMarks = (node) => node instanceof Element && node.localName === "mirador-marks";
+  // Where the root's own colour lets what is behind it through, the page shows on the panel's colour for its theme.
+  const opaqueRootColour = () => {
+    const { backgroundColor, colorScheme } = getComputedStyle(document.documentElement);
+    const context = document.createElement("canvas").getContext("2d");
+    const pixelPaintedOverWith = (colour) => {
+      context.fillStyle = colour;
+      context.fillRect(0, 0, 1, 1);
+      return context.getImageData(0, 0, 1, 1).data;
+    };
+    const [, , , alpha] = pixelPaintedOverWith(backgroundColor);
+    if (alpha === 255) return backgroundColor;
+    pixelPaintedOverWith(colorScheme === "dark" ? "#111" : "#fff");
+    const [red, green, blue] = pixelPaintedOverWith(backgroundColor);
+    return "rgb(" + [red, green, blue].join() + ")";
+  };
+  // No margin collapses through a page's root, but in the picture the root is an element like any other: the body's top
+  // margin would push its background down.
+  const displayKeepingMarginsInside = (root) => {
+    const { display } = getComputedStyle(root);
+    return display === "block" ? "flow-root" : display;
+  };
   const drawnPage = async () => {
     const { domToCanvas } = await import(${JSON.stringify(assetsOrigin + CAPTURE_LIBRARY_PATH)});
     const readings = await canvasesAsDrawn();
@@ -872,7 +893,8 @@ function pageDrawing(assetsOrigin: string) {
         width: root.scrollWidth,
         height: root.scrollHeight,
         scale: screenPixelRatio(),
-        backgroundColor: getComputedStyle(root).backgroundColor,
+        backgroundColor: opaqueRootColour(),
+        style: { display: displayKeepingMarginsInside(root) },
         font: false,
         filter: (node) => !isMiradorMarks(node),
         // The library works out the browser's default styles in a frame of its own, which a sandboxed page cannot reach;

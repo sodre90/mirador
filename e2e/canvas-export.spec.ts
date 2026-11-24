@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
-import { addWorkspace, callCanvasTool, chooseFromCanvasMore, findOnPageEntryText, openCanvasMore, openSettings, signIn, startConversation, waitForTurnToEnd, workspaceCard } from "./helpers.ts";
+import { addWorkspace, callCanvasTool, chooseFromCanvasMore, chooseInSettings, findOnPageEntryText, openCanvasMore, openSettings, signIn, startConversation, waitForTurnToEnd, workspaceCard } from "./helpers.ts";
 import { FakeClaudeApi, fakeClaudeEnvironment } from "./fake-claude-api.ts";
 import { TestHost } from "./test-host.ts";
 
@@ -45,7 +45,7 @@ async function saveToProject(page: Page) {
   await saveForm(page).getByRole("button", { name: "Save" }).click();
 }
 
-/** Copies the shown page as an image, and counts the pixels in it that are clearly red, green or blue. */
+/** Copies the shown page as an image, and counts the pixels in it that are clearly red, green or blue, and those that aren't opaque. */
 async function copyAsImage(page: Page) {
   await exportBy(page, "Copy as image");
   await expect(exportStatus(page)).toHaveText("Copied as an image", { timeout: 30_000 });
@@ -58,7 +58,16 @@ async function copyAsImage(page: Page) {
     const pixels = context.getImageData(0, 0, bitmap.width, bitmap.height).data;
     const pixelsWhereOnly = (channel: number) =>
       pixels.filter((value, index) => index % 4 === channel && value > 150 && [0, 1, 2].every((other) => other === channel || pixels[index - channel + other]! < 60)).length;
-    return { types: item!.types, width: bitmap.width, height: bitmap.height, redPixels: pixelsWhereOnly(0), greenPixels: pixelsWhereOnly(1), bluePixels: pixelsWhereOnly(2) };
+    return {
+      types: item!.types,
+      width: bitmap.width,
+      height: bitmap.height,
+      redPixels: pixelsWhereOnly(0),
+      greenPixels: pixelsWhereOnly(1),
+      bluePixels: pixelsWhereOnly(2),
+      seeThroughPixels: pixels.filter((value, index) => index % 4 === 3 && value < 255).length,
+      topLeftPixel: [...pixels.slice(0, 4)],
+    };
   });
 }
 
@@ -190,6 +199,14 @@ async function startConversationInProject(page: Page) {
   return startConversation(page);
 }
 
+/** Shows a page that has an element with the id `drawn`, and gives the size of the panel it shows in. */
+async function showInPanel(page: Page, conversationId: string, title: string, html: string) {
+  await callCanvasTool(host, conversationId, "show", { title, html });
+  await expect(page.locator(".canvas-panel:visible .canvas-header")).toContainText(title);
+  await expect(canvasPage(page).locator("#drawn")).toBeVisible();
+  return page.locator(".canvas-panel:visible .canvas-frame.show iframe").evaluate((frame: HTMLIFrameElement) => ({ width: frame.clientWidth, height: frame.clientHeight }));
+}
+
 test("Copy as image draws shapes a page reuses with <use> in the page's own styles, and in the colour each <use> passes on", async ({ page, context }) => {
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   const conversationId = await startConversationInProject(page);
@@ -234,11 +251,7 @@ test("Copy as image draws a three.js scene as it shows, though WebGL keeps a fra
 test("Copy as image leaves out the blank around a page's column, but keeps a scene whole and a page whose colour reaches its sides", async ({ page, context }) => {
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   const conversationId = await startConversationInProject(page);
-  const show = async (title: string, html: string) => {
-    await callCanvasTool(host, conversationId, "show", { title, html });
-    await expect(canvasPage(page).locator("#drawn")).toBeVisible();
-    return page.locator(".canvas-panel:visible .canvas-frame.show iframe").evaluate((frame: HTMLIFrameElement) => ({ width: frame.clientWidth, height: frame.clientHeight }));
-  };
+  const show = (title: string, html: string) => showInPanel(page, conversationId, title, html);
   const columnWithBlock = "main { width: 200px; margin: 60px auto; } #drawn { height: 100px; background: rgb(0, 160, 0); }";
 
   await test.step("a centred column is cut to itself and an even margin, however wide and tall its panel is", async () => {
@@ -274,6 +287,31 @@ test("Copy as image leaves out the blank around a page's column, but keeps a sce
   await test.step("a header across the page keeps its width", async () => {
     const panel = await show("A header", `<style>body { margin: 0; } header { height: 80px; background: rgb(0, 0, 200); } ${columnWithBlock}</style><header></header><main><div id="drawn"></div></main>`);
     expect(await copyAsImage(page)).toMatchObject(panel);
+  });
+});
+
+test("Copy as image draws the page's background as the panel shows it, up to the top edge and never see-through", async ({ page, context }) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  const conversationId = await startConversationInProject(page);
+  const showOnBackground = (title: string, rootStyle: string) =>
+    showInPanel(page, conversationId, title, `<style>html { ${rootStyle} } body { margin: 40px 0; }</style><div id="drawn" style="height: 100px"></div>`);
+
+  await test.step("a gradient starts at the top edge, above the body's margin", async () => {
+    const panel = await showOnBackground("A gradient", "min-height: 100%; background: linear-gradient(rgb(200, 0, 0) 20px, rgb(0, 0, 200) 20px);");
+    expect(await copyAsImage(page)).toMatchObject({ ...panel, seeThroughPixels: 0, redPixels: panel.width * 20, bluePixels: panel.width * (panel.height - 20) });
+  });
+
+  await test.step("a tint is painted once, over the panel's colour", async () => {
+    await showOnBackground("A tint", "background: rgba(255, 0, 0, 0.2);");
+    expect(await copyAsImage(page)).toMatchObject({ seeThroughPixels: 0, topLeftPixel: [255, 204, 204, 255] });
+  });
+
+  await test.step("a page with no background of its own is on the panel's colour, in either theme", async () => {
+    await showOnBackground("No background", "background: none;");
+    expect(await copyAsImage(page)).toMatchObject({ seeThroughPixels: 0, topLeftPixel: [255, 255, 255, 255] });
+    await chooseInSettings(page, "Theme", "Dark");
+    await expect.poll(() => canvasPage(page).locator("html").evaluate((root) => getComputedStyle(root).colorScheme)).toBe("dark");
+    expect(await copyAsImage(page)).toMatchObject({ seeThroughPixels: 0, topLeftPixel: [17, 17, 17, 255] });
   });
 });
 
