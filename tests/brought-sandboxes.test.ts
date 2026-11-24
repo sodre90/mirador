@@ -346,34 +346,39 @@ describe("a VM that starts beside another, which may swap what it finds for a li
 
   const OTHER_ROOM = roomSandbox("room-2");
 
-  test.skipIf(!RUNS_SANDBOXES)("of another room or workspace: a brought agent's does not start there, and the own agents' stops the brought ones first", async () => {
-    const { workspace, cli, sandboxes } = sandboxedRoom();
+  test.skipIf(!RUNS_SANDBOXES)("of another room or workspace: a brought agent's runs beside it in the same folder on the same plan, and stays out of a nested one", async () => {
+    const { workspaces, workspace, cli, sandboxes } = sandboxedRoom();
     const others = brought(workspace, { owner: OTHER_ROOM, agentId: "zoes-coder" });
-    const overlapping = notReady({ kind: "blocked", blocker: { kind: "workspace-overlaps-sandbox-folder", folder: workspace } });
     await sandboxes.launch(ownAgent(workspace));
-    await expect(sandboxes.launchForBrought(others)).rejects.toMatchObject(overlapping);
+    await sandboxes.launchForBrought(others);
+    const [ownRun, zoesRun] = cli.callsOf("run");
+    expect(ofWorkspace(zoesRun!, workspace)).toEqual(ofWorkspace(ownRun!, workspace));
+    expect(cli.vms.size).toBe(2);
     await sandboxes.stop(ROOM);
     await sandboxes.launchForBrought(brought(workspace));
-    await expect(sandboxes.launchForBrought(others)).rejects.toMatchObject(overlapping);
+    expect(cli.vms.size).toBe(2);
     await sandboxes.stopAll();
 
-    await sandboxes.launchForBrought(others);
-    const zoes = nameIn(cli.callsOf("run").at(-1)!);
     await sandboxes.launch(ownAgent(workspace));
-    expect(cli.vms.has(zoes)).toBe(false);
-    expect(cli.vms.size).toBe(1);
-    await expect(sandboxes.launchForBrought(others)).rejects.toMatchObject(overlapping);
+    const inner = join(workspace, "inner");
+    mkdirSync(inner);
+    Bun.spawnSync(["git", "init", "-q", inner]);
+    workspaces.current = inner;
+    await expect(sandboxes.launchForBrought(brought(inner, { owner: OTHER_ROOM, agentId: "zoes-coder" }))).rejects.toMatchObject(
+      notReady({ kind: "blocked", blocker: { kind: "workspace-overlaps-sandbox-workspace", folder: workspace } }),
+    );
     await sandboxes.stopAll();
   });
 
-  test("a brought agent's does not start while another room's starts there, nor the other way round", async () => {
+  test("a brought agent's and another room's that start at once in the same folder both start on the same plan", async () => {
     const { workspace, cli, sandboxes } = sandboxedRoom();
-    const started = await Promise.allSettled([sandboxes.launch(ownAgent(workspace)), sandboxes.launchForBrought(brought(workspace, { owner: OTHER_ROOM, agentId: "zoes-coder" }))]);
-    expect(started.map(({ status }) => status)).toEqual(["fulfilled", "rejected"]);
-    expect(cli.vms.size).toBe(1);
+    await Promise.all([sandboxes.launch(ownAgent(workspace)), sandboxes.launchForBrought(brought(workspace, { owner: OTHER_ROOM, agentId: "zoes-coder" }))]);
+    expect(cli.vms.size).toBe(2);
+    const [first, second] = cli.callsOf("run").slice(-2);
+    expect(ofWorkspace(second!, workspace)).toEqual(ofWorkspace(first!, workspace));
     await sandboxes.stopAll();
-    const bothBrought = await Promise.allSettled([sandboxes.launchForBrought(brought(workspace)), sandboxes.launchForBrought(brought(workspace, { owner: OTHER_ROOM, agentId: "zoes-coder" }))]);
-    expect(bothBrought.filter(({ status }) => status === "fulfilled").length).toBeLessThan(2);
+    await Promise.all([sandboxes.launchForBrought(brought(workspace)), sandboxes.launchForBrought(brought(workspace, { owner: OTHER_ROOM, agentId: "zoes-coder" }))]);
+    expect(cli.vms.size).toBe(2);
     await sandboxes.stopAll();
   });
 
@@ -399,10 +404,17 @@ describe("a VM that starts beside another, which may swap what it finds for a li
 
 test.skipIf(!RUNS_SANDBOXES)("a VM refused before it was launched holds up no other there, also while the runtime does not answer", async () => {
   const launcher = new FakeVmLauncher();
-  const { workspace, sandboxes } = sandboxedRoom({ launcher });
+  const { workspaces, workspace, sandboxes } = sandboxedRoom({ launcher });
   await sandboxes.launch(ownAgent(workspace));
+  const inner = join(workspace, "inner");
+  mkdirSync(inner);
+  Bun.spawnSync(["git", "init", "-q", inner]);
   launcher.stop = () => Promise.reject(new Error("the runtime does not answer"));
-  await expect(sandboxes.launchForBrought(brought(workspace, { owner: roomSandbox("room-2") }))).rejects.toMatchObject(notReady({ kind: "blocked", blocker: { kind: "workspace-overlaps-sandbox-folder", folder: workspace } }));
+  workspaces.current = inner;
+  await expect(sandboxes.launchForBrought(brought(inner, { owner: roomSandbox("room-2") }))).rejects.toMatchObject(
+    notReady({ kind: "blocked", blocker: { kind: "workspace-overlaps-sandbox-workspace", folder: workspace } }),
+  );
+  workspaces.current = workspace;
   await sandboxes.launchForBrought(brought(workspace));
   expect(launcher.running()).toHaveLength(2);
   launcher.stop = FakeVmLauncher.prototype.stop.bind(launcher);

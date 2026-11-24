@@ -226,9 +226,10 @@ describe("the VMs of sandboxes that work in one folder", () => {
   test.skipIf(!RUNS_SANDBOXES)("one refused before it was launched holds up no other, also while the runtime does not answer", async () => {
     const { launcher, sandboxes, launch, launchBrought } = computer();
     const workspace = repository();
+    const inner = repositoryAt(join(workspace, "inner"));
     await launch(WORKSPACE, workspace);
     launcher.stop = () => Promise.reject(new Error("the runtime does not answer"));
-    await expect(launchBrought(ROOM, workspace)).rejects.toMatchObject(notReady({ kind: "blocked", blocker: { kind: "workspace-overlaps-sandbox-folder", folder: workspace } }));
+    await expect(launchBrought(ROOM, inner)).rejects.toMatchObject(overlapsWorkspace(workspace));
     await launch(OTHER_ROOM, workspace);
     expect(launcher.running()).toHaveLength(2);
     launcher.stop = FakeVmLauncher.prototype.stop.bind(launcher);
@@ -238,11 +239,12 @@ describe("the VMs of sandboxes that work in one folder", () => {
   test.skipIf(!RUNS_SANDBOXES)("one stopped while it waits for another's start never runs, nor stops a brought agent's it would have", async () => {
     const { launcher, sandboxes, launch, launchBrought } = computer();
     const workspace = repository();
+    const inner = repositoryAt(join(workspace, "inner"));
     await launchBrought(OTHER_ROOM, workspace);
     const firstStarts = Promise.withResolvers<void>();
     launcher.starting = firstStarts.promise;
     const first = launch(WORKSPACE, repository());
-    const second = launch(ROOM, workspace).then(
+    const second = launch(ROOM, inner).then(
       () => "started",
       () => "refused",
     );

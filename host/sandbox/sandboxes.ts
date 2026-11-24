@@ -912,13 +912,12 @@ export class Sandboxes {
   }
 
   /**
-   * A VM that writes on the way to the workspace and works elsewhere keeps this one from starting. A brought agent's does
-   * not start beside another room's or workspace's VM either, and those of brought agents stop for the own agents' VM.
+   * A VM that writes on the way to the workspace and works elsewhere keeps this one from starting, except a brought
+   * agent's VM stops for an own agents' VM that needs the folder.
    */
   private async keepOthersOffTheWay(workspace: string, way: WayTo, vm: SandboxVm) {
-    const eitherBroughtByAnother = (other: SandboxVm) => (isBrought(vm) || isBrought(other)) && !sameOwner(other.owner, vm.owner);
-    const others = this.othersOnTheWay(way, vm).filter((other) => !worksInWorkspace(workspace)(other) || eitherBroughtByAnother(other));
-    if (isBrought(vm) && others.length > 0) throw new SandboxNotReady({ kind: "blocked", blocker: { kind: "workspace-overlaps-sandbox-folder", folder: workspace } });
+    const others = this.othersOnTheWay(way, vm).filter((other) => !worksInWorkspace(workspace)(other));
+    if (isBrought(vm) && others.length > 0) throw new SandboxNotReady({ kind: "blocked", blocker: overlappedBy(others[0]!, way) });
     const staying = others.find((other) => !isBrought(other));
     if (staying) throw new SandboxNotReady({ kind: "blocked", blocker: overlappedBy(staying, way) });
     await Promise.all(others.map((other) => this.stopVm(other)));
