@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { SessionUpdate } from "@agentclientprotocol/sdk/unstable";
 import type { ConversationEvent, StoredEvent } from "../shared/model.ts";
-import { replyEndingAt, replyEnds } from "../shared/replies.ts";
+import { lastMessageEndingAt, replyEndingAt, replyEnds } from "../shared/replies.ts";
 import { buildTimeline } from "../shared/timeline.ts";
 
 const stored = (events: ConversationEvent[]): StoredEvent[] => events.map((event, index) => ({ seq: index + 1, at: (index + 1) * 1000, event }));
@@ -16,7 +16,12 @@ const bashCall = (toolCallId: string) => acp({ sessionUpdate: "tool_call", toolC
 
 const repliesOf = (events: ConversationEvent[]) => {
   const timeline = buildTimeline(stored(events));
-  return [...replyEnds(timeline)].map((key) => [timeline.find((block) => block.key === key)?.kind, replyEndingAt(timeline, key)]);
+  return [...replyEnds(timeline).keys()].map((key) => [timeline.find((block) => block.key === key)?.kind, replyEndingAt(timeline, key)]);
+};
+
+const lastMessagesOf = (events: ConversationEvent[]) => {
+  const timeline = buildTimeline(stored(events));
+  return [...replyEnds(timeline)].map(([key, end]) => [end, lastMessageEndingAt(timeline, key)]);
 };
 
 describe("replies", () => {
@@ -35,6 +40,36 @@ describe("replies", () => {
       ["agent", "Pulling.\n\nI pulled **main**."],
       ["agent", "You're welcome."],
     ]);
+  });
+
+  test("a turn's last message is what the agent wrote after its last tool, and is told from a reply of a single message", () => {
+    expect(
+      lastMessagesOf([
+        { type: "user-message", text: "git pull" },
+        agentText("Pulling.\n"),
+        bashCall("pull"),
+        agentText("Pulled. Running the tests."),
+        bashCall("test"),
+        agentText("\n    128 pass\n"),
+        { type: "user-message", text: "thanks" },
+        agentText("You're welcome."),
+      ]),
+    ).toEqual([
+      ["last-of-several-messages", "    128 pass"],
+      ["only-message", "You're welcome."],
+    ]);
+  });
+
+  test("a turn that ends on a tool keeps the text before it as its last message", () => {
+    expect(lastMessagesOf([{ type: "user-message", text: "go" }, agentText("Looking."), bashCall("look"), agentText("Cleaning up."), bashCall("clean")])).toEqual([
+      ["last-of-several-messages", "Cleaning up."],
+    ]);
+  });
+
+  test("a message already replaced as the turn's last has nothing to copy", () => {
+    const timeline = buildTimeline(stored([{ type: "user-message", text: "go" }, agentText("Looking."), bashCall("look"), agentText("Found it.")]));
+    const replaced = timeline.find((block) => block.kind === "agent")!.key;
+    expect([replyEnds(timeline).has(replaced), lastMessageEndingAt(timeline, replaced)]).toEqual([false, ""]);
   });
 
   test("a turn the agent wrote nothing in has no reply to copy", () => {

@@ -35,6 +35,8 @@ export const hints: Messages["hints"] = {
   stopReadingAloud: "Deja de leer en voz alta esta respuesta.",
   copyReply: "Copia la respuesta de este turno como texto con formato, sin las herramientas que usó.",
   copyReplyAsMarkdown: "Copia la respuesta de este turno como Markdown, sin las herramientas que usó.",
+  copyLastMessage: "Copia solo el último mensaje del agente en este turno, como texto con formato.",
+  copyLastMessageAsMarkdown: "Copia solo el último mensaje del agente en este turno, como Markdown.",
   keepTalking:
     "Cuando la respuesta a lo que dictaste se ha leído en voz alta, el micrófono se abre de nuevo y lo que digas a continuación se envía de inmediato. Decir “stop” o “thanks”, o pulsar Esc, lo termina. Una pregunta que el agente haga mientras tanto se lee en voz alta para que respondas con la voz; di “help” para oír lo que puedes decir.",
   sendMessage: "Envía el mensaje. Shift+Enter empieza una línea nueva, / muestra los comandos del agente, @ completa una ruta y ! ejecuta un comando de shell.",

@@ -3043,6 +3043,17 @@ input.picker-search {
   pointer-events: none;
 }
 
+.copy-part {
+  display: flex;
+  gap: 2px;
+}
+
+.copy-part + .copy-part {
+  margin-left: 2px;
+  padding-left: 4px;
+  border-left: 1px solid var(--border);
+}
+
 .copy-reply button {
   display: inline-flex;
   padding: 2px 6px;

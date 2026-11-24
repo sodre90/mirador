@@ -127,6 +127,8 @@ export const chat: Messages["chat"] = {
     copy: "复制",
     copyReply: "复制回复",
     copyReplyAsMarkdown: "以 Markdown 复制回复",
+    copyLastMessage: "复制最后一条消息",
+    copyLastMessageAsMarkdown: "以 Markdown 复制最后一条消息",
     copied: "已复制",
     copyFailed: "无法复制",
   },

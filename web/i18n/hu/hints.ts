@@ -34,6 +34,8 @@ export const hints: Messages["hints"] = {
   stopReadingAloud: "Leállítja ennek a válasznak a felolvasását.",
   copyReply: "Formázott szövegként másolja ennek a körnek a válaszát, a futtatott eszközök nélkül.",
   copyReplyAsMarkdown: "Markdownként másolja ennek a körnek a válaszát, a futtatott eszközök nélkül.",
+  copyLastMessage: "Csak az ágens utolsó üzenetét másolja ebből a körből, formázott szövegként.",
+  copyLastMessageAsMarkdown: "Csak az ágens utolsó üzenetét másolja ebből a körből, Markdownként.",
   keepTalking:
     "Miután a diktált üzenetedre adott választ felolvasta, a mikrofon újra megnyílik, és amit ezután mondasz, azonnal elküldi. A „stop” vagy „thanks” szó, illetve az Esc befejezi. Ha az ágens közben kérdez, azt felolvassa, hogy hanggal válaszolhass; mondd, hogy „help”, és meghallod, mit mondhatsz.",
   sendMessage: "Elküldi az üzenetet. A Shift+Enter új sort kezd, a / az ágens parancsait listázza, a @ útvonalat egészít ki, a ! pedig shell-parancsot futtat.",
