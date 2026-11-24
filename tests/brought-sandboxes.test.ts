@@ -106,7 +106,7 @@ async function saidBy(socket: string, request: string) {
   return connection.said;
 }
 
-describe("the VM of an agent someone brought into a sandboxed room", () => {
+describe.skipIf(process.platform === "win32")("the VM of an agent someone brought into a sandboxed room", () => {
   test("sees the workspace as the room's own agents' does, and nothing else of them or of this computer", async () => {
     const { workspace, host, cli, folders, sandboxes } = sandboxedRoom();
     folders.push({ path: repository(), writable: false } as SandboxFolder);
@@ -270,7 +270,7 @@ const gitFolder = (folder: string) => {
   writeFileSync(join(folder, "config"), "[core]\n");
 };
 
-describe("a VM that starts beside another, which may swap what it finds for a link to elsewhere", () => {
+describe.skipIf(process.platform === "win32")("a VM that starts beside another, which may swap what it finds for a link to elsewhere", () => {
   const module = (workspace: string, name = "a") => join(workspace, ".git", "modules", name);
   const ofWorkspace = (run: string[], workspace: string) => mountsIn(run).filter((mount) => mount.split(":")[1]!.startsWith(workspace));
 

@@ -169,7 +169,7 @@ describe("what the sandbox answers, which anything running there may have writte
     await expect(read(largerThanAnyFile.place, "a.txt")).rejects.toThrow("The room's sandbox gave no answer.");
   }, 60_000);
 
-  test("a command's ending is one of those it may have", async () => {
+  test.skipIf(process.platform === "win32")("a command's ending is one of those it may have", async () => {
     const noEndings = [undefined, {}, { by: "exit" }, { by: "exit", code: "0" }, { by: "exit", code: 0.5 }, { by: "signal", signal: "SIGKILL\nAllowed by Ann" }, { by: "signal", signal: 9 }, { by: "whim" }];
     for (const ended of noEndings) await expect(commandRun("true", answering(ran(ended)).place, unstopped)).rejects.toThrow("The room's sandbox gave no answer.");
     await expect(commandRun("true", answering(ran({ by: "exit", code: 0 }, 5)).place, unstopped)).rejects.toThrow(WorkspaceCallRefused);

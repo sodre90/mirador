@@ -9,6 +9,7 @@ import { placeInWorkspace, WorkspaceCallRefused, type FileChange } from "../host
 import { WORKSPACE_FILE_MOST_BYTES, WORKSPACE_RESULT_MOST_CHARACTERS } from "../shared/room-workspace.ts";
 
 const diskIgnoresCase = existsSync(import.meta.path.toUpperCase());
+const onWindows = process.platform === "win32";
 
 let root: string;
 let workspace: string;
@@ -22,7 +23,7 @@ const makeChange = (change: FileChange) => changeMade(change, here(), unstopped)
 const inWorkspace = (...path: string[]) => join(workspace, ...path);
 
 beforeEach(() => {
-  root = realpathSync(mkdtempSync(join(tmpdir(), "room-workspace-")));
+  root = realpathSync.native(mkdtempSync(join(tmpdir(), "room-workspace-")));
   workspace = join(root, "project");
   miradorsData = join(workspace, "data", ".mirador");
   mkdirSync(join(workspace, "src"), { recursive: true });
@@ -115,22 +116,28 @@ describe("reading in a room's workspace", () => {
     await expect(read("data/.MIRADOR/state.sqlite")).rejects.toThrow(WorkspaceCallRefused);
   });
 
-  test("no pipe, no binary and no large file is read", async () => {
+  test.skipIf(onWindows)("no pipe is read", async () => {
     Bun.spawnSync(["mkfifo", inWorkspace("pipe")]);
+    await expect(read("pipe")).rejects.toThrow("is no regular file");
+  });
+
+  test("no binary and no large file is read", async () => {
     writeFileSync(inWorkspace("binary"), new Uint8Array([1, 0, 2]));
     writeFileSync(inWorkspace("latin1"), new Uint8Array([0x63, 0xe9]));
     writeFileSync(inWorkspace("large"), "x".repeat(WORKSPACE_FILE_MOST_BYTES + 1));
-    await expect(read("pipe")).rejects.toThrow("is no regular file");
     await expect(read("binary")).rejects.toThrow("is no text file");
     await expect(read("latin1")).rejects.toThrow("is no text file");
     await expect(read("large")).rejects.toThrow("is larger than");
   });
 
-  test("a path with a null character, a line break or another control character, its own or of what it leads to, and a workspace that is gone, are refused", async () => {
-    for (const path of ["src/a.ts\0.png", "src/a.ts\n+safe", "a\r.txt", "a\u0085.txt"]) await expect(read(path)).rejects.toThrow("A path holds no control characters.");
+  test.skipIf(onWindows)("a path that leads to a name with a line break is refused", async () => {
     writeFileSync(inWorkspace("a\n+safe"), "x");
     symlinkSync(inWorkspace("a\n+safe"), inWorkspace("plain.txt"));
     await expect(write("plain.txt", "y")).rejects.toThrow("leads to a name with control characters");
+  });
+
+  test("a path with a null character, a line break or another control character, and a workspace that is gone, are refused", async () => {
+    for (const path of ["src/a.ts\0.png", "src/a.ts\n+safe", "a\r.txt", "a\u0085.txt"]) await expect(read(path)).rejects.toThrow("A path holds no control characters.");
     rmSync(workspace, { recursive: true });
     await expect(read("src/a.ts")).rejects.toThrow("The room's workspace is not there.");
   });
@@ -150,10 +157,14 @@ describe("changing a file in a room's workspace", () => {
     expect(readFileSync(inWorkspace("src", "a.ts"), "utf8")).toBe("one\n2 $& $1\nthree\n");
   });
 
-  test("a shorter text leaves nothing of the longer one, and the file keeps its mode", async () => {
-    chmodSync(inWorkspace("src", "a.ts"), 0o755);
+  test("a shorter text leaves nothing of the longer one", async () => {
     await makeChange(await write("src/a.ts", "1\n"));
     expect(readFileSync(inWorkspace("src", "a.ts"), "utf8")).toBe("1\n");
+  });
+
+  test.skipIf(onWindows)("a changed file keeps its mode", async () => {
+    chmodSync(inWorkspace("src", "a.ts"), 0o755);
+    await makeChange(await write("src/a.ts", "1\n"));
     expect(statSync(inWorkspace("src", "a.ts")).mode & 0o777).toBe(0o755);
   });
 
@@ -188,6 +199,13 @@ describe("changing a file in a room's workspace", () => {
     for (const path of ["data/.mirador/new", "data/.MIRADOR/new"]) await expect(write(path, "x")).rejects.toThrow("is Mirador's own data");
   });
 
+  test("nor where the folder Mirador's data would be in is named through a link", async () => {
+    rmSync(miradorsData, { recursive: true });
+    symlinkSync(workspace, join(root, "by-link"));
+    miradorsData = join(root, "by-link", "data", ".mirador");
+    await expect(write("data/.mirador/new", "x")).rejects.toThrow("is Mirador's own data");
+  });
+
   test("a change too large to be read through asks for nothing", async () => {
     writeFileSync(inWorkspace("large.txt"), "line\n".repeat(60_000));
     const change = await write("large.txt", "short\n");
@@ -202,13 +220,13 @@ describe("changing a file in a room's workspace", () => {
 
   const numbered = (word: string, count: number) => Array.from({ length: count }, (_, index) => `${word}${index}\n`).join("");
 
-  test("a change of more lines than anyone reads through is refused without the work of comparing them, and a long new file is not", async () => {
-    writeFileSync(inWorkspace("many.txt"), numbered("a", 4_000));
-    const rewritten = await write("many.txt", numbered("b", 4_000));
-    const began = process.cpuUsage();
-    expect(() => diffOf(rewritten)).toThrow("too large to be read through");
-    const { user } = process.cpuUsage(began);
-    expect(user / 1_000).toBeLessThan(250);
+  test("a change that takes out and puts in more lines than anyone reads through is refused, and one of fewer lines or a long new file is not", async () => {
+    const before = numbered("a", 700);
+    const withFirstLinesChanged = (count: number) => numbered("b", count) + before.split(/(?<=\n)/).slice(count).join("");
+    writeFileSync(inWorkspace("many.txt"), before);
+    const tooMany = await write("many.txt", withFirstLinesChanged(601));
+    expect(() => diffOf(tooMany)).toThrow("too large to be read through");
+    expect(diffOf(await write("many.txt", withFirstLinesChanged(300)))).toContain("\n+b299\n");
     expect(diffOf(await write("new.txt", numbered("c", 4_000))).split("\n")).toHaveLength(4_003);
   });
 

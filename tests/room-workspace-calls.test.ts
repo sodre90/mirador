@@ -202,7 +202,7 @@ describe("letting a brought agent into the room's workspace", () => {
   });
 });
 
-describe("a brought agent in a sandboxed room", () => {
+describe.skipIf(process.platform === "win32")("a brought agent in a sandboxed room", () => {
   const freely: SandboxSetting = { on: true, workFreely: true, allowsSharedKernel: false, network: "closed" };
   const asking: SandboxSetting = { on: true, workFreely: false, allowsSharedKernel: false, network: "closed" };
 

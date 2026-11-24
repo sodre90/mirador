@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ContentBlock, RequestPermissionRequest, RequestPermissionResponse, SessionConfigOption } from "@agentclientprotocol/sdk/unstable";
@@ -16,7 +16,7 @@ import type { WorkspaceCall, WorkspaceCallResult } from "../shared/room-workspac
 import { END_OF_OTHERS_WORDS } from "../shared/rooms.ts";
 import { sideChatMayChangeFiles } from "../shared/side-chats.ts";
 
-const scratch = mkdtempSync(join(tmpdir(), "rooms-workspace-session-"));
+const scratch = realpathSync.native(mkdtempSync(join(tmpdir(), "rooms-workspace-session-")));
 afterAll(() => rmSync(scratch, { recursive: true, force: true }));
 
 const MODES = ["default", "acceptEdits", "plan", "bypassPermissions"];

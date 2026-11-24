@@ -111,7 +111,7 @@ const statusOf = (answer: string) => answer.split("\r\n")[0];
 const reasonOf = (answer: string) => answer.split("\r\n\r\n")[1];
 
 describe("a sandbox's way out", () => {
-  test("is a socket of its owner's alone, which is gone once it stops, and its connections with it", async () => {
+  test.skipIf(process.platform === "win32")("is a socket of its owner's alone, which is gone once it stops, and its connections with it", async () => {
     const { proxy, socketPath } = await proxyWith({ names: { "a.test": [HERE] } });
     expect(statSync(socketPath).mode & 0o777).toBe(0o600);
     const { port, connections } = await echo();

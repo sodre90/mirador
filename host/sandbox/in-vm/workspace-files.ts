@@ -16,7 +16,7 @@ export interface WorkspaceFolders {
   fileMostBytes: number;
 }
 
-/** What stands at a path, and the path from the workspace it leads to. */
+/** What stands at a path, and the path from the workspace it leads to, with slashes on every system. */
 export interface EntryFound {
   within: string;
   entry: { kind: "none" } | { kind: "folder"; names: string[] } | { kind: "file"; text: string };
@@ -92,8 +92,8 @@ export function placeInWorkspace(path: string, { workspace, miradorsData }: Work
   if (root === null) throw refused("The room's workspace is not there.");
   const place = realPlace(resolve(root, path));
   if (!isWithin(root, place)) throw refused(`${path} is outside the room's workspace.`);
-  if (miradorsData !== null && isWithinInAnyCase(realPathOrNull(miradorsData) ?? resolve(miradorsData), place)) throw refused(`${path} is Mirador's own data.`);
-  const within = relative(root, place);
+  if (miradorsData !== null && isWithinInAnyCase(realPlace(resolve(miradorsData)), place)) throw refused(`${path} is Mirador's own data.`);
+  const within = relative(root, place).replaceAll(sep, "/");
   if (holdsControlCharacters(within)) throw refused(`${path} leads to a name with control characters.`);
   if (namesGitsOwn(within)) throw refused("What git keeps in .git is reached by git's own commands alone.");
   return { place, within: within || "." };
