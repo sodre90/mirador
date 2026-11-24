@@ -783,6 +783,20 @@ describe("joining a machine that made its own certificate", () => {
     expect(store.findMachine("box")).toMatchObject({ outOfRooms: false, asPerson: true, relayKey: expect.stringMatching(/^[\w-]{43}$/), hostId: null });
   });
 
+  test("keeps the key its page is shown at as another room of the machine is joined, and takes a new one once the machine signed this computer out", async () => {
+    const { relays, store } = roomInviteMachine(newChallenge());
+    const keyAfterJoining = async () => {
+      await relays.join("box", "ABCD-EFGH-JKLM");
+      return store.findMachine("box")!.relayKey;
+    };
+    const first = await keyAfterJoining();
+    expect(await keyAfterJoining()).toBe(first);
+    store.forgetMachineDeviceToken("box");
+    const afterSignOut = await keyAfterJoining();
+    expect(afterSignOut).toMatch(/^[\w-]{43}$/);
+    expect(afterSignOut).not.toBe(first);
+  });
+
   test("waits at the door of a room whose invite asks its owner's OK, in place of where it stood there before, and stands at none of a room it went straight into", async () => {
     const { relays, store } = roomInviteMachine(newChallenge(), [
       { roomId: "r1", waiting: true },

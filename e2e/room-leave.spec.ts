@@ -27,8 +27,7 @@ const coderConversation = (visitor: Page) => visitor.locator(".sidebar li").filt
 
 const shownRoom = (visitor: Page, room: string) => visitor.frameLocator('iframe[title="Ann\'s machine"]').getByRole("heading", { name: `# ${room}` });
 
-/** Joined before the room joined last has loaded, Playwright at times no longer sees into the frame, which the browser shows. */
-async function joins(visitor: Page, room: string, invite: string) {
+async function joinsAndSees(visitor: Page, room: string, invite: string) {
   await expect(await joinRoom(visitor, invite)).toHaveCount(0);
   await expect(shownRoom(visitor, room)).toBeVisible();
 }
@@ -71,8 +70,8 @@ test("a person leaves a room they were invited to from their list, and the last 
   const profiles = await createProfile(visitor, "Coder", "", "", "opencode");
   await profiles.getByRole("button", { name: "Close" }).click();
 
-  await joins(visitor, "Garden", await inviteIntoRoom(page, "Garden"));
-  await joins(visitor, "Shed", await inviteIntoRoom(page, "Shed"));
+  await joinsAndSees(visitor, "Garden", await inviteIntoRoom(page, "Garden"));
+  await joinsAndSees(visitor, "Shed", await inviteIntoRoom(page, "Shed"));
   await expect(invitedRooms(visitor)).toHaveText(["Garden", "Shed"]);
 
   await test.step("the menu on the line above the open room closes on a press in the room", async () => {
@@ -98,7 +97,7 @@ test("a person leaves a room they were invited to from their list, and the last 
   await test.step("a reload keeps it left, and a new invite lets them in again", async () => {
     await visitor.reload();
     await expect(invitedRooms(visitor)).toHaveText(["Garden"]);
-    await joins(visitor, "Shed", await inviteIntoRoom(page, "Shed"));
+    await joinsAndSees(visitor, "Shed", await inviteIntoRoom(page, "Shed"));
     await expect(invitedRooms(visitor)).toHaveText(["Garden", "Shed"]);
     await expect(subline(page, "Shed")).toHaveText("1 person · No agents yet");
   });
@@ -133,7 +132,7 @@ test("a person leaves a room they were invited to from their list, and the last 
   });
 
   await test.step("a new invite brings the machine back with its room", async () => {
-    await joins(visitor, "Garden", await inviteIntoRoom(page, "Garden"));
+    await joinsAndSees(visitor, "Garden", await inviteIntoRoom(page, "Garden"));
     await expect(invitedRooms(visitor)).toHaveText(["Garden"]);
   });
   await visitor.close();

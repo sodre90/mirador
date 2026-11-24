@@ -339,7 +339,7 @@ export class MachineRelays {
     const answer = (await response.json()) as { token?: unknown; roomId?: unknown; waiting?: unknown };
     if (typeof answer.token !== "string") throw new HostProblemError({ code: "machine-gave-no-token", machine: machine.name });
     const joined = person ? this.roomJoined(machine.id, answer) : NO_ROOM;
-    this.signInFromNowOn(machine, authority, answer.token, person ? { asPerson: true, relayKey: newRelayKey() } : { asPerson: false });
+    this.signInFromNowOn(machine, authority, answer.token, person ? { asPerson: true, relayKey: this.relayKeyFor(machine.id) } : { asPerson: false });
     return joined;
   }
 
@@ -390,7 +390,7 @@ export class MachineRelays {
       this.store.setMachineTunnelDevice(machine.id, placesIn(given), { address: given.deviceAddress, privateKey: own.privateKey });
       this.tunnels.start(machine.id);
       const joined = this.roomJoined(machine.id, answer);
-      this.signInFromNowOn(machine, null, answer.token, { asPerson: true, relayKey: newRelayKey() });
+      this.signInFromNowOn(machine, null, answer.token, { asPerson: true, relayKey: this.relayKeyFor(machine.id) });
       return joined;
     } finally {
       joining.stop();
@@ -430,6 +430,12 @@ export class MachineRelays {
     const { name, color } = this.store.listPeople().find(({ id }) => id === this.store.ownerId())!;
     const signature = this.ownerKey.sign(roomJoinStatement({ ...reached, challenge, inviteKey: inviteKey(code), publicKey }));
     return { publicKey, name, color, challenge, signature };
+  }
+
+  /** Signed in there as a person already, it keeps its key: joining another room leaves the machine's page, whose address holds the key, as it is. */
+  private relayKeyFor(machineId: string) {
+    const machine = this.store.findMachine(machineId);
+    return (machine?.joined && machine.relayKey) || newRelayKey();
   }
 
   /** How it joined is this host's own record, from what it sent: a machine joined as a person is shown with no trust from then on. */

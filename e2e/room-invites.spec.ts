@@ -31,6 +31,13 @@ const invitedRooms = (visitor: Page) => visitor.getByRole("list", { name: "Invit
 
 const invitedRoomPane = (visitor: Page) => visitor.getByRole("region", { name: "Ann's room, on Ann's machine" });
 
+/** The pages the window and its frames load from now on, as they load. */
+function pagesLoading(visitor: Page) {
+  const loads: string[] = [];
+  visitor.on("request", (request) => request.isNavigationRequest() && loads.push(request.resourceType()));
+  return loads;
+}
+
 async function setRoleOfDora(page: Page, role: "Guest" | "Not in the room") {
   const dialog = await openRoomSettings(page, "Garden");
   if (role === "Guest") await dialog.getByLabel("Role of Dora").selectOption({ label: role });
@@ -391,12 +398,14 @@ test("a person joins a room from their own Mirador with an invite, works in it w
     await expect(frame.getByRole("heading", { name: "# Garden" })).toBeVisible();
   });
 
-  await test.step("an invite into another room of the same machine, pasted under Join a room, joins that room too, and both are listed as on the owner's machine", async () => {
+  await test.step("an invite into another room of the same machine, pasted under Join a room, joins that room too, in the page that is open there already, and both are listed as on the owner's machine", async () => {
     await createRoom(page, "Shed", ["Builder"]);
     const intoShed = await inviteIntoRoom(page, "Shed", { role: "Guest" });
+    const pagesLoaded = pagesLoading(visitor);
     const join = await joinRoom(visitor, intoShed);
     await expect(join).toHaveCount(0);
     await expect(frame.getByRole("heading", { name: "# Shed" })).toBeVisible();
+    expect(pagesLoaded).toEqual([]);
     const emptyForAGuest = frame.getByRole("region", { name: "Nothing written yet" });
     await expect(emptyForAGuest.locator("p")).toHaveText(["As a guest you write along with everyone here. The members give the agents tasks."]);
     await expect(emptyForAGuest.getByRole("button")).toHaveCount(0);
