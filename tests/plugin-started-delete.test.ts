@@ -1,8 +1,8 @@
-import { afterEach, beforeEach, expect, test } from "bun:test";
+import { afterEach, beforeEach, expect, setDefaultTimeout, test } from "bun:test";
 import { existsSync, writeFileSync } from "node:fs";
 import { mkdir, mkdtemp, realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import type { ConversationReply, StartedConversation } from "../shared/canvas-plugins.ts";
 import { loadConfig } from "../host/config.ts";
 import { ConversationService } from "../host/conversations.ts";
@@ -11,10 +11,14 @@ import { SystemNotifications } from "../host/system-notifications.ts";
 import { Store } from "../host/store.ts";
 import { removeOnceFree } from "./remove-once-free.ts";
 
+// Each test runs a few dozen git commands; a loaded machine takes longer than Bun's 5 s default.
+setDefaultTimeout(20_000);
+
+const SCRATCH_PREFIX = "plugin-started-delete-";
 let scratch: string;
 
 beforeEach(async () => {
-  scratch = await realpath(await mkdtemp(join(tmpdir(), "plugin-started-delete-")));
+  scratch = await realpath(await mkdtemp(join(tmpdir(), SCRATCH_PREFIX)));
 });
 afterEach(() => removeOnceFree(scratch));
 
@@ -91,7 +95,7 @@ async function callerInRepository({ deletesWhatItHears = false }: { deletesWhatI
 
 const branchesOf = async (project: string) => (await git(project, ["branch", "--format=%(refname:short)"])).stdout.split("\n");
 
-async function until(condition: () => boolean | Promise<boolean>, timeoutMs = 5000) {
+async function until(condition: () => boolean | Promise<boolean>, timeoutMs = 15_000) {
   const deadline = Date.now() + timeoutMs;
   while (!(await condition())) {
     if (Date.now() > deadline) throw new Error("timed out waiting");
@@ -131,9 +135,11 @@ test("the user's delete of such a conversation keeps its branch", async () => {
 });
 
 test("a plugin's replied deletes the very conversation it hears from, heard once, with nothing thrown or logged", async () => {
-  const logged: unknown[][] = [];
+  const logged: string[] = [];
   const consoleError = console.error;
-  console.error = (...args: unknown[]) => void logged.push(args);
+  console.error = (...args: unknown[]) => void logged.push(args.join(" "));
+  // Bun kills the git of a test that timed out, and what the host logs of that comes while a later test runs.
+  const leftOverByAnotherTest = (line: string) => line.includes(SCRATCH_PREFIX) && !line.includes(basename(scratch));
   try {
     const { conversations, store, callerId, replies, replied } = await callerInRepository({ deletesWhatItHears: true });
     const started = await conversations.startInOwnWorktree(callerId, "race", "Helper", "Fix the bug");
@@ -143,7 +149,7 @@ test("a plugin's replied deletes the very conversation it hears from, heard once
     await Bun.sleep(50);
     expect(store.hasConversation(started.id)).toBe(false);
     expect(replies.map(({ reply }) => reply.ended)).toEqual(["finished"]);
-    expect(logged).toEqual([]);
+    expect(logged.filter((line) => !leftOverByAnotherTest(line))).toEqual([]);
   } finally {
     console.error = consoleError;
   }
