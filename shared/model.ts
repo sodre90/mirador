@@ -50,7 +50,7 @@ export interface Machine {
   relayPort: number | null;
   /** This host has joined the machine and signs in there as one of its devices. */
   joined: boolean;
-  /** To tell the machine apart in the rail. */
+  /** To tell the machine apart. */
   color: Pastel | null;
   /** The id the machine's own Mirador goes by, once this host has reached it. */
   hostId: string | null;
@@ -59,7 +59,7 @@ export interface Machine {
   /**
    * This computer's owner is a person in the machine's rooms, not its owner: this host joined it with a room invite, or
    * was given a room invite's link for it. Decided here when joining, never by what the machine says, as it is someone
-   * else's: the rail shows it with no trust.
+   * else's: it is shown with no trust.
    */
   asPerson: boolean;
   /** For a machine joined as a person, the unguessable start of the path its relay shows it at: only what asks there gets this host's sign-in. */

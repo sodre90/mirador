@@ -11,7 +11,7 @@ import { hints } from "./hints.ts";
 import { replyProblemText } from "./host-error.ts";
 import { t } from "./i18n/index.ts";
 import { useMachineColorStyle } from "./machine-colors.ts";
-import { placeIn, tellTheMachineItIsShown } from "./machine-place.ts";
+import { placeIn, shownInAnotherMirador, tellTheMachineItIsShown } from "./machine-place.ts";
 import { machineRemovalAsked, removeMachine } from "./machine-removal.ts";
 import { giveMessageBoxToMachine, useFormatBar, useMessageBox } from "./message-box.ts";
 import { NameToJoinWith, useNameToJoinWith, type JoiningPerson } from "./name-to-join.tsx";
@@ -26,7 +26,7 @@ const machineFromHash = () => location.hash.match(/^#\/m\/([\w-]+)$/)?.[1] ?? nu
  * This host shows other machines at ports of this computer, which a page opened from elsewhere cannot reach. Neither can
  * a page shown in another Mirador's rail: its ports are this host's, but the computer it runs on is the other one's.
  */
-export const showsMachinesHere = () => ["127.0.0.1", "localhost"].includes(location.hostname) && window.self === window.top;
+export const showsMachinesHere = () => ["127.0.0.1", "localhost"].includes(location.hostname) && !shownInAnotherMirador();
 
 const words = t.shell.machines;
 
@@ -53,36 +53,41 @@ export interface PlaceToOpen {
 /** A machine's page keeps streaming what its conversations do while hidden, so a machine left for this long lets go of it. */
 export const HIDDEN_MACHINE_STAYS_LOADED_MS = 10 * 60_000;
 
-/**
- * Which machine the window shows (null for this computer), and every machine it has shown, which stay loaded until
- * hidden for HIDDEN_MACHINE_STAYS_LOADED_MS; a machine loaded again opens at the place its page showed last.
- */
-export function useShownMachine(machines: Machine[], machinesLoaded: boolean) {
-  const [shownId, setShownId] = useState(machineFromHash);
+/** Every machine shown so far, which stay loaded until hidden for HIDDEN_MACHINE_STAYS_LOADED_MS. */
+export function useKeptLoaded(shownId: string | null, onLetGo: (machineId: string) => void = () => {}) {
   const [visited, setVisited] = useState(() => new Set(shownId ? [shownId] : []));
-  const [opening, setOpening] = useState<PlaceToOpen | null>(null);
-  const places = useRef(new Map<string, string>());
   const lettingGo = useRef(new Map<string, ReturnType<typeof setTimeout>>());
-  const shown = machines.find(({ id }) => id === shownId) ?? null;
-  useEffect(() => {
-    if (machinesLoaded && shownId && !shown) setShownId(null);
-  }, [machinesLoaded, shownId, shown]);
+  const keep = (machineId: string) => setVisited((before) => new Set(before).add(machineId));
+  const letGo = (machineId: string) => {
+    setVisited((before) => new Set([...before].filter((id) => id !== machineId)));
+    onLetGo(machineId);
+  };
   useEffect(() => {
     if (!shownId) return;
+    keep(shownId);
     clearTimeout(lettingGo.current.get(shownId));
     return () => {
       lettingGo.current.set(shownId, setTimeout(() => letGo(shownId), HIDDEN_MACHINE_STAYS_LOADED_MS));
     };
   }, [shownId]);
-  const letGo = (machineId: string) => {
-    setVisited((before) => new Set([...before].filter((id) => id !== machineId)));
-    setOpening((current) => (current?.machineId === machineId ? null : current));
-  };
+  return { visited, keep };
+}
+
+/** Which machine of its owner's the window shows (null for this computer); one loaded again opens at the place its page showed last. */
+export function useShownMachine(machines: Machine[], machinesLoaded: boolean) {
+  const [shownId, setShownId] = useState(machineFromHash);
+  const [opening, setOpening] = useState<PlaceToOpen | null>(null);
+  const places = useRef(new Map<string, string>());
+  const shown = machines.find(({ id }) => id === shownId) ?? null;
+  const { visited, keep } = useKeptLoaded(shownId, (machineId) => setOpening((current) => (current?.machineId === machineId ? null : current)));
+  useEffect(() => {
+    if (machinesLoaded && shownId && !shown) setShownId(null);
+  }, [machinesLoaded, shownId, shown]);
   const rememberPlace = useCallback((machineId: string, place: string) => places.current.set(machineId, place), []);
   const placeOf = useCallback((machineId: string) => places.current.get(machineId) ?? "", []);
   const show = useCallback((machineId: string | null) => {
     setShownId(machineId);
-    if (machineId) setVisited((before) => new Set(before).add(machineId));
+    if (machineId) keep(machineId);
   }, []);
   const openIn = useCallback((machineId: string, place: string) => {
     setOpening({ machineId, place });
@@ -117,7 +122,6 @@ export const reachedAt = (machine: Machine) => (machine.peerToPeer ? words.peerT
 const machineHint = (machine: Machine, status: MachineStatus | undefined) =>
   [
     machine.name,
-    machine.asPerson && words.someoneElses,
     reachedAt(machine),
     !machine.joined && words.notJoinedYet,
     status?.reachable === false && words.notAnswering,
@@ -148,7 +152,7 @@ function MachineButton({ machine, status, shown, onShow }: { machine: Machine; s
     <>
       <button
         type="button"
-        className={`rail-machine ${shown ? "shown" : ""} ${away ? "away" : ""} ${machine.asPerson ? "someone-elses" : ""}`}
+        className={`rail-machine ${shown ? "shown" : ""} ${away ? "away" : ""}`}
         {...colorAttributes(machine.color)}
         aria-label={machine.name}
         aria-current={shown}
@@ -307,7 +311,7 @@ function MachineFrame({
  * a room invite before, or whose owner signed this computer out of their rooms there takes an invite alone. A machine
  * reached peer to peer takes the invite's whole link, as only the link carries the way through its tunnel.
  */
-function JoinMachinePanel({ machine, person }: { machine: Machine; person: JoiningPerson }) {
+function JoinMachinePanel({ machine, person, onJoinedRoom }: { machine: Machine; person: JoiningPerson; onJoinedRoom: (machineId: string, roomId: string, waiting: boolean) => void }) {
   const [text, setText] = useState("");
   const [problem, setProblem] = useState<string | null>(null);
   const [joining, setJoining] = useState(false);
@@ -324,6 +328,7 @@ function JoinMachinePanel({ machine, person }: { machine: Machine; person: Joini
       setProblem(replyProblemText(message));
       setJoining(false);
       setAskedNumber(null);
+      if (message.roomId) onJoinedRoom(machine.id, message.roomId, message.waiting);
     });
     if (!connection.send(send(requestId))) {
       stopListening();
@@ -427,6 +432,7 @@ export function MachineFrames({
   opening,
   placeOf,
   onPlace,
+  onJoinedRoom,
 }: {
   machines: Machine[];
   person: JoiningPerson;
@@ -435,6 +441,8 @@ export function MachineFrames({
   opening: PlaceToOpen | null;
   placeOf: (machineId: string) => string;
   onPlace: (machineId: string, place: string) => void;
+  /** An invite pasted in a machine's place took this computer's owner into this room of it, or to its door. */
+  onJoinedRoom: (machineId: string, roomId: string, waiting: boolean) => void;
 }) {
   const striped = useMachineColorStyle() === "strip";
   return machines
@@ -446,12 +454,12 @@ export function MachineFrames({
           machine={machine}
           shown={machine.id === shownId}
           opening={opening?.machineId === machine.id ? opening : null}
-          striped={striped}
+          striped={striped && !machine.asPerson}
           place={placeOf(machine.id)}
           onPlace={onPlace}
         />
       ) : (
-        machine.id === shownId && <JoinMachinePanel key={machine.id} machine={machine} person={person} />
+        machine.id === shownId && <JoinMachinePanel key={machine.id} machine={machine} person={person} onJoinedRoom={onJoinedRoom} />
       ),
     );
 }

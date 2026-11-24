@@ -13,7 +13,7 @@ import { BarMenu, type BarMenuEntry } from "./BarMenu.tsx";
 import { ColorSwatches } from "./ColorSwatches.tsx";
 import { ConfirmButton } from "./ConfirmButton.tsx";
 import { ContextMenu, type ContextMenuEntry } from "./ContextMenu.tsx";
-import { joinedRoomsOf, knocksOf, RoomsSection } from "./RoomsSidebar.tsx";
+import { invitedOf, RoomsSection } from "./RoomsSidebar.tsx";
 import { LineIcon } from "./LineIcon.tsx";
 import { connectedDevicesLabel, useConnectedDevicesInSidebar } from "./connected-devices.ts";
 import { connection } from "./connection.ts";
@@ -888,7 +888,7 @@ export function Sidebar({
   state: AppState;
   dispatch: Dispatch<AppAction>;
   /** Opens a room of someone else's machine in its frame; none where this page can't show machines. */
-  onOpenJoinedRoom?: (machineId: string, roomId: string) => void;
+  onOpenJoinedRoom?: (machineId: string, roomId: string | null) => void;
 }) {
   const adding = state.overlay?.kind === "add-workspace";
   const setAdding = (open: boolean) => dispatch(open ? { type: "open-overlay", overlay: { kind: "add-workspace" } } : { type: "close-overlay" });
@@ -1000,9 +1000,9 @@ export function Sidebar({
           roomsWaiting={roomsWaitingFor(state)}
           readings={state.roomReadings}
           roomsWithPeopleHere={state.roomsWithPeopleHere}
-          joinedRooms={joinedRoomsOf(state.machines, state.machineStatuses)}
-          knocks={knocksOf(state.machines)}
+          invited={invitedOf(state.machines, state.machineStatuses)}
           selectedKnock={state.selectedKnock}
+          selectedJoinedRoom={state.selectedJoinedRoom}
           people={state.people}
           broughtAgents={state.broughtAgents}
           manages

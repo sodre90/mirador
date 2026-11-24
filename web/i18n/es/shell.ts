@@ -329,7 +329,7 @@ export const shell: Messages["shell"] = {
     showInRailLabel: (machine) => `Mostrar ${machine} en la barra de máquinas`,
     waitingForYou: (count) => `${count} esperándote`,
     about:
-      "Otros equipos que ejecutan Mirador, como un servidor cuyos agentes siguen trabajando mientras este equipo duerme. Cada uno aparece en la barra de máquinas de la izquierda, como su propio Mirador. Pega un enlace de invitación de la máquina para unirte al instante; consíguelo en su Configuración → Dispositivos, o ejecuta",
+      "Otros equipos que ejecutan Mirador, como un servidor cuyos agentes siguen trabajando mientras este equipo duerme. Cada uno de los tuyos aparece en la barra de máquinas de la izquierda, como su propio Mirador; las salas en los de otras personas aparecen en Salas. Pega un enlace de invitación de la máquina para unirte al instante; consíguelo en su Configuración → Dispositivos, o ejecuta",
     aboutAfterCommand:
       " allí. Con solo su dirección, pides unirte, o pegas un código de invitación, la primera vez que la abres. Haz clic en las iniciales de una máquina para darle un color.",
     noneYet: "Todavía no hay máquinas.",
@@ -362,7 +362,6 @@ export const shell: Messages["shell"] = {
     joining: "Uniéndose…",
     joinButton: "Unirse",
     outOfRooms: "Su propietario cerró la sesión de este equipo en sus salas de allí. Pídele una nueva invitación y pégala aquí.",
-    someoneElses: "Máquina de otra persona, en cuyas salas estás",
     roomInviteFirst: "Te invitaron a una sala de allí. Pega aquí la invitación.",
     peerToPeer: "peer to peer",
     linkToOpen: {

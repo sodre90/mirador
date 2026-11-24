@@ -731,6 +731,7 @@ function RoomPeople({
   owns,
   shown,
   onShownChange,
+  onOwnProfile,
 }: {
   room: Room;
   agents: RoomAgentShown[];
@@ -740,6 +741,7 @@ function RoomPeople({
   owns: boolean;
   shown: boolean;
   onShownChange: (shown: boolean) => void;
+  onOwnProfile?: () => void;
 }) {
   const opener = useRef<HTMLButtonElement>(null);
   const popover = useRef<HTMLDivElement>(null);
@@ -775,6 +777,18 @@ function RoomPeople({
               <PersonListed key={personId} roomId={room.id} personId={personId} role={role} isHere={hereNow.has(personId)} removable={owns && isRoomRole(role)} />
             ))}
           </ul>
+          {onOwnProfile && (
+            <button
+              type="button"
+              className="link"
+              onClick={() => {
+                onShownChange(false);
+                onOwnProfile();
+              }}
+            >
+              {t.settings.ownProfile.title}
+            </button>
+          )}
           {owns && <WaitingToJoin joiners={joiners} />}
           {agents.length > 0 && (
             <>
@@ -829,7 +843,9 @@ export function RoomView({
   presence,
   joiners,
   muted,
+  offersMute = true,
   you,
+  onOwnProfile,
   dispatch,
   onOpenOnCanvas,
 }: {
@@ -856,7 +872,10 @@ export function RoomView({
   joiners: RoomJoiner[];
   /** Whether the room notifies you. */
   muted: boolean;
+  offersMute?: boolean;
   you: string | null;
+  /** Opens your own name and colour, offered with the room's people where the page has no other place for it. */
+  onOwnProfile?: () => void;
   dispatch: Dispatch<AppAction>;
   onOpenOnCanvas: (itemId: string) => void;
 }) {
@@ -921,9 +940,9 @@ export function RoomView({
             </button>
           )}
           {presence && (
-            <RoomPeople room={room} agents={agents} here={presence.here} joiners={joiners} ownerId={ownerId} owns={owns} shown={peopleShown} onShownChange={setPeopleShown} />
+            <RoomPeople room={room} agents={agents} here={presence.here} joiners={joiners} ownerId={ownerId} owns={owns} shown={peopleShown} onShownChange={setPeopleShown} onOwnProfile={onOwnProfile} />
           )}
-          <MuteToggle roomId={room.id} muted={muted} />
+          {offersMute && <MuteToggle roomId={room.id} muted={muted} />}
           {owns && (
             <button type="button" className="room-invite-button" onClick={invite}>
               {words.inviteSomeone}

@@ -1,6 +1,9 @@
 const PLACE_MESSAGE = "mirador:machine-place";
 const SHOWN_MESSAGE = "mirador:machine-shown";
 
+/** In the frame another computer's Mirador shows this machine in: its rail, or the pane its invited rooms open in. */
+export const shownInAnotherMirador = () => window.self !== window.top;
+
 /** A machine's page in another computer's rail tells it which conversation it shows, for the rail to come back to. */
 export function tellTheRailThePlace(hash: string) {
   if (window.parent !== window) window.parent.postMessage({ type: PLACE_MESSAGE, hash }, "*");

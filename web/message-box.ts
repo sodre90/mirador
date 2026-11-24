@@ -23,12 +23,12 @@ export const useFormatBar = formatBar.use;
 
 const RAIL_MESSAGE_BOX_MESSAGE = "mirador:rail-message-box";
 
-/** The rail gives someone else's machine the message box chosen on this computer, which that machine's page can't keep for itself. */
+/** Someone else's machine is given the message box chosen on this computer, which that machine's page can't keep for itself. */
 export function giveMessageBoxToMachine(frame: HTMLIFrameElement | null) {
   frame?.contentWindow?.postMessage({ type: RAIL_MESSAGE_BOX_MESSAGE, messageBox: messageBox.get(), formatBar: formatBar.get() }, "*");
 }
 
-/** A person's page of someone else's machine, in their own computer's rail, has the message box of that computer. */
+/** A person's page of someone else's machine, shown in their own Mirador, has the message box of that one. */
 export function takeMessageBoxFromTheRail() {
   if (window.parent === window) return;
   window.addEventListener("message", ({ source, data }: MessageEvent) => {

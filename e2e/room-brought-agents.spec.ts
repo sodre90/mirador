@@ -80,7 +80,6 @@ test("Mia brings an agent of hers into Ann's room: Ann's tasks for it wait for M
   const profiles = await createProfile(mia, "Coder", `OPENCODE_FAKE_ACP_PROMPTS=${coderPrompts()}`, "", "opencode");
   await profiles.getByRole("button", { name: "Close" }).click();
   await expect(await joinRoom(mia, invite)).toHaveCount(0);
-  await mia.getByRole("navigation", { name: "Machines" }).getByRole("button", { name: "This computer" }).click();
 
   await test.step("Mia brings her Coder from her own Mirador, only after her OK for others' tasks", async () => {
     const dialog = await bringCoder("Only after my OK");

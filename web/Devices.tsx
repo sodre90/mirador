@@ -14,6 +14,7 @@ import { hints } from "./hints.ts";
 import { refusalText } from "./host-error.ts";
 import { locale, t } from "./i18n/index.ts";
 import type { InviteJoins } from "./invite-link.ts";
+import { shownInAnotherMirador } from "./machine-place.ts";
 import { ConnectionSettings } from "./Reachability.tsx";
 import { SettingsSection, useSettingRow } from "./SettingsSection.tsx";
 import type { DevicesListed } from "./state.ts";
@@ -48,8 +49,6 @@ function guessedDeviceName() {
 }
 
 const isThisMachine = () => ["127.0.0.1", "localhost"].includes(location.hostname);
-/** In the rail of another computer's Mirador, which joins its machines itself. */
-const shownInAnotherMirador = () => window.self !== window.top;
 
 const postToThisMachine = (path: string, body: object) =>
   fetch(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }).catch(() => null);

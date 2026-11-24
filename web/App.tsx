@@ -69,7 +69,8 @@ import { RoomsOnlyApp, seesOnlyTheirRooms } from "./RoomsOnly.tsx";
 import { newRoomWorkspace, NewRoomDialog } from "./NewRoom.tsx";
 import { JoinRoomDialog, RoomInviteDialog } from "./RoomInvite.tsx";
 import { BringAgentDialog } from "./BringAgent.tsx";
-import { joinedRoomsOf, KnockView, knocksOf, useOpenedWhenLetIn } from "./RoomsSidebar.tsx";
+import { InvitedRoomPane } from "./InvitedRoom.tsx";
+import { joinedRoomShown, joinedRoomsOf, KnockView, knocksOf, useOpenedWhenLetIn } from "./RoomsSidebar.tsx";
 import { RoomSettingsDialog } from "./RoomSettings.tsx";
 import { useConversationsStartedFromTabs, useWorkspaceTabsSubscribed } from "./workspace-tabs.ts";
 import { landingBefore, landingBelowGroup, type SidebarLanding } from "../shared/workspace-drop.ts";
@@ -79,6 +80,16 @@ import { foldersOfSandbox } from "./SandboxFolders.tsx";
 
 const conversationFromHash = () => location.hash.match(/^#\/c\/(.+)$/)?.[1] ?? null;
 const roomFromHash = () => location.hash.match(/^#\/r\/(.+)$/)?.[1] ?? null;
+
+function joinedRoomFromHash() {
+  const [, machineId, roomId = null] = location.hash.match(/^#\/j\/([\w-]+)(?:\/([\w-]+))?$/) ?? [];
+  return machineId ? { machineId, roomId } : null;
+}
+
+const joinedRoomHash = ({ machineId, roomId }: NonNullable<AppState["selectedJoinedRoom"]>) => (roomId ? `#/j/${machineId}/${roomId}` : `#/j/${machineId}`);
+
+/** What shows something else in this computer's own panes. */
+const SELECTIONS: readonly AppAction["type"][] = ["select", "select-room", "select-knock", "select-joined-room"];
 
 export function useConnectionStatus() {
   const [status, setStatus] = useState<ConnectionStatus>(connection.status);
@@ -415,17 +426,23 @@ function useKeptConversationsSubscribed(status: ConnectionStatus, kept: OpenConv
 }
 
 export function App() {
-  const [state, dispatchToState] = useReducer(reducer, null, () => initialStateFor(conversationFromHash(), roomFromHash()));
-  const machines = useShownMachine(state.machines, state.hostRunId !== null);
+  const [state, dispatchToState] = useReducer(reducer, null, () => initialStateFor(conversationFromHash(), roomFromHash(), joinedRoomFromHash()));
+  /** Someone else's machines show in this computer's own panes instead, room by room. */
+  const ownMachines = state.machines.filter(({ asPerson }) => !asPerson);
+  const machines = useShownMachine(ownMachines, state.hostRunId !== null);
   const conversationsNow = useRef(state.conversations);
   conversationsNow.current = state.conversations;
   /** Whatever selects a conversation here, from the palette to a notification, brings this computer's own view back. */
   const dispatch = useCallback((action: AppAction) => {
-    if (action.type === "select" || action.type === "select-room") machines.show(null);
+    if (SELECTIONS.includes(action.type)) machines.show(null);
     dispatchToState(selectingBeside(action, conversationsNow.current));
   }, []);
-  const showMachine = (machine: Machine) => (showsMachinesHere() ? machines.show(machine.id) : openMachine(machine.origin));
-  const railShown = showsMachinesHere() && state.machines.length > 0;
+  const showMachine = (machine: Machine) => {
+    if (!showsMachinesHere()) return openMachine(machine.origin);
+    if (machine.asPerson) return openJoinedRoom(machine.id, null);
+    machines.show(machine.id);
+  };
+  const railShown = showsMachinesHere() && ownMachines.length > 0;
   const seenMachines = machinesSeen(state.machines, state.machineStatuses);
   const shownMachine = railShown ? machines.shown : null;
   const waitingHere = state.conversations.flatMap(({ waitingFor }) => (waitingFor ? [waitingFor] : []));
@@ -598,13 +615,11 @@ export function App() {
   useKeptConversationsSubscribed(status, [...state.kept, ...state.sideChats, ...state.threadConversations]);
   useRoomSubscribed(status, state.rooms.some(({ id }) => id === state.selectedRoomId) ? state.selectedRoomId : null);
 
-  /** A room of someone else's machine opens in that machine's frame, which shows nothing of this computer's own. */
   const openJoinedRoom = (machineId: string, roomId: string | null) => {
     if (!showsMachinesHere()) return;
-    if (!roomId) return machines.show(machineId);
-    connection.send({ type: "machine.room-opened", machineId, roomId });
-    machines.rememberPlace(machineId, `#/r/${roomId}`);
-    machines.openIn(machineId, `#/r/${roomId}`);
+    const opened = roomId ?? joinedRoomShown({ machineId, roomId }, joinedRoomsOf(state.machines, state.machineStatuses))?.room.id ?? null;
+    if (opened) connection.send({ type: "machine.room-opened", machineId, roomId: opened });
+    dispatch({ type: "select-joined-room", machineId, roomId: opened });
   };
   useOpenedWhenLetIn(state.machines, state.machineStatuses, openJoinedRoom);
   /** A room joined with an invite opens at once, or, where its owner lets people in, shows its door until they do. */
@@ -638,8 +653,10 @@ export function App() {
     const selectFromHash = () => {
       const conversationId = conversationFromHash();
       const roomId = roomFromHash();
+      const joinedRoom = joinedRoomFromHash();
       if (conversationId) dispatch({ type: "select", conversationId });
       else if (roomId) dispatch({ type: "select-room", roomId });
+      else if (joinedRoom) dispatch({ type: "select-joined-room", ...joinedRoom });
     };
     window.addEventListener("hashchange", selectFromHash);
     return () => window.removeEventListener("hashchange", selectFromHash);
@@ -679,16 +696,19 @@ export function App() {
         ? `#/c/${state.selectedConversationId}`
         : state.selectedRoomId
           ? `#/r/${state.selectedRoomId}`
-          : "";
+          : state.selectedJoinedRoom
+            ? joinedRoomHash(state.selectedJoinedRoom)
+            : "";
     if (location.hash !== hash) history.replaceState(null, "", hash || location.pathname);
     tellTheRailThePlace(hash);
-  }, [state.selectedConversationId, state.selectedRoomId, state.conversationsPicked, machines.shownId]);
+  }, [state.selectedConversationId, state.selectedRoomId, state.selectedJoinedRoom, state.conversationsPicked, machines.shownId]);
 
   if (status === "unauthorized") return <JoinMachine />;
   if (seesOnlyTheirRooms(state)) return <RoomsOnlyApp state={state} dispatch={dispatch} outOfRooms={status === "out-of-rooms"} banner={<HostBanner status={status} state={state} />} />;
 
   const conversation = state.conversations.find(({ id }) => id === state.selectedConversationId) ?? null;
   const shownRoom = shownMachine || conversation ? null : (state.rooms.find(({ id }) => id === state.selectedRoomId) ?? null);
+  const joinedRoomIsOpen = showsMachinesHere() && state.machines.some(({ id, asPerson }) => asPerson && id === state.selectedJoinedRoom?.machineId);
   const shownKnock = knocksOf(state.machines).find(({ machine, knock }) => machine.id === state.selectedKnock?.machineId && knock.roomId === state.selectedKnock.roomId);
   const showCanvas = canvasVisible && conversation !== null && open !== null;
   const showRoomCanvas = canvasVisible && shownRoom !== null;
@@ -882,7 +902,7 @@ export function App() {
     <div className={`app ${railShown ? "with-rail" : ""}`}>
       {railShown && (
         <MachineRail
-          machines={state.machines}
+          machines={ownMachines}
           statuses={state.machineStatuses}
           toJoin={seenMachines.filter((machine) => !isHidden(machine, state.hiddenMachines))}
           waitingHere={waitingHere}
@@ -894,7 +914,7 @@ export function App() {
       )}
       <div
         ref={layoutElement}
-        className={`layout ${shownMachine ? "covered" : ""} ${sidebarHidden ? "sidebar-hidden" : ""}`}
+        className={`layout ${shownMachine ? "covered" : ""} ${joinedRoomIsOpen ? "in-invited-room" : ""} ${sidebarHidden ? "sidebar-hidden" : ""}`}
         style={{ "--sidebar-width": `${sidebarWidth}px` } as CSSProperties}
       >
         {!sidebarHidden && (
@@ -923,19 +943,35 @@ export function App() {
             ) : null,
           }}
         />
+        {showsMachinesHere() && (
+          <InvitedRoomPane
+            machines={state.machines}
+            statuses={state.machineStatuses}
+            selected={state.selectedJoinedRoom}
+            covered={shownMachine !== null}
+            person={owner}
+            sidebar={{ visible: !sidebarHidden, toggle: toggleSidebar }}
+            broughtAgents={state.broughtAgents}
+            profiles={state.profiles}
+            banner={<HostBanner status={status} state={state} />}
+            onJoinedRoom={joinedRoom}
+            dispatch={dispatch}
+          />
+        )}
       </div>
       {railShown && (
         <MachineFrames
-          machines={state.machines}
+          machines={ownMachines}
           person={owner}
           shownId={shownMachine?.id ?? null}
           visited={machines.visited}
           opening={machines.opening}
           placeOf={machines.placeOf}
           onPlace={machines.rememberPlace}
+          onJoinedRoom={joinedRoom}
         />
       )}
-      {railShown && <LinkFromMachinePrompt ownOrigins={[state.canvasAssetsOrigin, state.agentsCanvasAssetsOrigin]} />}
+      {showsMachinesHere() && state.machines.length > 0 && <LinkFromMachinePrompt ownOrigins={[state.canvasAssetsOrigin, state.agentsCanvasAssetsOrigin]} />}
       <HintLayer />
       {conversation && open && <SelectionActions conversationId={conversation.id} onAsk={(text) => askInSideChat(conversation.id, text)} />}
       <JoinRequestPrompts joinRequests={state.joinRequests} />

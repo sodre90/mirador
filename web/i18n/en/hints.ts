@@ -83,7 +83,7 @@ export const hints = {
   removeMachineNotJoinedArmed: "Click again to remove this machine from the list. You can add it again later.",
   thisComputer: "This computer's own workspaces and conversations",
   manageMachines: "Add or remove machines",
-  machineColor: "Give this machine a colour, to tell it apart in the rail. Kept on this computer.",
+  machineColor: "Give this machine a colour, to tell it apart. Kept on this computer.",
   machineColorStyle:
     "Where a machine you gave a colour shows it: on its rail button only, or also as a strip along the top of its view, so you can tell at a glance which machine you work on. Give a machine a colour in Machines….",
   machines: "Other computers running Mirador, such as a server whose agents keep working while this one sleeps.",

@@ -36,11 +36,12 @@ test("tagged in a room of another machine while looking elsewhere, a person is t
   await allowNotifications(visitor);
   await signIn(visitor, visitors);
   await nameOwnProfile(visitor, "Dora");
+  await addWorkspace(visitor, visitors.projectDir);
+  await createRoom(visitor, "Own room", []);
   const frame = visitor.frameLocator('iframe[title="Ann\'s machine"]');
-  const rail = visitor.getByRole("navigation", { name: "Machines" });
   await expect(await joinRoom(visitor, invite)).toHaveCount(0);
   await expect(frame.getByRole("heading", { name: "# Garden" })).toBeVisible();
-  await rail.getByRole("button", { name: "This computer" }).click();
+  await roomCard(visitor, "Own room").click();
 
   const body = "Ann's machine · Ann tagged you: @Dora the seeds are in";
   await test.step("the owner tags the person, whose own Mirador notifies them and marks the room with what they haven't read", async () => {
@@ -57,17 +58,18 @@ test("tagged in a room of another machine while looking elsewhere, a person is t
     await clickNotification(visitor, body);
     await expect(frame.getByRole("heading", { name: "# Garden" })).toBeVisible();
     await expect(frame.locator(".room-timeline .room-mention.you")).toHaveText(["@Dora", "@Dora"]);
-    await rail.getByRole("button", { name: "This computer" }).click();
+    await roomCard(visitor, "Own room").click();
     await expect(joinedCard(visitor).locator(".room-unread")).toHaveCount(0);
     await expect(joinedCard(visitor).locator(".room-tagged")).toHaveCount(0);
   });
 
-  await test.step("muted, the room still counts for the person but calls them no more", async () => {
-    await rail.getByRole("button", { name: "Ann's machine" }).click();
-    const mute = frame.locator(".room-header").getByRole("button", { name: "Mute notifications" });
+  await test.step("muted on this computer from the line above it, the room still counts for the person but calls them no more", async () => {
+    await joinedCard(visitor).click();
+    await expect(frame.locator(".room-header").getByRole("button", { name: "Mute notifications" })).toHaveCount(0);
+    const mute = visitor.locator(".invited-room-bar").getByRole("button", { name: "Mute notifications" });
     await mute.click();
     await expect(mute).toHaveAttribute("aria-pressed", "true");
-    await rail.getByRole("button", { name: "This computer" }).click();
+    await roomCard(visitor, "Own room").click();
     await tagDora("and the beans");
     await composer.fill("watering at six");
     await composer.press("Enter");
@@ -76,22 +78,21 @@ test("tagged in a room of another machine while looking elsewhere, a person is t
     expect(await notificationsShown(visitor)).toHaveLength(1);
   });
 
-  await test.step("muted on the person's own Mirador, the room stays quiet there whatever its machine says, and the mute stays after a reload", async () => {
-    await rail.getByRole("button", { name: "Ann's machine" }).click();
-    const muteThere = frame.locator(".room-header").getByRole("button", { name: "Mute notifications" });
-    await muteThere.click();
-    await expect(muteThere).toHaveAttribute("aria-pressed", "false");
-    await rail.getByRole("button", { name: "This computer" }).click();
-    await expect(joinedCard(visitor)).not.toHaveClass(/\bmuted\b/);
-    const muteHere = joinedCard(visitor).getByRole("button", { name: "Mute notifications" });
-    await joinedCard(visitor).hover();
-    await muteHere.click();
-    await expect(muteHere).toHaveAttribute("aria-pressed", "true");
-    await expect(joinedCard(visitor)).toHaveClass(/\bmuted\b/);
+  await test.step("the mute stays after a reload, and the room's card lifts it", async () => {
+    await joinedCard(visitor).click();
+    await expect(frame.getByRole("heading", { name: "# Garden" })).toBeVisible();
+    await expect(joinedCard(visitor).locator(".room-unread")).toHaveCount(0);
+    await roomCard(visitor, "Own room").click();
     await tagDora("and the leeks");
     await expect(joinedCard(visitor).locator(".room-unread")).toHaveText("1");
     expect(await notificationsShown(visitor)).toHaveLength(1);
     await visitor.reload();
-    await expect(joinedCard(visitor).getByRole("button", { name: "Mute notifications" })).toHaveAttribute("aria-pressed", "true");
+    const muteOfCard = joinedCard(visitor).getByRole("button", { name: "Mute notifications" });
+    await expect(muteOfCard).toHaveAttribute("aria-pressed", "true");
+    await joinedCard(visitor).hover();
+    await muteOfCard.click();
+    await expect(muteOfCard).toHaveAttribute("aria-pressed", "false");
+    await expect(joinedCard(visitor)).not.toHaveClass(/\bmuted\b/);
   });
+  await visitor.close();
 });

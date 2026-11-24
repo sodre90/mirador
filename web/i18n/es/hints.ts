@@ -90,7 +90,7 @@ export const hints: Messages["hints"] = {
   removeMachineNotJoinedArmed: "Haz clic de nuevo para quitar esta máquina de la lista. Puedes agregarla de nuevo más tarde.",
   thisComputer: "Los espacios de trabajo y conversaciones de este equipo",
   manageMachines: "Agregar o quitar máquinas",
-  machineColor: "Dale un color a esta máquina para distinguirla en la barra de máquinas. Se guarda en este equipo.",
+  machineColor: "Dale un color a esta máquina para distinguirla. Se guarda en este equipo.",
   machineColorStyle:
     "Dónde muestra su color una máquina a la que se lo diste: solo en su botón de la barra, o también como una franja en la parte superior de su vista, para ver de un vistazo en qué máquina trabajas. Dale un color a una máquina en Máquinas….",
   machines: "Otros equipos que ejecutan Mirador, como un servidor cuyos agentes siguen trabajando mientras este equipo duerme.",

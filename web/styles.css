@@ -301,6 +301,69 @@ button.icon.layout-toggle svg {
   min-height: 0;
 }
 
+.layout > .workspace-area,
+.layout > .invited-room {
+  grid-row: 1;
+  grid-column: -2 / -1;
+}
+
+.layout.in-invited-room > .workspace-area,
+.layout.in-invited-room > .workspace-area * {
+  visibility: hidden !important;
+}
+
+.invited-room {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-width: 0;
+  visibility: hidden;
+}
+
+.invited-room.shown {
+  visibility: visible;
+}
+
+.invited-room > .machine-frame,
+.invited-room > .machine-join {
+  grid-row: 2;
+  grid-column: 1;
+}
+
+.invited-room > .machine-frame {
+  height: 100%;
+}
+
+.invited-room-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--muted);
+  font-size: calc(12px * var(--font-scale));
+}
+
+.invited-room-bar .room-mark {
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  font-size: calc(10px * var(--font-scale));
+}
+
+.invited-room-whose {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.invited-room-actions {
+  display: flex;
+  flex: none;
+  gap: 2px;
+  margin-left: auto;
+}
+
 .pane {
   position: relative;
   display: flex;
@@ -9334,19 +9397,6 @@ button.device-revoke:hover:not(:disabled) {
   text-align: center;
 }
 
-/* Someone else's machine, whose rooms this computer's owner is in: a hollow ring at its corner, whatever its colour. */
-.rail-machine.someone-elses::after {
-  content: "";
-  position: absolute;
-  bottom: -5px;
-  left: -5px;
-  width: 8px;
-  height: 8px;
-  border: 2px solid var(--muted);
-  border-radius: 50%;
-  background: var(--rail);
-}
-
 .rail-machine.shown {
   border-color: var(--accent);
   background: var(--accent-soft);
@@ -10236,6 +10286,10 @@ button.link.more-rows {
   margin: 0;
   padding: 0;
   list-style: none;
+}
+
+.room-people > .link {
+  align-self: start;
 }
 
 .room-people li,

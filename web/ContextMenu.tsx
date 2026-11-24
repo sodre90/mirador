@@ -42,7 +42,7 @@ function MenuEntryButton({ entry, onChoose }: { entry: AnyMenuEntry; onChoose: (
 }
 
 /** A press in a frame takes the focus out of this page, whose listeners it never reaches. */
-function useClosingWhenFocusLeavesPage(close: () => void) {
+export function useClosingWhenFocusLeavesPage(close: () => void) {
   useEffect(() => {
     window.addEventListener("blur", close);
     return () => window.removeEventListener("blur", close);

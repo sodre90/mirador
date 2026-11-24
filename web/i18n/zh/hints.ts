@@ -84,7 +84,7 @@ export const hints: Messages["hints"] = {
   removeMachineNotJoinedArmed: "再次点击，将从列表中移除这台机器。以后可以重新添加。",
   thisComputer: "这台电脑自己的工作区和对话",
   manageMachines: "添加或移除机器",
-  machineColor: "给这台机器设置一个颜色，以便在机器栏中区分。保存在这台电脑上。",
+  machineColor: "给这台机器设置一个颜色，以便区分。保存在这台电脑上。",
   machineColorStyle:
     "你给机器设置的颜色显示在哪里：仅在其机器栏按钮上，或者也作为其视图顶部的一条色带，让你一眼看出自己在哪台机器上工作。在“机器…”中给机器设置颜色。",
   machines: "运行 Mirador 的其他电脑，例如在这台电脑休眠时 Agent 仍能继续工作的服务器。",

@@ -58,12 +58,27 @@ function ToggleButton({
 }
 
 interface LayoutToggleState {
-  sidebar: PaneToggle;
+  /** Null where the page has no sidebar. */
+  sidebar: PaneToggle | null;
   canvas: PaneToggle;
   terminal: PaneToggle;
 }
 
 export const LayoutToggleState = createContext<LayoutToggleState | null>(null);
+
+export function SidebarToggle({ sidebar }: { sidebar: PaneToggle }) {
+  return (
+    <ToggleButton
+      className="toggle-sidebar"
+      pane={sidebar}
+      icon={<PanelIcon panel="left" />}
+      hideLabel={t.shell.sidebar.hideSidebar}
+      showLabel={t.shell.sidebar.showSidebar}
+      hint={sidebar.visible ? hints.hideSidebar : hints.showSidebar}
+      shortcut={shortcutKeys().toggleSidebar}
+    />
+  );
+}
 
 /**
  * At the start of the conversation's bar: in the default layout, showing or hiding the canvas or terminal leaves that edge
@@ -76,15 +91,7 @@ export function LayoutToggles() {
   const keys = shortcutKeys();
   return (
     <span className="layout-toggles">
-      <ToggleButton
-        className="toggle-sidebar"
-        pane={sidebar}
-        icon={<PanelIcon panel="left" />}
-        hideLabel={t.shell.sidebar.hideSidebar}
-        showLabel={t.shell.sidebar.showSidebar}
-        hint={sidebar.visible ? hints.hideSidebar : hints.showSidebar}
-        shortcut={keys.toggleSidebar}
-      />
+      {sidebar && <SidebarToggle sidebar={sidebar} />}
       <ToggleButton
         className="toggle-canvas"
         pane={canvas}

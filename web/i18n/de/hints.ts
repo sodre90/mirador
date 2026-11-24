@@ -90,7 +90,7 @@ export const hints: Messages["hints"] = {
   removeMachineNotJoinedArmed: "Klicke erneut, um diesen Rechner aus der Liste zu entfernen. Du kannst ihn später wieder hinzufügen.",
   thisComputer: "Die eigenen Arbeitsbereiche und Unterhaltungen dieses Computers",
   manageMachines: "Rechner hinzufügen oder entfernen",
-  machineColor: "Gib diesem Rechner eine Farbe, um ihn in der Rechnerleiste zu unterscheiden. Wird auf diesem Computer gespeichert.",
+  machineColor: "Gib diesem Rechner eine Farbe, um ihn zu unterscheiden. Wird auf diesem Computer gespeichert.",
   machineColorStyle:
     "Wo ein Rechner, dem du eine Farbe gegeben hast, sie zeigt: nur an seinem Button in der Rechnerleiste, oder auch als Streifen oben über seiner Ansicht, damit du auf einen Blick siehst, auf welchem Rechner du arbeitest. Eine Farbe gibst du einem Rechner unter Rechner….",
   machines: "Andere Computer, auf denen Mirador läuft, etwa ein Server, dessen Agenten weiterarbeiten, während dieser hier schläft.",

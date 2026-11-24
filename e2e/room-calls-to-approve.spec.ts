@@ -51,11 +51,12 @@ test("an approver who joined from their own Mirador is told there once that a re
   await allowNotifications(visitor);
   await signIn(visitor, visitors);
   await nameOwnProfile(visitor, "Dora");
+  await addWorkspace(visitor, visitors.projectDir);
+  await createRoom(visitor, "Own room", []);
   const frame = visitor.frameLocator('iframe[title="Ann\'s machine"]');
-  const rail = visitor.getByRole("navigation", { name: "Machines" });
   await expect(await joinRoom(visitor, invite)).toHaveCount(0);
   await expect(frame.getByRole("heading", { name: "# Orchard" })).toBeVisible();
-  await rail.getByRole("button", { name: "This computer" }).click();
+  await roomCard(visitor, "Own room").click();
 
   const body = "Ann's machine · Waits for your approval: Run ls";
   await test.step("the agent asks to run a command, and the approver's own Mirador notifies her once and marks the room as needing her", async () => {
@@ -73,8 +74,9 @@ test("an approver who joined from their own Mirador is told there once that a re
     await expect(strip.locator(".room-approval-detail")).toHaveText("ls");
     await strip.getByRole("button", { name: "Allow", exact: true }).click();
     await expect(page.locator(".room-timeline .room-entry .message.agent")).toHaveText(["Run ls: allow"]);
-    await rail.getByRole("button", { name: "This computer" }).click();
+    await roomCard(visitor, "Own room").click();
     await expect(joinedCard(visitor).locator(".waiting-pill")).toHaveCount(0);
     expect(await notificationsShown(visitor)).toHaveLength(1);
   });
+  await visitor.close();
 });

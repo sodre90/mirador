@@ -85,7 +85,7 @@ export const hints: Messages["hints"] = {
   removeMachineNotJoinedArmed: "Kattints újra, hogy eltávolítsd ezt a gépet a listáról. Később újra hozzáadhatod.",
   thisComputer: "Ennek a számítógépnek a saját munkaterületei és beszélgetései",
   manageMachines: "Gépek hozzáadása vagy eltávolítása",
-  machineColor: "Adj színt ennek a gépnek, hogy megkülönböztesd a sávban. Ez a számítógép jegyzi meg.",
+  machineColor: "Adj színt ennek a gépnek, hogy megkülönböztesd. Ez a számítógép jegyzi meg.",
   machineColorStyle:
     "Hol mutatja a színét egy gép, amelynek színt adtál: csak a sávgombján, vagy egy csíkként a nézete tetején is, így egy pillantásból látod, melyik gépen dolgozol. Színt a Gépek… menüpontban adhatsz egy gépnek.",
   machines: "Más számítógépek, amelyeken Mirador fut, például egy szerver, amelynek az ágensei tovább dolgoznak, amíg ez a gép alszik.",

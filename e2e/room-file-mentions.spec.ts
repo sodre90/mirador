@@ -97,7 +97,6 @@ test("a file of the bringer's computer named with an @ in a task is not read for
   await addWorkspace(mia, mias.projectDir);
   await makeClaudeProfile(mia, "Coder");
   await expect(await joinRoom(mia, invite)).toHaveCount(0);
-  await mia.getByRole("navigation", { name: "Machines" }).getByRole("button", { name: "This computer" }).click();
   const joined = roomCard(mia, "Garden").and(mia.locator(".joined-room"));
   await joined.hover();
   await joined.getByRole("button", { name: "More for Garden" }).click();

@@ -72,8 +72,9 @@ test("the owner and a person in the room see who of them is here and who writes,
   const visitor = await browser.newPage();
   await signIn(visitor, visitors);
   await nameOwnProfile(visitor, "Dora");
+  await addWorkspace(visitor, visitors.projectDir);
+  await createRoom(visitor, "Own room", []);
   const frame = visitor.frameLocator('iframe[title="Ann\'s machine"]');
-  const rail = visitor.getByRole("navigation", { name: "Machines" });
   const visitorsComposer = frame.getByRole("textbox", { name: "Write in Garden, @ tags an agent…" });
 
   await test.step("the person joins the room from their own Mirador, which opens it", async () => {
@@ -89,11 +90,11 @@ test("the owner and a person in the room see who of them is here and who writes,
     expect(await peopleListed(frame)).toEqual({ people: ["Ann, Owner, Here now", "Dora, Member, Here now"], agents: ["Builder"] });
   });
 
-  await test.step("the person is no longer here once their Mirador shows another machine, and is again when it shows the room", async () => {
-    await rail.getByRole("button", { name: "This computer" }).click();
+  await test.step("the person is no longer here once their Mirador shows a room of their own, and is again when it shows the room", async () => {
+    await roomCard(visitor, "Own room").click();
     await expect(hereCount(page)).toHaveText("1 here");
     expect((await peopleListed(page)).people).toEqual(["Ann, Owner, Here now", "Dora, Member"]);
-    await rail.getByRole("button", { name: "Ann's machine" }).click();
+    await roomCard(visitor, "Garden").click();
     await expect(hereCount(page)).toHaveText("2 here");
   });
 
@@ -101,7 +102,7 @@ test("the owner and a person in the room see who of them is here and who writes,
     await createRoom(page, "Shed", []);
     await expect(hereCount(frame)).toHaveText("1 here");
     expect((await peopleListed(frame)).people).toEqual(["Ann, Owner", "Dora, Member, Here now"]);
-    await expect(frame.locator(".sidebar .rooms .room-card-name")).toHaveText(["Garden"]);
+    await expect(visitor.getByRole("list", { name: "Invited" }).locator(".room-card-name")).toHaveText(["Garden"]);
     await roomCard(page, "Garden").click();
     await expect(hereCount(frame)).toHaveText("2 here");
   });

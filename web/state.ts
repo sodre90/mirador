@@ -117,6 +117,8 @@ export interface AppState {
   selectedRoomId: string | null;
   /** The door of a room on someone else's machine this computer's owner waits at, or was turned away from, shown in the main pane instead. */
   selectedKnock: { machineId: string; roomId: string } | null;
+  /** The room of someone else's machine shown in the main pane instead; with no room, the first that machine lists, or what it needs to be joined. */
+  selectedJoinedRoom: { machineId: string; roomId: string | null } | null;
   /** The shown room's messages and threads, and the pages and questions of its canvas, once the host sent them. */
   roomTimeline: (RoomTimelineWithCanvas & { roomId: string }) | null;
   /** Who is in the shown room now, and who of them writes there, once the host said. */
@@ -223,6 +225,8 @@ export type AppAction =
   | { type: "keep-side-chats"; conversationIds: string[] }
   | { type: "select-room"; roomId: string }
   | { type: "select-knock"; machineId: string; roomId: string }
+  | { type: "select-joined-room"; machineId: string; roomId: string | null }
+  | { type: "leave-joined-room"; machineId: string; roomId: string }
   | { type: "keep-thread-conversations"; conversationIds: string[] }
   | { type: "awaiting-conversation"; workspaceId: string }
   | { type: "open-overlay"; overlay: Overlay }
@@ -234,6 +238,9 @@ export type AppAction =
   | { type: "dismiss-conversations-to-delete" }
   | { type: "reminder-set"; undo: ReminderUndo }
   | { type: "dismiss-reminder-undo" };
+
+/** Nothing of someone else's machine is shown in the main pane. */
+const NOTHING_ELSEWHERE = { selectedKnock: null, selectedJoinedRoom: null } satisfies Partial<AppState>;
 
 export const initialState: AppState = {
   workspaces: [],
@@ -255,7 +262,7 @@ export const initialState: AppState = {
   roomsWithPeopleHere: [],
   roomReadings: [],
   selectedRoomId: null,
-  selectedKnock: null,
+  ...NOTHING_ELSEWHERE,
   roomTimeline: null,
   roomPresence: null,
   threadConversations: [],
@@ -323,7 +330,8 @@ export const initialState: AppState = {
   conversationsToDelete: null,
 };
 
-export function initialStateFor(conversationId: string | null, roomId: string | null = null): AppState {
+export function initialStateFor(conversationId: string | null, roomId: string | null = null, joinedRoom: AppState["selectedJoinedRoom"] = null): AppState {
+  if (joinedRoom) return selectJoinedRoom(initialState, joinedRoom);
   return roomId ? selectRoom(initialState, roomId) : select(initialState, conversationId);
 }
 
@@ -353,13 +361,36 @@ function conversationToReturnTo(state: AppState, leaving: string) {
 }
 
 function select(state: AppState, conversationId: string | null): AppState {
-  if (conversationId === null) return { ...state, selectedConversationId: null, selectedKnock: null };
+  if (conversationId === null) return { ...state, ...NOTHING_ELSEWHERE, selectedConversationId: null };
   const opened = state.kept.find((open) => open.conversationId === conversationId) ?? state.sideChats.find((open) => open.conversationId === conversationId) ?? notLoaded(conversationId);
   const others = state.kept.filter((open) => open !== opened);
-  return { ...leavingRoom(state), selectedConversationId: conversationId, selectedKnock: null, kept: [opened, ...others].slice(0, KEPT_CONVERSATIONS) };
+  return { ...leavingRoom(state), ...NOTHING_ELSEWHERE, selectedConversationId: conversationId, kept: [opened, ...others].slice(0, KEPT_CONVERSATIONS) };
 }
 
-const selectKnock = (state: AppState, machineId: string, roomId: string): AppState => ({ ...leavingRoom(state), selectedConversationId: null, selectedKnock: { machineId, roomId } });
+const selectKnock = (state: AppState, machineId: string, roomId: string): AppState => ({ ...leavingRoom(state), ...NOTHING_ELSEWHERE, selectedConversationId: null, selectedKnock: { machineId, roomId } });
+
+const selectJoinedRoom = (state: AppState, joinedRoom: NonNullable<AppState["selectedJoinedRoom"]>): AppState => ({
+  ...leavingRoom(state),
+  ...NOTHING_ELSEWHERE,
+  selectedConversationId: null,
+  selectedJoinedRoom: joinedRoom,
+});
+
+const withoutJoinedRoomOfNoMachine = (state: AppState): AppState =>
+  state.machines.some(({ id }) => id === state.selectedJoinedRoom?.machineId) ? state : { ...state, selectedJoinedRoom: null };
+
+const roomsListedWithJoinedRoom = ({ selectedJoinedRoom, machineStatuses }: AppState) => machineStatuses.find(({ machineId }) => machineId === selectedJoinedRoom?.machineId)?.rooms ?? [];
+const joinedRoomShownIsListed = (state: AppState) => roomsListedWithJoinedRoom(state).some(({ id }) => id === state.selectedJoinedRoom?.roomId);
+
+/** Someone else's machine that lists rooms, but not the one of it that is shown, has it no more; listing none, its own place says why. */
+const withoutJoinedRoomGone = (state: AppState): AppState =>
+  state.selectedJoinedRoom?.roomId && roomsListedWithJoinedRoom(state).length > 0 && !joinedRoomShownIsListed(state) ? { ...state, selectedJoinedRoom: null } : state;
+
+/** A room joined just now opens before its machine lists it. */
+function withMachineStatus(state: AppState, status: MachineStatus): AppState {
+  const next = { ...state, machineStatuses: [...state.machineStatuses.filter(({ machineId }) => machineId !== status.machineId), status] };
+  return joinedRoomShownIsListed(state) ? withoutJoinedRoomGone(next) : next;
+}
 
 /** An agent's conversation in a room opens as its room, which is where it shows, as a notification about it does; a page loaded on one does so once the snapshot says which room it is in. */
 function selectShowing(state: AppState, conversationId: string | null): AppState {
@@ -368,8 +399,8 @@ function selectShowing(state: AppState, conversationId: string | null): AppState
 }
 
 function selectRoom(state: AppState, roomId: string): AppState {
-  if (state.selectedRoomId === roomId) return { ...state, selectedConversationId: null, selectedKnock: null };
-  return { ...state, selectedConversationId: null, selectedKnock: null, selectedRoomId: roomId, roomTimeline: null, roomPresence: null, threadConversations: [] };
+  if (state.selectedRoomId === roomId) return { ...state, ...NOTHING_ELSEWHERE, selectedConversationId: null };
+  return { ...state, ...NOTHING_ELSEWHERE, selectedConversationId: null, selectedRoomId: roomId, roomTimeline: null, roomPresence: null, threadConversations: [] };
 }
 
 const leavingRoom = (state: AppState): AppState =>
@@ -512,10 +543,10 @@ function applyServerMessage(state: AppState, message: ServerMessage): AppState {
         threadConversations: state.threadConversations.filter(({ conversationId }) => exists(conversationId)),
       };
       const roomStays = message.rooms.some(({ id }) => id === state.selectedRoomId);
-      const withRoom = roomStays ? next : leavingRoom(next);
+      const withRoom = withoutJoinedRoomGone(withoutJoinedRoomOfNoMachine(roomStays ? next : leavingRoom(next)));
       const roomOfSelected = next.roomConversations.find(({ id }) => id === state.selectedConversationId)?.roomId;
       if (roomOfSelected) return selectRoom({ ...withRoom, kept: withRoom.kept.filter(({ conversationId }) => conversationId !== state.selectedConversationId) }, roomOfSelected);
-      return exists(state.selectedConversationId) ? withRoom : select(withRoom, null);
+      return exists(state.selectedConversationId) ? withRoom : { ...withRoom, selectedConversationId: null };
     }
     case "plugin-tab.state": {
       const { workspaceId, plugin, seq, shown, state: tabState, problem } = message;
@@ -719,11 +750,11 @@ function applyServerMessage(state: AppState, message: ServerMessage): AppState {
     case "devices.listed":
       return { ...state, devices: message };
     case "machines.changed":
-      return { ...state, machines: message.machines };
+      return withoutJoinedRoomOfNoMachine({ ...state, machines: message.machines });
     case "machines.hidden":
       return { ...state, hiddenMachines: message.machines };
     case "machine.status":
-      return { ...state, machineStatuses: [...state.machineStatuses.filter(({ machineId }) => machineId !== message.status.machineId), message.status] };
+      return withMachineStatus(state, message.status);
     case "host.code-changed":
       return { ...state, hostCodeChanged: true };
     case "host.restarting":
@@ -818,7 +849,7 @@ export function reducer(state: AppState, action: AppAction): AppState {
       return { ...state, heldTurnTimes: action.held ? turnTimesOf(state.conversations) : null };
     case "select":
       return {
-        ...(action.conversationId === state.selectedConversationId && state.selectedKnock === null ? state : selectShowing(state, action.conversationId)),
+        ...(action.conversationId === state.selectedConversationId && state.selectedKnock === null && state.selectedJoinedRoom === null ? state : selectShowing(state, action.conversationId)),
         conversationsPicked: state.conversationsPicked + 1,
       };
     case "leave-conversation":
@@ -829,6 +860,10 @@ export function reducer(state: AppState, action: AppAction): AppState {
       return selectRoom(state, action.roomId);
     case "select-knock":
       return selectKnock(state, action.machineId, action.roomId);
+    case "select-joined-room":
+      return selectJoinedRoom(state, { machineId: action.machineId, roomId: action.roomId });
+    case "leave-joined-room":
+      return state.selectedJoinedRoom?.machineId === action.machineId && [null, action.roomId].includes(state.selectedJoinedRoom.roomId) ? { ...state, selectedJoinedRoom: null } : state;
     case "keep-thread-conversations":
       return keepingThreadConversations(state, action.conversationIds);
     case "awaiting-conversation":

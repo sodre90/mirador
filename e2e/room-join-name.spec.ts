@@ -31,7 +31,7 @@ async function expectPeopleInGarden(page: Page, names: string[]) {
   await settings.getByRole("button", { name: "Close" }).click();
 }
 
-test("someone with no name is asked for one wherever they join a room: under Join a room, adding the machine from a room invite's link, and in its place in the rail; and joins with the name they chose", async ({ page, browser }) => {
+test("someone with no name is asked for one wherever they join a room: under Join a room, adding the machine from a room invite's link, and in its place; and joins with the name they chose", async ({ page, browser }) => {
   await signIn(page, owners);
   await nameMachine(page, "Ann's machine");
   await addWorkspace(page, owners.projectDir);
@@ -66,7 +66,6 @@ test("someone with no name is asked for one wherever they join a room: under Joi
   await test.step("the room shows the person by the name they gave", () => expectPeopleInGarden(page, ["Dora"]));
 
   await test.step("their own Mirador kept the name as their profile's", async () => {
-    await visitor.getByRole("navigation", { name: "Machines" }).getByRole("button", { name: "This computer" }).click();
     const settings = await openSettings(visitor);
     await expect(settings.getByLabel("Name", { exact: true })).toHaveValue("Dora");
     await settings.getByRole("button", { name: "Close" }).click();
@@ -82,12 +81,11 @@ test("someone with no name is asked for one wherever they join a room: under Joi
   });
 
   const frame = visitor.frameLocator('iframe[title="Ann\'s machine"]');
-  const rail = visitor.getByRole("navigation", { name: "Machines" });
 
   await test.step("added again under Machines from a room invite's link, the machine asks for a name too, while the profile has none", async () => {
     await clearOwnName(visitor);
     const invite = await inviteIntoRoom(page, "Garden");
-    await rail.getByRole("button", { name: "Machines…" }).click();
+    await visitor.locator(".sidebar").getByRole("button", { name: "Machines…" }).click();
     const machines = visitor.getByRole("dialog", { name: "Machines" });
     const row = machines.locator(".machine-list li", { hasText: "Ann's machine" });
     await row.getByRole("button", { name: "Remove Ann's machine" }).click();
@@ -107,14 +105,12 @@ test("someone with no name is asked for one wherever they join a room: under Joi
     await expectPeopleInGarden(page, ["Edie"]);
   });
 
-  await test.step("taken out of the room, the machine's place in the rail asks for a name with the new invite, while the profile has none", async () => {
-    await rail.getByRole("button", { name: "This computer" }).click();
+  await test.step("taken out of the room, the machine's place asks for a name with the new invite, while the profile has none", async () => {
     await clearOwnName(visitor);
     const settings = await openRoomSettings(page, "Garden", "People");
     await settings.getByRole("button", { name: "Remove Edie" }).click();
     await settings.getByRole("button", { name: "Confirm: Remove Edie" }).click();
     await settings.getByRole("button", { name: "Close" }).click();
-    await rail.getByRole("button", { name: "Ann's machine" }).click();
     const joinPanel = visitor.getByRole("region", { name: "Join Ann's machine" });
     await expect(joinPanel.locator(".join-out-of-rooms")).toBeVisible({ timeout: 30_000 });
     await joinPanel.getByLabel("Paste the invite").fill(await inviteIntoRoom(page, "Garden"));

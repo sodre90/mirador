@@ -333,7 +333,7 @@ export const shell: Messages["shell"] = {
     showInRailLabel: (machine) => `${machine} in der Rechnerleiste zeigen`,
     waitingForYou: (count) => plural(count, "1 wartet auf dich", `${count} warten auf dich`),
     about:
-      "Andere Computer, auf denen Mirador läuft, etwa ein Server, dessen Agenten weiterarbeiten, während dieser Computer schläft. Jeder erscheint links in der Rechnerleiste als eigenes Mirador. Füge einen Einladungslink des Rechners ein, um ihm sofort beizutreten; du bekommst einen in seinen Einstellungen → Geräte, oder führe",
+      "Andere Computer, auf denen Mirador läuft, etwa ein Server, dessen Agenten weiterarbeiten, während dieser Computer schläft. Jeder eigene erscheint links in der Rechnerleiste als eigenes Mirador; Räume auf denen anderer erscheinen unter Räume. Füge einen Einladungslink des Rechners ein, um ihm sofort beizutreten; du bekommst einen in seinen Einstellungen → Geräte, oder führe",
     aboutAfterCommand:
       " dort aus. Mit nur seiner Adresse bittest du beim ersten Öffnen um Beitritt oder fügst einen Einladungscode ein. Klicke auf die Initialen eines Rechners, um ihm eine Farbe zu geben.",
     noneYet: "Noch keine Rechner.",
@@ -367,7 +367,6 @@ export const shell: Messages["shell"] = {
     joining: "Beitritt läuft…",
     joinButton: "Beitreten",
     outOfRooms: "Sein Besitzer hat diesen Computer von seinen Räumen dort abgemeldet. Bitte um eine neue Einladung und füge sie hier ein.",
-    someoneElses: "Rechner von jemand anderem, in dessen Räumen du bist",
     roomInviteFirst: "Du wurdest in einen Raum dort eingeladen. Füge die Einladung hier ein.",
     peerToPeer: "per Peer-to-Peer",
     linkToOpen: {

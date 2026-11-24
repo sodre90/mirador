@@ -128,7 +128,6 @@ test("a room invite's one link, made before the owner's machine restarted and pa
   await nameOwnProfile(visitor, "Dora");
   const frame = visitor.frameLocator('iframe[title="Ann\'s Mac"]');
   const composer = frame.getByRole("textbox", { name: "Write in Garden, @ tags an agent…" });
-  const railButton = visitor.getByRole("navigation", { name: "Machines" }).getByRole("button", { name: "Ann's Mac" });
 
   await test.step("a link with a wrong code says so through the tunnel and adds nothing, so the person can paste the right one after it", async () => {
     await visitor.getByRole("button", { name: "Machines…" }).click();
@@ -151,9 +150,7 @@ test("a room invite's one link, made before the owner's machine restarted and pa
     await expect(machines.getByLabel("Name")).toHaveAttribute("placeholder", "Ann's Mac");
     await machines.getByRole("button", { name: "Add and join" }).click();
     await expect(machines).toHaveCount(0, { timeout: 60_000 });
-    await expect(railButton).toHaveAttribute("aria-current", "true");
-    await expect(railButton).toHaveClass(/someone-elses/);
-    await expect(railButton).toHaveAttribute("data-hint", /peer to peer/);
+    await expect(visitor.getByRole("region", { name: /room, on Ann's Mac$/ })).toBeVisible();
     await expect(visitor.locator('iframe[title="Ann\'s Mac"]')).toHaveAttribute("sandbox", "allow-scripts allow-forms");
     await expect(frame.getByRole("heading", { name: "# Garden" })).toBeVisible();
   });
@@ -194,9 +191,7 @@ test("a room invite's one link, made before the owner's machine restarted and pa
     await expect.poll(visitorsDials).toHaveLength(1);
     expect(visitorsDials()).not.toContain(dialBefore);
     await visitor.reload();
-    await railButton.click();
-    await roomCard(frame, "Garden").click({ timeout: 60_000 });
-    await expect(frame.locator(".room-timeline .room-entry .message")).toHaveText(["Hello through the tunnel"]);
+    await expect(frame.locator(".room-timeline .room-entry .message")).toHaveText(["Hello through the tunnel"], { timeout: 60_000 });
     await composer.fill("Back after a restart");
     await composer.press("Enter");
     await expect(roomMessages).toHaveText(["Hello through the tunnel", "Back after a restart"]);
@@ -206,9 +201,7 @@ test("a room invite's one link, made before the owner's machine restarted and pa
     await owners.restart();
     await reloadFromRestartedHost(page);
     await visitor.reload();
-    await railButton.click();
-    await roomCard(frame, "Garden").click({ timeout: 60_000 });
-    await expect(frame.locator(".room-timeline .room-entry .message")).toHaveText(["Hello through the tunnel", "Back after a restart"]);
+    await expect(frame.locator(".room-timeline .room-entry .message")).toHaveText(["Hello through the tunnel", "Back after a restart"], { timeout: 60_000 });
     await composer.fill("And after the owner's restart");
     await composer.press("Enter");
     await roomCard(page, "Garden").click();
@@ -237,7 +230,6 @@ test("a used link says the invite is over, and a person taken out of the room or
   await signIn(page, owners);
   const visitor = await browser.newPage();
   await signIn(visitor, visitors);
-  const railButton = visitor.getByRole("navigation", { name: "Machines" }).getByRole("button", { name: "Ann's Mac" });
   const frame = visitor.frameLocator('iframe[title="Ann\'s Mac"]');
   const joinPanel = visitor.getByRole("region", { name: "Join Ann's Mac" });
   const tunnelFiles = () => readdirSync(join(visitors.dataDir, "machine-tunnels"));
@@ -267,7 +259,6 @@ test("a used link says the invite is over, and a person taken out of the room or
     await visitors.start();
     await reloadFromRestartedHost(page);
     await reloadFromRestartedHost(visitor);
-    await railButton.click();
     await expect(joinPanel.locator(".join-out-of-rooms")).toHaveText(outOfRooms, { timeout: 60_000 });
     await expect(joinPanel.getByLabel("Paste the invite")).toBeVisible();
     await expect.poll(tunnelFiles).toEqual([]);
@@ -282,8 +273,7 @@ test("a used link says the invite is over, and a person taken out of the room or
     await joinPanel.getByLabel("Paste the invite").fill(link);
     await joinPanel.getByRole("button", { name: "Join", exact: true }).click();
     await expect(joinPanel).toHaveCount(0, { timeout: 60_000 });
-    await roomCard(frame, "Garden").click({ timeout: 60_000 });
-    await expect(frame.getByRole("heading", { name: "# Garden" })).toBeVisible();
+    await expect(frame.getByRole("heading", { name: "# Garden" })).toBeVisible({ timeout: 60_000 });
     await expect.poll(visitorsDials).toHaveLength(1);
   });
 

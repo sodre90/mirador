@@ -291,7 +291,7 @@ export const shell: Messages["shell"] = {
     showInRailLabel: (machine) => `在机器栏显示 ${machine}`,
     waitingForYou: (count) => `${count} 个等你处理`,
     about:
-      "其他运行 Mirador 的电脑，例如一台在你这台休眠时 Agent 仍能继续工作的服务器。每台都会作为一个独立的 Mirador 显示在左侧的机器栏里。粘贴那台机器的邀请链接即可立即加入；可在它的 设置 → 设备 中获取，或在那台机器上运行",
+      "其他运行 Mirador 的电脑，例如一台在你这台休眠时 Agent 仍能继续工作的服务器。你自己的每台都会作为一个独立的 Mirador 显示在左侧的机器栏里；别人机器上的房间显示在“房间”下。粘贴那台机器的邀请链接即可立即加入；可在它的 设置 → 设备 中获取，或在那台机器上运行",
     aboutAfterCommand: "。如果只知道它的地址，首次打开时你会申请加入，或粘贴邀请码。点击机器的首字母可以给它设置颜色。",
     noneYet: "还没有机器。",
     name: "名称",
@@ -323,7 +323,6 @@ export const shell: Messages["shell"] = {
     joining: "正在加入…",
     joinButton: "加入",
     outOfRooms: "它的所有者已让这台电脑退出了那边的房间。请向对方要一个新的邀请，并粘贴到这里。",
-    someoneElses: "别人的机器，你在它的房间里",
     roomInviteFirst: "你被邀请进入那边的一个房间。请把邀请粘贴到这里。",
     peerToPeer: "点对点连接",
     linkToOpen: {

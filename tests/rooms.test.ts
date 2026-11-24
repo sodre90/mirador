@@ -15,12 +15,12 @@ import { HOOKS_OFF_AFTER_SANDBOX_MS, repositoryHooksOff } from "../host/sandbox/
 import { Store } from "../host/store.ts";
 import { SystemNotifications } from "../host/system-notifications.ts";
 import { HostProblemError } from "../shared/host-problems.ts";
-import type { CanvasItem, Conversation, ConversationEvent, Launch, MadeInRoom, Profile, StoredEvent } from "../shared/model.ts";
+import type { CanvasItem, Conversation, ConversationEvent, Launch, Machine, MachineStatus, MadeInRoom, Profile, StoredEvent } from "../shared/model.ts";
 import type { ServerMessage } from "../shared/protocol.ts";
 import { DEFAULT_PERMISSION_PRESET, type AskedPermission, type PermissionPreset } from "../shared/room-permissions.ts";
 import type { NotificationReason, SystemNotification } from "../shared/system-notifications.ts";
 import { inLanguage } from "../web/notification-text.ts";
-import { initialState, reducer, type AppState } from "../web/state.ts";
+import { initialState, initialStateFor, reducer, type AppState } from "../web/state.ts";
 import {
   AGENT_TAGGED_TURNS_AFTER_A_PERSON,
   canvasItemsOfAnswers,
@@ -52,6 +52,7 @@ import {
 } from "../shared/rooms.ts";
 import { ALL_OF_CLAUDE_SETUP, type ClaudeSetup } from "../shared/room-agent-setup.ts";
 import { NO_SANDBOX, roomSandbox } from "../shared/sandbox.ts";
+import { snapshotMessage } from "./snapshot-message.ts";
 
 const OWNER = "owner";
 const profile = (id: string, name: string): Profile => ({
@@ -1041,6 +1042,57 @@ describe("a page that shows a room", () => {
       { type: "select", conversationId: null },
     ] as const)
       expect(reducer(atTheDoor, picked).selectedKnock).toBeNull();
+  });
+
+  test("shows a room of someone else's machine in place of the room, until a room, a door, a conversation or nothing is picked", () => {
+    const elsewhere = { machineId: "m1", roomId: "elsewhere" };
+    const invited = reducer(showingRoom([]), { type: "select-joined-room", ...elsewhere });
+    expect([invited.selectedJoinedRoom, invited.selectedRoomId, invited.roomTimeline, invited.selectedConversationId]).toEqual([elsewhere, null, null, null]);
+    for (const picked of [
+      { type: "select-room", roomId: "r1" },
+      { type: "select-knock", ...elsewhere },
+      { type: "select", conversationId: builderInRoom.id },
+      { type: "select", conversationId: "c1" },
+      { type: "select", conversationId: null },
+    ] as const)
+      expect(reducer(invited, picked).selectedJoinedRoom).toBeNull();
+    const atTheDoor = reducer(showingRoom([]), { type: "select-knock", ...elsewhere });
+    expect(reducer(atTheDoor, { type: "select-joined-room", ...elsewhere })).toMatchObject({ selectedKnock: null, selectedJoinedRoom: elsewhere });
+  });
+
+  test("keeps showing a room of someone else's machine as its page reconnects and other machines change, until it is left, its machine stops listing it or that machine goes", () => {
+    const machines = ["m1", "m2"].map((id): Machine => ({ id, name: id, origin: `https://${id}.example.ts.net`, createdAt: 1, relayPort: 4620, joined: true, color: null, hostId: null, outOfRooms: false, asPerson: true, relayKey: null, peerToPeer: false, knocks: [], ownerName: null }));
+    const loadedOn = initialStateFor(null, null, { machineId: "m1", roomId: "elsewhere" });
+    const connected = serverSent(loadedOn, snapshotMessage({ machines }));
+    const shownIn = (state: AppState) => state.selectedJoinedRoom?.roomId;
+    expect([shownIn(loadedOn), shownIn(connected)]).toEqual(["elsewhere", "elsewhere"]);
+    expect(shownIn(serverSent(connected, { type: "machines.changed", machines: machines.slice(0, 1) }))).toBe("elsewhere");
+    expect(shownIn(serverSent(connected, { type: "machines.changed", machines: machines.slice(1) }))).toBeUndefined();
+    expect(shownIn(serverSent(loadedOn, snapshotMessage({ machines: machines.slice(1) })))).toBeUndefined();
+
+    const statusOf = (machineId: string, ...roomIds: string[]): MachineStatus => ({
+      machineId,
+      reachable: true,
+      waiting: [],
+      joinedThere: [],
+      rooms: roomIds.map((id) => ({ id, name: id, unread: 0, mentions: 0, toConfirm: 0, toApprove: 0, muted: false })),
+      mutedHere: [],
+    });
+    const listing = (machineId: string, ...roomIds: string[]): ServerMessage => ({ type: "machine.status", status: statusOf(machineId, ...roomIds) });
+    const notYetListed = serverSent(connected, listing("m1", "garden"));
+    const listed = serverSent(notYetListed, listing("m1", "garden", "elsewhere"));
+    expect([notYetListed, listed, serverSent(listed, listing("m2")), serverSent(listed, listing("m1"))].map(shownIn)).toEqual(["elsewhere", "elsewhere", "elsewhere", "elsewhere"]);
+    expect(shownIn(serverSent(listed, listing("m1", "garden")))).toBeUndefined();
+
+    const loadedWith = (...roomIds: string[]) => shownIn(serverSent(loadedOn, snapshotMessage({ machines, machineStatuses: [statusOf("m1", ...roomIds)] })));
+    expect([loadedWith("garden", "elsewhere"), loadedWith(), loadedWith("garden")]).toEqual(["elsewhere", "elsewhere", undefined]);
+    const loadedOnMachine = initialStateFor(null, null, { machineId: "m1", roomId: null });
+    expect(serverSent(loadedOnMachine, snapshotMessage({ machines, machineStatuses: [statusOf("m1", "garden")] })).selectedJoinedRoom).toEqual({ machineId: "m1", roomId: null });
+
+    const leaving = (machineId: string, roomId: string) => shownIn(reducer(connected, { type: "leave-joined-room", machineId, roomId }));
+    expect([leaving("m1", "elsewhere"), leaving("m1", "another"), leaving("m2", "elsewhere")]).toEqual([undefined, "elsewhere", "elsewhere"]);
+    const onTheMachine = reducer(connected, { type: "select-joined-room", machineId: "m1", roomId: null });
+    expect(reducer(onTheMachine, { type: "leave-joined-room", machineId: "m1", roomId: "elsewhere" }).selectedJoinedRoom).toBeNull();
   });
 
   test("opens the room of an agent's conversation there when that conversation is picked, as a notification about it does", () => {

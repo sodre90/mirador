@@ -4,6 +4,7 @@ import { isMuted } from "../shared/room-reading.ts";
 import { t } from "./i18n/index.ts";
 import { inView, toggledInView, type PaneLayout } from "./layout.ts";
 import { LayoutToggles, LayoutToggleState } from "./LayoutToggles.tsx";
+import { shownInAnotherMirador } from "./machine-place.ts";
 import { Modal } from "./Palette.tsx";
 import { useConversationLayouts, useSidebarHidden, useSidebarWidth } from "./paneLayouts.ts";
 import { RoomCanvas, RoomView } from "./Room.tsx";
@@ -31,12 +32,15 @@ function Welcome({ state }: { state: AppState }) {
 
 /**
  * The page of a person other than the machine's owner: the list of their rooms, the room they opened, its canvas, and
- * their own name and colour. Taken out of their last room, they are signed out, and it says so.
+ * their own name and colour. Taken out of their last room, they are signed out, and it says so. In their own Mirador,
+ * whose sidebar lists the rooms and which mutes them, it shows the room alone.
  */
 export function RoomsOnlyApp({ state, dispatch, outOfRooms, banner }: { state: AppState; dispatch: Dispatch<AppAction>; outOfRooms: boolean; banner: ReactNode }) {
   const layouts = useConversationLayouts();
   const [sidebarWidth] = useSidebarWidth();
-  const [sidebarHidden, setSidebarHidden] = useSidebarHidden();
+  const [sidebarHiddenHere, setSidebarHidden] = useSidebarHidden();
+  const inTheirMirador = shownInAnotherMirador();
+  const sidebarHidden = inTheirMirador || sidebarHiddenHere;
   const [ownProfileOpen, setOwnProfileOpen] = useState(false);
   const [itemToShow, setItemToShow] = useState<{ roomId: string; itemId: string } | null>(null);
   const room = state.rooms.find(({ id }) => id === state.selectedRoomId) ?? null;
@@ -50,7 +54,7 @@ export function RoomsOnlyApp({ state, dispatch, outOfRooms, banner }: { state: A
     setItemToShow({ roomId, itemId });
   };
   const layoutToggles = {
-    sidebar: { visible: !sidebarHidden, toggle: () => setSidebarHidden((wasHidden) => !wasHidden) },
+    sidebar: inTheirMirador ? null : { visible: !sidebarHidden, toggle: () => setSidebarHidden((wasHidden) => !wasHidden) },
     canvas: { visible: inView(layout, "canvas"), toggle: toggleCanvas, disabled: room === null },
     terminal: { visible: false, toggle: () => {}, disabled: true },
   };
@@ -92,6 +96,8 @@ export function RoomsOnlyApp({ state, dispatch, outOfRooms, banner }: { state: A
             joiners={[]}
             muted={isMuted(state.roomReadings, room.id)}
             you={state.you}
+            offersMute={!inTheirMirador || isMuted(state.roomReadings, room.id)}
+            onOwnProfile={inTheirMirador ? () => setOwnProfileOpen(true) : undefined}
             dispatch={dispatch}
             onOpenOnCanvas={(itemId) => openOnCanvas(room.id, itemId)}
           />

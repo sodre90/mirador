@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type CSSProperties, type Dispatch } from "react";
+import { useEffect, useId, useRef, useState, type CSSProperties, type Dispatch, type RefObject } from "react";
 import { workspaceMarkColor } from "../shared/marks.ts";
 import type { BroughtAgentHere } from "../shared/brought-agents.ts";
 import type { JoinedRoom, Machine, MachineStatus, Person, Profile, RoomKnock } from "../shared/model.ts";
@@ -8,9 +8,11 @@ import { broughtAgentName, type Room } from "../shared/rooms.ts";
 import { placedBelow, useClosing } from "./BarMenu.tsx";
 import { ConfirmButton } from "./ConfirmButton.tsx";
 import { connection } from "./connection.ts";
+import { useClosingWhenFocusLeavesPage } from "./ContextMenu.tsx";
 import { formatNumber, t } from "./i18n/index.ts";
 import { LayoutToggles } from "./LayoutToggles.tsx";
 import { LineIcon } from "./LineIcon.tsx";
+import { machineRemovalAsked, removeMachine } from "./machine-removal.ts";
 import { pastelVariables } from "./pastels.ts";
 import type { AppAction, AppState } from "./state.ts";
 import { waitingLabels, type RoomWait } from "./waiting.ts";
@@ -34,6 +36,10 @@ export function joinedRoomsOf(machines: Machine[], statuses: MachineStatus[]): J
     });
 }
 
+/** The joined room the window shows: the one selected, or where its machine alone is, the first that machine lists. */
+export const joinedRoomShown = (selected: AppState["selectedJoinedRoom"], joinedRooms: JoinedRoomShown[]) =>
+  joinedRooms.find(({ machine, room }) => machine.id === selected?.machineId && (selected.roomId === null || selected.roomId === room.id));
+
 /** A room of someone else's machine this computer's owner waits to be let into, or was turned away from, with its machine. */
 export interface KnockShown {
   machine: Machine;
@@ -42,6 +48,20 @@ export interface KnockShown {
 
 /** Every room door this computer's owner stands at on someone else's machines. */
 export const knocksOf = (machines: Machine[]): KnockShown[] => machines.filter(({ asPerson }) => asPerson).flatMap((machine) => machine.knocks.map((knock) => ({ machine, knock })));
+
+/** What someone else's machines have for this computer's owner. */
+interface Invited {
+  joinedRooms: JoinedRoomShown[];
+  knocks: KnockShown[];
+  /** Those this computer isn't signed in to, as their owner signed it out or it has yet to join, until a new invite is pasted there. */
+  machinesToComeBackTo: Machine[];
+}
+
+export const invitedOf = (machines: Machine[], statuses: MachineStatus[]): Invited => ({
+  joinedRooms: joinedRoomsOf(machines, statuses),
+  knocks: knocksOf(machines),
+  machinesToComeBackTo: machines.filter(({ asPerson, joined, knocks }) => asPerson && !joined && knocks.length === 0),
+});
 
 const knockKey = (machineId: string, roomId: string) => JSON.stringify([machineId, roomId]);
 
@@ -66,7 +86,7 @@ function knockText({ ownerName }: Machine, { turnedAway }: RoomKnock) {
 }
 
 /** A room of someone else's machine has a hollow mark, in its machine's colour. */
-function JoinedRoomMark({ machine }: { machine: Machine }) {
+export function JoinedRoomMark({ machine }: { machine: Machine }) {
   return <RoomMark hollow style={machine.color ? { ...pastelVariables(machine.color), "--room-mark": "var(--pastel-stripe)" } : { "--room-mark": workspaceMarkColor(machine.name) }} />;
 }
 
@@ -168,8 +188,11 @@ function ReadingMarks({ reading, waiting }: { reading: ReadingCounts; waiting?: 
   );
 }
 
+const isMutedHere = ({ status, room }: JoinedRoomShown) => status?.mutedHere.includes(room.id) === true;
+
 /** Keeps a room of someone else's machine quiet on this computer, whatever that machine does; muted there, it is quiet too. */
-function MuteHereToggle({ machineId, roomId, mutedHere }: { machineId: string; roomId: string; mutedHere: boolean }) {
+export function MuteHereToggle({ joined }: { joined: JoinedRoomShown }) {
+  const mutedHere = isMutedHere(joined);
   return (
     <button
       type="button"
@@ -179,7 +202,7 @@ function MuteHereToggle({ machineId, roomId, mutedHere }: { machineId: string; r
       data-hint={mutedHere ? words.mutedHint : words.muteRoom}
       onClick={(event) => {
         event.stopPropagation();
-        connection.send({ type: "machine.mute-room", machineId, roomId, muted: !mutedHere });
+        connection.send({ type: "machine.mute-room", machineId: joined.machine.id, roomId: joined.room.id, muted: !mutedHere });
       }}
     >
       <LineIcon shape={mutedHere ? "bellOff" : "bell"} />
@@ -191,40 +214,52 @@ interface RoomMenuEntry {
   label: string;
   onChoose: () => void;
   /** Asks again in place before it is chosen. */
-  asked?: { armedText: string; armedHint: string };
+  asked?: { label: string; armedText: string; armedHint: string };
+}
+
+function OpenRoomMenu({ roomName, entries, opener, placement, onClose }: { roomName: string; entries: RoomMenuEntry[]; opener: RefObject<HTMLElement | null>; placement: CSSProperties; onClose: () => void }) {
+  const menu = useRef<HTMLDivElement>(null);
+  useClosing(true, [opener, menu], onClose);
+  useClosingWhenFocusLeavesPage(onClose);
+  const choose = (entry: RoomMenuEntry) => {
+    onClose();
+    entry.onChoose();
+  };
+  return (
+    <div ref={menu} className="add-room-menu" role="menu" aria-label={words.moreFor(roomName)} style={placement}>
+      {entries.map((entry, index) =>
+        entry.asked ? (
+          <ConfirmButton key={index} role="menuitem" className="danger" {...entry.asked} onConfirm={() => choose(entry)}>
+            {entry.label}
+          </ConfirmButton>
+        ) : (
+          <button key={index} type="button" role="menuitem" onClick={() => choose(entry)}>
+            {entry.label}
+          </button>
+        ),
+      )}
+    </div>
+  );
 }
 
 /** A room's "⋯", and what it offers. */
 function RoomMenu({ roomName, entries }: { roomName: string; entries: RoomMenuEntry[] }) {
   const opener = useRef<HTMLButtonElement>(null);
-  const menu = useRef<HTMLDivElement>(null);
   const [placement, setPlacement] = useState<CSSProperties | null>(null);
-  const open = placement !== null;
-  useClosing(open, [opener, menu], () => setPlacement(null));
-  const choose = (entry: RoomMenuEntry) => {
-    setPlacement(null);
-    entry.onChoose();
-  };
   return (
     <span className="room-menu" onClick={(event) => event.stopPropagation()}>
-      <button ref={opener} type="button" className="icon" aria-label={words.moreFor(roomName)} aria-haspopup="menu" aria-expanded={open} onClick={(event) => setPlacement(open ? null : placedBelow(event.currentTarget))}>
+      <button
+        ref={opener}
+        type="button"
+        className="icon"
+        aria-label={words.moreFor(roomName)}
+        aria-haspopup="menu"
+        aria-expanded={placement !== null}
+        onClick={(event) => setPlacement(placement ? null : placedBelow(event.currentTarget))}
+      >
         ⋯
       </button>
-      {open && (
-        <div ref={menu} className="add-room-menu" role="menu" aria-label={words.moreFor(roomName)} style={placement}>
-          {entries.map((entry, index) =>
-            entry.asked ? (
-              <ConfirmButton key={index} role="menuitem" className="danger" label={entry.label} {...entry.asked} onConfirm={() => choose(entry)}>
-                {entry.label}
-              </ConfirmButton>
-            ) : (
-              <button key={index} type="button" role="menuitem" onClick={() => choose(entry)}>
-                {entry.label}
-              </button>
-            ),
-          )}
-        </div>
-      )}
+      {placement && <OpenRoomMenu roomName={roomName} entries={entries} opener={opener} placement={placement} onClose={() => setPlacement(null)} />}
     </span>
   );
 }
@@ -232,7 +267,7 @@ function RoomMenu({ roomName, entries }: { roomName: string; entries: RoomMenuEn
 const ownRoomEntries = (room: Room, dispatch: Dispatch<AppAction>): RoomMenuEntry[] => [
   { label: words.inviteSomeone, onChoose: () => dispatch({ type: "open-overlay", overlay: { kind: "room-invite", roomId: room.id } }) },
   { label: words.editRoom, onChoose: () => dispatch({ type: "open-overlay", overlay: { kind: "room", roomId: room.id } }) },
-  { label: words.deleteRoom, asked: { armedText: words.deleteArmed, armedHint: words.deleteArmedHint }, onChoose: () => connection.send({ type: "room.delete", roomId: room.id }) },
+  { label: words.deleteRoom, asked: { label: words.deleteRoom, armedText: words.deleteArmed, armedHint: words.deleteArmedHint }, onChoose: () => connection.send({ type: "room.delete", roomId: room.id }) },
 ];
 
 /** Of a room of someone else's machine: bringing an agent of your own into it, taking out those you brought, and leaving it. */
@@ -242,8 +277,21 @@ const joinedRoomEntries = ({ machine, room }: JoinedRoomShown, brought: BroughtA
     label: words.takeOutAgent(profiles.find((profile) => profile.id === profileId)?.name ?? words.agentGone),
     onChoose: () => connection.send({ type: "machine.take-agent-out", broughtId: id }),
   })),
-  { label: words.leaveRoom, asked: { armedText: words.leaveArmed, armedHint: words.leaveArmedHint }, onChoose: () => connection.send({ type: "machine.leave-room", machineId: machine.id, roomId: room.id }) },
+  {
+    label: words.leaveRoom,
+    asked: { label: words.leaveRoom, armedText: words.leaveArmed, armedHint: words.leaveArmedHint },
+    onChoose: () => {
+      connection.send({ type: "machine.leave-room", machineId: machine.id, roomId: room.id });
+      dispatch({ type: "leave-joined-room", machineId: machine.id, roomId: room.id });
+    },
+  },
 ];
+
+const broughtInto = ({ machine, room }: JoinedRoomShown, broughtAgents: BroughtAgentHere[]) => broughtAgents.filter(({ machineId, roomId }) => machineId === machine.id && roomId === room.id);
+
+export function JoinedRoomMenu({ joined, broughtAgents, profiles, dispatch }: { joined: JoinedRoomShown; broughtAgents: BroughtAgentHere[]; profiles: Profile[]; dispatch: Dispatch<AppAction> }) {
+  return <RoomMenu roomName={joined.room.name} entries={joinedRoomEntries(joined, broughtInto(joined, broughtAgents), profiles, dispatch)} />;
+}
 
 /** The section's "+": a new room of this machine, or joining someone else's with their invite. */
 function AddRoomMenu({ canJoin, dispatch }: { canJoin: boolean; dispatch: Dispatch<AppAction> }) {
@@ -283,24 +331,25 @@ function AddRoomMenu({ canJoin, dispatch }: { canJoin: boolean; dispatch: Dispat
 
 function JoinedRoomCard({
   joined,
-  broughtHere,
+  selected,
+  broughtAgents,
   profiles,
   dispatch,
   onOpen,
 }: {
   joined: JoinedRoomShown;
-  broughtHere: BroughtAgentHere[];
+  selected: boolean;
+  broughtAgents: BroughtAgentHere[];
   profiles: Profile[];
   dispatch: Dispatch<AppAction>;
   onOpen: () => void;
 }) {
   const { machine, status, room } = joined;
   const away = status?.reachable === false;
-  const mutedHere = status?.mutedHere.includes(room.id) === true;
-  const agentNames = broughtHere.map(({ profileId }) => profiles.find(({ id }) => id === profileId)?.name ?? words.agentGone);
+  const agentNames = broughtInto(joined, broughtAgents).map(({ profileId }) => profiles.find(({ id }) => id === profileId)?.name ?? words.agentGone);
   return (
     <li
-      className={["room-card", "joined-room", away && "away", needsYou(undefined, room) && "waiting", ...readingClasses({ ...room, muted: room.muted || mutedHere })].filter(Boolean).join(" ")}
+      className={["room-card", "joined-room", selected && "selected", away && "away", needsYou(undefined, room) && "waiting", ...readingClasses({ ...room, muted: room.muted || isMutedHere(joined) })].filter(Boolean).join(" ")}
       data-waiting-tone={needsYou(undefined, room) ? "decision" : undefined}
       data-machine={machine.id}
       onClick={onOpen}
@@ -311,8 +360,8 @@ function JoinedRoomCard({
         <span className="room-card-subline">{[ownerAndMachine(machine), away && t.shell.machines.notAnswering, ...agentNames].filter(Boolean).join(" · ")}</span>
       </span>
       <ReadingMarks reading={room} />
-      <MuteHereToggle machineId={machine.id} roomId={room.id} mutedHere={mutedHere} />
-      <RoomMenu roomName={room.name} entries={joinedRoomEntries(joined, broughtHere, profiles, dispatch)} />
+      <MuteHereToggle joined={joined} />
+      <JoinedRoomMenu joined={joined} broughtAgents={broughtAgents} profiles={profiles} dispatch={dispatch} />
     </li>
   );
 }
@@ -345,25 +394,40 @@ function KnockCard({ machine, knock, selected, dispatch }: KnockShown & { select
   );
 }
 
-/** The rooms of someone else's machines this computer's owner was invited to, and the doors of those they wait at or were turned away from. */
+/** Opens where a new invite is pasted to come back to its rooms. */
+function MachineToComeBackToCard({ machine, selected, onOpen }: { machine: Machine; selected: boolean; onOpen: () => void }) {
+  return (
+    <li className={["room-card", "machine-to-come-back-to", selected && "selected"].filter(Boolean).join(" ")} data-machine={machine.id} onClick={onOpen}>
+      <JoinedRoomMark machine={machine} />
+      <span className="room-card-text">
+        <span className="room-card-name">{machine.name}</span>
+        <span className="room-card-subline">{machine.outOfRooms ? words.signedOutByOwner : t.shell.machines.notJoinedYet}</span>
+      </span>
+      <RoomMenu roomName={machine.name} entries={[{ label: t.shell.machines.remove, asked: machineRemovalAsked(machine), onChoose: () => removeMachine(machine.id) }]} />
+    </li>
+  );
+}
+
 function InvitedRooms({
-  joinedRooms,
-  knocks,
+  invited: { joinedRooms, knocks, machinesToComeBackTo },
   selectedKnock,
+  selectedJoinedRoom,
   broughtAgents,
   profiles,
   dispatch,
   onOpenJoinedRoom,
 }: {
-  joinedRooms: JoinedRoomShown[];
-  knocks: KnockShown[];
+  invited: Invited;
   selectedKnock: AppState["selectedKnock"];
+  selectedJoinedRoom: AppState["selectedJoinedRoom"];
   broughtAgents: BroughtAgentHere[];
   profiles: Profile[];
   dispatch: Dispatch<AppAction>;
-  onOpenJoinedRoom: (machineId: string, roomId: string) => void;
+  onOpenJoinedRoom: (machineId: string, roomId: string | null) => void;
 }) {
   const heading = useId();
+  if (joinedRooms.length + knocks.length + machinesToComeBackTo.length === 0) return null;
+  const joinedShown = joinedRoomShown(selectedJoinedRoom, joinedRooms);
   return (
     <>
       <h3 id={heading} className="rooms-invited-heading">
@@ -374,7 +438,8 @@ function InvitedRooms({
           <JoinedRoomCard
             key={`${joined.machine.id}:${joined.room.id}`}
             joined={joined}
-            broughtHere={broughtAgents.filter(({ machineId, roomId }) => machineId === joined.machine.id && roomId === joined.room.id)}
+            selected={joined === joinedShown}
+            broughtAgents={broughtAgents}
             profiles={profiles}
             dispatch={dispatch}
             onOpen={() => onOpenJoinedRoom(joined.machine.id, joined.room.id)}
@@ -389,6 +454,9 @@ function InvitedRooms({
             dispatch={dispatch}
           />
         ))}
+        {machinesToComeBackTo.map((machine) => (
+          <MachineToComeBackToCard key={`machine:${machine.id}`} machine={machine} selected={selectedJoinedRoom?.machineId === machine.id} onOpen={() => onOpenJoinedRoom(machine.id, null)} />
+        ))}
       </ul>
     </>
   );
@@ -401,9 +469,9 @@ export function RoomsSection({
   roomsWaiting,
   readings,
   roomsWithPeopleHere = [],
-  joinedRooms = [],
-  knocks = [],
+  invited,
   selectedKnock = null,
+  selectedJoinedRoom = null,
   people,
   broughtAgents = [],
   manages,
@@ -418,19 +486,19 @@ export function RoomsSection({
   readings: RoomReading[];
   /** The rooms someone other than the owner is in now. */
   roomsWithPeopleHere?: string[];
-  /** Rooms of someone else's machines, which open in that machine's frame; listed only where this page shows machines. */
-  joinedRooms?: JoinedRoomShown[];
-  /** The doors of rooms of someone else's machines this computer's owner waits at, or was turned away from; listed only where joined rooms are. */
-  knocks?: KnockShown[];
+  /** Listed only where this page shows machines. */
+  invited?: Invited;
   /** The door shown in the main pane. */
   selectedKnock?: AppState["selectedKnock"];
+  /** The room of someone else's machine shown in the main pane. */
+  selectedJoinedRoom?: AppState["selectedJoinedRoom"];
   people: Person[];
   /** The agents this computer's owner brought into rooms of other machines. */
   broughtAgents?: BroughtAgentHere[];
   /** The machine's owner makes rooms and changes them; anyone else only opens the ones they are in. */
   manages: boolean;
   dispatch: Dispatch<AppAction>;
-  onOpenJoinedRoom?: (machineId: string, roomId: string) => void;
+  onOpenJoinedRoom?: (machineId: string, roomId: string | null) => void;
 }) {
   return (
     <section className="rooms" aria-label={words.rooms}>
@@ -463,8 +531,16 @@ export function RoomsSection({
           );
         })}
       </ul>
-      {onOpenJoinedRoom && joinedRooms.length + knocks.length > 0 && (
-        <InvitedRooms joinedRooms={joinedRooms} knocks={knocks} selectedKnock={selectedKnock} broughtAgents={broughtAgents} profiles={profiles} dispatch={dispatch} onOpenJoinedRoom={onOpenJoinedRoom} />
+      {onOpenJoinedRoom && invited && (
+        <InvitedRooms
+          invited={invited}
+          selectedKnock={selectedKnock}
+          selectedJoinedRoom={selectedJoinedRoom}
+          broughtAgents={broughtAgents}
+          profiles={profiles}
+          dispatch={dispatch}
+          onOpenJoinedRoom={onOpenJoinedRoom}
+        />
       )}
     </section>
   );

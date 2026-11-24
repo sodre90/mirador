@@ -297,7 +297,7 @@ export const shell: Messages["shell"] = {
     showInRailLabel: (machine) => `${machine} megjelenítése a sávon`,
     waitingForYou: (count) => `${count} rád vár`,
     about:
-      "Más számítógépek, amelyeken Mirador fut, például egy szerver, amelynek az ágensei akkor is dolgoznak, amikor ez a gép alszik. Mindegyik a bal oldali sávon jelenik meg, saját Miradorként. Illessz be egy meghívólinket a gépről, hogy azonnal csatlakozz hozzá; ilyet a Beállítások → Készülékek oldalán kapsz, vagy futtasd ott ezt:",
+      "Más számítógépek, amelyeken Mirador fut, például egy szerver, amelynek az ágensei akkor is dolgoznak, amikor ez a gép alszik. A te gépeid a bal oldali sávon jelennek meg, mindegyik saját Miradorként; a másokén lévő szobák a Szobák alatt. Illessz be egy meghívólinket a gépről, hogy azonnal csatlakozz hozzá; ilyet a Beállítások → Készülékek oldalán kapsz, vagy futtasd ott ezt:",
     aboutAfterCommand:
       ". Ha csak a címe van meg, az első megnyitáskor kérheted a csatlakozást, vagy beilleszthetsz egy meghívókódot. Egy gép monogramjára kattintva színt adhatsz neki.",
     noneYet: "Még nincs gép.",
@@ -330,7 +330,6 @@ export const shell: Messages["shell"] = {
     joining: "Csatlakozás…",
     joinButton: "Csatlakozás",
     outOfRooms: "A tulajdonosa kijelentkeztette ezt a számítógépet az ottani szobáiból. Kérj tőle új meghívót, és illeszd be ide.",
-    someoneElses: "Valaki más gépe, ahol a szobáiban vagy",
     roomInviteFirst: "Meghívtak egy ottani szobába. Illeszd be ide a meghívót.",
     peerToPeer: "peer to peer kapcsolattal",
     linkToOpen: {

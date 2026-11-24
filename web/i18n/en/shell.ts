@@ -319,7 +319,7 @@ export const shell = {
     showInRailLabel: (machine: string) => `Show ${machine} in the rail`,
     waitingForYou: (count: number) => `${count} waiting for you`,
     about:
-      "Other computers running Mirador, such as a server whose agents keep working while this one sleeps. Each shows in the rail on the left, as its own Mirador. Paste an invite link from the machine to join it right away; get one in its Settings → Devices, or run",
+      "Other computers running Mirador, such as a server whose agents keep working while this one sleeps. Each of yours shows in the rail on the left, as its own Mirador; rooms on someone else's show under Rooms. Paste an invite link from the machine to join it right away; get one in its Settings → Devices, or run",
     aboutAfterCommand: " there. With only its address, you ask to join it, or paste an invite code, when you first open it. Click a machine's initials to give it a colour.",
     noneYet: "No machines yet.",
     name: "Name",
@@ -351,7 +351,6 @@ export const shell = {
     joining: "Joining…",
     joinButton: "Join",
     outOfRooms: "Its owner signed this computer out of their rooms there. Ask them for a new invite, and paste it here.",
-    someoneElses: "Someone else's machine, where you are in their rooms",
     roomInviteFirst: "You were invited into a room there. Paste the invite here.",
     peerToPeer: "peer to peer",
     linkToOpen: {

@@ -27,7 +27,9 @@ const OUT_OF_ROOMS = "Its owner signed this computer out of their rooms there. A
 
 const roomMessages = (page: Page | FrameLocator) => page.locator(".room-timeline .room-entry .message");
 
-const roomsListed = (scope: Page | FrameLocator) => scope.locator(".sidebar .rooms .room-card-name");
+const invitedRooms = (visitor: Page) => visitor.getByRole("list", { name: "Invited" });
+
+const invitedRoomPane = (visitor: Page) => visitor.getByRole("region", { name: "Ann's room, on Ann's machine" });
 
 async function setRoleOfDora(page: Page, role: "Guest" | "Not in the room") {
   const dialog = await openRoomSettings(page, "Garden");
@@ -76,6 +78,7 @@ test("a person joins a room from their own Mirador with an invite, works in it w
   const visitor = await browser.newPage();
   await signIn(visitor, visitors);
   await nameOwnProfile(visitor, "Dora");
+  await addWorkspace(visitor, visitors.projectDir);
   const frame = visitor.frameLocator('iframe[title="Ann\'s machine"]');
   const composer = frame.getByRole("textbox", { name: "Write in Garden, @ tags an agent…" });
 
@@ -90,13 +93,26 @@ test("a person joins a room from their own Mirador with an invite, works in it w
     await expect(frame.getByRole("heading", { name: "# Garden" })).toBeVisible();
   });
 
-  await test.step("their rail shows the owner's machine, which shows them only the room, and whose it is", async () => {
-    const railButton = visitor.getByRole("navigation", { name: "Machines" }).getByRole("button", { name: "Ann's machine" });
-    await expect(railButton).toHaveAttribute("aria-current", "true");
-    await expect(railButton).toHaveClass(/someone-elses/);
-    await expect(roomsListed(frame)).toHaveText(["Garden"]);
-    await expect(frame.locator(".sidebar .workspace")).toHaveCount(0);
-    await expect(frame.locator(".sidebar .rooms > header button")).toHaveCount(0);
+  await test.step("the room opens beside their own sidebar, under their own Mirador's line saying whose it is, and the owner's machine shows the room alone", async () => {
+    await expect(visitor.getByRole("navigation", { name: "Machines" })).toHaveCount(0);
+    await expect(roomCard(visitor, "Garden")).toHaveClass(/\bselected\b/);
+    const line = invitedRoomPane(visitor).locator(".invited-room-bar");
+    await expect(line.locator(".invited-room-whose")).toHaveText("Ann's room, on Ann's machine");
+    const [sidebarBox, lineBox, frameBox] = await Promise.all([visitor.locator(".sidebar"), line, visitor.locator('iframe[title="Ann\'s machine"]')].map((part) => part.boundingBox()));
+    expect(lineBox!.x).toBeGreaterThanOrEqual(sidebarBox!.x + sidebarBox!.width - 1);
+    expect(frameBox!.y).toBeGreaterThanOrEqual(lineBox!.y + lineBox!.height - 1);
+    expect(frameBox!.x).toBeCloseTo(lineBox!.x, 0);
+    await expect(frame.locator(".sidebar")).toHaveCount(0);
+    await expect(frame.getByRole("button", { name: "Hide the sidebar" })).toHaveCount(0);
+  });
+
+  await test.step("the line hides and shows their sidebar, and stays while it is hidden", async () => {
+    const line = invitedRoomPane(visitor).locator(".invited-room-bar");
+    await line.getByRole("button", { name: "Hide the sidebar" }).click();
+    await expect(visitor.locator(".sidebar")).toBeHidden();
+    await expect(line.locator(".invited-room-whose")).toHaveText("Ann's room, on Ann's machine");
+    await line.getByRole("button", { name: "Show the sidebar" }).click();
+    await expect(visitor.locator(".sidebar")).toBeVisible();
   });
 
   await test.step("the owner's machine runs sandboxed in an origin of its own, with no microphone or clipboard of the person's Mirador", async () => {
@@ -125,20 +141,23 @@ test("a person joins a room from their own Mirador with an invite, works in it w
     await settings.getByRole("button", { name: "Close" }).click();
   });
 
-  await test.step("the person's own list of rooms shows the room on the owner's machine, which opens it there", async () => {
-    const rail = visitor.getByRole("navigation", { name: "Machines" });
-    await rail.getByRole("button", { name: "This computer" }).click();
+  await test.step("the person's own list of rooms shows the room under Invited, with whose it is, which opens it beside the list", async () => {
+    await createRoom(visitor, "Own room", []);
+    await expect(invitedRoomPane(visitor)).toHaveCount(0);
+    await expect(frame.getByRole("heading", { name: "# Garden" })).toBeHidden();
     const joined = roomCard(visitor, "Garden");
     await expect(joined).toHaveClass(/joined-room/);
-    await expect(visitor.getByRole("list", { name: "Invited" }).locator(".room-card-name")).toHaveText(["Garden"]);
+    await expect(joined).not.toHaveClass(/\bselected\b/);
+    await expect(invitedRooms(visitor).locator(".room-card-name")).toHaveText(["Garden"]);
     await expect(joined.locator(".room-card-subline")).toHaveText("Ann · Ann's machine");
     const menu = await openRoomMenu(visitor, "Garden");
     await expect(menu.getByRole("menuitem")).toHaveText(["Bring an agent…", "Leave room"]);
     await visitor.keyboard.press("Escape");
     await expect(menu).toHaveCount(0);
     await joined.click();
-    await expect(rail.getByRole("button", { name: "Ann's machine" })).toHaveAttribute("aria-current", "true");
+    await expect(joined).toHaveClass(/\bselected\b/);
     await expect(frame.getByRole("heading", { name: "# Garden" })).toBeVisible();
+    await expect(visitor.getByRole("heading", { name: "# Own room" })).toBeHidden();
   });
 
   await test.step("in the room, the person sees no way to invite anyone, nor the models its owner chose", async () => {
@@ -153,8 +172,16 @@ test("a person joins a room from their own Mirador with an invite, works in it w
     await expect(empty.getByRole("button", { name: "Invite people" })).toHaveCount(0);
   });
 
+  await test.step("the room's people hold the person's own profile on the owner's machine, with no list of rooms there to hold it", async () => {
+    await frame.locator(".room-header .room-here-count").click();
+    await frame.getByRole("dialog", { name: "People in the room" }).getByRole("button", { name: "Your profile" }).click();
+    const profile = frame.getByRole("dialog", { name: "Your profile" });
+    await expect(profile.getByLabel("Name", { exact: true })).toHaveValue("Dora");
+    await frame.locator(".modal-backdrop").click({ position: { x: 4, y: 4 } });
+    await expect(profile).toHaveCount(0);
+  });
+
   await test.step("the person writes, and the owner reads it at once with their name and role", async () => {
-    await roomCard(frame, "Garden").click();
     await composer.fill("Hello from Dora");
     await composer.press("Enter");
     await expect(roomMessages(page)).toHaveText(["Hello from Dora"]);
@@ -178,8 +205,7 @@ test("a person joins a room from their own Mirador with an invite, works in it w
 
   await test.step("reloaded, the person's Mirador shows the room again through the owner's machine", async () => {
     await visitor.reload();
-    await visitor.getByRole("navigation", { name: "Machines" }).getByRole("button", { name: "Ann's machine" }).click();
-    await roomCard(frame, "Garden").click();
+    await expect(invitedRoomPane(visitor)).toBeVisible();
     await expect(roomMessages(frame)).toHaveText(["Hello from Dora"]);
   });
 
@@ -330,7 +356,7 @@ test("a person joins a room from their own Mirador with an invite, works in it w
     await join.getByRole("button", { name: "Join", exact: true }).click();
     await expect(join).toHaveCount(0);
     await expect(visitor.locator('iframe[title="Ann\'s machine"]')).toHaveAttribute("sandbox", "allow-scripts allow-forms");
-    await expect(roomsListed(frame)).toHaveText(["Garden"]);
+    await expect(frame.getByRole("heading", { name: "# Garden" })).toBeVisible();
   });
 
   const joinPanel = visitor.getByRole("region", { name: "Join Ann's machine" });
@@ -362,32 +388,36 @@ test("a person joins a room from their own Mirador with an invite, works in it w
     await joinPanel.getByLabel("Paste the invite").fill(lettingBackIn);
     await joinPanel.getByRole("button", { name: "Join", exact: true }).click();
     await expect(joinPanel).toHaveCount(0);
-    await expect(roomsListed(frame)).toHaveText(["Garden"]);
+    await expect(frame.getByRole("heading", { name: "# Garden" })).toBeVisible();
   });
 
   await test.step("an invite into another room of the same machine, pasted under Join a room, joins that room too, and both are listed as on the owner's machine", async () => {
     await createRoom(page, "Shed", ["Builder"]);
     const intoShed = await inviteIntoRoom(page, "Shed", { role: "Guest" });
-    await visitor.getByRole("navigation", { name: "Machines" }).getByRole("button", { name: "This computer" }).click();
     const join = await joinRoom(visitor, intoShed);
     await expect(join).toHaveCount(0);
     await expect(frame.getByRole("heading", { name: "# Shed" })).toBeVisible();
     const emptyForAGuest = frame.getByRole("region", { name: "Nothing written yet" });
     await expect(emptyForAGuest.locator("p")).toHaveText(["As a guest you write along with everyone here. The members give the agents tasks."]);
     await expect(emptyForAGuest.getByRole("button")).toHaveCount(0);
-    await expect(roomsListed(frame)).toHaveText(["Garden", "Shed"]);
-    await visitor.getByRole("navigation", { name: "Machines" }).getByRole("button", { name: "This computer" }).click();
-    await expect(visitor.locator(".sidebar .rooms li.joined-room .room-card-name")).toHaveText(["Garden", "Shed"]);
-    await expect(visitor.locator(".sidebar .rooms li.joined-room .room-card-subline")).toHaveText(["Ann · Ann's machine", "Ann · Ann's machine"]);
+    await expect(roomCard(visitor, "Shed")).toHaveClass(/\bselected\b/);
+    await expect(invitedRooms(visitor).locator(".room-card-name")).toHaveText(["Garden", "Shed"]);
+    await expect(invitedRooms(visitor).locator(".room-card-subline")).toHaveText(["Ann · Ann's machine", "Ann · Ann's machine"]);
     await roomCard(visitor, "Garden").click();
     await expect(frame.getByRole("heading", { name: "# Garden" })).toBeVisible();
+  });
+
+  await test.step("taken out of the room that is open, while still in another one there, the room closes and goes from the list", async () => {
+    await roomCard(visitor, "Shed").click();
+    await expect(frame.getByRole("heading", { name: "# Shed" })).toBeVisible();
     const settings = await openRoomSettings(page, "Shed");
     await settings.getByRole("button", { name: "Remove Dora" }).click();
     await settings.getByRole("button", { name: "Confirm: Remove Dora" }).click();
     await settings.getByRole("button", { name: "Close" }).click();
-    await expect(roomsListed(frame)).toHaveText(["Garden"]);
-    await visitor.getByRole("navigation", { name: "Machines" }).getByRole("button", { name: "This computer" }).click();
-    await expect(visitor.locator(".sidebar .rooms li.joined-room .room-card-name")).toHaveText(["Garden"]);
+    await expect(invitedRooms(visitor).locator(".room-card-name")).toHaveText(["Garden"]);
+    await expect(invitedRoomPane(visitor)).toHaveCount(0);
+    await roomCard(visitor, "Garden").click();
+    await expect(frame.getByRole("heading", { name: "# Garden" })).toBeVisible();
   });
 
   await test.step("taken out of the room while their Mirador was off, the person learns it from their own Mirador once it starts", async () => {
@@ -395,8 +425,20 @@ test("a person joins a room from their own Mirador with an invite, works in it w
     await setRoleOfDora(page, "Not in the room");
     await visitors.start();
     await reloadFromRestartedHost(visitor);
-    await visitor.getByRole("navigation", { name: "Machines" }).getByRole("button", { name: "Ann's machine" }).click();
     await expect(joinPanel.locator(".join-out-of-rooms")).toHaveText(OUT_OF_ROOMS, { timeout: 30_000 });
+  });
+
+  await test.step("the machine stays under Invited, where it opens the place to come back from, until removed", async () => {
+    const machine = roomCard(visitor, "Ann's machine");
+    await expect(machine.locator(".room-card-subline")).toHaveText("signed out by its owner");
+    await roomCard(visitor, "Own room").click();
+    await expect(joinPanel).toBeHidden();
+    await machine.click();
+    await expect(joinPanel).toBeVisible();
+    const menu = await openRoomMenu(visitor, "Ann's machine");
+    await expect(menu.getByRole("menuitem")).toHaveText(["Remove"]);
+    await visitor.keyboard.press("Escape");
+    await expect(menu).toHaveCount(0);
   });
 
   await test.step("the invite the person came back with last, typed again, says it is used up", async () => {
@@ -412,7 +454,7 @@ test("a person joins a room from their own Mirador with an invite, works in it w
     await expect(asked).toHaveAttribute("data-hint", "Click again to remove this machine from the list. You can add it again later.");
     await asked.click();
     await expect(joinPanel).toHaveCount(0);
-    await expect(visitor.getByRole("navigation", { name: "Machines" })).toHaveCount(0);
+    await expect(visitor.getByRole("heading", { name: "Invited" })).toHaveCount(0);
     await visitor.locator(".sidebar").getByRole("button", { name: "Machines…" }).click();
     await expect(visitor.getByRole("dialog", { name: "Machines" }).locator(".machine-none")).toHaveText("No machines yet.");
   });
