@@ -499,7 +499,7 @@ function ThreadColumn({
   const shownHere = threadMessagesShown(timeline, thread, agent);
   const firstReached = firstReachingTheAgent(timeline, thread, agent.answering);
   const workingLine = workUnderWay(pending, agentsById, approvals).find((work) => work.thread.id === thread.id)?.text;
-  const { ref: threadTimeline, onScroll } = useScrollAnchor();
+  const { ref: threadTimeline, onScroll, jumpToLatest } = useScrollAnchor();
   const closeOnEscape = (event: KeyboardEvent<HTMLElement>) => {
     if (event.key !== "Escape" || event.defaultPrevented) return;
     event.preventDefault();
@@ -532,7 +532,10 @@ function ThreadColumn({
           placeholder={words.followUpPlaceholder(agent.name)}
           agents={[]}
           people={peopleToTag}
-          onSend={(text) => writeIn(thread.roomId, text, [], thread.id)}
+          onSend={(text) => {
+            writeIn(thread.roomId, text, [], thread.id);
+            jumpToLatest();
+          }}
           tellWriting={tellWritingIn(thread.roomId, thread.id)}
         />
       )}

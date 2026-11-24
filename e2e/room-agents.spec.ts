@@ -426,7 +426,7 @@ test("the divider beside a thread drags it wider, and under it higher, and the r
   });
 });
 
-test("a thread opens at its latest, follows the agent's work from there, and leaves a reader who scrolled up in place", async ({ page }) => {
+test("a thread opens at its latest, follows the agent's work from there, leaves a reader who scrolled up in place, and takes them back when they follow up", async ({ page }) => {
   const longText = (ending: string) => `${"Every plank is measured twice. ".repeat(300)}${ending}`;
   const timeline = thread(page, "Builder").locator(".timeline");
   const scrolledTo = () => timeline.evaluate((element) => element.scrollTop);
@@ -437,6 +437,11 @@ test("a thread opens at its latest, follows the agent's work from there, and lea
     await expect.poll(leftBelow).toBeLessThan(2);
     expect(await scrolledTo()).toBeGreaterThan(0);
   };
+  const scrollUp = () =>
+    timeline.evaluate((element) => {
+      element.scrollTop = 200;
+      element.dispatchEvent(new Event("scroll"));
+    });
   const followUp = async (text: string) => {
     const box = thread(page, "Builder").getByRole("textbox", { name: "Follow up with Builder…" });
     await box.fill(text);
@@ -456,17 +461,18 @@ test("a thread opens at its latest, follows the agent's work from there, and lea
   rmSync(released, { force: true });
   await followUp(`WAIT ${released} SAY ${longText("Third coat")}`);
   await expect(thread(page, "Builder").locator(".working")).toHaveText("Builder is working…");
-  await timeline.evaluate((element) => {
-    element.scrollTop = 200;
-    element.dispatchEvent(new Event("scroll"));
-  });
+  await scrollUp();
   writeFileSync(released, "");
   await expect(workSaying("Third coat")).toBeVisible();
   expect(await scrolledTo()).toBe(200);
 
+  await followUp(`SAY ${longText("Fourth coat")}`);
+  await expectAtLatest("Fourth coat");
+
+  await scrollUp();
   await thread(page, "Builder").getByRole("button", { name: "Close thread" }).click();
   await answer.getByRole("button", { name: "Open thread" }).click();
-  await expectAtLatest("Third coat");
+  await expectAtLatest("Fourth coat");
 });
 
 test("a room follows its latest message, leaves a reader who scrolled up in place, and takes them back when they write or jump there", async ({ page }) => {
