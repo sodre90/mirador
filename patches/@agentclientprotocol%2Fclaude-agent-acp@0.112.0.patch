@@ -1,8 +1,8 @@
 diff --git a/dist/v1/acp-agent.js b/dist/v1/acp-agent.js
-index 3bbb498a98c8523102c7a67d82b8068604d51dd6..223028d7bf3d5a3519a732486836856b638402b8 100644
+index c440ab081dff67458aa311a6b3e600a127d24b17..d901cf8c565bb5e072024daa9db4694cd56ac44d 100644
 --- a/dist/v1/acp-agent.js
 +++ b/dist/v1/acp-agent.js
-@@ -2305,6 +2305,22 @@ export class ClaudeAcpAgent {
+@@ -2533,6 +2533,22 @@ export class ClaudeAcpAgent {
              if (settled)
                  registerLiveTask(taskId, settled.parentToolUseId, true, { backgrounded: true });
          };
@@ -25,7 +25,7 @@ index 3bbb498a98c8523102c7a67d82b8068604d51dd6..223028d7bf3d5a3519a732486836856b
          /** Whether any background subagent this turn spawned is still live —
           *  while true, the turn's settlement stays deferred so the subagent's
           *  output and permission requests land inside it (see
-@@ -3646,6 +3662,7 @@ export class ClaudeAcpAgent {
+@@ -3889,6 +3905,7 @@ export class ClaudeAcpAgent {
                                  if (message.status === "stopped") {
                                      await closeStoppedSubagentToolCalls(message.tool_use_id);
                                  }
@@ -33,7 +33,7 @@ index 3bbb498a98c8523102c7a67d82b8068604d51dd6..223028d7bf3d5a3519a732486836856b
                                  settleLiveTask(message.task_id);
                                  break;
                              case "task_updated":
-@@ -3680,6 +3697,7 @@ export class ClaudeAcpAgent {
+@@ -3926,6 +3943,7 @@ export class ClaudeAcpAgent {
                                      if (message.patch.status === "killed") {
                                          await closeStoppedSubagentToolCalls(parentToolUseId);
                                      }
@@ -41,7 +41,7 @@ index 3bbb498a98c8523102c7a67d82b8068604d51dd6..223028d7bf3d5a3519a732486836856b
                                      settleLiveTask(message.task_id);
                                  }
                                  else if (message.patch.status === "running" ||
-@@ -3687,6 +3705,7 @@ export class ClaudeAcpAgent {
+@@ -3933,6 +3951,7 @@ export class ClaudeAcpAgent {
                                      // The SDK can resume a finished subagent under the same
                                      // agent id without a new task_started.
                                      resumeLiveTask(message.task_id);
@@ -49,7 +49,7 @@ index 3bbb498a98c8523102c7a67d82b8068604d51dd6..223028d7bf3d5a3519a732486836856b
                                      await subagents.taskResumed(message.task_id, sendUpdate, sendMessageResumePrompt(session.toolUseCache, message.task_id));
                                  }
                                  break;
-@@ -8462,7 +8481,9 @@ function recordDispatchedToolUses(session, content) {
+@@ -8862,7 +8881,9 @@ function recordDispatchedToolUses(session, content) {
      if (!Array.isArray(content))
          return;
      for (const block of content) {
@@ -61,7 +61,7 @@ index 3bbb498a98c8523102c7a67d82b8068604d51dd6..223028d7bf3d5a3519a732486836856b
      }
  }
 diff --git a/package.json b/package.json
-index ed923116b0b874c8a5be54f1b69081746dc6bf0e..4325a85654bd558ba22c96dcf58b3c2b467b7110 100644
+index 940a48ebd7d9f2acdb2954a77167cad5b935431a..785cbdec354609ec2bee3d2dbfe872cda06886cd 100644
 --- a/package.json
 +++ b/package.json
 @@ -16,6 +16,7 @@

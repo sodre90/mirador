@@ -11,10 +11,10 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@agentclientprotocol/claude-agent-acp": "0.109.0",
-    "@agentclientprotocol/codex-acp": "2.8.0",
-    "@agentclientprotocol/sdk": "2.8.0",
-    "@anthropic-ai/sdk": "1.10.0",
+    "@agentclientprotocol/claude-agent-acp": "0.112.0",
+    "@agentclientprotocol/codex-acp": "2.12.0",
+    "@agentclientprotocol/sdk": "2.12.0",
+    "@anthropic-ai/sdk": "1.14.0",
     "@lexical/code": "0.53.0",
     "@lexical/link": "0.53.0",
     "@lexical/list": "0.53.0",
@@ -31,7 +31,7 @@
     "lexical": "0.53.0",
     "mermaid": "^12.3.0",
     "modern-screenshot": "4.7.0",
-    "pi-acp": "0.0.34",
+    "pi-acp": "0.0.35",
     "prismjs": "1.30.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
@@ -45,16 +45,16 @@
   "devDependencies": {
     "@lexical/headless": "0.53.0",
     "@playwright/test": "1.65.1",
-    "@types/bun": "^1.4.4",
+    "@types/bun": "^1.4.5",
     "@types/prismjs": "1.26.6",
-    "@types/react": "^19.3.0",
+    "@types/react": "^19.3.1",
     "@types/react-dom": "^19.3.0",
     "jsqr": "1.4.0",
     "typescript": "^7.0.2"
   },
   "patchedDependencies": {
-    "pi-acp@0.0.34": "patches/pi-acp@0.0.34.patch",
-    "@agentclientprotocol/claude-agent-acp@0.109.0": "patches/@agentclientprotocol%2Fclaude-agent-acp@0.109.0.patch",
-    "@agentclientprotocol/codex-acp@2.8.0": "patches/@agentclientprotocol%2Fcodex-acp@2.8.0.patch"
+    "@agentclientprotocol/claude-agent-acp@0.112.0": "patches/@agentclientprotocol%2Fclaude-agent-acp@0.112.0.patch",
+    "@agentclientprotocol/codex-acp@2.12.0": "patches/@agentclientprotocol%2Fcodex-acp@2.12.0.patch",
+    "pi-acp@0.0.35": "patches/pi-acp@0.0.35.patch"
   }
 }
