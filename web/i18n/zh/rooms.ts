@@ -194,7 +194,21 @@ export const rooms: Messages["rooms"] = {
   sandbox: {
     legend: "沙箱",
     turnOn: "在沙箱中运行 Agent",
-    network: "网络：只有模型和 Mirador",
+    network: {
+      label: "网络",
+      choices: {
+        closed: "只有模型和 Mirador",
+        internet: "还有互联网，但不包括这台电脑及其网络",
+        everything: "全部：互联网和这台电脑的网络",
+      },
+      meaning: {
+        internet:
+          "走 HTTPS 的 git、npm 以及其他使用 Web 代理的程序会通过 Mirador 访问外部，Agent 读到的内容也可能由此流出。路由器的公网地址，以及你的 VPN 通向的公网地址，都算互联网。",
+        everything:
+          "除了互联网，Agent 还能以这台电脑的身份访问你自己的网络和 tailnet，那里的设备可能会像放行你一样放行它们；也能通过这台电脑在那里的地址访问它，但访问不到 localhost 上的任何内容。它们读到的内容也可能由此流出。",
+      },
+      broughtReachToo: "其他人带入房间的 Agent 也能访问同样的范围。",
+    },
     workFreely: "Agent 在里面自由工作",
     presetApplies: "房间的权限预设仍然适用",
     checking: "正在检查这个房间能否使用沙箱…",
@@ -205,7 +219,7 @@ export const rooms: Messages["rooms"] = {
     },
     sharedKernel: {
       warning:
-        "在这台电脑上，沙箱是一个 Podman 容器，而不是虚拟机。它仍然只能看到工作区，也只能访问模型和 Mirador，但它与这台电脑共用 Linux 内核，内核中的漏洞可能让 Agent 逃出来。",
+        "在这台电脑上，沙箱是一个 Podman 容器，而不是虚拟机。它仍然只能看到工作区，也只能访问你选择的范围，但它与这台电脑共用 Linux 内核，内核中的漏洞可能让 Agent 逃出来。",
       turnOn: "仍然开启",
       keepOff: "保持关闭",
       turnsFailUntilAllowed: "在你允许之前，Agent 的轮次都会失败。",
@@ -236,7 +250,8 @@ export const rooms: Messages["rooms"] = {
     setupFailed: (problem: string) => `设置失败：${problem}`,
     wholeEnvironmentIgnored: "房间开着沙箱时此项无效：只有这里选中的值会进入它的沙箱。",
     meaning: [
-      "房间的 Claude Code 和 pi Agent 在这台电脑上自己的沙箱里运行：在 Mac 上是一个轻量虚拟机，由 Apple 的 container 工具创建；在 Linux 上是一个 Podman 容器，它与这台电脑共用内核，因此对 Agent 的约束比虚拟机更弱，只有在你允许后才会使用。沙箱能看到工作区、房间的一个文件夹（存放 Agent 的设置和会话），以及你从这台电脑添加的文件夹（只读或读写），看不到这台电脑的其他内容。它的网络只能通过 Mirador 访问模型，Mirador 会加上配置的密钥，所以密钥从不进入沙箱；此外只能访问 Mirador 的画布。",
+      "房间的 Claude Code 和 pi Agent 在这台电脑上自己的沙箱里运行：在 Mac 上是一个轻量虚拟机，由 Apple 的 container 工具创建；在 Linux 上是一个 Podman 容器，它与这台电脑共用内核，因此对 Agent 的约束比虚拟机更弱，只有在你允许后才会使用。沙箱能看到工作区、房间的一个文件夹（存放 Agent 的设置和会话），以及你从这台电脑添加的文件夹（只读或读写），看不到这台电脑的其他内容。Agent 通过 Mirador 访问模型，Mirador 会加上配置的密钥，所以密钥从不进入沙箱；它们还能访问 Mirador 的画布。",
+      "除此之外，沙箱能访问你在“网络”下选择的范围，经由 Mirador 的 Web 代理，因为它没有自己的网络：SSH、ping 和不使用代理的程序都访问不到外部。更改立即生效，进行中的轮次也不例外，并会断开不再允许的连接。关闭后再开启，沙箱只能访问模型和 Mirador。",
       "自由工作时，Agent 什么都不用请求批准，因为沙箱把它们关在里面。否则房间的权限预设照常适用，和在这台电脑上一样。",
       "Agent 读取设置、指令和 MCP 服务器的文件会被暂扣，会自行运行的文件也一样：.claude、.mcp.json、CLAUDE.md、AGENTS.md、.codex、opencode.json、.opencode、.pi、.husky、.githooks、.vscode、.pre-commit-config.yaml、lefthook.yml 和 .envrc。沙箱启动时已有的这些文件在其中是只读的；新出现的会立即被撤回，由你在房间里批准或丢弃。",
       "Agent 在工作区改动的其他任何文件，在你自己运行时都可能被执行：测试、脚本、package.json，或者在终端里提交（会运行仓库的 Hook）。在那里运行任何东西之前，请先看看它们改了什么。",
@@ -438,6 +453,11 @@ export const rooms: Messages["rooms"] = {
   },
   commandRunsAsOwner: "它在房间所在的机器上运行，拥有该机器所有者在那里的全部权限，不限于工作区。",
   commandRunsInSandbox: "它在房间的沙箱里运行，沙箱只看得到工作区，看不到房间所在机器上的其他任何东西。",
+  sandboxReaches: {
+    closed: "房间沙箱里的命令访问不到任何网络。",
+    internet: "房间沙箱里的命令可以访问互联网。",
+    everything: "房间沙箱里的命令可以访问互联网，并以房间所在机器的身份访问该机器的网络。",
+  },
   workspaceAccess: {
     asked: "正在等待获准进入这个房间的工作区",
     allowed: "在这个房间的工作区里工作",

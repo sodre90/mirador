@@ -65,6 +65,7 @@ export function runArguments({ name, labels, image, memory, mounts, entry }: VmP
     "label=disable",
     "--network",
     "none",
+    "--http-proxy=false",
     "--memory",
     memory,
     "--memory-swap",

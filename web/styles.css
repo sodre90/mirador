@@ -11434,6 +11434,15 @@ select.room-agent-choice-select:focus-visible {
   padding-left: 22px;
 }
 
+.room-sandbox-network {
+  margin-block: 4px 8px;
+}
+
+.room-sandbox-network > .hint {
+  margin: 0;
+  padding-left: 4px;
+}
+
 .room-sandbox-reasons {
   color: var(--warn-on-soft);
   font-size: calc(12px * var(--font-scale));

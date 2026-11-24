@@ -3,11 +3,14 @@ import type { Profile } from "../shared/model.ts";
 import { NO_ENVIRONMENT_CHOICES } from "../shared/room-agent-setup.ts";
 import {
   isHeldChangeAnswer,
+  keepingNetworkOf,
   narrowsSandbox,
   sameSandbox,
   sandboxSettingIn,
   workspaceSandbox,
   type HeldChangeAnswer,
+  type SandboxNetwork,
+  type SandboxSetting,
   type WorkspaceSandboxCheck,
 } from "../shared/sandbox.ts";
 import type { Hub } from "./hub.ts";
@@ -56,17 +59,28 @@ export class WorkspaceSandboxes {
    */
   async setSandbox(workspaceId: string, given: unknown) {
     const workspace = this.existingWorkspace(workspaceId);
-    const sandbox = sandboxSettingIn(given);
+    const sandbox = keepingNetworkOf(workspace.sandbox, sandboxSettingIn(given));
     if (sameSandbox(sandbox, workspace.sandbox)) return;
     const turnsOn = sandbox.on && !workspace.sandbox.on;
     if (turnsOn) assertSandboxCanRun(await this.sandboxCheck(workspaceId), sandbox);
     if (workspace.sandbox.on && !sandbox.on) this.sandboxLeaves(workspace.id, workspace.path);
-    this.store.setWorkspaceSandbox(workspaceId, sandbox);
-    this.hub.broadcast({ type: "workspace.upserted", workspace: this.existingWorkspace(workspaceId) });
+    this.storeSandbox(workspaceId, sandbox);
     this.conversations.startAfreshInWorkspace(workspaceId, { stopsTurn: narrowsSandbox(workspace.sandbox, sandbox) });
     if (turnsOn) this.ownConversationsOf(workspaceId).forEach(({ id }) => this.terminals.closeAgentPrograms(id));
     const startsOn = this.startsOnProfile(workspaceId);
     if (sandbox.on) this.sandboxes.prepare(startsOn && workspaceProfileBlocker(startsOn) === null ? [startsOn] : []);
+  }
+
+  /** What the workspace's sandbox reaches besides the model and Mirador, while it is on: from now on, in sessions under way too. */
+  setNetwork(workspaceId: string, network: SandboxNetwork) {
+    const { sandbox } = this.existingWorkspace(workspaceId);
+    if (sandbox.on && sandbox.network !== network) this.storeSandbox(workspaceId, { ...sandbox, network });
+  }
+
+  private storeSandbox(workspaceId: string, sandbox: SandboxSetting) {
+    this.store.setWorkspaceSandbox(workspaceId, sandbox);
+    this.sandboxes.networkChanged(workspaceSandbox(workspaceId));
+    this.hub.broadcast({ type: "workspace.upserted", workspace: this.existingWorkspace(workspaceId) });
   }
 
   private ownConversationsOf(workspaceId: string) {

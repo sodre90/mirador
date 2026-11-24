@@ -128,6 +128,7 @@ export function WorkspaceSandboxDialog({
       <p className="hint workspace-sandbox-lead">{words.lead}</p>
       <SandboxSwitch
         id={`workspace-${workspace.id}`}
+        owner={workspaceSandbox(workspace.id)}
         setting={workspace.sandbox}
         check={check}
         setup={setup}

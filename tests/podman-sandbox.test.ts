@@ -35,6 +35,7 @@ function hostFor(workspace: string) {
     setupChanged: (setup) => setups.push(setup),
     heldChanged: () => {},
     foldersOf: () => [],
+    networkOf: () => "closed" as const,
     otherSandboxes: () => ({ workspaces: [], writableFolders: [], writableFoldersOn: [] }),
     foldersStarted: () => {},
     places: { home: "/nonexistent-home", dataDir: join(scratch, "mirador-data"), checkout: "/nonexistent-checkout", computersOwn: [] },
@@ -79,6 +80,7 @@ describe("a room's sandbox on rootless Podman", () => {
     expect(valueAfter(run!, "--cap-drop")).toBe("all");
     expect(valuesAfter(run!, "--security-opt")).toEqual(["no-new-privileges", "label=disable"]);
     expect(valueAfter(run!, "--network")).toBe("none");
+    expect(run).toContain("--http-proxy=false");
     expect([valueAfter(run!, "--memory"), valueAfter(run!, "--memory-swap"), valueAfter(run!, "--cpus"), valueAfter(run!, "--pids-limit")]).toEqual(["3G", "3G", "4", "4096"]);
     expect([valueAfter(run!, "--log-driver"), valueAfter(run!, "--log-opt")]).toEqual(["k8s-file", "max-size=1mb"]);
     expect(valuesAfter(run!, "--label")).toContain("mirador.owner=room:room-1");
@@ -86,11 +88,11 @@ describe("a room's sandbox on rootless Podman", () => {
     expect(mounts).toContain(`${workspace}:${workspace}`);
     expect(mounts).toContain(`${workspace}/.git/hooks:${workspace}/.git/hooks:ro`);
     expect(mounts.some((mount) => mount.endsWith(`:${workspace}/.git/config:ro`))).toBe(true);
-    expect(run!.slice(-5)).toEqual(["sh", "/mirador/sandbox/room-vm.sh", "nobody", "7701=/run/mirador/canvas.sock", "7702=/run/mirador/model.sock"]);
-    const sockets = ["canvas", "model"].map((name) => mountedAt(run!, `/run/mirador/${name}.sock`));
-    expect(sockets.map(modeOf)).toEqual([0o666, 0o666]);
+    expect(run!.slice(-6)).toEqual(["sh", "/mirador/sandbox/room-vm.sh", "nobody", "7701=/run/mirador/canvas.sock", "7702=/run/mirador/model.sock", "7703=/run/mirador/network.sock"]);
+    const sockets = ["canvas", "model", "network"].map((name) => mountedAt(run!, `/run/mirador/${name}.sock`));
+    expect(sockets.map(modeOf)).toEqual([0o666, 0o666, 0o666]);
     expect(modeOf(dirname(sockets[0]!))).toBe(0o700);
-    expect(dirname(sockets[1]!)).toBe(dirname(sockets[0]!));
+    expect(new Set(sockets.map(dirname)).size).toBe(1);
 
     const [program, ...exec] = launched.command;
     expect(program).toBe(cli.program);

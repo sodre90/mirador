@@ -19,6 +19,7 @@ import {
   type SandboxFolder,
   type SandboxFolderRefusal,
   type SandboxFolderState,
+  type SandboxNetwork,
   type SandboxOwner,
   type SandboxSetting,
   type SandboxSetup,
@@ -27,13 +28,13 @@ import type { Conversation } from "../../shared/model.ts";
 import type { AgentLaunch } from "../acp/harness.ts";
 import type { Store } from "../store.ts";
 import { addedFolderRefusal, foldersMounted, repositoryRefusal, type FolderSurroundings, type FoldersMounted, type LeftOutFolder, type MountedFolder, type OtherSandboxes } from "./added-folders.ts";
-import { AGENT_USER, BUN_IN_VM, environmentInVm, IN_VM, SCRIPTS_IN_VM, type SandboxedKind } from "./agent-environment.ts";
+import { AGENT_USER, BUN_IN_VM, environmentInVm, IN_VM, NETWORK_RELAY_PORT, SCRIPTS_IN_VM, type SandboxedKind } from "./agent-environment.ts";
 import { startCanvasSocket, type SandboxCanvas } from "./canvas-socket.ts";
 import { HeldFiles, HeldFilesRefused, type HeldSandbox } from "./held-files.ts";
 import type { PlacesPutBack, PlacesRequest } from "./in-vm/held-places.ts";
 import type { AgentImage } from "./image.ts";
 import { secretsOf, startModelProxy, type ModelRoute, type RunningSocket } from "./model-proxy.ts";
-import { startPresenceSocket } from "./presence-socket.ts";
+import { startNetworkProxy, type NetworkProxy } from "./network-proxy.ts";
 import { removeLeftSocketFolders, SOCKETS_FOLDER_PREFIX } from "./socket-folders.ts";
 import { HOST_LABEL, OWNER_LABEL, SandboxNotReady, type AgentInVm, type VmLauncher } from "./vm-launcher.ts";
 import { asTheyStand, gitFoldersOf, isInside, realOrAsIs, replacedAmong, sandboxRefusalOf, workspaceMounts, type MiradorPlaces, type Mount, type StoodSource } from "./workspace-mounts.ts";
@@ -41,9 +42,6 @@ import { asTheyStand, gitFoldersOf, isInside, realOrAsIs, replacedAmong, sandbox
 /** The ports a sandbox's VM gives its agents on its own 127.0.0.1, relayed to Mirador's sockets on this computer. */
 export const CANVAS_RELAY_PORT = 7701;
 export const MODEL_RELAY_PORT = 7702;
-
-/** The port the VM of an agent someone brought gives nothing on: its relay is there for that VM to end once Mirador is gone. */
-const PRESENCE_RELAY_PORT = 7703;
 
 const IN_VM_SCRIPTS = join(import.meta.dir, "in-vm");
 const SOCKETS_IN_VM = "/run/mirador";
@@ -111,6 +109,8 @@ export interface SandboxHost {
   heldChanged(owner: SandboxOwner, changes: HeldChange[], full: boolean): void;
   /** The folders of this computer the owner added to the sandbox, oldest first. */
   foldersOf(owner: SandboxOwner): SandboxFolder[];
+  /** What the sandbox reaches now besides the model and Mirador; closed while it is off or gone. */
+  networkOf(owner: SandboxOwner): SandboxNetwork;
   /** What the other rooms' and workspaces' sandboxes work in. */
   otherSandboxes(owner: SandboxOwner): OtherSandboxes;
   /** The sandbox's VM started, with what of its added folders it mounted and what it left out. */
@@ -177,6 +177,8 @@ interface SandboxVm {
   agents: number;
   stopTimer?: ReturnType<typeof setTimeout>;
   sockets: RunningSocket[];
+  /** The VM's way out, once it is there. */
+  network?: NetworkProxy;
   /** The folder of the VM's own sockets, once made. */
   socketsFolder?: string;
   /** The model API of each agent's profile, by profile id, as the agents last started. */
@@ -190,11 +192,20 @@ interface WorkspacePlan {
   stood: StoodSource[];
 }
 
-/** What a VM sees besides the workspace and Mirador's scripts, and each port of its own with the socket of this computer it leads to. */
+/** A port of the VM's own, and the socket of this computer it leads to. */
+interface Relay {
+  port: number;
+  socket: string;
+}
+
+/** What a VM sees of its agents' besides the workspace and Mirador's scripts, and what leads to their canvases and models. */
 interface SeenInVm {
   mounts: Mount[];
-  relays: { port: number; socket: string }[];
+  relays: Relay[];
 }
+
+/** The VM of an agent someone brought sees none of it. */
+const NOTHING_OF_THE_AGENTS: SeenInVm = { mounts: [], relays: [] };
 
 /** What a sandbox's VM mounted of its added folders and left out as it last started, and the folders it started with. */
 interface FolderStart extends FoldersMounted {
@@ -245,8 +256,9 @@ const hostLabelOf = (dataDir: string) => shortHash(dataDir);
 /**
  * One light VM per sandboxed room and per sandboxed workspace, run by the launcher this computer has: set up on first use
  * (the runtime, then the image, built here), started on its first turn, and stopped once its last agent has gone. Its
- * agents start in it as the agent user; it has no network, only Mirador's canvas and model sockets relayed in, and the
- * workspace with its repository's config and hooks read-only. No VM sees another's sockets, config folder or canvases.
+ * agents start in it as the agent user; it has no network, only Mirador's canvas, model and web proxy sockets relayed in,
+ * the proxy letting through what the owner has the sandbox reach, and the workspace with its repository's config and hooks
+ * read-only. No VM sees another's sockets, config folder or canvases.
  * Whatever is not ready fails the turn. An agent someone brought into a sandboxed room has its calls done in a VM of its
  * own, which sees the workspace as the room's own VM does and none of what that one's agents have: their models, canvases,
  * settings, sessions or added folders.
@@ -495,6 +507,11 @@ export class Sandboxes {
     );
   }
 
+  /** What the sandbox reaches changed: what its VMs may reach no longer is cut off, as the rest of their way out follows by itself. */
+  networkChanged(owner: SandboxOwner) {
+    this.vmsOf(owner).forEach(({ network }) => network?.networkChanged());
+  }
+
   /** Stops the VM of the sandbox's own agents. */
   async stop(owner: SandboxOwner) {
     const vm = this.agentsVm(owner);
@@ -724,8 +741,10 @@ export class Sandboxes {
     const folders = vm.broughtAgent === null ? await this.addedFoldersMounted(vm) : null;
     // Unix socket paths hold about a hundred bytes on macOS, so each VM's sockets live in a short private folder.
     vm.socketsFolder = await mkdtemp(join(this.socketsParent, SOCKETS_FOLDER_PREFIX));
-    const seen = vm.broughtAgent === null ? await this.agentsOwn(vm, vm.socketsFolder) : await this.presenceOnly(vm, vm.socketsFolder);
-    if (this.launcher.firstProcessUser === "nobody") await reachableByNobody(seen.relays.map(({ socket }) => socket));
+    const wayOut = await this.wayOut(vm, vm.socketsFolder);
+    const seen = vm.broughtAgent === null ? await this.agentsOwn(vm, vm.socketsFolder) : NOTHING_OF_THE_AGENTS;
+    const relays = [...seen.relays, wayOut];
+    if (this.launcher.firstProcessUser === "nobody") await reachableByNobody(relays.map(({ socket }) => socket));
     const inVm = (socket: string) => `${SOCKETS_IN_VM}/${basename(socket)}`;
     this.assertNotStopped(vm);
     vm.launching = this.launcher.start({
@@ -738,9 +757,9 @@ export class Sandboxes {
         ...(folders?.mounts ?? []),
         ...seen.mounts,
         { source: IN_VM_SCRIPTS, target: SCRIPTS_IN_VM, readOnly: true },
-        ...seen.relays.map(({ socket }) => ({ source: socket, target: inVm(socket), readOnly: false })),
+        ...relays.map(({ socket }) => ({ source: socket, target: inVm(socket), readOnly: false })),
       ],
-      entry: ["sh", `${SCRIPTS_IN_VM}/room-vm.sh`, this.launcher.firstProcessUser, ...seen.relays.map(({ port, socket }) => `${port}=${inVm(socket)}`)],
+      entry: ["sh", `${SCRIPTS_IN_VM}/room-vm.sh`, this.launcher.firstProcessUser, ...relays.map(({ port, socket }) => `${port}=${inVm(socket)}`)],
     });
     await vm.launching;
     this.assertNotStopped(vm);
@@ -766,11 +785,12 @@ export class Sandboxes {
     };
   }
 
-  /** The VM of an agent someone brought has none of that: a socket that gives nothing, for the VM to end once Mirador is gone. */
-  private async presenceOnly(vm: SandboxVm, socketsFolder: string): Promise<SeenInVm> {
-    const socket = join(socketsFolder, "presence.sock");
-    vm.sockets.push(await startPresenceSocket(socket));
-    return { mounts: [], relays: [{ port: PRESENCE_RELAY_PORT, socket }] };
+  /** Each VM's only way out besides its canvases and models, which lets through what the owner has the sandbox reach at the moment. */
+  private async wayOut(vm: SandboxVm, socketsFolder: string): Promise<Relay> {
+    const socket = join(socketsFolder, "network.sock");
+    vm.network = await startNetworkProxy(socket, () => this.host.networkOf(vm.owner));
+    vm.sockets.push(vm.network);
+    return { port: NETWORK_RELAY_PORT, socket };
   }
 
   /**

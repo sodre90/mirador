@@ -1,4 +1,5 @@
 import type { RoomTask } from "./rooms.ts";
+import type { SandboxNetwork } from "./sandbox.ts";
 
 /** Whether a brought agent works in the room's workspace, on the room's machine: asked by its bringer, and as the owner or an approver answered. */
 export type RoomWorkspaceAccess = "asked" | "allowed" | "declined";
@@ -89,12 +90,12 @@ export interface WorkspaceCallNamed {
 
 /**
  * What an agent someone brought waits on for an approver: to be let into the room's workspace at all, by `agentId`, or
- * for one call there, by the id this machine gave it, with the whole change or command it would make, on this machine
- * or in the room's sandbox.
+ * for one call there, by the id this machine gave it, with the whole change or command it would make; and what the room's
+ * sandbox reaches, where its calls are done in one, null where they are done on this machine itself.
  */
-export type RoomWorkspaceApproval = { roomId: string; agentId: string; at: number; approvers: string[] } & (
+export type RoomWorkspaceApproval = { roomId: string; agentId: string; at: number; approvers: string[]; sandboxNetwork: SandboxNetwork | null } & (
   | { asks: "access" }
-  | ({ asks: "call"; callId: string; shown: string; inSandbox: boolean; threadId: string; task: RoomTask | null } & WorkspaceCallNamed)
+  | ({ asks: "call"; callId: string; shown: string; threadId: string; task: RoomTask | null } & WorkspaceCallNamed)
 );
 
 export type WorkspaceCallState = "waiting" | "running" | "done" | "refused" | "denied" | "stopped";

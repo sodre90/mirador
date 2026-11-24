@@ -108,6 +108,7 @@ import { NO_PROTECTIONS, protectionsKept, settingsFiles, type SettingSource } fr
 import { ALL_OF_CLAUDE_SETUP, environmentInRoom, NO_ENVIRONMENT_CHOICES, roomSetupFingerprint, type EnvironmentChoices } from "../shared/room-agent-setup.ts";
 import { canvasFollowUp, canvasUseOf, isCanvasFollowUp, type TurnToolCall } from "./canvas/reply-check.ts";
 import { HarnessProcess, type AgentLaunch, type ConfigValue } from "./acp/harness.ts";
+import type { SessionInSandbox } from "./sandbox/agent-guidance.ts";
 import { repositoryHooksOff } from "./sandbox/hooks-off.ts";
 import { belongsToSandbox, NO_SANDBOXES, sandboxCanvasAddress, sandboxConfigFolder, sandboxOfConversation, type AgentInSandbox, type ConversationSandbox, type SandboxedAgents } from "./sandbox/sandboxes.ts";
 import { SandboxNotReady } from "./sandbox/vm-launcher.ts";
@@ -3377,8 +3378,9 @@ export class ConversationService {
     const claudeSetup = conversation.roomId ? (this.store.findRoom(conversation.roomId)?.claudeSetup ?? ALL_OF_CLAUDE_SETUP) : ALL_OF_CLAUDE_SETUP;
     const cwd = await recordedDirectory(this.workspaceOf(conversationId));
     if (!this.runsInSandbox(conversation)) await this.sandboxes.settleHeldFilesFor(cwd);
-    const sandboxFolders = this.sandboxFoldersOf(conversation);
-    const additionalDirectories = sandboxFolders.length > 0 && (await this.currentProcessOf(conversation)?.takesAdditionalDirectories()) ? sandboxFolders.map(({ path }) => path) : [];
+    const sandbox = this.sessionSandboxOf(conversation);
+    const folders = sandbox?.folders ?? [];
+    const additionalDirectories = folders.length > 0 && (await this.currentProcessOf(conversation)?.takesAdditionalDirectories()) ? folders.map(({ path }) => path) : [];
     return {
       cwd,
       mcpServers: [this.runsInSandbox(conversation) ? this.canvasServerFor(conversationId, sandboxCanvasAddress(conversationId)) : this.canvasServerFor(conversationId)],
@@ -3391,17 +3393,18 @@ export class ConversationService {
         inRoomsWorkspace: conversation.worksInRoomsWorkspace === true,
         claudeSetup,
         keptProtections: await this.claudeProtectionsKept(conversation, settingSourcesLeftOut(claudeSetup, withoutUserSettings), cwd),
-        sandboxFolders,
+        sandbox,
       }),
       ...(systemPrompt && { systemPrompt }),
       ...(additionalDirectories.length > 0 && { additionalDirectories }),
     };
   }
 
-  /** The folders of this computer the VM the conversation's agent runs in mounted beside its workspace. */
-  private sandboxFoldersOf(conversation: Conversation) {
-    const sandbox = this.runsInSandbox(conversation) ? this.sandboxOf(conversation) : null;
-    return sandbox ? this.sandboxes.mountedFolders(sandbox.owner) : [];
+  /** The sandbox the conversation's agent runs in, with the folders of this computer its VM mounted beside its workspace. */
+  private sessionSandboxOf(conversation: Conversation): SessionInSandbox | null {
+    if (!this.runsInSandbox(conversation)) return null;
+    const sandbox = this.sandboxOf(conversation);
+    return { folders: sandbox ? this.sandboxes.mountedFolders(sandbox.owner) : [] };
   }
 
   /** A room's Claude Code session keeps the deny and ask rules and the sandbox of the settings it leaves out. */

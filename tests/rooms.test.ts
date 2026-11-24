@@ -51,7 +51,8 @@ import {
   type RoomTaskApproval,
 } from "../shared/rooms.ts";
 import { ALL_OF_CLAUDE_SETUP, type ClaudeSetup } from "../shared/room-agent-setup.ts";
-import { NO_SANDBOX, roomSandbox } from "../shared/sandbox.ts";
+import { NO_SANDBOX, roomSandbox, type SandboxNetwork, type SandboxOwner, type SandboxSetting } from "../shared/sandbox.ts";
+import { NO_SANDBOX_CONTROL } from "../host/sandbox/sandbox-control.ts";
 import { snapshotMessage } from "./snapshot-message.ts";
 
 const OWNER = "owner";
@@ -2069,8 +2070,54 @@ describe("what a room's agents are given of the owner's setup", () => {
   });
 });
 
+describe("what a room's sandbox reaches", () => {
+  const SANDBOX_ON: SandboxSetting = { on: true, workFreely: true, allowsSharedKernel: false, network: "closed" };
+  const networkOf = (store: Store, roomId: string) => store.findRoom(roomId)!.sandbox.network;
+
+  test("changes by itself, with nothing started afresh, and is told once stored", async () => {
+    const { store, rooms, room, startedAfresh, received } = machineWithRooms();
+    store.setRoomSandbox(room.id, SANDBOX_ON);
+    const told: [SandboxOwner, SandboxNetwork][] = [];
+    rooms.keepsSandboxesWith({ ...NO_SANDBOX_CONTROL, networkChanged: (owner) => void told.push([owner, networkOf(store, owner.id)]) });
+    received.splice(0);
+
+    rooms.setSandboxNetwork(room.id, "internet");
+    rooms.setSandboxNetwork(room.id, "internet");
+    rooms.setSandboxNetwork(room.id, "everything");
+
+    expect(told).toEqual([
+      [roomSandbox(room.id), "internet"],
+      [roomSandbox(room.id), "everything"],
+    ]);
+    expect(store.findRoom(room.id)!.sandbox).toEqual({ ...SANDBOX_ON, network: "everything" });
+    expect(received.flatMap((message) => (message.type === "room.upserted" ? [message.room.sandbox.network] : []))).toEqual(["internet", "everything"]);
+    expect(startedAfresh).toEqual([]);
+  });
+
+  test("stays as it is however else the sandbox is set, and is closed again once that is turned off", async () => {
+    const { store, rooms, room } = machineWithRooms();
+    store.setRoomSandbox(room.id, SANDBOX_ON);
+    const told: SandboxNetwork[] = [];
+    rooms.keepsSandboxesWith({ ...NO_SANDBOX_CONTROL, availability: () => ({ available: true, kind: "apple-container" }), networkChanged: (owner) => void told.push(networkOf(store, owner.id)) });
+    rooms.setSandboxNetwork(room.id, "internet");
+
+    await rooms.setSandbox(room.id, { ...SANDBOX_ON, network: "everything" });
+    expect(networkOf(store, room.id)).toBe("internet");
+    await rooms.setSandbox(room.id, { ...SANDBOX_ON, workFreely: false });
+    expect(store.findRoom(room.id)!.sandbox).toEqual({ ...SANDBOX_ON, workFreely: false, network: "internet" });
+    await rooms.setSandbox(room.id, NO_SANDBOX);
+    expect(networkOf(store, room.id)).toBe("closed");
+    expect(told).toEqual(["internet", "internet", "closed"]);
+    rooms.setSandboxNetwork(room.id, "everything");
+    expect(networkOf(store, room.id)).toBe("closed");
+    store.setRoomAgents(room.id, []);
+    await rooms.setSandbox(room.id, { ...SANDBOX_ON, network: "everything" });
+    expect(store.findRoom(room.id)!.sandbox).toEqual(SANDBOX_ON);
+  });
+});
+
 describe("a room's sandbox leaving its workspace", () => {
-  const SANDBOX_ON = { on: true, workFreely: true, allowsSharedKernel: false };
+  const SANDBOX_ON: SandboxSetting = { on: true, workFreely: true, allowsSharedKernel: false, network: "closed" };
 
   test("turned off, or gone with its room, it leaves the repositories' hooks off in the workspace's folder and its folders read and write for 7 days", async () => {
     const { store, rooms, room } = machineWithRooms();

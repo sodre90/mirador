@@ -81,7 +81,7 @@ describe("an export of the settings", () => {
     store.setWorkspaceGroup(grouped.id, group.id);
     store.setWorkspaceColor(grouped.id, "teal");
     store.setWorkspaceSideChatAccess(grouped.id, "read-only");
-    store.setWorkspaceSandbox(grouped.id, { on: true, workFreely: false, allowsSharedKernel: true });
+    store.setWorkspaceSandbox(grouped.id, { on: true, workFreely: false, allowsSharedKernel: true, network: "everything" });
     const inside = addGroup(store, "Old", group.id);
     store.setSidebarOrder([group.id, grouped.id, inside.id, apart.id]);
 

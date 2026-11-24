@@ -127,7 +127,7 @@ import { TunnelRefused, type PeerToPeer, type TunnelEnd, type TunnelListener } f
 import { thisMacModelsInUse, voiceSettingsProblem, voiceSettingsWithoutKeys, type VoiceSettings } from "../shared/voice.ts";
 import { described, englishProblem, HostProblemError, problemFieldsOf, problemOf, type DescribedProblem, type HostProblem } from "../shared/host-problems.ts";
 import { conversationCanvasToken } from "./canvas-token.ts";
-import { isSandboxOwner } from "../shared/sandbox.ts";
+import { isSandboxNetwork, isSandboxOwner } from "../shared/sandbox.ts";
 
 export interface HostServices {
   config: HostConfig;
@@ -2275,6 +2275,9 @@ export function startServer(services: HostServices) {
       case "sandbox.apply-folders-now":
         if (!isSandboxOwner(message.owner)) throw new Error("A room's or a workspace's sandbox takes up its folders.");
         return sandboxFolders.applyNow(message.owner);
+      case "sandbox.set-network":
+        if (!isSandboxOwner(message.owner) || !isSandboxNetwork(message.network)) throw new Error("A room's or a workspace's sandbox reaches only the model and Mirador, the internet too, or everything.");
+        return message.owner.kind === "room" ? rooms.setSandboxNetwork(message.owner.id, message.network) : workspaceSandboxes.setNetwork(message.owner.id, message.network);
       case "room.set-agent-variable":
         return rooms.chooseAgentVariable(message.roomId, message.profileId, message.name, message.given);
       case "room.set-agent-host-environment":

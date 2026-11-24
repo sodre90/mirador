@@ -4,27 +4,47 @@ import { parseEnvironment } from "./profile-environment.ts";
 import { switchedOn } from "./room-agent-setup.ts";
 
 /**
- * Whether a room's or a workspace's agents run in a sandbox of their own rather than on this computer, and whether they
- * work there without asking or under the room's permission preset, or their profile's permission mode, still. Its
- * network is only the model and Mirador. Where this computer's sandbox shares its kernel, the owner allowed that for the
- * room or workspace: it is never chosen for them.
+ * What a sandbox reaches besides the model and Mirador, from the least to the most: nothing; the internet, but neither
+ * this computer nor its networks; or those too.
+ */
+export const SANDBOX_NETWORKS = ["closed", "internet", "everything"] as const;
+
+export type SandboxNetwork = (typeof SANDBOX_NETWORKS)[number];
+
+export const isSandboxNetwork = (value: unknown): value is SandboxNetwork => SANDBOX_NETWORKS.some((network) => network === value);
+
+/** What a sandbox reaches while it is on. */
+export const networkWhileOn = ({ on, network }: SandboxSetting): SandboxNetwork | null => (on ? network : null);
+
+export const reachesMoreThan = (network: SandboxNetwork, other: SandboxNetwork) => SANDBOX_NETWORKS.indexOf(network) > SANDBOX_NETWORKS.indexOf(other);
+
+/**
+ * Whether a room's or a workspace's agents run in a sandbox of their own rather than on this computer, whether they work
+ * there without asking or under the room's permission preset, or their profile's permission mode, still, and what it
+ * reaches. Where this computer's sandbox shares its kernel, the owner allowed that for the room or workspace: it is never
+ * chosen for them.
  */
 export interface SandboxSetting {
   on: boolean;
   workFreely: boolean;
   allowsSharedKernel: boolean;
+  network: SandboxNetwork;
 }
 
-export const NO_SANDBOX: SandboxSetting = { on: false, workFreely: true, allowsSharedKernel: false };
+export const NO_SANDBOX: SandboxSetting = { on: false, workFreely: true, allowsSharedKernel: false, network: "closed" };
 
-/** A sandbox setting as stored or sent; a shared kernel is allowed only while the sandbox is on, so turning it on again asks again. */
+/** A sandbox setting as stored or sent; a shared kernel is allowed, and a network open, only while the sandbox is on, so turning it on again starts from neither. */
 export function sandboxSettingIn(value: unknown): SandboxSetting {
   const named = typeof value === "object" && value !== null ? (value as Record<string, unknown>) : {};
   const on = named.on === true;
-  return { on, workFreely: named.workFreely !== false, allowsSharedKernel: on && named.allowsSharedKernel === true };
+  return { on, workFreely: named.workFreely !== false, allowsSharedKernel: on && named.allowsSharedKernel === true, network: on && isSandboxNetwork(named.network) ? named.network : "closed" };
 }
 
-export const sameSandbox = (a: SandboxSetting, b: SandboxSetting) => a.on === b.on && a.workFreely === b.workFreely && a.allowsSharedKernel === b.allowsSharedKernel;
+/** The sandbox as it is to be, its network left as it is: that one is set by itself, as a change of it starts nothing afresh. */
+export const keepingNetworkOf = (before: SandboxSetting, after: SandboxSetting): SandboxSetting => ({ ...after, network: before.on && after.on ? before.network : "closed" });
+
+export const sameSandbox = (a: SandboxSetting, b: SandboxSetting) =>
+  a.on === b.on && a.workFreely === b.workFreely && a.allowsSharedKernel === b.allowsSharedKernel && a.network === b.network;
 
 /** Turning the sandbox on, "work freely" off in it, or a shared kernel no longer allowed leaves an agent with less: its turn under way stops at once. */
 export const narrowsSandbox = (before: SandboxSetting, after: SandboxSetting) =>

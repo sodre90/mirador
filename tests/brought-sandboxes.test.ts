@@ -1,10 +1,11 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { networkInterfaces, tmpdir } from "node:os";
 import { join } from "node:path";
-import { HELD_CHANGES_MOST, roomSandbox, type HeldChange, type SandboxAvailability, type SandboxFolder, type SandboxNotReadyWhy } from "../shared/sandbox.ts";
+import { HELD_CHANGES_MOST, roomSandbox, type HeldChange, type SandboxAvailability, type SandboxFolder, type SandboxNetwork, type SandboxNotReadyWhy } from "../shared/sandbox.ts";
 import { AppleContainer } from "../host/sandbox/apple-container.ts";
 import { IN_VM } from "../host/sandbox/agent-environment.ts";
+import { mayDial } from "../host/sandbox/dialable-addresses.ts";
 import { ANTHROPIC_API } from "../host/sandbox/model-proxy.ts";
 import { Sandboxes, type AgentInSandbox, type BroughtAgentInSandbox, type SandboxHost } from "../host/sandbox/sandboxes.ts";
 import { FakeContainerCli } from "./fake-container-cli.ts";
@@ -29,6 +30,7 @@ function repository() {
 function hostFor(workspaces: { current: string }) {
   const held: HeldChange[][] = [];
   const folders: SandboxFolder[] = [];
+  const reached: { now: SandboxNetwork } = { now: "closed" };
   const host: SandboxHost = {
     dataDir: join(scratch, `data-${crypto.randomUUID()}`),
     workspaceOf: () => workspaces.current,
@@ -37,11 +39,12 @@ function hostFor(workspaces: { current: string }) {
     setupChanged: () => {},
     heldChanged: (_, changes) => held.push(changes),
     foldersOf: () => folders,
+    networkOf: () => reached.now,
     otherSandboxes: () => ({ workspaces: [], writableFolders: [], writableFoldersOn: [] }),
     foldersStarted: () => {},
     places: { home: "/nonexistent-home", dataDir: join(scratch, "mirador-data"), checkout: "/nonexistent-checkout", computersOwn: [] },
   };
-  return { host, held, folders };
+  return { host, held, folders, reached };
 }
 
 const ownAgent = (workspace: string): AgentInSandbox => ({
@@ -68,13 +71,18 @@ const brought = (workspace: string, changes: Partial<BroughtAgentInSandbox> = {}
 
 function sandboxedRoom({ idleStopMs = 60_000, broughtIdleStopMs = 60_000, launcher = null as FakeVmLauncher | null } = {}) {
   const workspaces = { current: repository() };
-  const { host, held, folders } = hostFor(workspaces);
+  const { host, held, folders, reached } = hostFor(workspaces);
   const cli = new FakeContainerCli();
   const socketsParent = mkdtempSync(join(tmpdir(), "bs-"));
   socketFolders.push(socketsParent);
   const sandboxes = new Sandboxes(launcher ?? new AppleContainer(cli, AVAILABLE), host, idleStopMs, socketsParent, broughtIdleStopMs);
-  return { workspaces, workspace: workspaces.current, host, held, folders, cli, sandboxes, socketsParent };
+  return { workspaces, workspace: workspaces.current, host, held, folders, reached, cli, sandboxes, socketsParent };
 }
+
+/** This computer's address on one of its networks, where it is on any: what a sandbox reaches of it at most. */
+const THIS_COMPUTERS_ADDRESS = Object.values(networkInterfaces())
+  .flatMap((addresses) => addresses ?? [])
+  .find(({ family, address }) => family === "IPv4" && mayDial("everything", address))?.address;
 
 const notReady = (why: Partial<SandboxNotReadyWhy>) => ({ problem: { code: "sandbox-not-ready", why } });
 const mountsIn = (run: string[]) => run.flatMap((arg, index) => (run[index - 1] === "-v" ? [arg] : []));
@@ -83,6 +91,20 @@ const settled = async (holds: () => boolean) => {
   for (const started = Date.now(); Date.now() - started < 10_000 && !holds(); ) await Bun.sleep(20);
   return holds();
 };
+
+/** A connection to a socket of the VM's: all it said to the request so far, and whether it still runs. */
+function connectionTo(socket: string, request: string) {
+  const connection = { said: "", open: true };
+  void Bun.connect({ unix: socket, socket: { open: (to) => void to.write(request), data: (_, data) => void (connection.said += data.toString()), close: () => void (connection.open = false) } });
+  return connection;
+}
+
+/** All a socket of the VM's says to the request, until it closes the connection. */
+async function saidBy(socket: string, request: string) {
+  const connection = connectionTo(socket, request);
+  expect(await settled(() => !connection.open)).toBe(true);
+  return connection.said;
+}
 
 describe("the VM of an agent someone brought into a sandboxed room", () => {
   test("sees the workspace as the room's own agents' does, and nothing else of them or of this computer", async () => {
@@ -104,8 +126,8 @@ describe("the VM of an agent someone brought into a sandboxed room", () => {
     expect(mountsIn(run!).some((mount) => mount.startsWith(`${copies}/`) && mount.endsWith(`:${workspace}/.git/config:ro`))).toBe(true);
     expect(mountsIn(run!)).toContain(`${workspace}/CLAUDE.md:${workspace}/CLAUDE.md:ro`);
     const others = mountsIn(run!).filter((mount) => !mount.split(":")[1]!.startsWith(workspace));
-    expect(others.map((mount) => mount.split(":")[1])).toEqual(["/mirador/sandbox", "/run/mirador/presence.sock"]);
-    expect(run!.slice(-4)).toEqual(["sh", "/mirador/sandbox/room-vm.sh", "root", "7703=/run/mirador/presence.sock"]);
+    expect(others.map((mount) => mount.split(":")[1])).toEqual(["/mirador/sandbox", "/run/mirador/network.sock"]);
+    expect(run!.slice(-4)).toEqual(["sh", "/mirador/sandbox/room-vm.sh", "root", "7703=/run/mirador/network.sock"]);
     expect(run).toContain("mirador.owner=room:room-1");
 
     const [program, ...exec] = launched.command;
@@ -113,7 +135,7 @@ describe("the VM of an agent someone brought into a sandboxed room", () => {
     expect(exec).toContain(nameIn(run!));
     expect(exec).toEqual(expect.arrayContaining(["setpriv", "--reuid=1000", "--no-new-privs"]));
     expect(Object.keys(launched.environment).filter((name) => /^(ANTHROPIC|CLAUDE|DEPLOY)/.test(name))).toEqual([]);
-    expect(exec.filter((arg) => /^[A-Z]+=/.test(arg)).toSorted()).toEqual(Object.entries(IN_VM).map(([name, value]) => `${name}=${value}`).toSorted());
+    expect(exec.flatMap((arg, index) => (exec[index - 1] === "-e" ? [arg.split("=")[0]!] : [])).toSorted()).toEqual(Object.keys(IN_VM).toSorted());
     expect(readdirSync(copies)).toHaveLength(1);
     own.gone!();
     launched.gone!();
@@ -123,19 +145,42 @@ describe("the VM of an agent someone brought into a sandboxed room", () => {
     await sandboxes.stopAll();
   });
 
-  test("answers nothing on its one socket", async () => {
+  test("has the sandbox's way out alone, which reaches what the owner has the sandbox reach, and is gone with it", async () => {
     const { workspace, cli, sandboxes } = sandboxedRoom();
     await sandboxes.launchForBrought(brought(workspace));
     const socket = mountsIn(cli.callsOf("run")[0]!).at(-1)!.split(":")[0]!;
-    const heard: string[] = [];
-    let closed = 0;
-    for (let asked = 0; asked < 3; asked += 1) {
-      await Bun.connect({ unix: socket, socket: { open: (connection) => void connection.write("GET /mcp/c1 HTTP/1.1\r\nhost: localhost\r\n\r\n"), data: (_, data) => void heard.push(data.toString()), close: () => void (closed += 1) } });
-    }
-    expect(await settled(() => closed === 3)).toBe(true);
-    expect(heard).toEqual([]);
+    const asks = ["GET /mcp/c1 HTTP/1.1", "POST /p/builder/v1/messages HTTP/1.1", "CONNECT 1.1.1.1:443 HTTP/1.1"];
+    for (const ask of asks) expect(await saidBy(socket, `${ask}\r\nhost: localhost\r\n\r\n`)).toStartWith("HTTP/1.1 403 Forbidden\r\n");
     await sandboxes.stopAll();
     expect(existsSync(socket)).toBe(false);
+  });
+
+  test.skipIf(THIS_COMPUTERS_ADDRESS === undefined)("reaches what its sandbox does, at once as the owner changes it, and so does the VM of the sandbox's own agents", async () => {
+    const { workspace, cli, reached, sandboxes } = sandboxedRoom();
+    await sandboxes.launch(ownAgent(workspace));
+    await sandboxes.launchForBrought(brought(workspace));
+    const sockets = cli.callsOf("run").map((run) => mountsIn(run).find((mount) => mount.endsWith(":/run/mirador/network.sock"))!.split(":")[0]!);
+    const place = Bun.listen({ hostname: THIS_COMPUTERS_ADDRESS!, port: 0, socket: { data: (connection, data) => void connection.write(data) } });
+    const ask = `CONNECT ${THIS_COMPUTERS_ADDRESS}:${place.port} HTTP/1.1\r\n\r\n`;
+    const allAnswer = async (status: string) => expect((await Promise.all(sockets.map((socket) => saidBy(socket, ask)))).map((said) => said.split("\r\n")[0])).toEqual([status, status]);
+    await allAnswer("HTTP/1.1 403 Forbidden");
+    reached.now = "internet";
+    await allAnswer("HTTP/1.1 403 Forbidden");
+    reached.now = "everything";
+    const tunnels = sockets.map((socket) => connectionTo(socket, `${ask}hello`));
+    const established = "HTTP/1.1 200 Connection established\r\n\r\nhello";
+    expect(await settled(() => tunnels.every(({ said }) => said === established))).toBe(true);
+    sandboxes.networkChanged(ROOM);
+    reached.now = "internet";
+    sandboxes.networkChanged(roomSandbox("room-2"));
+    await Bun.sleep(100);
+    expect(tunnels.map(({ open }) => open)).toEqual([true, true]);
+    sandboxes.networkChanged(ROOM);
+    expect(await settled(() => tunnels.every(({ open }) => !open))).toBe(true);
+    expect(tunnels.map(({ said }) => said)).toEqual([established, established]);
+    await allAnswer("HTTP/1.1 403 Forbidden");
+    place.stop(true);
+    await sandboxes.stopAll();
   });
 
   test("is that agent's alone, started once for its calls, and stops a while after its last", async () => {

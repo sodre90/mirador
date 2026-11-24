@@ -119,7 +119,7 @@ const edit: WorkspaceCall = { kind: "edit", path: "a.txt", old: "one", new: "two
 describe("letting a brought agent into the room's workspace", () => {
   test("one brought for it is asked about, and the owner and approvers alone are told and answer", () => {
     const { rooms, room, agentId, ownerId, held, store } = roomOfAnn();
-    expect(rooms.workspaceWaiting(room.id)).toEqual([{ asks: "access", roomId: room.id, agentId, at: 0, approvers: [ownerId, "a1"] }]);
+    expect(rooms.workspaceWaiting(room.id)).toEqual([{ asks: "access", roomId: room.id, agentId, at: 0, approvers: [ownerId, "a1"], sandboxNetwork: null }]);
     expect(rooms.countWaiting(room.id)).toBe(1);
     expect(held).toEqual(["the room's workspace, for Mia's Coder"]);
     for (const personId of ["m1", "b1", "c1", "g1", "x1"]) expect(refusal(() => rooms.answerWorkspace(room.id, agentId, "allow", personId))).toBe("room-approval-not-yours");
@@ -172,7 +172,7 @@ describe("letting a brought agent into the room's workspace", () => {
     expect((await answered(waitingCall)).text).toBe("It was stopped.");
     expect([accessOf(patsAgent), accessOf(agentId)]).toEqual(["asked", "allowed"]);
     expect((await answered(call(taskId, read, asPats))).text).toContain("not let you work in its workspace");
-    expect(rooms.workspaceWaiting(room.id)).toEqual([{ asks: "access", roomId: room.id, agentId: patsAgent, at: 0, approvers: [ownerId] }]);
+    expect(rooms.workspaceWaiting(room.id)).toEqual([{ asks: "access", roomId: room.id, agentId: patsAgent, at: 0, approvers: [ownerId], sandboxNetwork: null }]);
     rooms.answerWorkspace(room.id, patsAgent, "allow", ownerId);
     expect((await answered(call(taskId, read, asPats))).text).toContain("Nobody who approves in the room let this task through");
     rooms.setPersonRole(room.id, "a1", "collaborator");
@@ -203,8 +203,8 @@ describe("letting a brought agent into the room's workspace", () => {
 });
 
 describe("a brought agent in a sandboxed room", () => {
-  const freely: SandboxSetting = { on: true, workFreely: true, allowsSharedKernel: false };
-  const asking: SandboxSetting = { on: true, workFreely: false, allowsSharedKernel: false };
+  const freely: SandboxSetting = { on: true, workFreely: true, allowsSharedKernel: false, network: "closed" };
+  const asking: SandboxSetting = { on: true, workFreely: false, allowsSharedKernel: false, network: "closed" };
 
   /** The room's sandbox does its calls on this computer; what it was asked to start and stop. */
   async function sandboxedRoom(sandbox: SandboxSetting) {
@@ -215,6 +215,7 @@ describe("a brought agent in a sandboxed room", () => {
     const started: BroughtCallInSandbox[] = [];
     const stopped: string[] = [];
     const looked: string[] = [];
+    const networkTold: string[] = [];
     rooms.keepsSandboxesWith({
       ...NO_SANDBOX_CONTROL,
       availability: () => ({ available: true, kind: "apple-container" }),
@@ -224,11 +225,13 @@ describe("a brought agent in a sandboxed room", () => {
       },
       stopBrought: async (owner, agent) => void stopped.push(`${ownerKey(owner)} ${agent}`),
       turnEnded: async (owner) => void looked.push(ownerKey(owner)),
+      networkChanged: (owner) => void networkTold.push(`${ownerKey(owner)} ${store.findRoom(owner.id)!.sandbox.network}`),
     });
     await rooms.setSandbox(room.id, sandbox);
     rooms.answerWorkspace(room.id, agentId, "allow", ownerId);
     stopped.splice(0);
-    return { ...machine, started, stopped, looked, its: `room:${room.id} ${agentId}` };
+    networkTold.splice(0);
+    return { ...machine, started, stopped, looked, networkTold, its: `room:${room.id} ${agentId}` };
   }
 
   test("has its calls done in its own VM of the sandbox, and nothing on this computer where the sandbox can't run", async () => {
@@ -259,11 +262,31 @@ describe("a brought agent in a sandboxed room", () => {
     for (const asked of [edit, run("touch ran")]) {
       const callId = call(taskId, asked);
       const waiting = await waits();
-      expect(waiting.inSandbox).toBe(true);
+      expect(waiting.sandboxNetwork).toBe("closed");
       rooms.answerWorkspaceCall(room.id, waiting.callId, "allow", ownerId);
       expect((await answerTo(callId)).done).toBe(true);
     }
     expect(existsSync(inWorkspace("ran"))).toBe(true);
+  });
+
+  test("says what its sandbox reaches where it asks, as the owner changes that, which ends nothing of it", async () => {
+    const { rooms, room, agentId, ownerId, store, ownerTasks, call, answerTo, waiting, waits, stopped, networkTold, inWorkspace } = await sandboxedRoom(asking);
+    const callId = call(ownerTasks(), run("touch ran"));
+    const { callId: shownId } = await waits();
+    rooms.setSandboxNetwork(room.id, "internet");
+    expect(waiting().map(({ sandboxNetwork }) => sandboxNetwork)).toEqual(["internet"]);
+    rooms.setSandboxNetwork(room.id, "closed");
+    expect(waiting().map(({ sandboxNetwork }) => sandboxNetwork)).toEqual(["closed"]);
+    rooms.answerWorkspaceCall(room.id, shownId, "allow", ownerId);
+    expect((await answerTo(callId)).done).toBe(true);
+    expect(existsSync(inWorkspace("ran"))).toBe(true);
+    expect(store.findRoom(room.id)!.agents.find(({ profileId }) => profileId === agentId)!.brought!.workspace).toBe("allowed");
+    expect(stopped).toEqual([]);
+    expect(networkTold).toEqual([`room:${room.id} internet`, `room:${room.id} closed`]);
+    rooms.setSandboxNetwork(room.id, "everything");
+    await rooms.setSandbox(room.id, { ...freely, network: "everything" });
+    rooms.setWorkspace(room.id, "w2");
+    expect(rooms.workspaceWaiting(room.id).map(({ asks, sandboxNetwork }) => [asks, sandboxNetwork])).toEqual([["access", "everything"]]);
   });
 
   test("a call asked for in the sandbox is never done on this computer, and leaving the sandbox asks for the agent again", async () => {

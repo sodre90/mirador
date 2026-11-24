@@ -10,7 +10,7 @@ import { versionSaidIn } from "../host/sandbox/agent-version.ts";
 import { baseImageOf, buildArguments, buildStepIn, imageReferencesIn, imageTag, RECIPE } from "../host/sandbox/image.ts";
 import { PODMAN_READS } from "../host/sandbox/podman.ts";
 import { gitFoldersOf, sandboxRefusalOf, workspaceMounts, type MiradorPlaces } from "../host/sandbox/workspace-mounts.ts";
-import { narrowsSandbox, sandboxSettingIn, sameSandbox, sharesKernel, signInElsewhere } from "../shared/sandbox.ts";
+import { keepingNetworkOf, narrowsSandbox, NO_SANDBOX, reachesMoreThan, SANDBOX_NETWORKS, sandboxSettingIn, sameSandbox, sharesKernel, signInElsewhere, type SandboxNetwork, type SandboxSetting } from "../shared/sandbox.ts";
 
 const scratch = realpathSync(mkdtempSync(join(tmpdir(), "sandbox-parts-")));
 afterAll(() => rmSync(scratch, { recursive: true, force: true }));
@@ -70,7 +70,7 @@ test("Podman's storage is read from its info, and none from info that names none
 });
 
 test("a room's sandbox setting reads as off unless it is on, allows a shared kernel only while on, and narrows when it is turned on, stops working freely or no longer allows a shared kernel", () => {
-  const sandbox = (on: boolean, workFreely: boolean, allowsSharedKernel = false) => ({ on, workFreely, allowsSharedKernel });
+  const sandbox = (on: boolean, workFreely: boolean, allowsSharedKernel = false): SandboxSetting => ({ ...NO_SANDBOX, on, workFreely, allowsSharedKernel });
   expect(sandboxSettingIn({ on: "yes", workFreely: 0 })).toEqual(sandbox(false, true));
   expect(sandboxSettingIn({ on: true, workFreely: false })).toEqual(sandbox(true, false));
   expect(sandboxSettingIn({ on: true, workFreely: true, allowsSharedKernel: true })).toEqual(sandbox(true, true, true));
@@ -82,6 +82,19 @@ test("a room's sandbox setting reads as off unless it is on, allows a shared ker
   expect(narrowsSandbox(sandbox(true, true, true), sandbox(true, true))).toBe(true);
   expect(narrowsSandbox(sandbox(true, true), sandbox(true, true, true))).toBe(false);
   expect(sameSandbox(sandbox(true, true), sandbox(true, true, true))).toBe(false);
+});
+
+test("a sandbox's network reads as closed unless it is on and reaches one known, and stays as it is however else the sandbox is set, until it is turned off", () => {
+  const on = (network: SandboxNetwork): SandboxSetting => ({ ...NO_SANDBOX, on: true, network });
+  SANDBOX_NETWORKS.forEach((network) => expect(sandboxSettingIn({ on: true, network }).network).toBe(network));
+  ["", "all", "Internet", "constructor", 1, null, undefined, ["internet"], { internet: true }].forEach((network) => expect(sandboxSettingIn({ on: true, network }).network).toBe("closed"));
+  expect(sandboxSettingIn({ on: false, network: "everything" }).network).toBe("closed");
+  expect(keepingNetworkOf(on("internet"), { ...on("everything"), workFreely: false })).toEqual({ ...on("internet"), workFreely: false });
+  expect(keepingNetworkOf(on("everything"), NO_SANDBOX).network).toBe("closed");
+  expect(keepingNetworkOf({ ...NO_SANDBOX, network: "everything" }, on("internet")).network).toBe("closed");
+  expect(sameSandbox(on("closed"), on("internet"))).toBe(false);
+  expect(narrowsSandbox(on("everything"), on("closed"))).toBe(false);
+  expect(SANDBOX_NETWORKS.map((network) => SANDBOX_NETWORKS.filter((other) => reachesMoreThan(network, other)))).toEqual([[], ["closed"], ["closed", "internet"]]);
 });
 
 test("an agent that signs in with a key works in a sandbox; one on a subscription, Bedrock, Vertex or Foundry does not yet", () => {

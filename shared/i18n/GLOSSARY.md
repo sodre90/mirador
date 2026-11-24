@@ -86,6 +86,8 @@ These terms stay the same everywhere:
 | Podman container (the sandbox on Linux, which shares this computer's kernel, weaker than a VM) | Podman-konténer | contenedor de Podman | Podman 容器 | Podman-Container (der) |
 | kernel (the Linux kernel a Podman container shares) | kernel | kernel | 内核 | Kernel (der) |
 | SELinux confinement (what SELinux keeps a container to, which the sandbox runs without) | SELinux korlátai | confinamiento de SELinux | SELinux 的约束 | Einschränkungen von SELinux (die) |
+| network (what a sandbox reaches besides the model and Mirador) | hálózat | red | 网络 | Netzwerk (das) |
+| web proxy (through which a sandbox reaches it) | webproxy | proxy web | Web 代理 | Webproxy (der) |
 | work freely (in a sandbox, without asking) | szabadon dolgozik | trabajar libremente | 自由工作 | frei arbeiten |
 | held (an agent config change, put back until the owner allows it) | visszatartott | retenido | 暂扣 | zurückgehalten |
 | folders from this computer (that the owner adds to a sandbox, which sees each at the same path) | mappák erről a gépről | carpetas de este equipo | 这台电脑上的文件夹 | Ordner von diesem Rechner |

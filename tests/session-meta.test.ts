@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { claudeRoomSessionMeta, claudeSessionMeta, piSessionMeta, sessionMeta } from "../host/acp/harnesses.ts";
 import { canvasInstructions, canvasUseGuidance, titleGuidance } from "../host/canvas/guidance.ts";
+import type { SessionInSandbox } from "../host/sandbox/agent-guidance.ts";
 import type { CanvasUse } from "../shared/model.ts";
 
 test("Claude Code runs every tool of the canvas's own without a permission prompt", () => {
@@ -51,6 +52,20 @@ test("pi, which publishes no title, is asked to name its conversation once the f
   expect(appendedForPi("as-needed")).toContain(titleGuidance());
   expect(titleGuidance()).toContain("title_conversation");
   expect(claudeSessionMeta("often").systemPrompt.append).not.toContain(titleGuidance());
+});
+
+test("an agent in a sandbox is told of its way out, in and out of rooms, and one on this computer is not", () => {
+  const toldTo = (harness: "claude" | "pi", inRoom: boolean, sandbox: SessionInSandbox | null) => (sessionMeta(harness, "often", { canvasAssetsOrigin: ASSETS_ORIGIN, inRoom, sandbox }) as { systemPrompt: { append: string } }).systemPrompt.append;
+  for (const harness of ["claude", "pi"] as const) {
+    for (const inRoom of [true, false]) {
+      const told = toldTo(harness, inRoom, { folders: [{ path: "/home/me/notes", writable: false }] });
+      expect(told).toContain("# Network\nYou work in a sandbox that has no network of its own.");
+      expect(told).toContain("HTTPS_PROXY");
+      expect(told).toContain("- /home/me/notes (read-only)");
+      expect(toldTo(harness, inRoom, null)).not.toContain("HTTPS_PROXY");
+      expect(toldTo(harness, inRoom, null)).toBe(told.slice(0, told.indexOf("\n\n# Network")));
+    }
+  }
 });
 
 test("opencode gets no session options", () => {

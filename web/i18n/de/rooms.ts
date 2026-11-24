@@ -202,7 +202,21 @@ export const rooms: Messages["rooms"] = {
   sandbox: {
     legend: "Sandbox",
     turnOn: "Agenten in einer Sandbox ausführen",
-    network: "Netzwerk: nur das Modell und Mirador",
+    network: {
+      label: "Netzwerk",
+      choices: {
+        closed: "Nur das Modell und Mirador",
+        internet: "Auch das Internet, aber nicht dieser Rechner und seine Netzwerke",
+        everything: "Alles: das Internet und die Netzwerke dieses Rechners",
+      },
+      meaning: {
+        internet:
+          "Git über HTTPS, npm und alles andere, was einen Webproxy nutzt, kommt über Mirador hinaus, und was die Agenten lesen, kann auf diesem Weg hinausgelangen. Die öffentliche Adresse deines Routers und öffentliche Adressen, zu denen dein VPN führt, zählen zum Internet.",
+        everything:
+          "Außer dem Internet erreichen die Agenten als dieser Rechner dein eigenes Netzwerk und dein Tailnet, wo Geräte sie einlassen können wie dich, und diesen Rechner unter seinen Adressen dort, aber nichts auf localhost. Was sie lesen, kann auf diesem Weg hinausgelangen.",
+      },
+      broughtReachToo: "Agenten, die andere in den Raum mitbringen, erreichen dasselbe.",
+    },
     workFreely: "Agenten arbeiten darin frei",
     presetApplies: "Die Berechtigungsvorgabe des Raums gilt weiter",
     checking: "Prüfe, ob dieser Raum eine Sandbox haben kann…",
@@ -213,7 +227,7 @@ export const rooms: Messages["rooms"] = {
     },
     sharedKernel: {
       warning:
-        "Auf diesem Rechner ist die Sandbox ein Podman-Container, keine VM. Sie sieht trotzdem nur den Arbeitsbereich und erreicht nur das Modell und Mirador, teilt sich aber den Linux-Kernel dieses Rechners, sodass ein Fehler im Kernel die Agenten herauslassen könnte.",
+        "Auf diesem Rechner ist die Sandbox ein Podman-Container, keine VM. Sie sieht trotzdem nur den Arbeitsbereich und erreicht nur, was du auswählst, teilt sich aber den Linux-Kernel dieses Rechners, sodass ein Fehler im Kernel die Agenten herauslassen könnte.",
       turnOn: "Trotzdem einschalten",
       keepOff: "Ausgeschaltet lassen",
       turnsFailUntilAllowed: "Die Runden der Agenten schlagen fehl, bis du es erlaubst.",
@@ -244,7 +258,8 @@ export const rooms: Messages["rooms"] = {
     setupFailed: (problem: string) => `Das Einrichten ist fehlgeschlagen: ${problem}`,
     wholeEnvironmentIgnored: "Wird ignoriert, solange der Raum eine Sandbox hat: In seine Sandbox kommen nur die hier gewählten Werte.",
     meaning: [
-      "Die Claude-Code- und pi-Agenten des Raums laufen in einer eigenen Sandbox auf diesem Rechner: auf einem Mac in einer leichten VM, erstellt mit Apples container-Tool; unter Linux in einem Podman-Container, der sich den Kernel des Rechners teilt und die Agenten daher weniger gut einschließt als eine VM; er wird erst genutzt, wenn du es erlaubst. Die Sandbox sieht den Arbeitsbereich, einen Ordner des Raums für die Einstellungen und Sitzungen der Agenten und die Ordner dieses Rechners, die du hinzufügst, schreibgeschützt oder les- und schreibbar; sonst nichts von diesem Rechner. Ihr Netzwerk erreicht nur das Modell, über Mirador, das den Schlüssel des Profils hinzufügt, sodass er nie in die Sandbox gelangt, und Miradors Canvas.",
+      "Die Claude-Code- und pi-Agenten des Raums laufen in einer eigenen Sandbox auf diesem Rechner: auf einem Mac in einer leichten VM, erstellt mit Apples container-Tool; unter Linux in einem Podman-Container, der sich den Kernel des Rechners teilt und die Agenten daher weniger gut einschließt als eine VM; er wird erst genutzt, wenn du es erlaubst. Die Sandbox sieht den Arbeitsbereich, einen Ordner des Raums für die Einstellungen und Sitzungen der Agenten und die Ordner dieses Rechners, die du hinzufügst, schreibgeschützt oder les- und schreibbar; sonst nichts von diesem Rechner. Die Agenten erreichen ihr Modell über Mirador, das den Schlüssel des Profils hinzufügt, sodass er nie in die Sandbox gelangt, und Miradors Canvas.",
+      "Darüber hinaus erreicht die Sandbox, was du unter Netzwerk auswählst, über einen Webproxy von Mirador, da sie kein eigenes Netzwerk hat: SSH, Ping und Programme, die keinen Proxy nutzen, kommen nicht hinaus. Eine Änderung gilt sofort, auch in laufenden Runden, und beendet die Verbindungen, die sie nicht mehr erlaubt. Nach dem Aus- und Wiedereinschalten erreicht die Sandbox nur das Modell und Mirador.",
       "Arbeiten sie frei, fragen die Agenten nach nichts, da die Sandbox sie einschließt. Sonst gilt die Berechtigungsvorgabe des Raums wie auf diesem Rechner.",
       "Die Dateien, aus denen Agenten ihre Einstellungen, Anweisungen und MCP-Server laden, werden zurückgehalten, ebenso die Dateien, die von selbst laufen: .claude, .mcp.json, CLAUDE.md, AGENTS.md, .codex, opencode.json, .opencode, .pi, .husky, .githooks, .vscode, .pre-commit-config.yaml, lefthook.yml und .envrc. Die beim Start der Sandbox vorhandenen sind darin schreibgeschützt; eine neue wird sofort zurückgesetzt, und du erlaubst oder verwirfst sie im Raum.",
       "Jede andere Datei, die die Agenten im Arbeitsbereich ändern, kann laufen, wenn du sie selbst ausführst: Tests, Skripte, package.json oder ein Commit aus deinem Terminal, der die Hooks des Repositorys ausführt. Sieh dir an, was sie geändert haben, bevor du dort etwas ausführst.",
@@ -449,6 +464,11 @@ export const rooms: Messages["rooms"] = {
   },
   commandRunsAsOwner: "Er läuft auf dem Rechner des Raums mit allem, was dessen Besitzer dort darf, nicht nur im Arbeitsbereich.",
   commandRunsInSandbox: "Er läuft in der Sandbox des Raums, die den Arbeitsbereich sieht und sonst nichts vom Rechner des Raums.",
+  sandboxReaches: {
+    closed: "Befehle in der Sandbox des Raums erreichen kein Netzwerk.",
+    internet: "Befehle in der Sandbox des Raums erreichen das Internet.",
+    everything: "Befehle in der Sandbox des Raums erreichen das Internet und, als der Rechner des Raums, dessen Netzwerke.",
+  },
   workspaceAccess: {
     asked: "Wartet darauf, in den Arbeitsbereich dieses Raums gelassen zu werden",
     allowed: "Arbeitet im Arbeitsbereich dieses Raums",

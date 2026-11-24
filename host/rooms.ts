@@ -72,7 +72,9 @@ import {
   type RoomTimeline,
 } from "../shared/rooms.ts";
 import {
+  keepingNetworkOf,
   narrowsSandbox,
+  networkWhileOn,
   NO_SANDBOX,
   roomSandbox,
   sandboxSettingIn,
@@ -81,6 +83,7 @@ import {
   type HeldChangeAnswer,
   type SandboxBlocker,
   type SandboxCheck,
+  type SandboxNetwork,
   type SandboxSetting,
 } from "../shared/sandbox.ts";
 import { assertSandboxCanRun, NO_SANDBOX_CONTROL, profileSandboxBlocker, type SandboxControl } from "./sandbox/sandbox-control.ts";
@@ -457,7 +460,7 @@ export class RoomService implements RoomRules, TurnListener {
    */
   async setSandbox(roomId: string, given: SandboxSetting) {
     const room = this.existingRoom(roomId);
-    const sandbox = sandboxSettingIn(given);
+    const sandbox = keepingNetworkOf(room.sandbox, sandboxSettingIn(given));
     if (sameSandbox(sandbox, room.sandbox)) return;
     if (sandbox.on && !room.sandbox.on) assertSandboxCanRun(await this.sandboxCheck(roomId), sandbox);
     const now = this.existingRoom(roomId);
@@ -466,11 +469,22 @@ export class RoomService implements RoomRules, TurnListener {
     if (sandbox.on !== now.sandbox.on) this.workspaceIsAskedForAgain(now);
     else if (stopsTurn) this.allEndInWorkspace(now);
     this.store.setRoomSandbox(roomId, sandbox);
+    this.sandboxes.networkChanged(roomSandbox(roomId));
     this.publish(roomId);
     this.waitingChanged(roomId);
     const ownAgents = now.agents.filter(({ brought }) => !brought);
     ownAgents.forEach((agent) => this.startAfresh(agent, stopsTurn));
     if (sandbox.on) this.sandboxes.prepare(ownAgents.flatMap(({ profileId }) => this.store.findProfile(profileId) ?? []));
+  }
+
+  /** What the room's sandbox reaches besides the model and Mirador, while it is on: from now on, in sessions under way too. */
+  setSandboxNetwork(roomId: string, network: SandboxNetwork) {
+    const room = this.existingRoom(roomId);
+    if (!room.sandbox.on || room.sandbox.network === network) return;
+    this.store.setRoomSandbox(roomId, { ...room.sandbox, network });
+    this.sandboxes.networkChanged(roomSandbox(roomId));
+    this.publish(roomId);
+    this.waitingChanged(roomId);
   }
 
   /** A sandbox leaving its workspace and its folders read and write leaves the repositories' hooks off in them a while yet. */
@@ -618,19 +632,19 @@ export class RoomService implements RoomRules, TurnListener {
     const room = this.store.findRoom(roomId);
     if (!room) return [];
     const approvers = this.approversOf(room);
-    const asking = room.agents.filter(({ brought }) => brought?.workspace === "asked").map(({ profileId }) => ({ asks: "access" as const, roomId, agentId: profileId, at: 0, approvers }));
-    return [...asking, ...this.workspaceCalls.waitingIn(roomId).map((call) => this.workspaceCallWaiting(call, approvers))];
+    const asking = room.agents.filter(({ brought }) => brought?.workspace === "asked").map(({ profileId }) => ({ asks: "access" as const, roomId, agentId: profileId, at: 0, approvers, sandboxNetwork: networkWhileOn(room.sandbox) }));
+    return [...asking, ...this.workspaceCalls.waitingIn(roomId).map((call) => this.workspaceCallWaiting(call, room, approvers))];
   }
 
   allWorkspaceWaiting(): RoomWorkspaceApproval[] {
     return this.list().flatMap(({ id }) => this.workspaceWaiting(id));
   }
 
-  private workspaceCallWaiting({ shown, whole, messageId, inSandbox }: WorkspaceCallUnderWay, approvers: string[]): RoomWorkspaceApproval {
+  private workspaceCallWaiting({ shown, whole, messageId, inSandbox }: WorkspaceCallUnderWay, { sandbox }: Room, approvers: string[]): RoomWorkspaceApproval {
     const { id, roomId, agentId, threadId, at, kind, about } = shown;
     const asked = this.store.findRoomMessage(messageId);
     const messagesById = new Map(this.store.listRoomMessages(roomId).map((message) => [message.id, message]));
-    return { asks: "call", roomId, agentId, callId: id, threadId, at, kind, about, shown: whole, inSandbox, task: asked ? taskOf(asked, messagesById, this.store.ownerId()) : null, approvers };
+    return { asks: "call", roomId, agentId, callId: id, threadId, at, kind, about, shown: whole, sandboxNetwork: inSandbox ? sandbox.network : null, task: asked ? taskOf(asked, messagesById, this.store.ownerId()) : null, approvers };
   }
 
   /** Approvers hear of it as of a request. */

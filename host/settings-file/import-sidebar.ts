@@ -128,7 +128,8 @@ class FileSidebar {
     if (entry.sideChatAccess !== undefined && entry.sideChatAccess !== workspace.sideChatAccess) this.writers.setSideChatAccess(workspace.id, entry.sideChatAccess);
     await this.setWorktreeSettings(entry, workspace);
     if (entry.sandbox !== undefined && !matchesSandbox(entry.sandbox, workspace.sandbox)) {
-      await this.writers.setSandbox(workspace.id, { ...entry.sandbox, allowsSharedKernel: workspace.sandbox.allowsSharedKernel });
+      const { allowsSharedKernel, network } = workspace.sandbox;
+      await this.writers.setSandbox(workspace.id, { ...entry.sandbox, allowsSharedKernel, network });
     }
   }
 

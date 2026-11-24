@@ -47,7 +47,7 @@ function WholeOfCall({ kind, shown }: { kind: RoomWorkspaceCall["kind"]; shown: 
 }
 
 /** An agent someone brought that asks to be let into the room's workspace. */
-export function WorkspaceAccessApproval({ asked: { roomId, agentId }, agentName, count }: { asked: AccessAsked; agentName: string; count: ReactNode }) {
+export function WorkspaceAccessApproval({ asked: { roomId, agentId, sandboxNetwork }, agentName, count }: { asked: AccessAsked; agentName: string; count: ReactNode }) {
   return (
     <section className="room-approvals" aria-label={words.approvalsWaiting} data-workspace-access-asked={agentId}>
       <div className="room-approval-head">
@@ -55,6 +55,7 @@ export function WorkspaceAccessApproval({ asked: { roomId, agentId }, agentName,
         {count}
       </div>
       <div className="room-approval-task">{words.workHereMeaning}</div>
+      {sandboxNetwork && <div className="room-approval-outside">{words.sandboxReaches[sandboxNetwork]}</div>}
       <div className="permission-options">
         <button type="button" className="option-allow_once" onClick={() => answerAccess(roomId, agentId, "allow")}>
           {words.letItWorkHere}
@@ -67,6 +68,8 @@ export function WorkspaceAccessApproval({ asked: { roomId, agentId }, agentName,
   );
 }
 
+const whereCommandRuns = ({ sandboxNetwork }: CallAsked) => (sandboxNetwork ? `${words.commandRunsInSandbox} ${words.sandboxReaches[sandboxNetwork]}` : words.commandRunsAsOwner);
+
 /** One call of such an agent: all it would do, for whoever allows it. */
 export function WorkspaceCallApproval({ asked, agentName, count, task }: { asked: CallAsked; agentName: string; count: ReactNode; task: ReactNode }) {
   return (
@@ -77,7 +80,7 @@ export function WorkspaceCallApproval({ asked, agentName, count, task }: { asked
       </div>
       {asked.kind !== "run" && <code className="workspace-call-path">{asked.about}</code>}
       {asked.kind !== "read" && <WholeOfCall kind={asked.kind} shown={asked.shown} />}
-      {asked.kind === "run" && <div className="room-approval-outside">{asked.inSandbox ? words.commandRunsInSandbox : words.commandRunsAsOwner}</div>}
+      {asked.kind === "run" && <div className="room-approval-outside">{whereCommandRuns(asked)}</div>}
       {task}
       <div className="permission-options">
         <button type="button" className="option-allow_once" onClick={() => answerCall(asked, "allow")}>

@@ -238,6 +238,7 @@ const sandboxes = new Sandboxes(podman ?? AppleContainer.here(config.sandboxCont
   setupChanged: (setup) => hub.broadcast({ type: "sandbox.setup", setup }),
   heldChanged: (owner, changes, full) => hub.broadcast({ type: "sandbox.held-changes", owner, changes, full }),
   foldersOf: (owner) => store.sandboxFoldersOf(owner),
+  networkOf: (owner) => (owner.kind === "room" ? store.findRoom(owner.id) : store.findWorkspace(owner.id))?.sandbox.network ?? "closed",
   otherSandboxes: (owner) => otherSandboxesOf(store, owner),
   foldersStarted: (owner) => sandboxFolders.vmStarted(owner),
 });
@@ -251,6 +252,7 @@ const sandboxControl: SandboxControl = {
   launchForBrought: ({ profiles, ...call }) => sandboxes.launchForBrought({ ...call, images: () => agentImagesOf(profiles, store.claudeProgramSetting()) }),
   stopBrought: (owner, agentId) => sandboxes.stopBrought(owner, agentId),
   turnEnded: (owner) => sandboxes.turnEnded(owner),
+  networkChanged: (owner) => sandboxes.networkChanged(owner),
   ownerGone: (owner) => {
     sandboxFolders.ownerGone(owner);
     return sandboxes.ownerGone(owner);

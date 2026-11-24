@@ -4,6 +4,8 @@ import type { Room } from "../shared/rooms.ts";
 import {
   HELD_CHANGES_MOST,
   narrowsSandbox,
+  roomSandbox,
+  SANDBOX_NETWORKS,
   sharesKernel,
   type HeldChange,
   type HeldChangeAnswer,
@@ -11,6 +13,7 @@ import {
   type SandboxCheck,
   type SandboxFolders,
   type SandboxKind,
+  type SandboxOwner,
   type SandboxSetting,
   type SandboxSetup,
 } from "../shared/sandbox.ts";
@@ -20,6 +23,7 @@ import { t } from "./i18n/index.ts";
 import { sandboxBlockerText, sandboxUnavailableText } from "./problem-text.ts";
 import { SandboxFolderList } from "./SandboxFolders.tsx";
 import { withHomeAsTilde } from "./workspace-folder.ts";
+import { useSentChoice } from "./sent-choice.ts";
 import { nameOf, roomStartsAfreshText, StartsAfreshWarning, useChangeStartingAfresh, workingThere } from "./RoomAgentSetup.tsx";
 
 const words = t.rooms.sandbox;
@@ -102,17 +106,42 @@ export interface SandboxSwitchWords {
   checking: string;
   /** The option under which the agents still ask: the room's preset, or their profile's mode. */
   stillAsks: string;
+  /** Who else's agents reach what the sandbox does, where anyone's. */
+  othersReachToo?: string;
+}
+
+/** What the sandbox reaches, which changes at once, in turns under way too, so no change of it waits for the owner to confirm it. */
+function NetworkChoice({ id, owner, setting, othersReachToo }: { id: string; owner: SandboxOwner; setting: SandboxSetting; othersReachToo?: string }) {
+  const labelId = `${id}-sandbox-network`;
+  const [network, choose] = useSentChoice(setting.network, (chosen) => connection.send({ type: "sandbox.set-network", owner, network: chosen }));
+  return (
+    <div className="room-sandbox-work room-sandbox-network" role="radiogroup" aria-labelledby={labelId}>
+      <span className="hint" id={labelId}>
+        {words.network.label}
+      </span>
+      {SANDBOX_NETWORKS.map((each) => (
+        <label key={each} className="room-agent-choice">
+          <input type="radio" name={labelId} checked={network === each} disabled={!setting.on} onChange={() => choose(each)} />
+          {words.network.choices[each]}
+        </label>
+      ))}
+      {network !== "closed" && (
+        <p className="hint room-sandbox-reaches">{[words.network.meaning[network], othersReachToo].filter(Boolean).join(" ")}</p>
+      )}
+    </div>
+  );
 }
 
 /**
  * A room's or workspace's sandbox switch, which this computer or the room or workspace can keep off with a reason said
- * under it, and the kind of sandbox this computer gives; once on, how the agents work inside and where setting it up on
- * this computer stands, and the folders of this computer it sees. A sandbox that shares this computer's kernel is said
+ * under it, and the kind of sandbox this computer gives; once on, what it reaches, how the agents work inside and where
+ * setting it up on this computer stands, and the folders of this computer it sees. A sandbox that shares this computer's kernel is said
  * to before it is turned on, and taken only once the owner allows it. A change that starts conversations at work
  * afresh waits for the owner to confirm it.
  */
 export function SandboxSwitch({
   id,
+  owner,
   setting,
   check,
   setup,
@@ -123,6 +152,7 @@ export function SandboxSwitch({
   folders,
 }: {
   id: string;
+  owner: SandboxOwner;
   setting: SandboxSetting;
   check: SandboxCheck | null;
   setup: SandboxSetup;
@@ -182,7 +212,7 @@ export function SandboxSwitch({
       )}
       {shown.on && (
         <>
-          <p className="hint">{words.network}</p>
+          <NetworkChoice id={id} owner={owner} setting={setting} othersReachToo={switchWords.othersReachToo} />
           <div className="room-sandbox-work">
             <label className="room-agent-choice">
               <input type="radio" name={`${id}-sandbox-work`} checked={shown.workFreely} disabled={pending !== null} onChange={() => choose({ ...shown, workFreely: true })} />
@@ -202,7 +232,7 @@ export function SandboxSwitch({
   );
 }
 
-const roomSwitchWords: SandboxSwitchWords = { turnOn: words.turnOn, checking: words.checking, stillAsks: words.presetApplies };
+const roomSwitchWords: SandboxSwitchWords = { turnOn: words.turnOn, checking: words.checking, stillAsks: words.presetApplies, othersReachToo: words.network.broughtReachToo };
 
 /** The room's sandbox switch; changing it starts the room's agents at work afresh. */
 export function SandboxField({
@@ -225,6 +255,7 @@ export function SandboxField({
   return (
     <SandboxSwitch
       id={`room-${room.id}`}
+      owner={roomSandbox(room.id)}
       setting={room.sandbox}
       check={check}
       setup={setup}

@@ -150,6 +150,7 @@ test("an agent Mia brought is let into Ann's sandboxed room, and its calls are d
   await roomCard(ann, "Garden").click();
   const access = ann.locator("[data-workspace-access-asked]");
   await expect(access).toContainText("unless the room's sandbox lets agents work freely");
+  await expect(access).toContainText("Commands in the room's sandbox reach no network.");
   expect(ourVms()).toEqual([]);
   await access.getByRole("button", { name: "Let it work here" }).click();
 
@@ -157,7 +158,7 @@ test("an agent Mia brought is let into Ann's sandboxed room, and its calls are d
   expect(ourVms()).toHaveLength(1);
 });
 
-test("the VM sees the workspace alone, reaches nothing, and runs its calls as the agent user with nothing of Ann's or of the room's own agents", async () => {
+test("the VM sees the workspace alone, reaches nothing but a web proxy that lets nothing through, and runs its calls as the agent user with nothing of Ann's or of the room's own agents", async () => {
   writeFileSync(inRoomsWorkspace("look-around.cjs"), LOOK_AROUND);
   const macAddresses = Object.values(networkInterfaces())
     .flat()
@@ -170,10 +171,24 @@ test("the VM sees the workspace alone, reaches nothing, and runs its calls as th
   const { uid, noNewPrivs, capabilities, variables, folders: found, reached, processes } = JSON.parse(textThere("looked-around.json")!) as LookedAround;
 
   expect([uid, noNewPrivs, capabilities]).toEqual([1000, "1", "0000000000000000"]);
-  expect(variables.filter((name) => !["PATH", "HOME", "SHELL", "USER", "LOGNAME", "TMPDIR", "PWD", "OLDPWD", "SHLVL", "_"].includes(name))).toEqual([]);
-  expect(found).toEqual({ "/Users": "ENOENT", "/run/mirador": ["presence.sock"], [folders[2]!]: "ENOENT", [folders[3]!]: "ENOENT", "/mirador": ["sandbox"] });
+  const throughTheProxy = ["HTTPS_PROXY", "HTTP_PROXY", "NO_PROXY", "http_proxy", "https_proxy", "no_proxy"];
+  expect(variables.filter((name) => !["PATH", "HOME", "SHELL", "USER", "LOGNAME", "TMPDIR", "PWD", "OLDPWD", "SHLVL", "_"].includes(name)).toSorted()).toEqual(throughTheProxy);
+  expect(found).toEqual({ "/Users": "ENOENT", "/run/mirador": ["network.sock"], [folders[2]!]: "ENOENT", [folders[3]!]: "ENOENT", "/mirador": ["sandbox"] });
   expect(Object.keys(reached).filter((target) => reached[target] === "reached")).toEqual(["127.0.0.1 7703"]);
   expect(processes).not.toContain(BUILDERS_KEY);
+  await expect(callCard()).toHaveCount(0);
+});
+
+test("what Ann chooses under Network, its commands reach at once, with nothing asked of her again", async () => {
+  const lookOut = { command: "git ls-remote https://github.com/octocat/Hello-World.git HEAD 2>&1 || true" };
+  await expect(await taskDone("LOOK OUT WHILE CLOSED", "room_run", lookOut)).toContainText("403");
+  const settings = await openRoomSettings(ann, "Garden", "Permissions");
+  const internet = settings.getByRole("radiogroup", { name: "Network" }).getByRole("radio", { name: "The internet too, but not this computer or its networks" });
+  await internet.check();
+  await expect(internet).toBeChecked();
+  await settings.getByRole("button", { name: "Close" }).click();
+  await expect(await taskDone("LOOK OUT ONCE OPEN", "room_run", lookOut)).toContainText(/[0-9a-f]{40}\s+HEAD/);
+  await expect(ann.locator("[data-workspace-access-asked]")).toHaveCount(0);
   await expect(callCard()).toHaveCount(0);
 });
 
@@ -207,7 +222,7 @@ test("where agents don't work freely in the sandbox, a command there asks first"
   await expect(presetApplies).toBeChecked();
   await settings.getByRole("button", { name: "Close" }).click();
   const done = taskDone("COPY THE NOTES", "room_run", { command: "cp notes.txt copy.txt && cat copy.txt" });
-  await expect(callCard()).toContainText("It runs in the room's sandbox, which sees the workspace and nothing else of the room's machine.", { timeout: 120_000 });
+  await expect(callCard()).toContainText("It runs in the room's sandbox, which sees the workspace and nothing else of the room's machine. Commands in the room's sandbox reach the internet.", { timeout: 120_000 });
   expect(textThere("copy.txt")).toBeNull();
   await callCard().getByRole("button", { name: "Allow" }).click();
   await expect(await done).toContainText("Sow the peas");

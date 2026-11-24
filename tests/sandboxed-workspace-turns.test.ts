@@ -18,7 +18,7 @@ import { englishProblem, type HostProblem } from "../shared/host-problems.ts";
 import type { Conversation, HarnessId, Profile } from "../shared/model.ts";
 import { ALL_OF_CLAUDE_SETUP } from "../shared/room-agent-setup.ts";
 import { DEFAULT_PERMISSION_PRESET } from "../shared/room-permissions.ts";
-import { NO_SANDBOX, roomSandbox, workspaceSandbox, type SandboxOwner, type SandboxSetting } from "../shared/sandbox.ts";
+import { NO_SANDBOX, ownerKey, roomSandbox, workspaceSandbox, type SandboxOwner, type SandboxSetting } from "../shared/sandbox.ts";
 import { agentWithModes } from "./agent-with-modes.ts";
 import { FakeVmLauncher } from "./fake-vm-launcher.ts";
 
@@ -31,7 +31,7 @@ afterAll(async () => {
   rmSync(scratch, { recursive: true, force: true });
 });
 
-const SANDBOX_ON: SandboxSetting = { on: true, workFreely: true, allowsSharedKernel: false };
+const SANDBOX_ON: SandboxSetting = { on: true, workFreely: true, allowsSharedKernel: false, network: "closed" };
 const BUILDER = { harness: "claude" as const, profileId: "builder" };
 
 /**
@@ -97,6 +97,7 @@ function sandboxedWorkspace(sandbox: SandboxSetting = SANDBOX_ON) {
     setupChanged: () => {},
     heldChanged: () => {},
     foldersOf: () => [],
+    networkOf: () => "closed" as const,
     otherSandboxes: () => ({ workspaces: [], writableFolders: [], writableFoldersOn: [] }),
     foldersStarted: () => {},
     places: { home: "/nonexistent-home", dataDir: config.dataDir, checkout: "/nonexistent-checkout", computersOwn: [] },
@@ -105,6 +106,7 @@ function sandboxedWorkspace(sandbox: SandboxSetting = SANDBOX_ON) {
   sandboxesMade.push(sandboxes);
   conversations.startsSandboxedAgentsIn(sandboxes);
   const preparedFor: string[][] = [];
+  const networkTold: string[] = [];
   const control: SandboxControl = {
     ...NO_SANDBOX_CONTROL,
     availability: () => sandboxes.availability(),
@@ -112,12 +114,13 @@ function sandboxedWorkspace(sandbox: SandboxSetting = SANDBOX_ON) {
     answerHeldChange: (owner, changeId, answer) => sandboxes.answerHeldChange(owner, changeId, answer),
     workspaceRefusal: (workspace, turningOn) => sandboxes.workspaceRefusal(workspace, turningOn),
     ownerGone: (owner) => sandboxes.ownerGone(owner),
+    networkChanged: (owner) => void networkTold.push(`${ownerKey(owner)} ${store.findWorkspace(owner.id)!.sandbox.network}`),
   };
   const agentTabsClosed: string[] = [];
   const workspaceSandboxes = new WorkspaceSandboxes(store, hub, conversations, { closeAgentPrograms: (conversationId) => void agentTabsClosed.push(conversationId) });
   workspaceSandboxes.keepsSandboxesWith(control);
   const turnFailure = (conversationId: string) => store.listEvents(conversationId).findLast(({ event }) => event.type === "error" && event.endsTurn)?.event as { problem?: HostProblem } | undefined;
-  return { store, config, conversations, conversationsOnThisHost, launcher, sandboxes, workspaceSandboxes, agentTabsClosed, claude, project, other, turnFailure, preparedFor };
+  return { store, config, conversations, conversationsOnThisHost, launcher, sandboxes, workspaceSandboxes, agentTabsClosed, claude, project, other, turnFailure, preparedFor, networkTold };
 }
 
 type Inside = {
@@ -354,6 +357,33 @@ test("turned on, the workspace's sandbox prepares the image of the profile its n
   expect(preparedFor).toEqual([["builder"], []]);
 });
 
+test("what a workspace's sandbox reaches changes by itself, its conversations going on in their sessions, stays as it is however else the sandbox is set, and is closed again once that is turned off", async () => {
+  const { store, conversations, workspaceSandboxes, networkTold } = sandboxedWorkspace();
+  const shared = fakeAgent();
+  const conversation = conversations.create("w1", BUILDER);
+  const processKey = agentProcessKey(store.findProfile("builder")!, conversation, true);
+  inside(conversations).agentProcesses.set(processKey, shared.agent);
+  inside(conversations).sandboxStarts.set(shared.agent, {});
+  await conversations.send(conversation.id, "go");
+
+  workspaceSandboxes.setNetwork("w1", "internet");
+  workspaceSandboxes.setNetwork("w1", "internet");
+  expect(store.findWorkspace("w1")!.sandbox).toEqual({ ...SANDBOX_ON, network: "internet" });
+  await conversations.send(conversation.id, "go on");
+  expect(store.listEventsOfTypes(conversation.id, ["context-cleared"])).toEqual([]);
+  expect(shared.prompts()).toBe(2);
+
+  await workspaceSandboxes.setSandbox("w1", { ...SANDBOX_ON, workFreely: false, network: "everything" });
+  expect(store.findWorkspace("w1")!.sandbox).toEqual({ ...SANDBOX_ON, workFreely: false, network: "internet" });
+  await workspaceSandboxes.setSandbox("w1", NO_SANDBOX);
+  workspaceSandboxes.setNetwork("w1", "everything");
+  expect(store.findWorkspace("w1")!.sandbox.network).toBe("closed");
+  await workspaceSandboxes.setSandbox("w1", { ...SANDBOX_ON, network: "everything" });
+  expect(store.findWorkspace("w1")!.sandbox).toEqual(SANDBOX_ON);
+  expect(networkTold).toEqual(["workspace:w1 internet", "workspace:w1 internet", "workspace:w1 closed", "workspace:w1 closed"]);
+  await conversations.shutdown();
+});
+
 test("a session started on this computer before the workspace was sandboxed is not resumed: the conversation starts afresh in the VM", async () => {
   const { store, conversations, launcher, workspaceSandboxes, claude } = sandboxedWorkspace(NO_SANDBOX);
   const shared = fakeAgent();
@@ -557,7 +587,7 @@ test("one workspace's VM sees neither another workspace's nor a room's: its own 
   expect(new Set(configFolders).size).toBe(3);
   sources.forEach((mounted, index) => expect(configFolders.filter((folder, each) => each !== index && mounted.includes(folder))).toEqual([]));
   const socketFolders = vms.map(([vm]) => vm!.mounts.filter(({ target }) => target.startsWith("/run/mirador/")).map(({ source }) => source));
-  expect(new Set(socketFolders.flat()).size).toBe(6);
+  expect(new Set(socketFolders.flat()).size).toBe(9);
 
   const ownConversation = { workspaceId: "w1", roomId: undefined };
   const roomsConversation = { workspaceId: "w1", roomId: "r1" };

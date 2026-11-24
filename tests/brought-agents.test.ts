@@ -177,7 +177,7 @@ describe("bringing an agent of your own into a room of someone else's machine", 
 
   test("not into a workspace whose agents run in a sandbox, which it would share with them: the room's machine is never asked", () => {
     const { brought, store, sentToAnn } = miasMirador();
-    store.setWorkspaceSandbox("w1", { on: true, workFreely: true, allowsSharedKernel: false });
+    store.setWorkspaceSandbox("w1", { on: true, workFreely: true, allowsSharedKernel: false, network: "closed" });
 
     expect(() => brought.bring("ann", "r1", "p1", "w1", "after-ok")).toThrow(expect.objectContaining({ problem: { code: "brought-agent-in-sandboxed-workspace" } }));
     expect(sentToAnn("room.bring-agent")).toEqual([]);

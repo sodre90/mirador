@@ -2,7 +2,7 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, realpathSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { HELD_CHANGES_MOST, roomSandbox, workspaceSandbox, type HeldChange, type SandboxAvailability, type SandboxNotReadyWhy, type SandboxSetup } from "../shared/sandbox.ts";
+import { HELD_CHANGES_MOST, roomSandbox, workspaceSandbox, type HeldChange, type SandboxAvailability, type SandboxNetwork, type SandboxNotReadyWhy, type SandboxSetup } from "../shared/sandbox.ts";
 import { KEY_PLACEHOLDER } from "../host/sandbox/agent-environment.ts";
 import { IMAGE_NAME } from "../host/sandbox/image.ts";
 import { ANTHROPIC_API } from "../host/sandbox/model-proxy.ts";
@@ -28,6 +28,7 @@ function repository() {
 function hostFor(workspace: string) {
   const setups: SandboxSetup[] = [];
   const held: HeldChange[][] = [];
+  let network: SandboxNetwork = "closed";
   const host: SandboxHost = {
     dataDir: join(scratch, `data-${crypto.randomUUID()}`),
     workspaceOf: () => workspace,
@@ -36,11 +37,12 @@ function hostFor(workspace: string) {
     setupChanged: (setup) => setups.push(setup),
     heldChanged: (_, changes) => held.push(changes),
     foldersOf: () => [],
+    networkOf: () => network,
     otherSandboxes: () => ({ workspaces: [], writableFolders: [], writableFoldersOn: [] }),
     foldersStarted: () => {},
     places: { home: "/nonexistent-home", dataDir: join(scratch, "mirador-data"), checkout: "/nonexistent-checkout", computersOwn: [] },
   };
-  return { host, setups, held };
+  return { host, setups, held, reaches: (now: SandboxNetwork) => (network = now) };
 }
 
 const agentIn = (workspace: string, changes: Partial<AgentInSandbox> = {}): AgentInSandbox => ({
@@ -79,8 +81,8 @@ describe("a room's sandbox", () => {
     expect(mountOf(run!, join(workspace, ".git"))).toBe(`${workspace}/.git:${workspace}/.git`);
     expect(mountOf(run!, join(workspace, ".git/hooks"))).toBe(`${workspace}/.git/hooks:${workspace}/.git/hooks:ro`);
     expect(run).toContain("mirador.owner=room:room-1");
-    expect(run!.slice(-5)).toEqual(["sh", "/mirador/sandbox/room-vm.sh", "root", "7701=/run/mirador/canvas.sock", "7702=/run/mirador/model.sock"]);
-    expect(["canvas.sock", "model.sock"].map((socket) => statSync(join(socketsFolderOf(run!), socket)).mode & 0o777)).toEqual([0o600, 0o600]);
+    expect(run!.slice(-6)).toEqual(["sh", "/mirador/sandbox/room-vm.sh", "root", "7701=/run/mirador/canvas.sock", "7702=/run/mirador/model.sock", "7703=/run/mirador/network.sock"]);
+    expect(["canvas.sock", "model.sock", "network.sock"].map((socket) => statSync(join(socketsFolderOf(run!), socket)).mode & 0o777)).toEqual([0o600, 0o600, 0o600]);
     const [program, ...exec] = launched.command;
     expect(program).toBe(cli.program);
     expect(exec.slice(0, 6)).toEqual(["exec", "-i", "--user", "0:0", "-w", workspace]);
@@ -88,7 +90,7 @@ describe("a room's sandbox", () => {
     expect(exec.slice(-2)).toEqual(agentIn(workspace).agent);
     expect(exec).toContain("PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin");
     expect(JSON.stringify([run, launched.command, launched.environment])).not.toContain(KEY);
-    expect(launched.environment).toMatchObject({ ANTHROPIC_API_KEY: KEY_PLACEHOLDER, ANTHROPIC_BASE_URL: "http://127.0.0.1:7702/p/builder", DEPLOY_TARGET: "staging" });
+    expect(launched.environment).toMatchObject({ ANTHROPIC_API_KEY: KEY_PLACEHOLDER, ANTHROPIC_BASE_URL: "http://127.0.0.1:7702/p/builder", DEPLOY_TARGET: "staging", HTTPS_PROXY: "http://127.0.0.1:7703", NO_PROXY: "localhost,127.0.0.1,::1" });
     expect(launched.environment.ECHOED).toBeUndefined();
     expect(sandboxes.confirmedRunning(ROOM)).toBe(true);
     expect(setups.map(({ stage }) => stage)).toEqual(["starting-service", "building-image", "building-image", "building-image", "building-image", "ready"]);

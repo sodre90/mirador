@@ -238,6 +238,7 @@ describe("the sandbox's VM", () => {
       setupChanged: () => {},
       heldChanged: (_, changes) => void held.push(changes),
       foldersOf: () => folders,
+      networkOf: () => "closed" as const,
       otherSandboxes: () => others,
       foldersStarted: (owner) => void started.push(owner),
       places: surroundings.places,
@@ -404,7 +405,7 @@ describe("the sandbox's VM", () => {
   });
 });
 
-const SANDBOX_ON: SandboxSetting = { on: true, workFreely: true, allowsSharedKernel: false };
+const SANDBOX_ON: SandboxSetting = { on: true, workFreely: true, allowsSharedKernel: false, network: "closed" };
 const BUILDER = { harness: "claude" as const, profileId: "builder" };
 
 const builder: Profile = {
@@ -655,12 +656,13 @@ describe("the folders added to a sandbox", () => {
     expect(store.ownersWithSandboxFolders()).toEqual([]);
   });
 
-  test("are told to a Claude agent, each as read-only or read and write, in and out of rooms, and nothing is said where there are none", () => {
+  test("are told to an agent, each as read-only or read and write, in and out of rooms, and nothing is said where there are none", () => {
     const guidance = "# Folders from the owner's computer";
     const folders = [readOnly("/home/me/notes"), readAndWrite("/home/me/library")];
-    expect(claudeSessionMeta("often", { sandboxFolders: folders }).systemPrompt.append).toContain(`${guidance}\n`);
-    expect(claudeRoomSessionMeta("as-needed", { sandboxFolders: folders }).systemPrompt.append).toMatch(/git config and hooks stay read-only[\s\S]*- \/home\/me\/notes \(read-only\)\n- \/home\/me\/library \(read and write\)$/);
+    expect(claudeSessionMeta("often", { sandbox: { folders } }).systemPrompt.append).toContain(`${guidance}\n`);
+    expect(claudeRoomSessionMeta("as-needed", { sandbox: { folders } }).systemPrompt.append).toMatch(/git config and hooks stay read-only[\s\S]*- \/home\/me\/notes \(read-only\)\n- \/home\/me\/library \(read and write\)$/);
     expect(claudeSessionMeta("often").systemPrompt.append).not.toContain(guidance);
+    expect(claudeSessionMeta("often", { sandbox: { folders: [] } }).systemPrompt.append).not.toContain(guidance);
     expect(claudeRoomSessionMeta("as-needed").systemPrompt.append).toBe("");
   });
 

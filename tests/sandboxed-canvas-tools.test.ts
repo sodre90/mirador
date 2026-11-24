@@ -9,7 +9,7 @@ import { DEFAULT_PERMISSION_PRESET } from "../shared/room-permissions.ts";
 import { NO_SANDBOX, type SandboxSetting } from "../shared/sandbox.ts";
 import { storeWithConversation } from "./canvas-plugin-host.ts";
 
-const SANDBOX_ON: SandboxSetting = { on: true, workFreely: true, allowsSharedKernel: false };
+const SANDBOX_ON: SandboxSetting = { on: true, workFreely: true, allowsSharedKernel: false, network: "closed" };
 
 /**
  * Workspace w1 with its own conversation c1 and its other conversation c3, and room r1 of it, with its own sandbox,

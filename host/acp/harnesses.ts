@@ -6,8 +6,7 @@ import { harnessIds, harnessLabels, type CanvasUse, type HarnessId, type Profile
 import { canvasInstructions, canvasPluginInstructions, canvasUseGuidance, NO_CANVAS_PLUGINS, titleGuidance, type CanvasPluginGuidance } from "../canvas/guidance.ts";
 import { PRE_ALLOWED_CANVAS_TOOLS, ROOM_CANVAS_TOOLS, ROOMS_WORKSPACE_CANVAS_TOOLS } from "../canvas/tool-names.ts";
 import { jobWaitGuidance } from "../job-waits.ts";
-import type { MountedFolder } from "../sandbox/added-folders.ts";
-import { sandboxFoldersGuidance } from "../sandbox/folders-guidance.ts";
+import { sandboxGuidance, type SessionInSandbox } from "../sandbox/agent-guidance.ts";
 import { applyEnvironment, parseEnvironment, type ProfileEnvironment } from "../../shared/profile-environment.ts";
 import { ALL_OF_CLAUDE_SETUP, NONE_OF_CLAUDE_SETUP, type ClaudeSetup } from "../../shared/room-agent-setup.ts";
 import { commandValues, readCommandValues, readMissingCommandValues } from "./environment-commands.ts";
@@ -282,7 +281,7 @@ export function sessionMeta(
     inRoomsWorkspace = false,
     claudeSetup = ALL_OF_CLAUDE_SETUP,
     keptProtections = NO_PROTECTIONS,
-    sandboxFolders = [],
+    sandbox = null,
   }: {
     canvasAssetsOrigin: string;
     withoutUserSettings?: boolean;
@@ -292,16 +291,17 @@ export function sessionMeta(
     inRoomsWorkspace?: boolean;
     claudeSetup?: ClaudeSetup;
     keptProtections?: ClaudeProtections;
-    /** The folders of this computer the agent's sandbox mounted beside its workspace, read-only or read and write. */
-    sandboxFolders?: MountedFolder[];
+    /** The sandbox the agent works in; null where it works on this computer. */
+    sandbox?: SessionInSandbox | null;
   },
 ) {
   if (harness === "claude" && inRoomsWorkspace) return claudeRoomsWorkspaceSessionMeta(canvasUse, idleCompaction);
   if (harness === "claude")
     return inRoom
-      ? claudeRoomSessionMeta(canvasUse, { withoutUserSettings, idleCompaction, claudeSetup, keptProtections, sandboxFolders })
-      : claudeSessionMeta(canvasUse, { withoutUserSettings, canvasPlugins, idleCompaction, sandboxFolders });
-  if (harness === "pi") return inRoom ? { systemPrompt: { append: roomCanvasPromptAppendix(canvasUse, canvasAssetsOrigin) } } : piSessionMeta(canvasUse, canvasAssetsOrigin, canvasPlugins);
+      ? claudeRoomSessionMeta(canvasUse, { withoutUserSettings, idleCompaction, claudeSetup, keptProtections, sandbox })
+      : claudeSessionMeta(canvasUse, { withoutUserSettings, canvasPlugins, idleCompaction, sandbox });
+  if (harness === "pi")
+    return inRoom ? { systemPrompt: { append: [roomCanvasPromptAppendix(canvasUse, canvasAssetsOrigin), ...sandboxGuidance(sandbox)].join("\n\n") } } : piSessionMeta(canvasUse, canvasAssetsOrigin, canvasPlugins, sandbox);
   if (harness === "antigravity")
     return inRoom ? { antigravity: { systemPrompt: { append: roomCanvasPromptAppendix(canvasUse, canvasAssetsOrigin) } } } : antigravitySessionMeta(canvasUse, canvasAssetsOrigin, canvasPlugins);
   return undefined;
@@ -320,8 +320,8 @@ export function sessionSystemPrompt(harness: HarnessId, canvasUse: CanvasUse, ca
  * pi leaves the instructions of MCP servers whose tools it declares directly out of its prompt, so the canvas server's
  * come in the text Mirador's pi-acp patch appends. Its job waits go through the canvas's when_done tool, as opencode's do.
  */
-export function piSessionMeta(canvasUse: CanvasUse, canvasAssetsOrigin: string, canvasPlugins = NO_CANVAS_PLUGINS) {
-  return { systemPrompt: { append: canvasPromptAppendix(canvasUse, canvasAssetsOrigin, canvasPlugins) } };
+export function piSessionMeta(canvasUse: CanvasUse, canvasAssetsOrigin: string, canvasPlugins = NO_CANVAS_PLUGINS, sandbox: SessionInSandbox | null = null) {
+  return { systemPrompt: { append: [canvasPromptAppendix(canvasUse, canvasAssetsOrigin, canvasPlugins), ...sandboxGuidance(sandbox)].join("\n\n") } };
 }
 
 /**
@@ -351,11 +351,11 @@ const canvasPromptParts = (canvasUse: CanvasUse, canvasAssetsOrigin: string, can
  */
 export function claudeSessionMeta(
   canvasUse: CanvasUse,
-  { withoutUserSettings = false, canvasPlugins = NO_CANVAS_PLUGINS, idleCompaction = true, sandboxFolders = [] as MountedFolder[] } = {},
+  { withoutUserSettings = false, canvasPlugins = NO_CANVAS_PLUGINS, idleCompaction = true, sandbox = null as SessionInSandbox | null } = {},
 ) {
   return {
     systemPrompt: {
-      append: [...(canvasUse === "often" ? [canvasUseGuidance(canvasPlugins)] : []), canvasPluginInstructions(canvasPlugins), jobWaitGuidance(), sandboxFoldersGuidance(sandboxFolders)].filter(Boolean).join("\n\n"),
+      append: [...(canvasUse === "often" ? [canvasUseGuidance(canvasPlugins)] : []), canvasPluginInstructions(canvasPlugins), jobWaitGuidance(), ...sandboxGuidance(sandbox)].filter(Boolean).join("\n\n"),
     },
     claudeCode: {
       options: {
@@ -386,20 +386,20 @@ export function claudeRoomSessionMeta(
     idleCompaction = true,
     claudeSetup = ALL_OF_CLAUDE_SETUP,
     keptProtections = NO_PROTECTIONS,
-    sandboxFolders = [],
-  }: { withoutUserSettings?: boolean; idleCompaction?: boolean; claudeSetup?: ClaudeSetup; keptProtections?: ClaudeProtections; sandboxFolders?: MountedFolder[] } = {},
+    sandbox = null,
+  }: { withoutUserSettings?: boolean; idleCompaction?: boolean; claudeSetup?: ClaudeSetup; keptProtections?: ClaudeProtections; sandbox?: SessionInSandbox | null } = {},
 ) {
   const { env, disallowedTools } = claudeSessionMeta(canvasUse).claudeCode.options;
-  const { deny, ask, sandbox } = keptProtections;
+  const { deny, ask, sandbox: claudeSandbox } = keptProtections;
   const settings = {
     ...(!idleCompaction && { idleCompaction: false }),
     ...settingsLeavingOut(claudeSetup),
     permissions: { ...(deny.length > 0 && { deny }), ask: [...ask, ...ROOM_ASKS_BEFORE_EDITING] },
-    ...(sandbox && { sandbox }),
+    ...(claudeSandbox && { sandbox: claudeSandbox }),
   };
   const loaded = settingSourcesLoaded(claudeSetup, withoutUserSettings);
   return {
-    systemPrompt: { append: [canvasUse === "often" ? canvasUseGuidance() : "", sandboxFoldersGuidance(sandboxFolders)].filter(Boolean).join("\n\n") },
+    systemPrompt: { append: [canvasUse === "often" ? canvasUseGuidance() : "", ...sandboxGuidance(sandbox)].filter(Boolean).join("\n\n") },
     claudeCode: {
       options: {
         ...(loaded.length < SETTING_SOURCES.length && { settingSources: loaded }),

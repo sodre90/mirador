@@ -3,7 +3,7 @@ import type { RoomUsagePeriod } from "../../../shared/room-usage.ts";
 import type { RoomInviteConnect } from "../../../shared/machines.ts";
 import type { RoomAuthorRole, RoomInviteLetsIn, RoomInviteLifetime, RoomRole } from "../../../shared/rooms.ts";
 import type { ClaudeSetupChoice, ClaudeSetupPart } from "../../../shared/room-agent-setup.ts";
-import type { SandboxFolderRefusal, SandboxFolderState, SandboxKind, SandboxSetupStage } from "../../../shared/sandbox.ts";
+import type { SandboxFolderRefusal, SandboxFolderState, SandboxKind, SandboxNetwork, SandboxSetupStage } from "../../../shared/sandbox.ts";
 import type { OthersTasks } from "../../../shared/brought-agents.ts";
 import type { RoomWorkspaceAccess, WorkspaceCallKind, WorkspaceCallState } from "../../../shared/room-workspace.ts";
 
@@ -212,7 +212,21 @@ export const rooms = {
   sandbox: {
     legend: "Sandbox",
     turnOn: "Run the agents in a sandbox",
-    network: "Network: only the model and Mirador",
+    network: {
+      label: "Network",
+      choices: {
+        closed: "Only the model and Mirador",
+        internet: "The internet too, but not this computer or its networks",
+        everything: "Everything: the internet and this computer's networks",
+      } satisfies Record<SandboxNetwork, string>,
+      meaning: {
+        internet:
+          "Git over HTTPS, npm and whatever else uses a web proxy get out through Mirador, and what the agents read can leave that way. Your router's public address, and public addresses your VPN leads to, count as the internet.",
+        everything:
+          "Besides the internet, the agents reach your own network and tailnet as this computer, where devices may let them in as they would you, and this computer at its addresses there, but nothing on localhost. What they read can leave that way.",
+      } satisfies Record<Exclude<SandboxNetwork, "closed">, string>,
+      broughtReachToo: "Agents people bring into the room reach it too.",
+    },
     workFreely: "Agents work freely inside",
     presetApplies: "The room's permission preset still applies",
     checking: "Checking whether this room can have a sandbox…",
@@ -223,7 +237,7 @@ export const rooms = {
     } satisfies Record<SandboxKind, string>,
     sharedKernel: {
       warning:
-        "On this computer the sandbox is a Podman container, not a VM. It still sees only the workspace and reaches only the model and Mirador, but it shares this computer's Linux kernel, so a flaw in the kernel could let the agents out.",
+        "On this computer the sandbox is a Podman container, not a VM. It still sees only the workspace and reaches only what you choose, but it shares this computer's Linux kernel, so a flaw in the kernel could let the agents out.",
       turnOn: "Turn on anyway",
       keepOff: "Keep it off",
       turnsFailUntilAllowed: "The agents' turns fail until you allow it.",
@@ -254,7 +268,8 @@ export const rooms = {
     setupFailed: (problem: string) => `Setting it up failed: ${problem}`,
     wholeEnvironmentIgnored: "Ignored while the room is sandboxed: only the values chosen here go into its sandbox.",
     meaning: [
-      "The room's Claude Code and pi agents run in a sandbox of their own on this computer: on a Mac a light VM, made with Apple's container tool; on Linux a Podman container, which shares the computer's kernel and so keeps the agents in less well than a VM, used only once you allow it. The sandbox sees the workspace, a folder of the room's for the agents' settings and sessions, and the folders from this computer you add, read only or read and write; nothing else of this computer. Its network reaches only the model, through Mirador, which adds the profile's key so the key never enters the sandbox, and Mirador's canvas.",
+      "The room's Claude Code and pi agents run in a sandbox of their own on this computer: on a Mac a light VM, made with Apple's container tool; on Linux a Podman container, which shares the computer's kernel and so keeps the agents in less well than a VM, used only once you allow it. The sandbox sees the workspace, a folder of the room's for the agents' settings and sessions, and the folders from this computer you add, read only or read and write; nothing else of this computer. The agents reach their model through Mirador, which adds the profile's key so the key never enters the sandbox, and Mirador's canvas.",
+      "Besides those, the sandbox reaches what you choose under Network, through a web proxy of Mirador's, as it has no network of its own: SSH, ping and programs that use no proxy get nowhere. A change holds at once, in turns under way too, and ends the connections it no longer allows. Turned off and on again, the sandbox reaches only the model and Mirador.",
       "Working freely, the agents ask for nothing, as the sandbox keeps them in. Otherwise the room's permission preset applies as it does on this computer.",
       "The files agents load their settings, instructions and MCP servers from are held, and so are the files that run by themselves: .claude, .mcp.json, CLAUDE.md, AGENTS.md, .codex, opencode.json, .opencode, .pi, .husky, .githooks, .vscode, .pre-commit-config.yaml, lefthook.yml and .envrc. Those there as the sandbox starts are read-only in it; a new one is put back at once, and you allow or discard it in the room.",
       "Any other file the agents change in the workspace may run when you run it yourself: tests, scripts, package.json, or a commit from your terminal, which runs the repository's hooks. Review what they changed before you run anything there.",
@@ -462,6 +477,11 @@ export const rooms = {
   } satisfies Record<WorkspaceCallKind, (agent: string) => string>,
   commandRunsAsOwner: "It runs on the room's machine with all its owner may do there, not only in the workspace.",
   commandRunsInSandbox: "It runs in the room's sandbox, which sees the workspace and nothing else of the room's machine.",
+  sandboxReaches: {
+    closed: "Commands in the room's sandbox reach no network.",
+    internet: "Commands in the room's sandbox reach the internet.",
+    everything: "Commands in the room's sandbox reach the internet and the networks of the room's machine, as that machine.",
+  } satisfies Record<SandboxNetwork, string>,
   workspaceAccess: {
     asked: "Waits to be let into this room's workspace",
     allowed: "Works in this room's workspace",

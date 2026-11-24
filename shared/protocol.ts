@@ -1,7 +1,7 @@
 import type { EditorSetting, EditorState } from "./editors.ts";
 import type { Reminder } from "./reminders.ts";
 import type { ClaudeSetup } from "./room-agent-setup.ts";
-import type { HeldChange, HeldChangeAnswer, HeldChangeText, SandboxCheck, SandboxFolderRefusal, SandboxFolders, SandboxOwner, SandboxSetting, SandboxSetup, WorkspaceSandboxCheck } from "./sandbox.ts";
+import type { HeldChange, HeldChangeAnswer, HeldChangeText, SandboxCheck, SandboxFolderRefusal, SandboxFolders, SandboxNetwork, SandboxOwner, SandboxSetting, SandboxSetup, WorkspaceSandboxCheck } from "./sandbox.ts";
 import type { PermissionPreset, RoomApprovalAnswer } from "./room-permissions.ts";
 import type { RoomUsage } from "./room-usage.ts";
 import type {
@@ -165,6 +165,8 @@ export type ClientMessage =
   | { type: "sandbox.remove-folder"; owner: SandboxOwner; path: string }
   /** Stops the turns at work in the sandbox, for its VM to take up its folders now. */
   | { type: "sandbox.apply-folders-now"; owner: SandboxOwner }
+  /** What the sandbox reaches besides the model and Mirador, at once: nothing starts afresh, and what it may reach no longer is cut off. */
+  | { type: "sandbox.set-network"; owner: SandboxOwner; network: SandboxNetwork }
   /** Adds the group first in the group named, or in none for null. */
   | { type: "workspace-group.create"; name: string; parentId: string | null }
   | { type: "workspace-group.rename"; groupId: string; name: string }

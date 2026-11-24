@@ -201,7 +201,21 @@ export const rooms: Messages["rooms"] = {
   sandbox: {
     legend: "Sandbox",
     turnOn: "Az ágensek sandboxban futnak",
-    network: "Hálózat: csak a modell és a Mirador",
+    network: {
+      label: "Hálózat",
+      choices: {
+        closed: "Csak a modell és a Mirador",
+        internet: "Az internet is, de ez a gép és a hálózatai nem",
+        everything: "Minden: az internet és ennek a gépnek a hálózatai",
+      },
+      meaning: {
+        internet:
+          "A HTTPS-en futó git, az npm és minden más, ami webproxyt használ, a Miradoron át kijut, és ugyanígy kijuthat az is, amit az ágensek elolvasnak. A routered nyilvános címe és azok a nyilvános címek, amelyekhez a VPN-ed vezet, az internethez számítanak.",
+        everything:
+          "Az interneten túl az ágensek ennek a gépnek a nevében elérik a saját hálózatodat és a tailnetedet, ahol az eszközök úgy engedhetik be őket, mint téged, és magát ezt a gépet is az ottani címein, de a localhoston semmit. Amit elolvasnak, ugyanígy kijuthat.",
+      },
+      broughtReachToo: "Ugyanezt érik el az ágensek is, amelyeket mások hoznak a szobába.",
+    },
     workFreely: "Az ágensek szabadon dolgoznak benne",
     presetApplies: "A szoba engedélybeállítása továbbra is érvényes",
     checking: "Annak ellenőrzése, hogy lehet-e a szobának sandboxa…",
@@ -212,7 +226,7 @@ export const rooms: Messages["rooms"] = {
     },
     sharedKernel: {
       warning:
-        "Ezen a gépen a sandbox egy Podman-konténer, nem virtuális gép. Így is csak a munkaterületet látja, és csak a modellt és a Miradort éri el, de osztozik a gép Linux-kernelén, így a kernel egy hibáján át az ágensek kijuthatnak belőle.",
+        "Ezen a gépen a sandbox egy Podman-konténer, nem virtuális gép. Így is csak a munkaterületet látja, és csak azt éri el, amit kiválasztasz, de osztozik a gép Linux-kernelén, így a kernel egy hibáján át az ágensek kijuthatnak belőle.",
       turnOn: "Bekapcsolás mégis",
       keepOff: "Maradjon kikapcsolva",
       turnsFailUntilAllowed: "Az ágensek körei sikertelenek, amíg nem engedélyezed.",
@@ -243,7 +257,8 @@ export const rooms: Messages["rooms"] = {
     setupFailed: (problem: string) => `A beállítás nem sikerült: ${problem}`,
     wholeEnvironmentIgnored: "Amíg a szoba sandboxolt, ez nem számít: a sandboxába csak az itt kiválasztott értékek kerülnek.",
     meaning: [
-      "A szoba Claude Code- és pi-ágensei egy saját sandboxban futnak ezen a gépen: Macen egy könnyű virtuális gépen, az Apple container eszközével; Linuxon egy Podman-konténerben, amely osztozik a gép kernelén, így kevésbé tartja bent az ágenseket, mint egy virtuális gép, és csak akkor kapja a szoba, ha engedélyezed. A sandbox a munkaterületet, a szoba egy mappáját az ágensek beállításainak és munkameneteinek, valamint az erről a gépről hozzáadott mappákat látja, csak olvashatóan vagy olvashatóan és írhatóan; a gépből semmi mást. A hálózata csak a modellt éri el, a Miradoron keresztül, amely hozzáadja a profil kulcsát, így a kulcs sosem kerül a sandboxba, valamint a Mirador vásznát.",
+      "A szoba Claude Code- és pi-ágensei egy saját sandboxban futnak ezen a gépen: Macen egy könnyű virtuális gépen, az Apple container eszközével; Linuxon egy Podman-konténerben, amely osztozik a gép kernelén, így kevésbé tartja bent az ágenseket, mint egy virtuális gép, és csak akkor kapja a szoba, ha engedélyezed. A sandbox a munkaterületet, a szoba egy mappáját az ágensek beállításainak és munkameneteinek, valamint az erről a gépről hozzáadott mappákat látja, csak olvashatóan vagy olvashatóan és írhatóan; a gépből semmi mást. Az ágensek a Miradoron keresztül érik el a modelljüket, amely hozzáadja a profil kulcsát, így a kulcs sosem kerül a sandboxba, és elérik a Mirador vásznát.",
+      "Ezeken túl a sandbox azt éri el, amit a Hálózat alatt kiválasztasz, a Mirador webproxyján át, mert saját hálózata nincs: az SSH, a ping és a proxyt nem használó programok nem jutnak ki. Egy változtatás azonnal érvényes, a folyamatban lévő körökben is, és megszakítja a már nem engedett kapcsolatokat. Kikapcsolás és újbóli bekapcsolás után a sandbox csak a modellt és a Miradort éri el.",
       "Ha szabadon dolgoznak, az ágensek semmire sem kérnek engedélyt, mert a sandbox bent tartja őket. Különben a szoba engedélybeállítása érvényes, mint ezen a gépen.",
       "Az ágensek beállításait, utasításait és MCP-szervereit adó fájlok visszatartva vannak, és azok is, amelyek maguktól futnak: .claude, .mcp.json, CLAUDE.md, AGENTS.md, .codex, opencode.json, .opencode, .pi, .husky, .githooks, .vscode, .pre-commit-config.yaml, lefthook.yml és .envrc. Amelyek a sandbox indulásakor megvannak, azok benne csak olvashatók; egy újat azonnal visszaállít, te pedig a szobában engedélyezed vagy elveted.",
       "Minden más fájl, amelyet az ágensek a munkaterületen módosítanak, lefuthat, ha te magad futtatod: tesztek, szkriptek, a package.json, vagy egy commit a terminálodból, amely lefuttatja a repó hookjait. Nézd át, mit változtattak, mielőtt bármit futtatsz ott.",
@@ -448,6 +463,11 @@ export const rooms: Messages["rooms"] = {
   },
   commandRunsAsOwner: "A szoba gépén fut, mindazzal, amit ott a tulajdonosa megtehet, nem csak a munkaterületen.",
   commandRunsInSandbox: "A szoba sandboxában fut, amely a munkaterületet látja, és a szoba gépéből semmi mást.",
+  sandboxReaches: {
+    closed: "A szoba sandboxában futó parancsok semmilyen hálózatot nem érnek el.",
+    internet: "A szoba sandboxában futó parancsok elérik az internetet.",
+    everything: "A szoba sandboxában futó parancsok a szoba gépének nevében elérik az internetet és a gép hálózatait.",
+  },
   workspaceAccess: {
     asked: "Arra vár, hogy beengedjék a szoba munkaterületére",
     allowed: "A szoba munkaterületén dolgozik",

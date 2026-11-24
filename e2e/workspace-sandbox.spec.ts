@@ -76,6 +76,7 @@ const keepPageScreenshot = async (page: Page, name: string) => screenshotsFolder
 
 const projectCard = (page: Page) => workspaceCard(page, host.projectDir);
 const sandboxDialog = (page: Page, workspace: string) => page.getByRole("dialog", { name: `Sandbox for ${workspace}` });
+const networkChoice = (dialog: Locator, name: string) => dialog.getByRole("radiogroup", { name: "Network" }).getByRole("radio", { name, exact: true });
 const sandboxSwitch = (dialog: Locator) => dialog.getByRole("switch", { name: "Run this workspace's agents in a sandbox" });
 const reasons = (dialog: Locator) => dialog.locator(".room-sandbox-reasons");
 const startOnPicker = (dialog: Locator) => dialog.getByRole("combobox", { name: "Start new conversations on" });
@@ -189,6 +190,7 @@ test("turned on, the workspace's sandbox is set up with its progress shown, mark
   writeFileSync(buildHeldBy(), "");
   await expect(setup).toHaveText("Set up on this Mac.");
   await keepScreenshot(dialog, "switch-on");
+  await expect(networkChoice(dialog, "Only the model and Mirador")).toBeChecked();
   await dialog.getByRole("button", { name: "Done" }).click();
   await expect(dialog).toBeHidden();
 
@@ -234,6 +236,24 @@ test("turned on, the workspace's sandbox is set up with its progress shown, mark
   await test.step("the conversation's mark opens the workspace's sandbox", async () => {
     await headerMark.click();
     await expect(sandboxSwitch(dialog)).toBeChecked();
+  });
+
+  await test.step("what it reaches is changed at once, in the same VM, and stays through a reload", async () => {
+    await networkChoice(dialog, "The internet too, but not this computer or its networks").check();
+    const reaches = dialog.locator(".room-sandbox-reaches");
+    await expect(reaches).toContainText("Git over HTTPS, npm and whatever else uses a web proxy get out through Mirador");
+    await expect(reaches).not.toContainText("bring into the room");
+    await expect(dialog.getByRole("button", { name: "Change" })).toHaveCount(0);
+    await keepScreenshot(dialog, "network-internet");
+    await dialog.getByRole("button", { name: "Done" }).click();
+    await sendMessage(page, "SAY Still in the same VM.");
+    await waitForTurnToEnd(page);
+    expect(containerCalls().filter(([command]) => command === "run")).toHaveLength(1);
+    await page.reload();
+    await headerMark.click();
+    await expect(networkChoice(dialog, "The internet too, but not this computer or its networks")).toBeChecked();
+    await networkChoice(dialog, "Only the model and Mirador").check();
+    await expect(networkChoice(dialog, "Only the model and Mirador")).toBeChecked();
     await dialog.getByRole("button", { name: "Done" }).click();
   });
 });

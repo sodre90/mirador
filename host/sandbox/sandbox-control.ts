@@ -41,6 +41,8 @@ export interface SandboxControl {
   stopBrought(owner: SandboxOwner, agentId: string): Promise<void>;
   /** An agent's turn, or a brought one's task, ended: the held files are looked at once more. */
   turnEnded(owner: SandboxOwner): Promise<void>;
+  /** What the sandbox reaches changed, as stored: what it may reach no longer is cut off. */
+  networkChanged(owner: SandboxOwner): void;
 }
 
 export const NO_SANDBOX_CONTROL: SandboxControl = {
@@ -52,6 +54,7 @@ export const NO_SANDBOX_CONTROL: SandboxControl = {
   launchForBrought: () => Promise.reject(new SandboxNotReady({ kind: "unavailable", why: "turned-off" })),
   stopBrought: async () => {},
   turnEnded: async () => {},
+  networkChanged: () => {},
 };
 
 /**

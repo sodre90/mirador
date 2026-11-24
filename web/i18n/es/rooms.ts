@@ -202,7 +202,21 @@ export const rooms: Messages["rooms"] = {
   sandbox: {
     legend: "Sandbox",
     turnOn: "Ejecutar los agentes en un sandbox",
-    network: "Red: solo el modelo y Mirador",
+    network: {
+      label: "Red",
+      choices: {
+        closed: "Solo el modelo y Mirador",
+        internet: "También internet, pero no este equipo ni sus redes",
+        everything: "Todo: internet y las redes de este equipo",
+      },
+      meaning: {
+        internet:
+          "Git por HTTPS, npm y todo lo que use un proxy web salen a través de Mirador, y lo que los agentes leen puede salir por ahí. La dirección pública de tu router y las direcciones públicas a las que lleva tu VPN cuentan como internet.",
+        everything:
+          "Además de internet, los agentes llegan a tu propia red y a tu tailnet como este equipo, donde los dispositivos pueden dejarlos entrar como a ti, y a este equipo en sus direcciones de ahí, pero a nada en localhost. Lo que leen puede salir por ahí.",
+      },
+      broughtReachToo: "Los agentes que otras personas traen a la sala llegan a lo mismo.",
+    },
     workFreely: "Los agentes trabajan libremente dentro",
     presetApplies: "El permiso predefinido de la sala sigue aplicándose",
     checking: "Comprobando si esta sala puede tener un sandbox…",
@@ -213,7 +227,7 @@ export const rooms: Messages["rooms"] = {
     },
     sharedKernel: {
       warning:
-        "En este equipo el sandbox es un contenedor de Podman, no una máquina virtual. Aun así solo ve el espacio de trabajo y solo llega al modelo y a Mirador, pero comparte el kernel de Linux de este equipo, así que un fallo del kernel podría dejar salir a los agentes.",
+        "En este equipo el sandbox es un contenedor de Podman, no una máquina virtual. Aun así solo ve el espacio de trabajo y solo llega a lo que elijas, pero comparte el kernel de Linux de este equipo, así que un fallo del kernel podría dejar salir a los agentes.",
       turnOn: "Activarlo igualmente",
       keepOff: "Dejarlo desactivado",
       turnsFailUntilAllowed: "Los turnos de los agentes fallan hasta que lo permitas.",
@@ -244,7 +258,8 @@ export const rooms: Messages["rooms"] = {
     setupFailed: (problem: string) => `No se pudo preparar: ${problem}`,
     wholeEnvironmentIgnored: "Se ignora mientras la sala tenga sandbox: en su sandbox solo entran los valores elegidos aquí.",
     meaning: [
-      "Los agentes de Claude Code y de pi de la sala se ejecutan en un sandbox propio en este equipo: en un Mac, una máquina virtual ligera, creada con la herramienta container de Apple; en Linux, un contenedor de Podman, que comparte el kernel del equipo y por eso retiene peor a los agentes que una máquina virtual, y que solo se usa cuando lo permites. El sandbox ve el espacio de trabajo, una carpeta de la sala para la configuración y las sesiones de los agentes y las carpetas de este equipo que añadas, en solo lectura o en lectura y escritura; nada más de este equipo. Su red solo llega al modelo, a través de Mirador, que añade la clave del perfil para que la clave nunca entre en el sandbox, y al lienzo de Mirador.",
+      "Los agentes de Claude Code y de pi de la sala se ejecutan en un sandbox propio en este equipo: en un Mac, una máquina virtual ligera, creada con la herramienta container de Apple; en Linux, un contenedor de Podman, que comparte el kernel del equipo y por eso retiene peor a los agentes que una máquina virtual, y que solo se usa cuando lo permites. El sandbox ve el espacio de trabajo, una carpeta de la sala para la configuración y las sesiones de los agentes y las carpetas de este equipo que añadas, en solo lectura o en lectura y escritura; nada más de este equipo. Los agentes llegan a su modelo a través de Mirador, que añade la clave del perfil para que la clave nunca entre en el sandbox, y al lienzo de Mirador.",
+      "Además de eso, el sandbox llega a lo que elijas en Red, a través de un proxy web de Mirador, porque no tiene red propia: SSH, ping y los programas que no usan un proxy no salen. Un cambio vale al instante, también en los turnos en curso, y corta las conexiones que ya no permite. Si lo desactivas y lo vuelves a activar, el sandbox solo llega al modelo y a Mirador.",
       "Trabajando libremente, los agentes no piden nada, porque el sandbox los mantiene dentro. Si no, se aplica el permiso predefinido de la sala, igual que en este equipo.",
       "Los archivos de los que los agentes cargan su configuración, instrucciones y servidores MCP quedan retenidos, y también los que se ejecutan solos: .claude, .mcp.json, CLAUDE.md, AGENTS.md, .codex, opencode.json, .opencode, .pi, .husky, .githooks, .vscode, .pre-commit-config.yaml, lefthook.yml y .envrc. Los que ya están cuando arranca el sandbox son de solo lectura en él; uno nuevo se deshace al instante, y tú lo apruebas o lo descartas en la sala.",
       "Cualquier otro archivo que los agentes cambien en el espacio de trabajo puede ejecutarse cuando lo ejecutes tú: pruebas, scripts, package.json o un commit desde tu terminal, que ejecuta los hooks del repositorio. Revisa lo que cambiaron antes de ejecutar nada allí.",
@@ -449,6 +464,11 @@ export const rooms: Messages["rooms"] = {
   },
   commandRunsAsOwner: "Se ejecuta en la máquina de la sala con todo lo que su dueño puede hacer allí, no solo en el espacio de trabajo.",
   commandRunsInSandbox: "Se ejecuta en el sandbox de la sala, que ve el espacio de trabajo y nada más de la máquina de la sala.",
+  sandboxReaches: {
+    closed: "Los comandos en el sandbox de la sala no llegan a ninguna red.",
+    internet: "Los comandos en el sandbox de la sala llegan a internet.",
+    everything: "Los comandos en el sandbox de la sala llegan a internet y a las redes de la máquina de la sala, como esa máquina.",
+  },
   workspaceAccess: {
     asked: "Espera a que lo dejen entrar en el espacio de trabajo de esta sala",
     allowed: "Trabaja en el espacio de trabajo de esta sala",

@@ -5,7 +5,23 @@ import type { PiModelInVm } from "./pi-setup.ts";
 /** What the agent's key variable holds in the VM: the model proxy on this computer puts the real key on each request. */
 export const KEY_PLACEHOLDER = "kept-by-mirador";
 
-/** Where the agent runs in the VM: the image's programs and the agent user's home. */
+/** The port of the VM's own 127.0.0.1 that leads to the sandbox's web proxy, its only way out besides its canvases and models. */
+export const NETWORK_RELAY_PORT = 7703;
+
+const WEB_PROXY = `http://127.0.0.1:${NETWORK_RELAY_PORT}`;
+const THE_VMS_OWN = "localhost,127.0.0.1,::1";
+
+/** What has the VM's programs go through the web proxy, as each of them reads it, for anywhere but the VM itself. */
+const THROUGH_THE_PROXY = {
+  HTTP_PROXY: WEB_PROXY,
+  http_proxy: WEB_PROXY,
+  HTTPS_PROXY: WEB_PROXY,
+  https_proxy: WEB_PROXY,
+  NO_PROXY: THE_VMS_OWN,
+  no_proxy: THE_VMS_OWN,
+} as const;
+
+/** Where the agent runs in the VM: the image's programs, the agent user's home, and its way out. */
 export const IN_VM = {
   PATH: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
   HOME: "/home/node",
@@ -13,6 +29,7 @@ export const IN_VM = {
   USER: "node",
   LOGNAME: "node",
   TMPDIR: "/tmp",
+  ...THROUGH_THE_PROXY,
 } as const;
 
 /** The Bun of the image, which runs Mirador's ACP adapters from this computer's packages, mounted read-only. */
@@ -43,7 +60,7 @@ export interface AgentPlacesInVm {
 }
 
 /** Values of this computer's that mean nothing in the VM, or that the model proxy keeps on this computer. */
-const KEPT_ON_THIS_COMPUTER = [...MODEL_KEY_VARIABLES, "CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_BASE_URL", "ANTHROPIC_CUSTOM_HEADERS", "CLAUDE_CONFIG_DIR", "SSH_AUTH_SOCK", "MIRADOR_URL", "MIRADOR_SCRIPT_TOKEN"];
+const KEPT_ON_THIS_COMPUTER = [...MODEL_KEY_VARIABLES, "CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_BASE_URL", "ANTHROPIC_CUSTOM_HEADERS", "CLAUDE_CONFIG_DIR", "SSH_AUTH_SOCK", "ALL_PROXY", "all_proxy", "MIRADOR_URL", "MIRADOR_SCRIPT_TOKEN"];
 
 /** pi's places on this computer, which its VM has none of. */
 const PI_PLACES_HERE = ["PI_CODING_AGENT_DIR", "PI_ACP_PI_COMMAND", "PI_CODING_AGENT_SESSION_DIR", "PI_PACKAGE_DIR"];

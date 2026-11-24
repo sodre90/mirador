@@ -46,6 +46,7 @@ const EVERY_CLIENT_MESSAGE: Record<ClientMessage["type"], true> = {
   "sandbox.set-folder-access": true,
   "sandbox.remove-folder": true,
   "sandbox.apply-folders-now": true,
+  "sandbox.set-network": true,
   "workspace.create": true,
   "workspace.delete": true,
   "workspace.set-default-launch": true,

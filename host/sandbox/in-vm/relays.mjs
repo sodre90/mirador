@@ -1,4 +1,4 @@
-// Inside a room's VM, which has no network: each port on the VM's own 127.0.0.1 passes its connections, byte for byte,
+// Inside a sandbox's VM, which has no network: each port on the VM's own 127.0.0.1 passes its connections, byte for byte,
 // to a unix socket of Mirador's on this computer forwarded in. Once those sockets stop answering, as when Mirador is
 // gone, the relays end, and the VM with them. usage: relays.mjs <port>=<socket> ...
 import { connect, createServer } from "node:net";

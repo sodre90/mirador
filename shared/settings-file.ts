@@ -55,8 +55,8 @@ export interface FileWorkspace {
   sandbox?: FileSandbox;
 }
 
-/** Without whether it may share the computer's kernel, which is the owner's to allow on each computer. */
-export type FileSandbox = Omit<SandboxSetting, "allowsSharedKernel">;
+/** Without whether it may share the computer's kernel and what it reaches, which are the owner's to allow on each computer. */
+export type FileSandbox = Omit<SandboxSetting, "allowsSharedKernel" | "network">;
 
 export interface FileWorkspaceGroup {
   group: string;

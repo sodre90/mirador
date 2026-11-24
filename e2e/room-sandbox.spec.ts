@@ -79,6 +79,8 @@ const textStart = (shown: Locator) =>
     text.selectNodeContents(element);
     return text.getBoundingClientRect().left;
   });
+const network = (dialog: Locator) => dialog.getByRole("radiogroup", { name: "Network" });
+const networkChoice = (dialog: Locator, name: string) => network(dialog).getByRole("radio", { name, exact: true });
 const PRESETS_ASIDE = "Agents in the sandbox work freely there, whatever is chosen here.";
 const presets = (dialog: Locator) => dialog.getByRole("radiogroup", { name: "What the agents may do without asking" });
 const heldCard = (page: Page) => page.getByRole("region", { name: "Agent config change held for you" });
@@ -143,7 +145,7 @@ test("turned on, the sandbox is set up on this Mac with its progress shown, and 
   await expect(dialog.locator(".room-sandbox-kind")).toHaveText("Runs in a light VM of its own on this Mac, made with Apple's container tool.");
   await sandboxSwitch(dialog).check();
 
-  await expect(dialog.getByText("Network: only the model and Mirador")).toBeVisible();
+  await expect(networkChoice(dialog, "Only the model and Mirador")).toBeChecked();
   await expect(dialog.getByRole("radio", { name: "Agents work freely inside" })).toBeChecked();
   await expect(presets(dialog)).toHaveAccessibleDescription(PRESETS_ASIDE);
   await expect(dialog.getByText(PRESETS_ASIDE)).toBeVisible();
@@ -154,7 +156,7 @@ test("turned on, the sandbox is set up on this Mac with its progress shown, and 
   writeFileSync(buildHeldBy(), "");
   await expect(setup).toHaveText("Set up on this Mac.");
   const optionsStart = (await dialog.getByRole("radio", { name: "Agents work freely inside" }).boundingBox())!.x;
-  for (const underTheSwitch of [dialog.getByText("Network: only the model and Mirador"), setup]) expect(Math.abs((await textStart(underTheSwitch)) - optionsStart)).toBeLessThan(2);
+  for (const underTheSwitch of [network(dialog).getByText("Network", { exact: true }), setup]) expect(Math.abs((await textStart(underTheSwitch)) - optionsStart)).toBeLessThan(2);
   await keepScreenshot(dialog, "switch-on");
   expect(containerStateNow()).toMatchObject({ builderRunning: false, images: [expect.stringMatching(/^mirador-room-agent:claude-2\.1\.330-bun-/)] });
   await dialog.getByRole("button", { name: "Close" }).click();
@@ -177,6 +179,59 @@ test("turned on, the sandbox is set up on this Mac with its progress shown, and 
   const execs = calls.filter(([command]) => command === "exec");
   expect(execs.every((exec) => exec[exec.indexOf("--user") + 1] === "0:0" && exec.includes("--reuid=1000") && exec.includes("--no-new-privs"))).toBe(true);
   expect(JSON.stringify(calls)).not.toContain(KEY);
+});
+
+test("what the sandbox reaches is the owner's choice, which holds at once with no VM started anew, stays through a reload, and goes as the sandbox is turned off", async ({ page }) => {
+  test.skip(!sandboxesRunHere, "Sandboxes run on macOS 26 on Apple silicon only.");
+  await signIn(page, host);
+  await roomCard(page, "Sandboxed").click();
+  const vmsStarted = () => containerCalls().filter(([command]) => command === "run").length;
+  const startedBefore = vmsStarted();
+  const dialog = await openRoomSettings(page, "Sandboxed", "Permissions");
+  const closed = networkChoice(dialog, "Only the model and Mirador");
+  const internet = networkChoice(dialog, "The internet too, but not this computer or its networks");
+  const everything = networkChoice(dialog, "Everything: the internet and this computer's networks");
+  const reaches = dialog.locator(".room-sandbox-reaches");
+  await expect(closed).toBeChecked();
+  await expect(reaches).toHaveCount(0);
+
+  await internet.check();
+  await expect(internet).toBeChecked();
+  await expect(reaches).toContainText("Git over HTTPS, npm and whatever else uses a web proxy get out through Mirador");
+  await expect(reaches).toContainText("Agents people bring into the room reach it too.");
+  await keepScreenshot(dialog, "network-internet");
+  await everything.check();
+  await expect(everything).toBeChecked();
+  await expect(reaches).toContainText("but nothing on localhost");
+  await expect(dialog.getByRole("button", { name: "Change" })).toHaveCount(0);
+  await dialog.getByRole("button", { name: "Close" }).click();
+
+  await tag(page, "Sandboxed", "Builder", "SAY Still the same agent.");
+  await expect(answerSaying(page, "Still the same agent.")).toBeVisible();
+  expect(vmsStarted()).toBe(startedBefore);
+
+  await page.reload();
+  await openRoomSettings(page, "Sandboxed", "Permissions");
+  await expect(everything).toBeChecked();
+
+  await test.step("how the agents work inside is another choice, which leaves what they reach as it is", async () => {
+    await dialog.getByRole("radio", { name: "The room's permission preset still applies" }).check();
+    await dialog.getByRole("button", { name: "Change" }).click();
+    await expect(dialog.getByText(PRESETS_ASIDE)).toBeHidden();
+    await expect(everything).toBeChecked();
+    await dialog.getByRole("radio", { name: "Agents work freely inside" }).check();
+    await expect(dialog.getByText(PRESETS_ASIDE)).toBeVisible();
+    await expect(everything).toBeChecked();
+  });
+
+  await test.step("turned off and on again, the sandbox reaches only the model and Mirador", async () => {
+    await sandboxSwitch(dialog).uncheck();
+    await expect(network(dialog)).toHaveCount(0);
+    await sandboxSwitch(dialog).check();
+    await expect(closed).toBeChecked();
+    await expect(dialog.locator(".room-sandbox-setup")).toHaveText("Set up on this Mac.");
+    await dialog.getByRole("button", { name: "Close" }).click();
+  });
 });
 
 test("a change to an agent config file is put back at once and held in the room, until the owner allows or discards it", async ({ page }) => {

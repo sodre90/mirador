@@ -38,7 +38,7 @@ describe("importing settings", () => {
     from.setWorktreeSettings(grouped.id, "worktree", "bun install");
     from.setWorkspaceColor(grouped.id, "teal");
     from.setWorkspaceSideChatAccess(grouped.id, "can-change-files");
-    from.setWorkspaceSandbox(grouped.id, { on: true, workFreely: false, allowsSharedKernel: false });
+    from.setWorkspaceSandbox(grouped.id, { on: true, workFreely: false, allowsSharedKernel: false, network: "closed" });
     from.setSidebarOrder([group.id, grouped.id, apart.id]);
     from.setOlderAfter("1-week");
     from.setConversationsShown("12");
@@ -255,15 +255,25 @@ describe("importing settings", () => {
     expect(sidebarOf(store)).toEqual(["Work[shop]"]);
   });
 
-  test("a workspace's sandbox comes in but for a shared kernel, which is allowed on each computer", async () => {
+  test("a workspace's sandbox comes in but for a shared kernel and what it reaches, which are allowed on each computer", async () => {
     const store = aStore();
     const folder = folderIn(aFolder(), "app");
-    const text = textOf({ workspaces: [{ path: folder, sandbox: { on: true, workFreely: false, allowsSharedKernel: true } }] } as never);
+    const text = textOf({ workspaces: [{ path: folder, sandbox: { on: true, workFreely: false, allowsSharedKernel: true, network: "everything" } }] } as never);
 
     await bringInAll(importInto(store), text);
 
-    expect(store.listWorkspaces()[0]!.sandbox).toEqual({ on: true, workFreely: false, allowsSharedKernel: false });
+    expect(store.listWorkspaces()[0]!.sandbox).toEqual({ on: true, workFreely: false, allowsSharedKernel: false, network: "closed" });
     expect((await importInto(store).plan(text)).items.map(({ state }) => state)).toEqual(["same"]);
+  });
+
+  test("an import that changes how a sandbox's agents work leaves what it reaches as it was chosen here", async () => {
+    const store = aStore();
+    const folder = folderIn(aFolder(), "app");
+    store.setWorkspaceSandbox(addWorkspace(store, folder).id, { ...NO_SANDBOX, on: true, network: "internet" });
+
+    await bringInAll(importInto(store), textOf({ workspaces: [{ path: folder, sandbox: { on: true, workFreely: false } }] }));
+
+    expect(store.listWorkspaces()[0]!.sandbox).toMatchObject({ on: true, workFreely: false, network: "internet" });
   });
 
   test("a workspace whose sandbox can't run here comes in without it, and says so", async () => {

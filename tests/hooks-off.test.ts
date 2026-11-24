@@ -9,7 +9,7 @@ import { DEFAULT_PERMISSION_PRESET } from "../shared/room-permissions.ts";
 import { NO_SANDBOX, type SandboxSetting } from "../shared/sandbox.ts";
 
 const NOW = 1_800_000_000_000;
-const SANDBOX_ON: SandboxSetting = { on: true, workFreely: true, allowsSharedKernel: false };
+const SANDBOX_ON: SandboxSetting = { on: true, workFreely: true, allowsSharedKernel: false, network: "closed" };
 const LAUNCH = { harness: "claude" as const, profileId: null };
 
 function storeWithARoom() {

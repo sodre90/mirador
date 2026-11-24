@@ -1,8 +1,12 @@
-import { execFileSync } from "node:child_process";
+import { execFile, execFileSync, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
+import { once } from "node:events";
 import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import { homedir, networkInterfaces, release } from "node:os";
 import { basename, join } from "node:path";
+import { promisify } from "node:util";
 import { expect, test, type Page } from "@playwright/test";
 import { addWorkspace, createProfile, createRoom, openRoomSettings, signIn } from "./helpers.ts";
 import { modelServerStatus, ownersModelServer } from "./model-server.ts";
@@ -89,6 +93,41 @@ const urls = JSON.parse(process.argv[1]);
 Promise.all(urls.map(answer)).then((answers) => console.log(JSON.stringify(Object.fromEntries(urls.map((url, index) => [url, answers[index]])))));
 `;
 
+/** How the VM's web proxy answers a client that asks for a tunnel to each of these. */
+const TUNNELS_SCRIPT = `
+const net = require("net");
+const asked = (target) => new Promise((resolve) => {
+  const socket = net.connect({ host: "127.0.0.1", port: 7703, timeout: 40000 });
+  socket.on("data", (answer) => { socket.destroy(); resolve(Number(String(answer).split(" ")[1])); });
+  socket.on("timeout", () => { socket.destroy(); resolve("timed out"); });
+  socket.on("error", (error) => resolve(error.code || error.message));
+  socket.on("close", () => resolve("ended"));
+  socket.write("CONNECT " + target + " HTTP/1.1\\r\\nHost: " + target + "\\r\\n\\r\\n");
+});
+const targets = JSON.parse(process.argv[1]);
+Promise.all(targets.map(asked)).then((answers) => console.log(JSON.stringify(Object.fromEntries(targets.map((target, index) => [target, answers[index]])))));
+`;
+
+/** A tunnel to this target through the VM's web proxy, held until the other side ends it: says as it opens, and as it ends. */
+const HELD_TUNNEL_SCRIPT = `
+const socket = require("net").connect({ host: "127.0.0.1", port: 7703 });
+socket.once("data", (answer) => console.log("opened " + String(answer).split(" ")[1]));
+socket.on("error", () => {});
+socket.on("close", () => console.log("ended"));
+socket.write("CONNECT " + process.argv[1] + " HTTP/1.1\\r\\nHost: " + process.argv[1] + "\\r\\n\\r\\n");
+`;
+
+/** What a command prints in the VM as the agent's own tools would run it, with the environment the agent has. */
+const AS_AGENTS_TOOL_SCRIPT = `
+const fs = require("fs");
+const read = (path) => { try { return fs.readFileSync(path, "latin1"); } catch { return ""; } };
+const agent = fs.readdirSync("/proc").find((pid) => /^\\d+$/.test(pid) && pid !== String(process.pid) && read("/proc/" + pid + "/cmdline").includes("claude-agent-acp/"));
+const values = read("/proc/" + agent + "/environ").split("\\0").filter(Boolean);
+const env = Object.fromEntries(values.map((value) => [value.slice(0, value.indexOf("=")), value.slice(value.indexOf("=") + 1)]));
+const { stdout, stderr } = require("child_process").spawnSync("bash", ["-c", process.argv[1]], { env, encoding: "utf8", timeout: 45000 });
+console.log(JSON.stringify({ stdout, stderr }));
+`;
+
 /** Everything of the VM's processes the agent user can read: their environments and command lines, in base64, and how the agents run. */
 const PROCESSES_SCRIPT = `
 const fs = require("fs");
@@ -105,7 +144,28 @@ const privileges = claudes.map(({ status }) => ({ noNewPrivs: status.NoNewPrivs,
 console.log(JSON.stringify({ claudeUids, privileges, commands: claudes.map(({ command }) => command), seen: Buffer.from(seen).toString("base64") }));
 `;
 
-const asAgent = (vm: string, ...command: string[]) => container("exec", "--user", "1000:1000", "-w", realpathSync(host.projectDir), vm, ...command);
+const inVmAsAgent = (vm: string, command: string[]) => ["exec", "--user", "1000:1000", "-w", realpathSync(host.projectDir), vm, ...command];
+const asAgent = (vm: string, ...command: string[]) => container(...inVmAsAgent(vm, command));
+
+/** Waits without blocking this process, as the command may reach a server of the test's own. */
+async function asAgentsTool(vm: string, command: string) {
+  const { stdout } = await promisify(execFile)(containerProgram!, inVmAsAgent(vm, ["node", "-e", AS_AGENTS_TOOL_SCRIPT, command]), { timeout: 60_000 });
+  return JSON.parse(stdout) as { stdout: string; stderr: string };
+}
+const tunnelsFrom = (vm: string, targets: string[]) => JSON.parse(asAgent(vm, "node", "-e", TUNNELS_SCRIPT, JSON.stringify(targets))) as Record<string, number | string>;
+
+/** The programs an agent works with, each fetching something of the internet's: what each prints once it got it. */
+const FETCHED_FROM_THE_INTERNET: Record<string, RegExp> = {
+  "git ls-remote https://github.com/octocat/Hello-World.git HEAD": /^[0-9a-f]{40}\s+HEAD\n$/,
+  "npm view is-number@7.0.0 version": /^7\.0\.0\n$/,
+  [`NODE_USE_ENV_PROXY=1 node -e "fetch('https://example.com').then((answer) => console.log(answer.status))"`]: /^200\n$/,
+  [`bun -e "fetch('https://example.com').then((answer) => console.log(answer.status))"`]: /^200\n$/,
+};
+
+const ipv4AddressesOfThisMac = () =>
+  Object.values(networkInterfaces())
+    .flat()
+    .flatMap((address) => (address && address.family === "IPv4" && !address.internal ? [address.address] : []));
 
 const answersAsAgent = (vm: string) => {
   try {
@@ -140,7 +200,7 @@ function filesUnder(folder: string): string[] {
 /** The room's Claude Code session transcripts, each named by its session, in its Claude Code folder on this Mac. */
 const sessionTranscripts = () => filesUnder(join(host.dataDir, "sandbox")).filter((path) => /\/projects\/[^/]+\/[^/]+\.jsonl$/.test(path));
 
-test("a sandboxed room's Claude agent works in the workspace from its VM, reaches only the model and Mirador, and its config changes are held", async ({ page }) => {
+test("a sandboxed room's Claude agent works in the workspace from its VM, reaches what its owner chooses under Network, and its config changes are held", async ({ page }) => {
   test.setTimeout(30 * 60_000);
   const timings: Record<string, number> = {};
   await signIn(page, host);
@@ -185,16 +245,57 @@ test("a sandboxed room's Claude agent works in the workspace from its VM, reache
   expect(vm).toBeDefined();
 
   await test.step("from the VM, only the relays to Mirador are reached: not the internet, nor this Mac's ports", async () => {
-    const macAddresses = Object.values(networkInterfaces())
-      .flat()
-      .flatMap((address) => (address && address.family === "IPv4" && !address.internal ? [address.address] : []));
-    const outside = ["example.com 443", "1.1.1.1 443", "192.168.64.1 22", `192.168.64.1 ${host.port}`, `127.0.0.1 ${host.port}`, ...macAddresses.map((address) => `${address} ${host.port}`)];
-    const relays = ["127.0.0.1 7701", "127.0.0.1 7702"];
+    const outside = ["example.com 443", "1.1.1.1 443", "192.168.64.1 22", `192.168.64.1 ${host.port}`, `127.0.0.1 ${host.port}`, ...ipv4AddressesOfThisMac().map((address) => `${address} ${host.port}`)];
+    const relays = ["127.0.0.1 7701", "127.0.0.1 7702", "127.0.0.1 7703"];
     const reached = JSON.parse(asAgent(vm!, "node", "-e", CONNECT_SCRIPT, JSON.stringify([...outside, ...relays]))) as Record<string, string>;
     expect(Object.fromEntries(outside.map((target) => [target, reached[target] === "reached"]))).toEqual(Object.fromEntries(outside.map((target) => [target, false])));
-    expect(relays.map((target) => reached[target])).toEqual(["reached", "reached"]);
+    expect(relays.map((target) => reached[target])).toEqual(["reached", "reached", "reached"]);
     const refused = ["http://127.0.0.1:7701/mcp/not-a-conversation-of-the-room", "http://127.0.0.1:7702/v1/messages"];
     expect(JSON.parse(asAgent(vm!, "node", "-e", ANSWERS_SCRIPT, JSON.stringify(refused)))).toEqual({ [refused[0]!]: "404 not found", [refused[1]!]: "404 not a path of the model API" });
+  });
+
+  await test.step("through Mirador's web proxy it reaches what the owner chooses under Network, at once, and Mirador itself and what else is on localhost never", async () => {
+    const onThisMacsNetwork = createServer((_request, response) => response.end("on this Mac's network\n"));
+    const [ownAddress] = ipv4AddressesOfThisMac().filter((address) => !address.startsWith("169.254."));
+    onThisMacsNetwork.listen(0, ownAddress);
+    await once(onThisMacsNetwork, "listening");
+    const ofTheNetwork = `${ownAddress}:${(onThisMacsNetwork.address() as AddressInfo).port}`;
+    const never = [`127.0.0.1:${host.port}`, `localhost:${host.port}`, `[::1]:${host.port}`, `0.0.0.0:${host.port}`, "169.254.169.254:80"];
+    const tunnels = () => tunnelsFrom(vm!, ["example.com:443", ofTheNetwork, ...never]);
+    const refused = Object.fromEntries(never.map((target) => [target, 403]));
+    const settings = await openRoomSettings(page, "Boxed", "Permissions");
+    const choose = async (name: string) => {
+      const choice = settings.getByRole("radiogroup", { name: "Network" }).getByRole("radio", { name, exact: true });
+      await choice.check();
+      await expect(choice).toBeChecked();
+    };
+
+    expect(tunnels()).toEqual({ "example.com:443": 403, [ofTheNetwork]: 403, ...refused });
+    const gitWhileClosed = await asAgentsTool(vm!, "git ls-remote https://github.com/octocat/Hello-World.git HEAD");
+    expect(gitWhileClosed.stdout).toBe("");
+    expect(gitWhileClosed.stderr).toContain("403");
+
+    await choose("The internet too, but not this computer or its networks");
+    expect(tunnels()).toEqual({ "example.com:443": 200, [ofTheNetwork]: 403, ...refused });
+    const fetched = Object.fromEntries(await Promise.all(Object.keys(FETCHED_FROM_THE_INTERNET).map(async (command) => [command, await asAgentsTool(vm!, command)] as const)));
+    console.log(`sandbox VM e2e fetched through the web proxy: ${JSON.stringify(fetched)}`);
+    for (const [command, printed] of Object.entries(FETCHED_FROM_THE_INTERNET)) expect(fetched[command]!.stdout, command).toMatch(printed);
+    expect(await asAgentsTool(vm!, `node -e "console.log('quiet')"`), "what a program prints is its own").toEqual({ stdout: "quiet\n", stderr: "" });
+
+    await choose("Everything: the internet and this computer's networks");
+    expect(tunnels()).toEqual({ "example.com:443": 200, [ofTheNetwork]: 200, ...refused });
+    expect(await asAgentsTool(vm!, `bun -e "fetch('http://${ofTheNetwork}/').then((answer) => answer.text()).then(console.log)"`)).toMatchObject({ stdout: expect.stringContaining("on this Mac's network") });
+
+    const held = spawn(containerProgram!, inVmAsAgent(vm!, ["node", "-e", HELD_TUNNEL_SCRIPT, ofTheNetwork]));
+    let said = "";
+    held.stdout.on("data", (chunk) => (said += chunk));
+    await expect.poll(() => said).toBe("opened 200\n");
+    await choose("Only the model and Mirador");
+    await expect.poll(() => said).toBe("opened 200\nended\n");
+    expect(tunnels()).toEqual({ "example.com:443": 403, [ofTheNetwork]: 403, ...refused });
+    expect(ourVms()).toEqual([vm]);
+    onThisMacsNetwork.close();
+    await settings.getByRole("button", { name: "Close" }).click();
   });
 
   await test.step("the agents run as the agent user, with no capability and none to gain, and the key is nowhere in the VM nor in the room's Claude Code folder", async () => {

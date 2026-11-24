@@ -12,7 +12,7 @@ import { Store } from "../host/store.ts";
 import { SystemNotifications } from "../host/system-notifications.ts";
 import { ALL_OF_CLAUDE_SETUP } from "../shared/room-agent-setup.ts";
 import { DEFAULT_PERMISSION_PRESET } from "../shared/room-permissions.ts";
-import type { SandboxSetting } from "../shared/sandbox.ts";
+import { NO_SANDBOX, type SandboxSetting } from "../shared/sandbox.ts";
 import { agentWithModes } from "./agent-with-modes.ts";
 import { FakeContainerCli } from "./fake-container-cli.ts";
 import { FakeVmLauncher } from "./fake-vm-launcher.ts";
@@ -59,17 +59,17 @@ function sandboxedRoom(sandbox: SandboxSetting) {
   const conversations = new ConversationService(store, new Hub(), config, { mute: () => {} } as never, {} as never, {} as never, new SystemNotifications(store, new Hub()));
   const conversation = conversations.startInRoom("r1", "w1", launch, "Launch: Builder");
   const turnFailure = () => store.listEvents(conversation.id).findLast(({ event }) => event.type === "error" && event.endsTurn)?.event;
-  const sandboxHost = { dataDir: config.dataDir, workspaceOf: () => realpathSync(project), canvasOf: () => ({ belongs: () => false, tokenOf: () => "", handle: () => new Response() }), atWork: () => ({ agents: [], conversationIds: [] }), setupChanged: () => {}, heldChanged: () => {}, foldersOf: () => [], otherSandboxes: () => ({ workspaces: [], writableFolders: [], writableFoldersOn: [] }), foldersStarted: () => {}, places: { home: "/nonexistent-home", dataDir: config.dataDir, checkout: "/nonexistent-checkout", computersOwn: [] } };
+  const sandboxHost = { dataDir: config.dataDir, workspaceOf: () => realpathSync(project), canvasOf: () => ({ belongs: () => false, tokenOf: () => "", handle: () => new Response() }), atWork: () => ({ agents: [], conversationIds: [] }), setupChanged: () => {}, heldChanged: () => {}, foldersOf: () => [], networkOf: () => "closed" as const, otherSandboxes: () => ({ workspaces: [], writableFolders: [], writableFoldersOn: [] }), foldersStarted: () => {}, places: { home: "/nonexistent-home", dataDir: config.dataDir, checkout: "/nonexistent-checkout", computersOwn: [] } };
   return { store, config, conversations, conversation, claude, turnFailure, project, sandboxHost };
 }
 
-const SANDBOX_ON = { on: true, workFreely: true, allowsSharedKernel: false };
+const SANDBOX_ON: SandboxSetting = { on: true, workFreely: true, allowsSharedKernel: false, network: "closed" };
 
 test("a sandboxed room's agent whose sandbox can't be set up fails its turn, and never runs on this computer", async () => {
   const { conversations, conversation, claude, turnFailure, project, config } = sandboxedRoom(SANDBOX_ON);
   const cli = new FakeContainerCli();
   cli.failing = ([command, sub]) => (command === "system" && sub === "start" ? "kernel download failed" : null);
-  const host = { dataDir: config.dataDir, workspaceOf: () => project, canvasOf: () => ({ belongs: () => false, tokenOf: () => "", handle: () => new Response() }), atWork: () => ({ agents: [], conversationIds: [] }), setupChanged: () => {}, heldChanged: () => {}, foldersOf: () => [], otherSandboxes: () => ({ workspaces: [], writableFolders: [], writableFoldersOn: [] }), foldersStarted: () => {}, places: { home: "/nonexistent-home", dataDir: config.dataDir, checkout: "/nonexistent-checkout", computersOwn: [] } };
+  const host = { dataDir: config.dataDir, workspaceOf: () => project, canvasOf: () => ({ belongs: () => false, tokenOf: () => "", handle: () => new Response() }), atWork: () => ({ agents: [], conversationIds: [] }), setupChanged: () => {}, heldChanged: () => {}, foldersOf: () => [], networkOf: () => "closed" as const, otherSandboxes: () => ({ workspaces: [], writableFolders: [], writableFoldersOn: [] }), foldersStarted: () => {}, places: { home: "/nonexistent-home", dataDir: config.dataDir, checkout: "/nonexistent-checkout", computersOwn: [] } };
   conversations.startsSandboxedAgentsIn(stoppedAfterAll(new Sandboxes(new AppleContainer(cli, { available: true, kind: "apple-container" }), host)));
 
   await conversations.send(conversation.id, "go");
@@ -89,7 +89,7 @@ test("a sandboxed room's agent fails its turn while the host has no sandboxes to
 });
 
 test("a room without a sandbox runs its agent on this computer, as it always did", async () => {
-  const { conversations, conversation, claude, turnFailure } = sandboxedRoom({ on: false, workFreely: true, allowsSharedKernel: false });
+  const { conversations, conversation, claude, turnFailure } = sandboxedRoom(NO_SANDBOX);
   await conversations.send(conversation.id, "go");
   expect(turnFailure()).toBeDefined();
   expect(claude.ranHere()).toBe(true);
@@ -145,7 +145,7 @@ test("a sandboxed room's agent whose VM doesn't start fails its turn, and never 
 });
 
 test("an agent process started on this computer is not taken up again once its room is sandboxed", async () => {
-  const { store, conversations, conversation, claude, turnFailure, sandboxHost } = sandboxedRoom({ on: false, workFreely: true, allowsSharedKernel: false });
+  const { store, conversations, conversation, claude, turnFailure, sandboxHost } = sandboxedRoom(NO_SANDBOX);
   const launcher = new FakeVmLauncher();
   launcher.startFails = "not enough memory";
   conversations.startsSandboxedAgentsIn(stoppedAfterAll(new Sandboxes(launcher, sandboxHost)));
@@ -181,7 +181,7 @@ test("a sandboxed room's conversation has no side chat and runs no ! command, as
 });
 
 test("an agent session on this computer does not start in a folder where a sandboxed room's agents left a held file that stays", async () => {
-  const { conversations, store } = sandboxedRoom({ on: false, workFreely: true, allowsSharedKernel: false });
+  const { conversations, store } = sandboxedRoom(NO_SANDBOX);
   const settled: string[] = [];
   conversations.startsSandboxedAgentsIn({
     ...NO_SANDBOXES,
@@ -202,7 +202,7 @@ test("an agent session on this computer does not start in a folder where a sandb
 });
 
 test("putting a conversation's files back stops the VMs of rooms working in its folder first, so none races the restore", async () => {
-  const { store, conversations } = sandboxedRoom({ on: false, workFreely: true, allowsSharedKernel: false });
+  const { store, conversations } = sandboxedRoom(NO_SANDBOX);
   const stopped: string[] = [];
   conversations.startsSandboxedAgentsIn({ ...NO_SANDBOXES, settleHeldFilesFor: async () => {}, stopSandboxesWorkingIn: async (directory) => void stopped.push(directory) });
   const onThisMac = conversations.create("w1", { harness: "claude", profileId: "builder" });

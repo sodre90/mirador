@@ -320,6 +320,7 @@ const admissions: { [K in ClientMessage["type"]]: K extends PersonMessageType ? 
   "sandbox.set-folder-access": OWNER_ONLY,
   "sandbox.remove-folder": OWNER_ONLY,
   "sandbox.apply-folders-now": OWNER_ONLY,
+  "sandbox.set-network": OWNER_ONLY,
   "room.set-agent-variable": OWNER_ONLY,
   "room.set-agent-host-environment": OWNER_ONLY,
   "room.set-agents-read-guests": OWNER_ONLY,
