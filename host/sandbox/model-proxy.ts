@@ -143,15 +143,18 @@ function givingBackWhenDone(answer: Response, giveBack: () => void): Response {
   return new Response(body, { status: answer.status, statusText: answer.statusText, headers: answer.headers });
 }
 
+/** Bun's types leave it out of a unix socket's server, which keeps to it. A request's own `server.timeout` would end as its answer starts to stream. */
+const idleTimeoutOfSocket = (seconds: number): object => ({ idleTimeout: seconds });
+
 /** Serves a unix socket only this user of this computer reaches, made anew where an old one was left, within its limits. */
 export async function serveOnSocket(socketPath: string, fetch: (request: Request) => Response | Promise<Response>, { mostAtOnce, idleSeconds }: SocketLimits): Promise<RunningSocket> {
   await rm(socketPath, { force: true });
   let atOnce = 0;
   const server = Bun.serve({
     unix: socketPath,
-    async fetch(request, server) {
+    ...idleTimeoutOfSocket(idleSeconds),
+    async fetch(request) {
       if (atOnce >= mostAtOnce) return refused(429, "too many requests at once");
-      server.timeout(request, idleSeconds);
       atOnce += 1;
       let given = false;
       const giveBack = () => {

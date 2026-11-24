@@ -233,3 +233,41 @@ describe("a room's model proxy holds only so much of this Mac", () => {
     }
   });
 });
+
+describe("an answer that falls silent for longer than the ten seconds Bun gives a request by itself", () => {
+  const SILENT_MS = 13_000;
+
+  async function beginsThenEndsAfterSilence(request: Request) {
+    await request.text();
+    await Bun.sleep(50);
+    const body = new ReadableStream<string>({
+      async start(controller) {
+        controller.enqueue("begun ");
+        await Bun.sleep(SILENT_MS);
+        controller.enqueue("ended");
+        controller.close();
+      },
+    });
+    return new Response(body);
+  }
+  const wholeAnswer = async (socket: string, address: string, headers: Record<string, string> = {}) => (await fetch(address, { unix: socket, method: "POST", headers, body: "{}" })).text();
+
+  test("comes whole, a model's that thinks and a canvas question's that waits for its answer", async () => {
+    const thinking = Bun.serve({ port: 0, idleTimeout: 0, fetch: beginsThenEndsAfterSilence });
+    const [model, canvas] = [join(scratch, "thinking.sock"), join(scratch, "waiting.sock")];
+    const sockets = await Promise.all([
+      startModelProxy(model, MODEL_PORT, () => ({ upstream: `http://127.0.0.1:${thinking.port}`, api: "anthropic-messages", key: KEY, keyHeader: "x-api-key", headers: [] })),
+      startCanvasSocket(canvas, CANVAS_PORT, { belongs: () => true, tokenOf: () => "token", handle: (_conversationId, request) => beginsThenEndsAfterSilence(request) }),
+    ]);
+    try {
+      const answers = await Promise.all([
+        wholeAnswer(model, `http://127.0.0.1:${MODEL_PORT}/p/builder/v1/messages`),
+        wholeAnswer(canvas, `http://127.0.0.1:${CANVAS_PORT}/mcp/conversation-1`, { authorization: "Bearer token" }),
+      ]);
+      expect(answers).toEqual(["begun ended", "begun ended"]);
+    } finally {
+      await Promise.all(sockets.map((socket) => socket.stop()));
+      thinking.stop(true);
+    }
+  }, 30_000);
+});
