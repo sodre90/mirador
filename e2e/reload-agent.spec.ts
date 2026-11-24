@@ -83,9 +83,14 @@ async function expectReloadToPickUpAddedServer(agent: string, environment: strin
 
   addServer();
   await reload();
-  await sendMessage(page, `after the reload, on ${agent}`);
-  await waitForTurnToEnd(page);
-  expect(probeOffered()).toBe(true);
+  const expectOfferedWithNextMessage = async () => {
+    await sendMessage(page, `after the reload, on ${agent}`);
+    await waitForTurnToEnd(page);
+    expect(probeOffered()).toBe(true);
+  };
+  // Antigravity starts the servers in its settings in the background, so a message right after the reload can go without them.
+  if (agent === "Antigravity") await expect(expectOfferedWithNextMessage).toPass({ timeout: 30_000 });
+  else await expectOfferedWithNextMessage();
   expect(model.userMessagesInContext().join("\n")).toContain(`before the reload, on ${agent}`);
   await expect(page.locator(".timeline:visible")).not.toContainText("Could not resume");
 }
