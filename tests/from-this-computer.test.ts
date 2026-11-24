@@ -7,7 +7,8 @@ import { join } from "node:path";
 import { freePorts } from "../e2e/free-ports.ts";
 import { SignInCodes } from "../host/sign-in-codes.ts";
 import { Store } from "../host/store.ts";
-import { BROWSER_TOKEN_ONLY_HERE, fromThisComputer } from "../host/from-this-computer.ts";
+import { conversationCanvasToken } from "../host/canvas-token.ts";
+import { AGENT_TOKENS_ONLY_HERE, BROWSER_TOKEN_ONLY_HERE, fromThisComputer } from "../host/from-this-computer.ts";
 import { TOKEN_COOKIE } from "../shared/protocol.ts";
 
 const PORT = 4600;
@@ -62,6 +63,7 @@ describe("the host's own token", () => {
   const root = mkdtempSync(join(tmpdir(), "mirador-this-computer-"));
   const dataDir = join(root, "data");
   const PUBLIC_HOST = "box.example.ts.net";
+  const MCP_TOKEN = "the-canvas-tokens-key";
   let host: ChildProcess;
   let hostOutput = "";
   let port = 0;
@@ -72,6 +74,7 @@ describe("the host's own token", () => {
     CLAUDE_CONFIG_DIR: join(root, "claude-config"),
     MIRADOR_PORT: String(port),
     MIRADOR_DATA_DIR: dataDir,
+    MIRADOR_MCP_TOKEN: MCP_TOKEN,
     MIRADOR_NETWORK: "off",
     MIRADOR_TAILSCALE: join(root, "no-tailscale-on-this-machine"),
     MIRADOR_NOTIFIER_DIR: join(root, "notifier"),
@@ -124,10 +127,10 @@ describe("the host's own token", () => {
   }
 
   /** Answers as soon as the host's answer is whole, whether it keeps the connection open or turns it into a socket. */
-  function rawGet(path: string, headers: Record<string, string>) {
+  function raw(method: "GET" | "POST" | "DELETE", path: string, headers: Record<string, string>) {
     return new Promise<{ status: number; body: string }>((resolve, reject) => {
       let received = Buffer.alloc(0);
-      const socket = connect(port, "127.0.0.1", () => socket.write([`GET ${path} HTTP/1.1`, ...Object.entries(headers).map(([name, value]) => `${name}: ${value}`), "", ""].join("\r\n")));
+      const socket = connect(port, "127.0.0.1", () => socket.write([`${method} ${path} HTTP/1.1`, ...Object.entries(headers).map(([name, value]) => `${name}: ${value}`), "", ""].join("\r\n")));
       socket.on("data", (chunk: Buffer) => {
         received = Buffer.concat([received, chunk]);
         const answer = answerIn(received);
@@ -138,6 +141,8 @@ describe("the host's own token", () => {
       socket.on("error", reject);
     });
   }
+
+  const rawGet = (path: string, headers: Record<string, string>) => raw("GET", path, headers);
 
   const thisComputer = () => ({ Host: `127.0.0.1:${port}` });
   const forwardedShapes: Record<string, () => Record<string, string>> = {
@@ -166,7 +171,22 @@ describe("the host's own token", () => {
     });
   const linkWithToken = (shape: Record<string, string>) => rawGet(`/auth?token=${browserToken}`, { ...shape });
   const linkWithCode = (shape: Record<string, string>, code: string) => rawGet(`/auth?code=${code}`, { ...shape });
-  const devicesWithBearer = (shape: Record<string, string>) => rawGet("/devices", { ...shape, Authorization: `Bearer ${browserToken}` });
+  const withBearer = (shape: Record<string, string>, method: "GET" | "POST" | "DELETE", path: string, token: string) =>
+    raw(method, path, { ...shape, Authorization: `Bearer ${token}`, "Content-Length": "0" });
+  const devicesWithBearer = (shape: Record<string, string>) => withBearer(shape, "GET", "/devices", browserToken);
+  const scriptToken = () => readFileSync(join(dataDir, "script-token"), "utf8").trim();
+  /** What agents, scripts and commands reach with a token of theirs, and how each is answered on this computer. */
+  const agentRoutes = (): { method: "GET" | "POST" | "DELETE"; path: string; token: string; here: number }[] => [
+    { method: "POST", path: "/mcp/no-such-conversation", token: conversationCanvasToken(MCP_TOKEN, "no-such-conversation"), here: 404 },
+    { method: "POST", path: "/sessions/no-such-session/messages", token: scriptToken(), here: 404 },
+    { method: "POST", path: "/sessions/no-such-session/job-waits", token: scriptToken(), here: 404 },
+    { method: "GET", path: "/devices", token: browserToken, here: 200 },
+    { method: "POST", path: "/settings-import/plan", token: browserToken, here: 400 },
+    { method: "POST", path: "/settings-import", token: browserToken, here: 400 },
+    { method: "POST", path: "/settings-import/plugins", token: browserToken, here: 400 },
+    { method: "POST", path: "/settings-import/plugins/no-such-offer", token: browserToken, here: 400 },
+    { method: "DELETE", path: "/settings-import/plugins/no-such-offer", token: browserToken, here: 200 },
+  ];
 
   function mintedCode() {
     const store = new Store(join(dataDir, "state.sqlite"));
@@ -182,12 +202,26 @@ describe("the host's own token", () => {
     expect((await devicesWithBearer(thisComputer())).status).toBe(200);
   });
 
+  test("and the tokens of agents and scripts, reach what they are for from this computer itself", async () => {
+    for (const { method, path, token, here } of agentRoutes()) expect((await withBearer(thisComputer(), method, path, token)).status, `${method} ${path}`).toBe(here);
+  });
+
+  test("and the tokens of agents and scripts, reach nothing under another name that was pointed at this computer", async () => {
+    for (const { method, path, token } of agentRoutes())
+      expect(await withBearer({ Host: `rebound.example.com:${port}` }, method, path, token), `${method} ${path}`).toEqual({ status: 403, body: AGENT_TOKENS_ONLY_HERE });
+  });
+
   for (const [shape, headersOf] of Object.entries(forwardedShapes)) {
+    test(`and the tokens of agents and scripts, reach nothing passed on by ${shape}`, async () => {
+      for (const { method, path, token } of agentRoutes())
+        expect(await withBearer(headersOf(), method, path, token), `${method} ${path}`).toEqual({ status: 403, body: AGENT_TOKENS_ONLY_HERE });
+    });
+
     test(`signs in nothing passed on by ${shape}`, async () => {
       const shaped = headersOf();
       expect((await socketWithCookie(shaped)).status).toBe(401);
       expect(await linkWithToken(shaped)).toEqual({ status: 403, body: BROWSER_TOKEN_ONLY_HERE });
-      expect(await devicesWithBearer(shaped)).toEqual({ status: 403, body: BROWSER_TOKEN_ONLY_HERE });
+      expect(await devicesWithBearer(shaped)).toEqual({ status: 403, body: AGENT_TOKENS_ONLY_HERE });
       const code = mintedCode();
       expect(await linkWithCode(shaped, code)).toEqual({ status: 403, body: BROWSER_TOKEN_ONLY_HERE });
       expect((await linkWithCode(thisComputer(), code)).status, "a code tried from afar is not used up").toBe(302);

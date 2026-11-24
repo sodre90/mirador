@@ -5,6 +5,9 @@ import { isLoopback } from "./hub.ts";
 export const BROWSER_TOKEN_ONLY_HERE =
   "This sign-in link works only on the computer Mirador runs on. To use Mirador on this device, add it with an invite from Settings → Devices on that computer.";
 
+/** What is told of a canvas token, the script token or the host's own one, in a request of an agent, a script or a command, come from another computer. */
+export const AGENT_TOKENS_ONLY_HERE = "Agents, scripts and commands reach Mirador only on the computer it runs on.";
+
 const PROXY_HEADERS = new Set(["forwarded", "via", "x-real-ip", CANVAS_ASSETS_ORIGIN_HEADER]);
 const PROXY_HEADER_PREFIXES = ["x-forwarded-", "tailscale-"];
 

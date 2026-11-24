@@ -95,7 +95,7 @@ import type { MachineWatch } from "./machine-watch.ts";
 import type { MachineTunnels } from "./machine-tunnels.ts";
 import { wayToMachine } from "./machine-trust.ts";
 import { sameSecret, signedInWith } from "./sign-in.ts";
-import { BROWSER_TOKEN_ONLY_HERE, fromThisComputer } from "./from-this-computer.ts";
+import { AGENT_TOKENS_ONLY_HERE, BROWSER_TOKEN_ONLY_HERE, fromThisComputer } from "./from-this-computer.ts";
 import { MAX_DROPPED_FILE_BYTES, type DroppedFiles } from "./dropped-files.ts";
 import { MAX_IMAGE_BYTES, type ImageStore } from "./images.ts";
 import { imagesOf, lowDataEvent, pageEvent, wholeToolOutput } from "./low-data.ts";
@@ -827,9 +827,10 @@ export function startServer(services: HostServices) {
     broadcastHiddenMachines();
   }
 
-  /** Agents and the scripts they start call with the host's token and, unlike a browser's POST, no Origin header. */
+  /** Agents, the scripts they start and commands call from this computer itself, with the host's token and, unlike a browser's POST, no Origin header. */
   function refusedAgentRequest(request: Request, token: string) {
-    if (!hasAllowedHost(request) || request.headers.has("origin")) return new Response("forbidden", { status: 403 });
+    if (!madeOnThisComputer.has(request)) return new Response(AGENT_TOKENS_ONLY_HERE, { status: 403 });
+    if (request.headers.has("origin")) return new Response("forbidden", { status: 403 });
     const bearer = request.headers.get("authorization")?.replace(/^Bearer /, "");
     return sameSecret(bearer, token) ? null : new Response("unauthorized", { status: 401 });
   }
@@ -2545,7 +2546,7 @@ export function startServer(services: HostServices) {
   /** For `mirador devices`, which signs in with the host's own token, as this machine's browser does. */
   function listDevicesForCommandLine(request: Request) {
     const listed: DevicesAndPeople = { devices: listedDevices(), people: store.listPeople(), ownerId: store.ownerId() };
-    return refusedFromAfar(request) ?? refusedAgentRequest(request, config.browserToken) ?? Response.json(listed);
+    return refusedAgentRequest(request, config.browserToken) ?? Response.json(listed);
   }
 
   function upgradeSockets(request: Request, server: Bun.Server<SocketData>) {
