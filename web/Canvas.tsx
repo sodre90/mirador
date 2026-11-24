@@ -143,6 +143,7 @@ export function CanvasFrame({
   zoomRef.current = zoom;
   const [errors, setErrors] = useState<string[]>([]);
   const [contentSize, setContentSize] = useState<ContentSize>();
+  const [columnWidthAsked, setColumnWidthAsked] = useState(0);
   const [unwrappedWidth, setUnwrappedWidth] = useState(0);
   // Neither the theme nor the zoom is a dependency: changing one would reload the page, so it reaches a shown page by message instead.
   const imagesFromOtherSites = policy?.imagesFromOtherSites ?? false;
@@ -179,6 +180,7 @@ export function CanvasFrame({
   useEffect(() => {
     setErrors([]);
     setContentSize(undefined);
+    setColumnWidthAsked(0);
     setUnwrappedWidth(0);
     const listener = (event: MessageEvent) => {
       if (event.source !== frame.current?.contentWindow || !isCanvasFrameMessage(event.data)) return;
@@ -187,8 +189,10 @@ export function CanvasFrame({
       if (message.kind === "error") setErrors((current) => [...current, message.message]);
       if (message.kind === "rendered") onRenderedRef.current?.(message.errors);
       if (message.kind === "size") {
-        const askedWidth = message.overflowWidth && Math.min(message.overflowWidth, MAX_CONTENT_WIDTH);
-        setContentSize((current) => ({ height: message.height, width: askedWidth || current?.width || null }));
+        const neededWidth = message.overflowWidth && Math.min(message.overflowWidth, MAX_CONTENT_WIDTH);
+        setContentSize({ height: message.height, width: neededWidth });
+        // Kept once the column gives it: the page then fits its column, which would otherwise take the width away again.
+        if (neededWidth) setColumnWidthAsked(neededWidth);
         if (message.naturalWidth) setUnwrappedWidth(Math.min(message.naturalWidth, MAX_UNWRAPPED_WIDTH_ASKED));
       }
       if (message.kind === "wheel") scrollPanelBy(frame.current, message);
@@ -204,16 +208,14 @@ export function CanvasFrame({
   }, [document]);
 
   useEffect(() => {
-    const wantedWidth = Math.max(contentSize?.width ?? 0, unwrappedWidth);
+    const wantedWidth = Math.max(columnWidthAsked, unwrappedWidth);
     if (wantedWidth) onContentWidthRef.current?.(wantedWidth);
-  }, [contentSize?.width, unwrappedWidth]);
+  }, [columnWidthAsked, unwrappedWidth]);
 
   useEffect(() => onShownThemeChange(() => postThemeTo(frame)), []);
   useEffect(() => {
     if (!followsTextSize) return;
-    // The page overflows by more or less at another zoom, so the width it asked for before is forgotten until it reports again.
-    setContentSize((current) => current && { ...current, width: null });
-    setUnwrappedWidth(0);
+    setColumnWidthAsked(0);
     postTextScaleTo(frame, zoom);
   }, [zoom]);
 
@@ -223,13 +225,11 @@ export function CanvasFrame({
   }, [shown]);
 
   // A page in a frame sized to its content takes its column's width as its window's, rather than the frame's, which
-  // grows with it. A page sized to its window overflows by more or less in another, so the width it asked for is
-  // forgotten until it reports again.
+  // grows with it. Until it reports the size it has there, its frame keeps the one it has: drawn at the column's width
+  // meanwhile, a page wider than it would flicker at each step of a drag.
   const pageRoomWidth = roomWidth - FRAME_BORDERS;
   useEffect(() => {
     if (!fitsContent || pageRoomWidth <= 0) return;
-    setContentSize((current) => current && { ...current, width: null });
-    setUnwrappedWidth(0);
     frame.current?.contentWindow?.postMessage(canvasRoomMessage(pageRoomWidth), "*");
   }, [pageRoomWidth]);
 

@@ -60,6 +60,12 @@ describe("buildCanvasDocument", () => {
     expect(buildCanvasDocument("<p>", "item", assetsOrigin, "light", { followsTextSize: true })).toContain("const contentWatcher = false");
   });
 
+  test("only a page in a frame sized to its content is measured as it would be laid out in its room", () => {
+    const laysOutInRoom = /max-width:calc\(100 \* var\(--mirador-vw\)\)/;
+    expect(buildCanvasDocument("<p>", "item", assetsOrigin, "light", { fitsContent: true })).toMatch(laysOutInRoom);
+    expect(buildCanvasDocument("<p>", "item", assetsOrigin, "light", { followsTextSize: true })).not.toMatch(laysOutInRoom);
+  });
+
   test("only a page in a frame sized to its content has the viewport lengths it writes after load rewritten", () => {
     expect(buildCanvasDocument("<p>", "item", assetsOrigin, "light", { fitsContent: true })).toContain("rewriteViewportUnits(changes)");
     expect(buildCanvasDocument("<p>", "item", assetsOrigin, "light", { followsTextSize: true })).not.toContain("rewriteViewportUnits(changes)");

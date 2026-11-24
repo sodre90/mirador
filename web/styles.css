@@ -5418,6 +5418,11 @@ button.jump-to-latest svg {
   flex-direction: column;
 }
 
+/* A page scaled to its room gets shorter as the room narrows, so a scrollbar that took room only when needed would come and go without end. */
+.canvas-body:has(> .ask, > .checklist) {
+  overflow-y: scroll;
+}
+
 .canvas-frame {
   display: flex;
   flex-direction: column;
