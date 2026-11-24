@@ -208,7 +208,7 @@ describe("a brought agent in a sandboxed room", () => {
   const asking: SandboxSetting = { on: true, workFreely: false, allowsSharedKernel: false, network: "closed" };
 
   /** The room's sandbox does its calls on this computer; what it was asked to start and stop. */
-  async function sandboxedRoom(sandbox: SandboxSetting) {
+  async function sandboxedRoom(sandbox: SandboxSetting, vmStarts = Promise.resolve()) {
     const machine = roomOfAnn();
     const { rooms, room, agentId, ownerId, store } = machine;
     store.saveProfile(profile("p0", "Another"));
@@ -222,6 +222,7 @@ describe("a brought agent in a sandboxed room", () => {
       availability: () => ({ available: true, kind: "apple-container" }),
       launchForBrought: async (call) => {
         started.push(call);
+        await vmStarts;
         return { command: commandHere(call.command), environment: {} };
       },
       stopBrought: async (owner, agent) => void stopped.push(`${ownerKey(owner)} ${agent}`),
@@ -334,11 +335,13 @@ describe("a brought agent in a sandboxed room", () => {
   });
 
   test("calls asked for at once count while what they change is worked out, and end with the task", async () => {
-    const { rooms, room, agentId, ownerTasks, call, answerTo } = await sandboxedRoom(asking);
+    const vm = Promise.withResolvers<void>();
+    const { rooms, room, agentId, ownerTasks, call, answerTo } = await sandboxedRoom(asking, vm.promise);
     const taskId = ownerTasks();
     const asked = Array.from({ length: MOST_WORKSPACE_CALLS_AT_ONCE }, () => call(taskId, edit));
     expect((await answerTo(call(taskId, edit))).text).toContain(`Only ${MOST_WORKSPACE_CALLS_AT_ONCE} calls`);
     rooms.broughtTaskAnswered("m1", room.id, agentId, taskId, "Done", null);
+    vm.resolve();
     for (const callId of asked) expect((await answerTo(callId)).text).toBe("It was stopped.");
     expect(rooms.workspaceCallsIn(room.id)).toEqual([]);
   });
