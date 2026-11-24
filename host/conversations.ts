@@ -70,7 +70,7 @@ import { canTryAgain } from "../shared/try-again.ts";
 import { currentActivity, isAgentsNextStep, OpenToolCalls } from "./activity.ts";
 import { editDiffsOf } from "./edit-diff.ts";
 import { askedPermissionOf, pendingAsk, pendingPermission } from "./pending-requests.ts";
-import { askingDefaultModeOf, askingModeOf, presetModeOf, type AskedPermission } from "../shared/room-permissions.ts";
+import { allowsBroughtMode, askingDefaultModeOf, askingModeOf, presetModeOf, type AskedPermission } from "../shared/room-permissions.ts";
 import { END_OF_OTHERS_WORDS, PROFILES_MODEL, type Room, type RoomAgentModel } from "../shared/rooms.ts";
 import { newestWaitingAsk } from "../shared/ask.ts";
 import { launchEditor } from "./editor.ts";
@@ -2022,9 +2022,20 @@ export class ConversationService {
   }
 
   async setConfigOption(conversationId: string, configId: string, value: ConfigValue) {
+    this.assertModeAllowed(this.get(conversationId), configId, value);
     const sessionId = await this.ensureSession(conversationId);
-    const response = await this.harnessFor(this.get(conversationId)).setConfigOption(sessionId, configId, value);
+    const conversation = this.get(conversationId);
+    this.assertModeAllowed(conversation, configId, value);
+    const response = await this.harnessFor(conversation).setConfigOption(sessionId, configId, value);
     this.save({ ...this.get(conversationId), configOptions: response.configOptions });
+  }
+
+  private assertModeAllowed(conversation: Conversation, configId: string, value: ConfigValue) {
+    if (!conversation.broughtIntoRoom || typeof value !== "string") return;
+    const option = conversation.configOptions.find(({ id }) => id === configId);
+    if ((option?.category === "mode" || configId === "mode") && !allowsBroughtMode(conversation, value)) {
+      throw new Error("A conversation that works for a room always asks.");
+    }
   }
 
   /**

@@ -9,7 +9,7 @@ import { Hub } from "../host/hub.ts";
 import { SystemNotifications } from "../host/system-notifications.ts";
 import { Store } from "../host/store.ts";
 import { ALL_OF_CLAUDE_SETUP } from "../shared/room-agent-setup.ts";
-import { askingModeOf } from "../shared/room-permissions.ts";
+import { allowsBroughtMode, askingModeOf, offeredConfigOption } from "../shared/room-permissions.ts";
 import { NO_SANDBOX } from "../shared/sandbox.ts";
 
 const scratch = mkdtempSync(join(tmpdir(), "room-preset-modes-"));
@@ -179,4 +179,50 @@ test("a profile's mode that still asks is kept for a brought agent; one that nev
   expect(askingModeOf("codex", "agent-full-access")).toBe("read-only");
   expect(askingModeOf("opencode", "build")).toBe("build");
   expect(askingModeOf("opencode", null)).toBeUndefined();
+});
+
+test("a brought agent's conversation refuses switching to a mode that never asks, and its Mode picker leaves those modes out", async () => {
+  const store = new Store(":memory:");
+  const project = join(scratch, `project-${crypto.randomUUID()}`);
+  mkdirSync(project);
+  store.saveProfile({ id: "p1", name: "p", harness: "codex", environment: "", prelaunch: "", model: null, mode: null, effort: null, bypassPermissions: false, askMode: "wait", color: null, pluginsOff: [], createdAt: 1 });
+  store.saveProfile({ id: "p2", name: "c", harness: "claude", environment: "", prelaunch: "", model: null, mode: null, effort: null, bypassPermissions: false, askMode: "wait", color: null, pluginsOff: [], createdAt: 1 });
+  store.insertWorkspace({ id: "w1", name: "p", path: project, defaultLaunch: { harness: "codex", profileId: "p1" }, createdAt: 1 });
+  const conversations = new ConversationService(store, new Hub(), loadConfig({ MIRADOR_DATA_DIR: join(scratch, `data-${crypto.randomUUID()}`) }), { mute() {}, unmute() {} } as never, {} as never, {} as never, new SystemNotifications(store, new Hub()));
+  const { agent, promptedIn } = codexAgent("agent");
+  const claude = codexAgent("default");
+  const withSessions = conversations as unknown as { ensureSession: (id: string) => Promise<string> };
+  const ensureSession = withSessions.ensureSession;
+  withSessions.ensureSession = async () => "not-started";
+  const brought = conversations.createBroughtIntoRoom("w1", { harness: "codex", profileId: "p1" }, "Garden · Ann's machine", false);
+  const inRooms = conversations.createBroughtIntoRoom("w1", { harness: "claude", profileId: "p2" }, "Garden · Ann's machine", true);
+  withSessions.ensureSession = ensureSession;
+  const processes = (conversations as unknown as { agentProcesses: Map<string, unknown> }).agentProcesses;
+  processes.set(agentProcessKey(store.findProfile("p1")!, brought, false), agent);
+  processes.set(agentProcessKey(store.findProfile("p2")!, inRooms, false), claude.agent);
+
+  await expect(conversations.setConfigOption(brought.id, "mode", "agent-full-access")).rejects.toThrow("A conversation that works for a room always asks.");
+  await expect(conversations.setConfigOption(brought.id, "mode", "agent")).rejects.toThrow("A conversation that works for a room always asks.");
+  await conversations.setConfigOption(brought.id, "mode", "workspace-write");
+  await conversations.send(brought.id, "first", []);
+  await until(() => promptedIn.length === 1);
+  expect(promptedIn).toEqual(["workspace-write"]);
+
+  await expect(conversations.setConfigOption(inRooms.id, "mode", "acceptEdits")).rejects.toThrow("A conversation that works for a room always asks.");
+  await conversations.setConfigOption(inRooms.id, "mode", "default");
+
+  const claudeModes: SessionConfigOption = {
+    id: "mode",
+    name: "Mode",
+    category: "mode",
+    type: "select",
+    currentValue: "default",
+    options: ["default", "acceptEdits", "plan", "dontAsk", "bypassPermissions"].map((value) => ({ value, name: value })),
+  };
+  const valuesOf = (option: SessionConfigOption) => (option.type === "select" ? option.options.map((entry) => ("value" in entry ? entry.value : "")) : []);
+  expect(valuesOf(offeredConfigOption({ harness: "claude", broughtIntoRoom: true }, claudeModes))).toEqual(["default", "acceptEdits"]);
+  expect(valuesOf(offeredConfigOption({ harness: "claude", broughtIntoRoom: true, worksInRoomsWorkspace: true }, claudeModes))).toEqual(["default"]);
+  expect(valuesOf(offeredConfigOption({ harness: "claude" }, claudeModes))).toEqual(["default", "acceptEdits", "plan", "dontAsk", "bypassPermissions"]);
+  expect(allowsBroughtMode({ harness: "claude", broughtIntoRoom: true, sideChatOf: "parent" }, "plan")).toBe(true);
+  expect(allowsBroughtMode({ harness: "claude", broughtIntoRoom: true, sideChatOf: "parent" }, "bypassPermissions")).toBe(false);
 });

@@ -338,5 +338,8 @@ test("brought to work in a workspace of hers, it runs in the mode that asks, tho
 
   await hers.locator(".conversation-title", { hasText: "Garden · Ann's machine" }).click();
   await expect(mia.locator(".chat-header:visible h2")).toHaveText("Garden · Ann's machine");
-  await expect(await modeOfOpenConversation()).toHaveValue("default", { timeout: 60_000 });
+  const mode = await modeOfOpenConversation();
+  await expect(mode).toHaveValue("default", { timeout: 60_000 });
+  const offered = await mode.locator("option").evaluateAll((options) => options.map((option) => (option as HTMLOptionElement).value));
+  expect(offered).toEqual(["default", "acceptEdits"]);
 });

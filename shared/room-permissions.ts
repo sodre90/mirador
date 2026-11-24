@@ -1,6 +1,7 @@
-import type { ToolKind } from "@agentclientprotocol/sdk/unstable";
+import type { SessionConfigOption, SessionConfigSelectGroup, SessionConfigSelectOption, ToolKind } from "@agentclientprotocol/sdk/unstable";
 import { asDisksCompare } from "./disk-names.ts";
-import type { HarnessId } from "./model.ts";
+import type { Conversation, HarnessId } from "./model.ts";
+import { sideChatModeOf } from "./side-chats.ts";
 
 /** What a room's agents may do without asking, as the room's owner chose it. */
 export type PermissionPreset = "ask-everything" | "read-freely" | "work-freely" | "never-asks";
@@ -52,6 +53,50 @@ export const askingModeOf = (harness: HarnessId, mode: string | undefined | null
 
 /** The agent's own mode that asks before edits and commands alike; null for an agent with no modes for a room's presets. */
 export const askingDefaultModeOf = (harness: HarnessId) => presetModes[harness]?.["ask-everything"] ?? null;
+
+/** Whether the mode is one a room's presets run that agent in, or any where the agent has none. */
+export const isAskingMode = (harness: HarnessId, mode: string) => {
+  const asking = presetModes[harness];
+  return !asking || Object.values(asking).includes(mode);
+};
+
+/**
+ * Whether a brought agent's conversation may be switched to this mode: only the asking default for one working in the
+ * room's workspace, any mode a room's preset runs the agent in for one working in the bringer's workspace, and a side
+ * chat's own read-only mode for a side chat.
+ */
+export function allowsBroughtMode(
+  conversation: Pick<Conversation, "harness" | "broughtIntoRoom" | "worksInRoomsWorkspace" | "sideChatOf">,
+  mode: string,
+): boolean {
+  if (!conversation.broughtIntoRoom) return true;
+  if (conversation.sideChatOf !== undefined && mode === sideChatModeOf(conversation.harness)) return true;
+  if (conversation.worksInRoomsWorkspace) {
+    const only = askingDefaultModeOf(conversation.harness);
+    return only === null || mode === only;
+  }
+  return isAskingMode(conversation.harness, mode);
+}
+
+/**
+ * A config option as the conversation's settings offer it: a brought agent's Mode picker lists only modes it may run
+ * in, keeping the current one if the agent reported another.
+ */
+export function offeredConfigOption(
+  conversation: Pick<Conversation, "harness" | "broughtIntoRoom" | "worksInRoomsWorkspace" | "sideChatOf">,
+  option: SessionConfigOption,
+): SessionConfigOption {
+  if (!conversation.broughtIntoRoom || option.category !== "mode" || option.type !== "select") return option;
+  const keep = ({ value }: SessionConfigSelectOption) => allowsBroughtMode(conversation, value) || value === option.currentValue;
+  const isGrouped = (entries: typeof option.options): entries is SessionConfigSelectGroup[] => entries.length > 0 && "group" in entries[0]!;
+  const options = isGrouped(option.options)
+    ? option.options.flatMap((group) => {
+        const kept = group.options.filter(keep);
+        return kept.length > 0 ? [{ ...group, options: kept }] : [];
+      })
+    : option.options.filter(keep);
+  return { ...option, options };
+}
 
 /** A permission request as the host judges it: the tool's kind, its title, the whole command it would run, and the paths it names. */
 export interface AskedPermission {

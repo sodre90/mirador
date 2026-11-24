@@ -5,6 +5,7 @@ import { chosenModel, flatSelectOptions } from "../shared/config-options.ts";
 import { nameWithPrice } from "./model-names.ts";
 import { harnessLabels, worksForARoom, type AskMode, type Conversation, type Profile } from "../shared/model.ts";
 import { agentBesideProfile } from "../shared/profile-label.ts";
+import { offeredConfigOption } from "../shared/room-permissions.ts";
 import { placedBelowOnItsSide, useClosing } from "./BarMenu.tsx";
 import { choiceGroups } from "./choices.ts";
 import { connection } from "./connection.ts";
@@ -285,7 +286,7 @@ export function ConversationSettingsPopover({
       <div className="controls">
         <ProfilePicker conversation={conversation} profiles={profiles} begun={begun} />
         {conversation.configOptions.map((option) => (
-          <ConfigControl key={option.id} conversationId={conversation.id} option={option} />
+          <ConfigControl key={option.id} conversationId={conversation.id} option={offeredConfigOption(conversation, option)} />
         ))}
         {!worksForARoom(conversation) && <YoloSwitch conversation={conversation} />}
         <PluginSettingMenus conversation={conversation} profiles={profiles} />
