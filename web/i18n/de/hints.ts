@@ -35,6 +35,8 @@ export const hints: Messages["hints"] = {
   stopReadingAloud: "Hört auf, diese Antwort vorzulesen.",
   copyReply: "Kopiert die Antwort dieser Runde als formatierten Text, ohne die Werkzeuge, die sie nutzte.",
   copyReplyAsMarkdown: "Kopiert die Antwort dieser Runde als Markdown, ohne die Werkzeuge, die sie nutzte.",
+  copyLastMessage: "Kopiert nur die letzte Nachricht des Agenten in dieser Runde, als formatierten Text.",
+  copyLastMessageAsMarkdown: "Kopiert nur die letzte Nachricht des Agenten in dieser Runde, als Markdown.",
   keepTalking:
     "Sobald die Antwort auf das, was du diktiert hast, vorgelesen ist, öffnet sich das Mikrofon wieder, und was du als Nächstes sagst, wird sofort gesendet. „stop“ oder „thanks“ zu sagen, oder Esc, beendet es. Eine Frage, die der Agent in der Zwischenzeit stellt, wird vorgelesen, damit du per Stimme antworten kannst; sag „help“, um zu hören, was du sagen kannst.",
   sendMessage: "Sendet die Nachricht. Shift+Enter beginnt eine neue Zeile, / listet die Befehle des Agenten auf, @ vervollständigt einen Pfad und ! führt einen Shell-Befehl aus.",

@@ -122,6 +122,8 @@ export const chat: Messages["chat"] = {
     copy: "Másolás",
     copyReply: "Válasz másolása",
     copyReplyAsMarkdown: "Válasz másolása Markdownként",
+    copyLastMessage: "Utolsó üzenet másolása",
+    copyLastMessageAsMarkdown: "Utolsó üzenet másolása Markdownként",
     copied: "Másolva",
     copyFailed: "Nem sikerült másolni",
   },

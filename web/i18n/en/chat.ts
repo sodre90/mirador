@@ -129,6 +129,8 @@ export const chat = {
     copy: "Copy",
     copyReply: "Copy reply",
     copyReplyAsMarkdown: "Copy reply as Markdown",
+    copyLastMessage: "Copy last message",
+    copyLastMessageAsMarkdown: "Copy last message as Markdown",
     copied: "Copied",
     copyFailed: "Couldn't copy",
   },

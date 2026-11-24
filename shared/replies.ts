@@ -20,11 +20,19 @@ function turnsWithText(timeline: TimelineBlock[]): Turn[] {
   return turns;
 }
 
-/** The turns' last text blocks, where copying the reply is offered. */
-export const replyEnds = (timeline: TimelineBlock[]) => new Set(turnsWithText(timeline).map((turn) => turn.lastKey));
+export type ReplyEnd = "only-message" | "last-of-several-messages";
+
+/** The turns' last text blocks, where copying the reply is offered, and the last message by itself when the reply has several. */
+export const replyEnds = (timeline: TimelineBlock[]) =>
+  new Map<string, ReplyEnd>(turnsWithText(timeline).map(({ lastKey, texts }) => [lastKey, texts.length > 1 ? "last-of-several-messages" : "only-message"]));
+
+const turnEndingAt = (timeline: TimelineBlock[], key: string) => turnsWithText(timeline).find((turn) => turn.lastKey === key);
 
 /** The whole reply of the turn ending at that text block, as one Markdown document. */
-export const replyEndingAt = (timeline: TimelineBlock[], key: string) => turnsWithText(timeline).find((turn) => turn.lastKey === key)?.texts.join("\n\n") ?? "";
+export const replyEndingAt = (timeline: TimelineBlock[], key: string) => turnEndingAt(timeline, key)?.texts.join("\n\n") ?? "";
+
+/** Only the last message of the turn ending at that text block, as Markdown. */
+export const lastMessageEndingAt = (timeline: TimelineBlock[], key: string) => turnEndingAt(timeline, key)?.texts.at(-1) ?? "";
 
 /** The whole reply of the latest turn the agent wrote in, as one Markdown document; empty before it wrote any. */
 export const latestReply = (timeline: TimelineBlock[]) => turnsWithText(timeline).at(-1)?.texts.join("\n\n") ?? "";
