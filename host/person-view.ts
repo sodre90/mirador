@@ -370,6 +370,7 @@ export function personView(store: PeopleSeen & Pick<Store, "findRoom" | "listPro
     "voice.engine": HIDDEN,
     "workspace.upserted": HIDDEN,
     "workspace.deleted": HIDDEN,
+    "workspace.icon": HIDDEN,
     "workspace-group.upserted": HIDDEN,
     "workspace-group.deleted": HIDDEN,
     "conversation.upserted": ({ conversation }, socket) => {

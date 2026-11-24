@@ -77,6 +77,7 @@ const admissions: { [K in ClientMessage["type"]]: K extends PersonMessageType ? 
   "workspace.set-default-launch": OWNER_ONLY,
   "workspace.move": OWNER_ONLY,
   "workspace.set-color": OWNER_ONLY,
+  "workspaces.find-icons": OWNER_ONLY,
   "workspace.set-worktree-settings": OWNER_ONLY,
   "workspace.set-side-chat-access": OWNER_ONLY,
   "workspace.set-sandbox": OWNER_ONLY,

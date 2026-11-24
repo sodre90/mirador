@@ -47,6 +47,7 @@ import type { CanvasMcpEndpoints } from "./canvas/mcp.ts";
 import type { CanvasService } from "./canvas/service.ts";
 import { AppFileRefused, type AppDocuments } from "./apps/documents.ts";
 import { WorkspaceGitRefused } from "./apps/workspace-git.ts";
+import { workspaceIcon } from "./workspace-icons.ts";
 import { shownProblemOf, type InstalledPlugins } from "./apps/installed-plugins.ts";
 import type { CanvasPlugins } from "./canvas/plugins.ts";
 import { AppStorage } from "./apps/storage.ts";
@@ -1502,6 +1503,10 @@ export function startServer(services: HostServices) {
     });
   }
 
+  /** Each answered on its own, so a folder on a slow disk holds up no other's icon. */
+  const findWorkspaceIcons = (reply: (response: ServerMessage) => void) =>
+    store.listWorkspaces().forEach(({ id, path }) => void workspaceIcon(path).then((icon) => reply({ type: "workspace.icon", workspaceId: id, icon })));
+
   const newestSessionSearch = newestOnly<BrowserSocket>();
 
   async function dispatch(socket: BrowserSocket, message: ClientMessage) {
@@ -1517,6 +1522,8 @@ export function startServer(services: HostServices) {
         return moveWorkspace(message.workspaceId, message.groupId, message.beforeWorkspaceId, message.beforeGroupId ?? null);
       case "workspace.set-color":
         return colorWorkspace(message.workspaceId, message.color);
+      case "workspaces.find-icons":
+        return findWorkspaceIcons(reply);
       case "workspace.set-worktree-settings":
         return conversations.setWorktreeSettings(message.workspaceId, message.newConversationsIn, message.worktreeSetup);
       case "workspace.set-side-chat-access":

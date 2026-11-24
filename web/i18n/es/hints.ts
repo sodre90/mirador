@@ -218,7 +218,7 @@ export const hints: Messages["hints"] = {
   waitingCount: "Conversaciones de este espacio de trabajo que te esperan.",
   workspaceColor: "Dale un color a este espacio de trabajo para distinguirlo en la barra lateral. Todas las ventanas lo muestran.",
   workspaceColorStyle:
-    "Cómo muestra su color un espacio de trabajo al que se lo diste: en toda su tarjeta, solo en su encabezado, o como una franja en su borde sobre un tono más suave. Haz clic en las iniciales de un espacio de trabajo para darle un color.",
+    "Cómo muestra su color un espacio de trabajo al que se lo diste: en toda su tarjeta, solo en su encabezado, o como una franja en su borde sobre un tono más suave. Haz clic en las iniciales o el icono de un espacio de trabajo para darle un color.",
   newConversation: "Inicia una conversación en este espacio de trabajo, con el perfil elegido en esta tarjeta.",
   continueSession: "Continúa una sesión que se inició en una terminal, como una conversación en este espacio de trabajo.",
   whereConversationsWork: "Elige si las conversaciones nuevas trabajan en la carpeta del proyecto o cada una en su propio worktree de git.",

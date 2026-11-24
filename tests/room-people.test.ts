@@ -51,6 +51,7 @@ const EVERY_CLIENT_MESSAGE: Record<ClientMessage["type"], true> = {
   "workspace.set-default-launch": true,
   "workspace.move": true,
   "workspace.set-color": true,
+  "workspaces.find-icons": true,
   "workspace.set-worktree-settings": true,
   "workspace.set-side-chat-access": true,
   "workspace.set-sandbox": true,
