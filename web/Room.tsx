@@ -43,7 +43,7 @@ import {
 import type { HeldChange } from "../shared/sandbox.ts";
 import { placedBelowOnItsSide, useClosing, useKeptInWindow } from "./BarMenu.tsx";
 import { CanvasPanel, CanvasShown, type WorkspaceApps } from "./Canvas.tsx";
-import { agentMarks, MessageWriters, pendingPermissionNeeded, PersonAvatar, PersonName, TimelineOfEvents, Timestamp, usePersonName, usePersonNames, useScrollAnchor } from "./Chat.tsx";
+import { agentMarks, JumpToLatest, MessageWriters, pendingPermissionNeeded, PersonAvatar, PersonName, TimelineOfEvents, Timestamp, usePersonName, usePersonNames, useScrollAnchor } from "./Chat.tsx";
 import { connection } from "./connection.ts";
 import { HintedWhenCutShort } from "./cut-short.tsx";
 import { useEarlierHistory } from "./earlier-history.ts";
@@ -915,11 +915,7 @@ export function RoomView({
   const voteOn = (item: AskItem) => <RoomVote key={item.id} roomId={room.id} item={item} votes={votesOf.get(item.id)} you={you} takesOwnWords={owns || approvesIn(room, you) || !room.peoplesTasksWait} />;
   const pending = timeline ? workPending(timeline, room.agents) : [];
   const writing = presence?.writing ?? [];
-  const { ref: roomTimeline, onScroll } = useScrollAnchor();
-  const timelineEnd = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    timelineEnd.current?.scrollIntoView({ block: "end" });
-  }, [timeline?.messages.length]);
+  const { ref: roomTimeline, onScroll, awayFromLatest, jumpToLatest } = useScrollAnchor();
   const main = (
     <>
       <header className="chat-header room-header" data-pane-bar>
@@ -972,8 +968,8 @@ export function RoomView({
         {timeline && questionsOfNoAnswer(timeline.canvas, canvasOfAnswers).map(voteOn)}
         {workUnderWay(pending, agentsById, approvals).map(({ key, thread: working, text }) => <ThreadLink key={key} text={text} onOpen={() => setThreadId(working.id)} />)}
         <WritingLine writing={writing} threadId={null} you={you} />
-        <div ref={timelineEnd} />
       </div>
+      {awayFromLatest && <JumpToLatest onJump={jumpToLatest} />}
       {owns && <HeldChangeCard changes={heldChanges} holdsTooMany={holdsTooMany} agentName={(profileId) => agentsById.get(profileId)?.name ?? words.agentGone} countOf={words.approvalPosition} homeDir={homeDir} />}
       <ApprovalStrip approvals={waitingForYou} tasks={tasksWaitingForYou} agentsById={agentsById} you={you} />
       <RoomComposer
@@ -981,7 +977,10 @@ export function RoomView({
         placeholder={tagsAgents ? words.placeholder(room.name) : words.guestPlaceholder(room.name)}
         agents={agentsToTag}
         people={peopleToTag}
-        onSend={(text, tags) => writeIn(room.id, text, tags, null)}
+        onSend={(text, tags) => {
+          writeIn(room.id, text, tags, null);
+          jumpToLatest();
+        }}
         tellWriting={tellWritingIn(room.id, null)}
       />
     </>

@@ -1290,7 +1290,7 @@ export function useScrollAnchor() {
   return { ref, onScroll, holdPlace, isPinned, rememberPlace, awayFromLatest, jumpToLatest };
 }
 
-function JumpToLatest({ onJump }: { onJump: () => void }) {
+export function JumpToLatest({ onJump }: { onJump: () => void }) {
   return (
     <div className="jump-to-latest-anchor">
       <button type="button" className="jump-to-latest" aria-label={words.timeline.jumpToLatest} data-hint={hints.jumpToLatest} onClick={onJump}>

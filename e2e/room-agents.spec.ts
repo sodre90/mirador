@@ -468,3 +468,72 @@ test("a thread opens at its latest, follows the agent's work from there, and lea
   await answer.getByRole("button", { name: "Open thread" }).click();
   await expectAtLatest("Third coat");
 });
+
+test("a room follows its latest message, leaves a reader who scrolled up in place, and takes them back when they write or jump there", async ({ page }) => {
+  const longText = (ending: string) => `${"Every nail is counted once. ".repeat(300)}${ending}`;
+  const timeline = page.locator(".room-timeline");
+  const scrolledTo = () => timeline.evaluate((element) => element.scrollTop);
+  const leftBelow = () => timeline.evaluate((element) => element.scrollHeight - element.clientHeight - element.scrollTop);
+  const jump = page.getByRole("button", { name: "Jump to the latest" });
+  const expectAtLatest = async () => {
+    await expect.poll(leftBelow).toBeLessThan(2);
+    expect(await scrolledTo()).toBeGreaterThan(0);
+    await expect(jump).toHaveCount(0);
+  };
+  const scrollUp = async () => {
+    await timeline.evaluate((element) => {
+      element.scrollTop = 100;
+      element.dispatchEvent(new Event("scroll"));
+    });
+    await expect(jump).toBeVisible();
+  };
+
+  await openNewRoom(page, "Nails");
+  await tag(page, "Nails", "Builder", `SAY ${longText("First box")}`);
+  await expect(answerSaying(page, "First box")).toBeVisible();
+  await expectAtLatest();
+
+  await test.step("an answer leaves a reader who scrolled up where they are", async () => {
+    const released = join(host.root, "second-box-released");
+    rmSync(released, { force: true });
+    await tag(page, "Nails", "Builder", `WAIT ${released} SAY ${longText("Second box")}`);
+    await expectAtLatest();
+    await scrollUp();
+    writeFileSync(released, "");
+    await expect(answerSaying(page, "Second box")).toHaveCount(1);
+    expect(await scrolledTo()).toBe(100);
+  });
+
+  await test.step("the jump button takes them to the latest, which is followed from there", async () => {
+    await jump.click();
+    await expectAtLatest();
+    await tag(page, "Nails", "Builder", `SAY ${longText("Third box")}`);
+    await expect(answerSaying(page, "Third box")).toBeVisible();
+    await expectAtLatest();
+  });
+
+  await test.step("a message of their own takes them there too", async () => {
+    await scrollUp();
+    await write(page, "Nails", "Counted them all");
+    await expect(roomEntries(page).last().locator(".message.user")).toHaveText("Counted them all");
+    await expectAtLatest();
+  });
+
+  await test.step("another room opens at its own latest, and this one too on coming back", async () => {
+    await scrollUp();
+    await createRoom(page, "Screws", []);
+    await write(page, "Screws", longText("None counted yet"));
+    await expect(roomEntries(page).last().locator(".message.user")).toContainText("None counted yet");
+    await expectAtLatest();
+    await scrollUp();
+    await roomCard(page, "Nails").click();
+    await expect(roomEntries(page).last().locator(".message.user")).toHaveText("Counted them all");
+    await expectAtLatest();
+  });
+
+  await test.step("the room opens at its latest again", async () => {
+    await page.reload();
+    await expect(roomEntries(page).last().locator(".message.user")).toHaveText("Counted them all");
+    await expectAtLatest();
+  });
+});
