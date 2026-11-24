@@ -11,8 +11,8 @@ export type CanvasFrameMessage =
   | { source: typeof CANVAS_MESSAGE_SOURCE; itemId: string; kind: "error"; message: string }
   | { source: typeof CANVAS_MESSAGE_SOURCE; itemId: string; kind: "rendered"; errors: string[] }
   /**
-   * `overflowWidth` is how wide the content wants to be, when that is wider than the frame. `naturalWidth` is how wide it
-   * would be with no line wrapped, at any frame width, from a page built to measure it.
+   * `overflowWidth` is how wide a frame shows the content whole, when that is wider than the page's room. `naturalWidth` is
+   * how wide it would be with no line wrapped, at any frame width, from a page built to measure it.
    */
   | { source: typeof CANVAS_MESSAGE_SOURCE; itemId: string; kind: "size"; height: number; overflowWidth: number | null; naturalWidth: number | null }
   /** A wheel turn the page has no use for, for the panel behind it to take instead. */
@@ -1220,6 +1220,11 @@ const WINDOW_SIZE_PINNING = `
   Object.defineProperty(window, "innerWidth", { get: () => pinnedWidth || frameWidth(), configurable: true });
 `;
 
+// The page laid out in its room, whatever its frame's width. Content positioned in the window is out of reach of the body's
+// scroll width, so while measured it is positioned in the body, unless the page positions its body itself.
+const LAID_OUT_IN_ROOM_STYLE =
+  ":root:is([data-mirador-measured],[data-mirador-kept-in-room]){box-sizing:border-box;max-width:calc(100 * var(--mirador-vw))}:where(:root[data-mirador-measured]) body{position:relative}";
+
 // Viewport lengths a page writes after it loads are rewritten in the frame, as buildCanvasDocument rewrote its markup:
 // an inline style and a style block alike. A record of the rewrite is dropped, so it starts no check of its own.
 const STYLE_VIEWPORT_UNITS = `
@@ -1292,7 +1297,7 @@ function frameReporter(itemId: string, theme: CanvasTheme, assetsOrigin: string,
     return ":root{--mirador-vw:" + vw + ";--mirador-vh:" + vh + "}";
   };
   const showZoom = () => {
-    textZoom.textContent = (zoom === 1 ? "" : ":root{zoom:" + zoom + "}" + ${JSON.stringify(WINDOW_SIZED_CANVAS_FIT)}) + frameViewportUnits();
+    textZoom.textContent = (zoom === 1 ? "" : ":root{zoom:" + zoom + "}" + ${JSON.stringify(WINDOW_SIZED_CANVAS_FIT)}) + frameViewportUnits()${pinsWindowSize ? ` + ${JSON.stringify(LAID_OUT_IN_ROOM_STYLE)}` : ""};
   };
   const zoomTo = (scale) => {
     zoom = scale > 0 ? scale : 1;
@@ -1332,6 +1337,8 @@ ${pinsWindowSize ? WINDOW_SIZE_PINNING : ""}
     contentWatcher.observe(document.documentElement, { subtree: true, childList: true, characterData: true, attributes: true });
     addEventListener("transitionend", scheduleReport, true);
     addEventListener("animationend", scheduleReport, true);
+    // A page kept in its room has a root no frame width changes, so the observer below misses that too.
+    addEventListener("resize", scheduleReport);
   }
 ${TEXT_CONTRAST_SCRIPT}
   // Pages often pick colours for one theme only. Text that all but vanishes on its own background takes the theme
@@ -1419,6 +1426,7 @@ ${PAGE_FIND_SCRIPT}
     if (data.kind === "text-scale") {
       const zoomBefore = zoom;
       zoomTo(data.scale);
+      if (zoom !== zoomBefore) roomChanged = true;
       lastSizePosted = "";
       reportSize();
       // A zoom change fires no resize of its own, and resize is when canvas code asks for the pixel ratio again.
@@ -1427,6 +1435,7 @@ ${PAGE_FIND_SCRIPT}
     if (data.kind === "room" && ${pinsWindowSize} && data.width > 0) {
       if (data.width !== pinnedWidth) {
         pinnedWidth = data.width;
+        roomChanged = true;
         showZoom();
         dispatchEvent(new Event("resize"));
       }
@@ -1483,17 +1492,43 @@ ${HIDDEN_ERROR_SCRIPT}
     consoleError.apply(console, args);
   };
   addEventListener("load", () => setTimeout(() => post({ kind: "rendered", errors }), 1500));
-  // Only a size that changed goes to the panel, so a page busy with changes that keep its size costs it nothing. The
-  // panel forgets the width a page asked for when the text size or the column changes, so those post again.
+  const overflowsFrame = (root) => root.scrollWidth > root.clientWidth;
+  // In a frame as wide as it asked for, the page overflows no more, so once its room or its text size changes no overflow
+  // tells the width it needs now. It is laid out in its room for a moment instead, which nothing draws: giving its frame
+  // the room's width to measure it in would flicker.
+  const widthNeededInRoom = (root) => {
+    const frameIsWiderThanRoom = frameWidth() > pinnedWidth + 1;
+    root.toggleAttribute("data-mirador-measured", frameIsWiderThanRoom);
+    const bodyLeft = document.body ? document.body.getBoundingClientRect().left + scrollX : 0;
+    const overflows = overflowsFrame(root);
+    const reach = overflows ? root.scrollWidth : bodyLeft + (document.body?.scrollWidth ?? 0) * zoom;
+    root.toggleAttribute("data-mirador-measured", false);
+    const roundingOfScrollWidth = zoom;
+    return overflows || reach > pinnedWidth + roundingOfScrollWidth ? Math.ceil(reach + bodyLeft) : null;
+  };
+  // Content that moves as its frame widens, as what overflows a centred column does, would have it widened round after
+  // round and drawn ever smaller. A page its widened frame would show whole if laid out in its room stays laid out there.
+  let neededWidth = null;
+  let roomChanged = false;
+  const measureNeededWidth = (root) => {
+    const overflows = overflowsFrame(root);
+    if (!overflows && !roomChanged) return;
+    roomChanged = false;
+    const frameWasWidened = neededWidth !== null;
+    neededWidth = widthNeededInRoom(root);
+    const wideningPushesItOut = overflows && frameWasWidened && frameWidth() >= neededWidth;
+    if (wideningPushesItOut) root.toggleAttribute("data-mirador-kept-in-room", true);
+  };
+  // Only a size that changed goes to the panel, so a page busy with changes that keep its size costs it nothing. The panel
+  // posts the room and the text size again as it shows the page again, knowing no size of it, so those post anyway.
   let lastSizePosted = "";
   const reportSize = () => {
     // Hidden, the page is laid out in no room at all; the frame keeps its first size to pin when it shows.
     if (${pinsWindowSize} && !pinnedHeight) return;
     const root = document.documentElement;
-    const bodyLeft = document.body ? document.body.getBoundingClientRect().left + scrollX : 0;
-    const overflowWidth = root.scrollWidth > root.clientWidth ? Math.ceil(root.scrollWidth + bodyLeft) : null;
+    if (${pinsWindowSize}) measureNeededWidth(root);
     const height = Math.ceil(root.getBoundingClientRect().height);
-    const size = { kind: "size", height, overflowWidth, naturalWidth: ${measuresNaturalWidth} ? naturalWidthOf(root) : null };
+    const size = { kind: "size", height, overflowWidth: neededWidth, naturalWidth: ${measuresNaturalWidth} ? naturalWidthOf(root) : null };
     const sizeKey = JSON.stringify(size);
     if (sizeKey === lastSizePosted) return;
     lastSizePosted = sizeKey;
@@ -1501,14 +1536,18 @@ ${HIDDEN_ERROR_SCRIPT}
   };
   const naturalWidthOf = (root) => {
     const inlineWidth = root.style.width;
+    const keptInRoom = root.hasAttribute("data-mirador-kept-in-room");
+    root.removeAttribute("data-mirador-kept-in-room");
     root.style.width = "max-content";
     const width = Math.ceil(root.getBoundingClientRect().width);
     root.style.width = inlineWidth;
+    root.toggleAttribute("data-mirador-kept-in-room", keptInRoom);
     contentWatcher?.takeRecords();
     return width;
   };
-  // Measuring the natural width resizes the page for a moment, which inside the observer's own callback is a resize loop.
-  new ResizeObserver(() => (${measuresNaturalWidth} ? requestAnimationFrame(reportSize) : reportSize())).observe(document.documentElement);
+  // Measuring the width the page needs or its natural one resizes it for a moment, which inside the observer's own callback
+  // is a resize loop.
+  new ResizeObserver(() => (${pinsWindowSize || measuresNaturalWidth} ? scheduleReport() : reportSize())).observe(document.documentElement);
   addEventListener("load", reportSize);
   const hasRoom = (node, axis, delta) => {
     const position = axis === "scrollTop" ? node.scrollTop : node.scrollLeft;

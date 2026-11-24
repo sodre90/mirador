@@ -2,7 +2,7 @@ import type { CSSProperties } from "react";
 
 export interface ContentSize {
   height: number;
-  /** The width the content asked for when it overflowed; kept once known, as the frame drawn that wide reports no overflow. */
+  /** The width that shows the content whole, when that is wider than its room. */
   width: number | null;
 }
 

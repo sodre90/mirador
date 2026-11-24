@@ -1,5 +1,5 @@
-import { expect, test, type Locator } from "@playwright/test";
-import { addWorkspace, answerCanvasQuestion, callCanvasTool, signIn, startConversation } from "./helpers.ts";
+import { expect, test, type Locator, type Page } from "@playwright/test";
+import { addWorkspace, answerCanvasQuestion, callCanvasTool, chooseInSettings, signIn, startConversation } from "./helpers.ts";
 import { TestHost } from "./test-host.ts";
 
 const host = new TestHost();
@@ -26,6 +26,18 @@ const WHOLLY_SHOWN_RATIO = 0.99;
 
 async function expectWhollyShown(frame: Locator) {
   await expect(frame.contentFrame().getByText("END")).toBeInViewport({ ratio: WHOLLY_SHOWN_RATIO });
+}
+
+/** Text drawn within its frame's sides, though a page taller than the window may have it out of sight. */
+async function expectInWidth(frame: Locator, text: string) {
+  await expect(async () => {
+    const { left, right, frameWidth } = await frame
+      .contentFrame()
+      .getByText(text, { exact: true })
+      .evaluate((node) => ({ left: node.getBoundingClientRect().left, right: node.parentElement!.getBoundingClientRect().right, frameWidth: document.documentElement.clientWidth }));
+    expect(left).toBeGreaterThanOrEqual(0);
+    expect(right).toBeLessThanOrEqual(frameWidth + 1);
+  }).toPass({ timeout: 5_000 });
 }
 
 const scaleOf = (frame: Locator) =>
@@ -371,6 +383,213 @@ test("a preview sized to the viewport, in its markup or from its script, keeps i
   // Its script set its width in vw after it loaded, which would chase the frame it is shown in as well.
   await expectAsWideAsItsColumn(options.nth(3));
   await answerCanvasQuestion(page, "Viewport");
+});
+
+/** Code side by side in a centred column of text, as agents lay out a before and after, where the code is wider than the column. */
+const codeInACentredColumn = (lineLength: number) => {
+  const code = `<pre>${`${"x".repeat(lineLength - 1)}\n`.repeat(4)}</pre>`;
+  return `<style>
+  body { max-width: 900px; margin: 0 auto; padding: 16px }
+  .columns { display: grid; grid-template-columns: 1fr 1fr; gap: 12px }
+  pre { font: 12px monospace; padding: 8px; background: #eef; overflow-x: auto }
+</style>
+<p>Every check runs on the calling thread, in dependency order.</p>
+<div class="columns"><div><b>BEFORE</b>${code}</div><div><b>AFTER</b>${code}</div></div>`;
+};
+
+const columnDivider = (page: Page) => page.getByRole("separator", { name: "Resize the left and right panes" });
+
+/** The widths the frames that match were drawn from since it started, each scaled to fit its column; 0 for one drawn at its column's own width. */
+async function widthsDrawnFrom(page: Page, frames: string) {
+  await page.evaluate((frames) => {
+    const recorder = window as unknown as { widthsDrawn: Set<string> };
+    recorder.widthsDrawn = new Set();
+    const record = () => {
+      document.querySelectorAll<HTMLElement>(frames).forEach((frame, index) => recorder.widthsDrawn.add(`${index} ${frame.style.transform ? parseFloat(frame.style.width) : 0}`));
+      requestAnimationFrame(record);
+    };
+    record();
+  }, frames);
+  return async (index: number) => {
+    const drawn = await page.evaluate(() => [...(window as unknown as { widthsDrawn: Set<string> }).widthsDrawn]);
+    return drawn.map((entry) => entry.split(" ").map(Number)).filter(([frame]) => frame === index).map(([, width]) => width!);
+  };
+}
+
+/** Drags the divider with each pointer move right after the page's current task, before React got round to what the move before it left to do. */
+const dragFasterThanThePageRenders = (page: Page, moves: number) =>
+  columnDivider(page).evaluate(async (divider, moves) => {
+    divider.setPointerCapture = () => {};
+    divider.releasePointerCapture = () => {};
+    const { x, y } = divider.getBoundingClientRect();
+    const point = (type: string, clientX: number) => divider.dispatchEvent(new PointerEvent(type, { bubbles: true, clientX, clientY: y + 100, pointerId: 1 }));
+    const channel = new MessageChannel();
+    const nextTask = () =>
+      new Promise((resolve) => {
+        channel.port1.onmessage = resolve;
+        channel.port2.postMessage(null);
+      });
+    point("pointerdown", x);
+    for (let move = 0; move < moves; move++) {
+      point("pointermove", x + (move % 60) * 2);
+      await nextTask();
+    }
+    point("pointerup", x);
+  }, moves);
+
+test("a page and a preview wider than their columns stay scaled to fit while the canvas is resized, rather than flickering between that and their own size, and a drag that outruns the page doesn't end it", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await signIn(page, host);
+  const conversationId = await startConversation(page);
+  const html = codeInACentredColumn(90);
+  await callCanvasTool(host, conversationId, "show", { title: "Before and after", html });
+  askInBackground(conversationId, { question: "Which API?", options: [{ label: "After", html }, { label: "Before" }] });
+  const carried = page.locator(".ask-page-before:visible iframe");
+  const option = preview(page.locator(".ask-option:visible").first());
+  for (const frame of [carried, option]) {
+    await expect(frame).toHaveAttribute("style", /scale/);
+    await expectInWidth(frame, "AFTER");
+  }
+  await page.waitForTimeout(1_000);
+
+  const widthsDrawn = await widthsDrawnFrom(page, ".ask-page-before iframe, .ask-option iframe");
+  const divider = (await columnDivider(page).boundingBox())!;
+  const y = divider.y + 100;
+  await page.mouse.move(divider.x + divider.width / 2, y);
+  await page.mouse.down();
+  for (const x of [divider.x + 120, divider.x - 120, divider.x]) await page.mouse.move(x, y, { steps: 30 });
+  await page.mouse.up();
+  await page.waitForTimeout(500);
+  for (const index of [0, 1]) {
+    const widths = await widthsDrawn(index);
+    expect(Math.max(...widths) - Math.min(...widths), `frame ${index} drawn from ${widths.join(", ")}px wide`).toBeLessThanOrEqual(2);
+  }
+
+  await dragFasterThanThePageRenders(page, 150);
+  await expect(page.locator(".ask h3")).toHaveText("Which API?");
+  expect(errors).toEqual([]);
+  for (const frame of [carried, option]) await expectInWidth(frame, "AFTER");
+  await answerCanvasQuestion(page, "After");
+});
+
+test("a page that moves as its frame widens is drawn as large as shows it whole, at any text size, rather than ever smaller, while one that fills its frame still spreads across it", async ({ page }) => {
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await signIn(page, host);
+  const conversationId = await startConversation(page);
+  const column = "max-width:700px;margin:0 auto";
+  const wide = (left: string, right: string) => `<div style="width:1000px;display:flex;justify-content:space-between;background:#eef"><b>${left}</b><b>${right}</b></div>`;
+  askInBackground(conversationId, {
+    question: "Which page?",
+    html: `<style>body{${column}}</style>${wide("BODY START", "BODY END")}`,
+    options: [
+      { label: "Centred", html: `<main style="${column}">${wide("MAIN START", "MAIN END")}</main>` },
+      { label: "Wider than its page", html: `<div style="width:calc(100% + 60px);display:flex;justify-content:space-between;background:#eef"><b>MORE START</b><b>MORE END</b></div>` },
+      { label: "Filling", html: `<p style="background:#eef">SPREADS</p>${wide("FILL START", "FILL END")}` },
+      { label: "Fixed", html: `<style>html{width:1000px}</style>${wide("HTML START", "HTML END")}` },
+    ],
+  });
+  const pages = [
+    { frame: page.locator(".ask-context:visible iframe"), name: "BODY" },
+    { frame: preview(page.locator(".ask-option:visible").nth(0)), name: "MAIN" },
+    { frame: preview(page.locator(".ask-option:visible").nth(1)), name: "MORE" },
+    { frame: preview(page.locator(".ask-option:visible").nth(2)), name: "FILL" },
+    { frame: preview(page.locator(".ask-option:visible").nth(3)), name: "HTML" },
+  ];
+  const edgesOf = (frame: Locator, name: string) =>
+    frame.contentFrame().locator("body").evaluate((body, name) => {
+      const edge = (text: string, side: "left" | "right") => [...body.querySelectorAll("b")].find((node) => node.textContent === text)!.getBoundingClientRect()[side];
+      return { before: edge(`${name} START`, "left"), after: document.documentElement.clientWidth - edge(`${name} END`, "right") };
+    }, name);
+  const expectEachAsLargeAsShowsItWhole = async (textScale: number) => {
+    for (const { frame, name } of pages)
+      await expect(async () => {
+        const { before, after } = await edgesOf(frame, name);
+        for (const room of [before, after]) {
+          expect(room, `${name} is whole`).toBeGreaterThanOrEqual(-1);
+          expect(room, `${name} leaves no more room beside it than its page's own spacing`).toBeLessThan(30 * textScale);
+        }
+      }).toPass({ timeout: 8_000 });
+  };
+  await expectEachAsLargeAsShowsItWhole(1);
+  const spread = pages[3]!.frame.contentFrame().getByText("SPREADS");
+  expect(await spread.evaluate((node) => node.getBoundingClientRect().width / document.documentElement.clientWidth)).toBeGreaterThan(0.9);
+
+  for (const [choice, textScale] of [["140%", 1.4], ["100%", 1]] as const) {
+    await chooseInSettings(page, "Text size", choice);
+    await expectEachAsLargeAsShowsItWhole(textScale);
+  }
+  await answerCanvasQuestion(page, "Centred");
+});
+
+test("previews that fit the row a column of their own gives them keep it, rather than going side by side and back without end", async ({ page }) => {
+  await page.setViewportSize({ width: 3600, height: 1000 });
+  await signIn(page, host);
+  const conversationId = await startConversation(page);
+  const options = page.locator(".ask-option:visible");
+  askInBackground(conversationId, {
+    question: "Which of two?",
+    options: [
+      { label: "First", html: mockup(900) },
+      { label: "Second", html: mockup(900) },
+    ],
+  });
+  await expect(options).toHaveCount(2);
+  const row = await page.locator(".ask-options:visible").boundingBox();
+  expect(row!.width, "side by side they would be cut off, stacked they fit").toBeGreaterThan(900);
+  expect(row!.width / 2, "side by side they would be cut off, stacked they fit").toBeLessThan(940);
+  for (const width of [3550, 3600]) {
+    await page.setViewportSize({ width, height: 1000 });
+    await page.waitForTimeout(1_000);
+    const layouts = await page.evaluate(async () => {
+      const seen = new Set<string>();
+      for (let frame = 0; frame < 60; frame++) {
+        seen.add([...document.querySelectorAll(".ask-option")].map((option) => Math.round(option.getBoundingClientRect().width)).join(" "));
+        await new Promise(requestAnimationFrame);
+      }
+      return [...seen];
+    });
+    expect(layouts, `at rest in a window ${width} wide`).toHaveLength(1);
+    for (const option of await options.all()) await expectWhollyShown(preview(option));
+  }
+  await answerCanvasQuestion(page, "First");
+});
+
+test("a scaled page about as tall as the panel keeps its size, where the panel's scrollbar takes room", async ({ playwright, browserName, channel, launchOptions, locale }) => {
+  const browser = await playwright[browserName].launch({ ...launchOptions, channel, ignoreDefaultArgs: ["--hide-scrollbars"] });
+  const page = await browser.newPage({ locale, viewport: { width: 1700, height: 1000 } });
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await signIn(page, host);
+  await page.addStyleTag({ content: "::-webkit-scrollbar { width: 15px }" });
+  const conversationId = await startConversation(page);
+  const text = "<p>Every check runs on the calling thread, in dependency order, so nothing runs after one that failed, and no work is wasted on the ones behind it.</p>".repeat(15);
+  askInBackground(conversationId, { question: "Which tall page?", html: text + codeInACentredColumn(90), options: [{ label: "This one" }, { label: "Another" }] });
+  const frame = page.locator(".ask-context:visible iframe");
+  await expect(frame).toHaveAttribute("style", /scale/);
+  await expectInWidth(frame, "AFTER");
+  const heightThatFits = 1000 + (await page.evaluate(() => document.querySelector<HTMLElement>(".ask")!.offsetHeight - document.querySelector(".canvas-body")!.clientHeight));
+
+  for (let height = heightThatFits + 8; height > heightThatFits - 20; height -= 4) {
+    await page.setViewportSize({ width: 1700, height });
+    await page.waitForTimeout(200);
+    await expect(page.locator(".ask h3")).toHaveText("Which tall page?");
+    const sizes = await page.evaluate(async () => {
+      const seen = new Set<string>();
+      for (let frame = 0; frame < 20; frame++) {
+        const page = document.querySelector<HTMLElement>(".ask-context iframe")!;
+        seen.add(`drawn from ${page.style.width || "its column's width"} in ${page.parentElement!.clientWidth}px`);
+        await new Promise(requestAnimationFrame);
+      }
+      return [...seen];
+    });
+    expect(sizes, `at rest in a window ${height} tall`).toHaveLength(1);
+  }
+  expect(await page.locator(".canvas-body").evaluate((panel: HTMLElement) => panel.offsetWidth - panel.clientWidth), "the scrollbar takes room").toBe(15);
+  expect(errors).toEqual([]);
+  await answerCanvasQuestion(page, "This one");
+  await browser.close();
 });
 
 test("a preview at rest does no work, also when Mirador recolours its text to keep it readable", async ({ page }) => {
