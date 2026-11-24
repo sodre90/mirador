@@ -16,9 +16,18 @@ export const HELD_MOUNTS_MOST = 100;
 
 export class HeldFilesRefused extends Error {}
 
-/** What the held files of a folder ask of its sandbox, all of whose VMs that write in the folder share them. */
+/** A change as it is held, for every sandbox that works in the folder. */
+type ChangeKept = Omit<HeldChange, "owner" | "folder">;
+
+/** A room or workspace whose sandbox works in the folder: as its workspace, or as one added to it read and write. */
+interface WorksThere {
+  owner: SandboxOwner;
+  asAddedFolder: boolean;
+}
+
+/** What the held files of a folder ask of the sandboxes that work in it, all of whose VMs that write there share them. */
 export interface HeldSandbox {
-  /** The agents at work in the sandbox, by profile id, and their conversations. */
+  /** The agents at work in their VMs there, by profile id, and their conversations. */
   atWork(): { agents: string[]; conversationIds: string[] };
   changed(): void;
   /** Puts places back inside one of the VMs, as its agent user, while one runs; null where none does. */
@@ -62,7 +71,7 @@ const textOf = (entry: PlaceEntry): string | null | undefined => {
 const kindOfChange = (before: PlaceEntry, after: PlaceEntry): HeldChange["kind"] => (before.kind === "none" ? "add" : after.kind === "none" ? "delete" : "change");
 
 interface Held {
-  change: HeldChange;
+  change: ChangeKept;
   before: PlaceEntry;
   proposed: PlaceEntry;
 }
@@ -85,15 +94,27 @@ export class HeldFiles {
   private watcher?: FSWatcher;
   private readOnly: string[] = [];
   private gitRedirects: string[] = [];
+  /** Whose sandboxes work there or did while these were held, each told of every change of it, by `ownerKey`. */
+  private readonly working = new Map<string, WorksThere>();
 
-  /** `workspace` is the folder whose files it holds: the sandbox's workspace, or a folder added to it read and write. */
+  /** `workspace` is the folder whose files it holds: the workspace of each sandbox that works there, or a folder added to one read and write. */
   constructor(
     readonly workspace: string,
-    private readonly owner: SandboxOwner,
     private readonly gitFolders: string[],
     private readonly sandbox: HeldSandbox,
-    private readonly isAddedFolder: boolean,
   ) {}
+
+  worksThere(owner: SandboxOwner, asAddedFolder = false) {
+    this.working.set(ownerKey(owner), { owner, asAddedFolder });
+  }
+
+  worksThereNoLonger(owner: SandboxOwner) {
+    this.working.delete(ownerKey(owner));
+  }
+
+  owners(): SandboxOwner[] {
+    return [...this.working.values()].map(({ owner }) => owner);
+  }
 
   /**
    * Takes in the held paths as they are, and watches from then on: the held files and folders there are, which the VM is
@@ -141,13 +162,21 @@ export class HeldFiles {
     await this.check();
   }
 
-  /** The changes a previous run of the sandbox's VM held, still waiting for the owner. */
+  /** The changes held there as a VM worked in the folder before, still waiting for those it was told to. */
   takeOver(previous: HeldFiles) {
     previous.held.forEach((kept, path) => this.held.set(path, kept));
+    previous.working.forEach((working, key) => this.working.has(key) || this.working.set(key, working));
   }
 
-  changes(): HeldChange[] {
-    return [...this.held.values()].map(({ change }) => change);
+  /** What it holds, as the room or workspace is told of it; nothing where its sandbox doesn't work there. */
+  changesFor(owner: SandboxOwner): HeldChange[] {
+    const working = this.working.get(ownerKey(owner));
+    if (!working) return [];
+    return [...this.held.values()].map(({ change }) => ({ ...change, owner: working.owner, folder: working.asAddedFolder ? this.workspace : null }));
+  }
+
+  holdsAny() {
+    return this.held.size > 0;
   }
 
   /** Whether it holds as many changes as a sandbox may: its VM does not start again until the owner answers some. */
@@ -195,7 +224,7 @@ export class HeldFiles {
       while (this.pending.size > 0) {
         const roots = outermost([...this.pending]);
         this.pending.clear();
-        await this.settle(roots).catch((error: unknown) => console.error(`holding agent config files of ${ownerKey(this.owner)}:`, error));
+        await this.settle(roots).catch((error: unknown) => console.error(`holding agent config files in ${this.workspace}:`, error));
       }
     } finally {
       this.draining = undefined;
@@ -245,10 +274,8 @@ export class HeldFiles {
     const before = this.expected.get(path) ?? NONE;
     const [beforeText, afterText] = [textOf(before), textOf(proposed)];
     const unshown = beforeText === undefined || afterText === undefined;
-    const change: HeldChange = {
+    const change: ChangeKept = {
       id: kept?.change.id ?? crypto.randomUUID(),
-      owner: this.owner,
-      folder: this.isAddedFolder ? this.workspace : null,
       path,
       ...this.sandbox.atWork(),
       kind: kindOfChange(before, proposed),

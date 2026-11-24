@@ -78,7 +78,7 @@ describe("a room's sandbox", () => {
     expect(run![run!.indexOf("--network") + 1]).toBe("none");
     expect(mountOf(run!, workspace)).toBe(`${workspace}:${workspace}`);
     const configMount = run!.find((arg, index) => run![index - 1] === "-v" && arg.endsWith(`:${workspace}/.git/config:ro`));
-    expect(configMount?.startsWith(`${join(host.dataDir, "sandbox", "room-1", "git-config")}/`)).toBe(true);
+    expect(configMount?.startsWith(`${join(host.dataDir, "sandbox", "plans")}/`)).toBe(true);
     expect(mountOf(run!, join(workspace, ".git"))).toBe(`${workspace}/.git:${workspace}/.git`);
     expect(mountOf(run!, join(workspace, ".git/hooks"))).toBe(`${workspace}/.git/hooks:${workspace}/.git/hooks:ro`);
     expect(run).toContain("mirador.owner=room:room-1");

@@ -65,6 +65,7 @@ import { ConversationWithSide } from "./SideChat.tsx";
 import type { AppAction, OpenConversation, RoomTimelineWithCanvas } from "./state.ts";
 import { SuggestionList, suggestionAttributes, suggestionKey, usePickedSuggestion } from "./SuggestionList.tsx";
 import { ModelChoice, offeredAlready } from "./RoomAgents.tsx";
+import { nameOf } from "./RoomAgentSetup.tsx";
 import { HeldChangeCard } from "./Sandbox.tsx";
 import { JoinerAtTheDoor, RemovePerson, WaitingToJoin } from "./RoomSettings.tsx";
 import { RoomVote } from "./RoomVote.tsx";
@@ -1033,7 +1034,7 @@ export function RoomView({
         <WritingLine writing={writing} threadId={null} you={you} />
       </div>
       {awayFromLatest && <JumpToLatest onJump={jumpToLatest} />}
-      {owns && <HeldChangeCard changes={heldChanges} holdsTooMany={holdsTooMany} agentName={(profileId) => agentsById.get(profileId)?.name ?? words.agentGone} countOf={words.approvalPosition} homeDir={homeDir} />}
+      {owns && <HeldChangeCard changes={heldChanges} holdsTooMany={holdsTooMany} agentName={(profileId) => agentsById.get(profileId)?.name ?? nameOf(profiles, profileId)} countOf={words.approvalPosition} homeDir={homeDir} />}
       <ApprovalStrip approvals={waitingForYou} tasks={tasksWaitingForYou} workspace={workspaceWaitingForYou} agentsById={agentsById} you={you} />
       <RoomComposer
         ref={composer}

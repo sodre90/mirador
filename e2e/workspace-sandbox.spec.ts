@@ -229,7 +229,7 @@ test("turned on, the workspace's sandbox is set up with its progress shown, mark
   await test.step("the project's .gitconfig, which its git config includes, is read-only in the VM, from a copy", () => {
     const includedMount = run.find((argument) => argument.endsWith(`:${realpathSync(inProject(".gitconfig"))}:ro`));
     const copy = includedMount!.split(":")[0]!;
-    expect(copy.startsWith(`${join(host.dataDir, "sandbox", "workspaces")}/`)).toBe(true);
+    expect(copy.startsWith(`${join(host.dataDir, "sandbox", "plans")}/`)).toBe(true);
     expect(readFileSync(copy, "utf8")).toBe("[mirador]\n\tteam = shared\n");
   });
 

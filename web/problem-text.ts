@@ -60,6 +60,8 @@ export function sandboxBlockerText(blocker: SandboxBlocker, words: ProblemWords)
       return words.sandboxWorkspaceHoldsComputersOwn(blocker.folder);
     case "workspace-overlaps-sandbox-folder":
       return words.sandboxWorkspaceOverlapsSandboxFolder(blocker.folder);
+    case "workspace-overlaps-sandbox-workspace":
+      return words.sandboxWorkspaceOverlapsSandboxWorkspace(blocker.folder);
     default:
       return words.sandboxWorkspace[blocker.kind];
   }

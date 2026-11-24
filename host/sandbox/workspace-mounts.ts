@@ -150,6 +150,17 @@ async function walkTo(path: string): Promise<Walk> {
   return { passed, links, ends: at, missing: false };
 }
 
+/** What the kernel takes on its way to a path, as far as it gets: the folders and links there, the last of them where it ends; and which of them are links. */
+export interface WayTo {
+  places: string[];
+  links: string[];
+}
+
+export async function wayTo(path: string): Promise<WayTo> {
+  const { passed, links, ends } = await walkTo(path);
+  return { places: [...passed, ...links, ends], links };
+}
+
 /** What of the workspace git's walks to the config files it reads take: the files there, to be kept read-only, and the folders on the way, so none can be moved aside. */
 interface IncludedParts {
   files: string[];

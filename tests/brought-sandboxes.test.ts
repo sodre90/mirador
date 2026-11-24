@@ -121,7 +121,7 @@ describe("the VM of an agent someone brought into a sandboxed room", () => {
     const [ownRun, run] = cli.callsOf("run");
     expect(nameIn(run!)).not.toBe(nameIn(ownRun!));
     expect(run![run!.indexOf("--network") + 1]).toBe("none");
-    const copies = join(host.dataDir, "sandbox", "room-1", "git-config");
+    const copies = join(host.dataDir, "sandbox", "plans");
     const ofWorkspace = (mounts: string[]) => mounts.filter((mount) => mount.split(":")[1]!.startsWith(workspace));
     expect(ofWorkspace(mountsIn(run!))).toEqual(ofWorkspace(mountsIn(ownRun!)));
     expect(mountsIn(run!).some((mount) => mount.startsWith(`${copies}/`) && mount.endsWith(`:${workspace}/.git/config:ro`))).toBe(true);

@@ -117,7 +117,8 @@ export type SandboxBlocker =
   /** A workspace's conversation that works in a worktree of its own, which lies outside the folder its sandbox sees. */
   | { kind: "conversation-in-worktree" }
   /** Another sandbox that is on has a folder read and write that is the workspace, holds it or lies inside it. */
-  | { kind: "workspace-overlaps-sandbox-folder"; folder: string };
+  | { kind: "workspace-overlaps-sandbox-folder"; folder: string }
+  | { kind: "workspace-overlaps-sandbox-workspace"; folder: string };
 
 /**
  * A folder of this computer the owner added to a room's or workspace's sandbox, which its VM shows at the same path,

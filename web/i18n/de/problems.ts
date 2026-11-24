@@ -519,6 +519,7 @@ export const problems: Messages["problems"] = {
   sandboxWorkspaceHoldsComputersOwn: (folder: string) =>
     `Der Arbeitsbereich ist oder enthält ${folder}, aus dem dieser Rechner von selbst Programme startet: Eine Sandbox könnte sie ändern.`,
   sandboxWorkspaceOverlapsSandboxFolder: (folder: string) => `Eine andere eingeschaltete Sandbox hat ${folder} les- und schreibbar, also den Arbeitsbereich, einen Ordner darüber oder darin: Nur eine Sandbox darf dort schreiben.`,
+  sandboxWorkspaceOverlapsSandboxWorkspace: (folder: string) => `Eine andere eingeschaltete Sandbox arbeitet in ${folder}, also in einem Ordner über dem Arbeitsbereich oder darin: Nur eine Sandbox darf dort schreiben.`,
   sandboxTooManyHeldChanges: (most: number) => `Seine Agenten haben mehr als ${most} zurückgehaltene Dateien geändert, die auf deine Antwort warten: Erlaube oder verwirf zuerst einige.`,
   sandboxSetupFailed: (cause: string) => `Das Einrichten der Sandboxes ist fehlgeschlagen: ${cause}`,
   sandboxCouldNotStart: (cause: string) => `Sie konnte nicht starten: ${cause}`,

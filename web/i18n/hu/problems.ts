@@ -514,6 +514,7 @@ export const problems: Messages["problems"] = {
   sandboxWorkspaceHoldsComputersOwn: (folder: string) =>
     `A munkaterület maga a(z) ${folder}, vagy tartalmazza azt: ebből a gép magától futtat programokat, amelyeket egy sandbox megváltoztathatna.`,
   sandboxWorkspaceOverlapsSandboxFolder: (folder: string) => `Egy másik, bekapcsolt sandbox olvashatóan és írhatóan kapta meg ezt a mappát, amely a munkaterület, tartalmazza, vagy benne van; csak egy sandbox írhat oda: ${folder}`,
+  sandboxWorkspaceOverlapsSandboxWorkspace: (folder: string) => `Egy másik, bekapcsolt sandbox dolgozik egy mappában, amely tartalmazza a munkaterületet, vagy benne van; csak egy sandbox írhat oda: ${folder}`,
   sandboxTooManyHeldChanges: (most: number) => `Az ágensei több mint ${most} visszatartott fájlt módosítottak, amelyek a válaszodra várnak: előbb engedélyezz vagy vess el néhányat.`,
   sandboxSetupFailed: (cause: string) => `A sandboxok beállítása nem sikerült: ${cause}`,
   sandboxCouldNotStart: (cause: string) => `Nem tudott elindulni: ${cause}`,

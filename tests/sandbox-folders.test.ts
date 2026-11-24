@@ -332,7 +332,7 @@ describe("the sandbox's VM", () => {
     expect(run).toContain(`${library}/AGENTS.md:${library}/AGENTS.md:ro`);
     const copyOf = (repository: string) => run.find((mount) => mount.endsWith(`:${repository}/.git/config:ro`))?.split(":")[0];
     expect(copyOf(library)?.startsWith(`${join(dataDir, "sandbox", "room-1", "folder-git-config")}/`)).toBe(true);
-    expect(copyOf(workspace)?.startsWith(`${join(dataDir, "sandbox", "room-1", "git-config")}/`)).toBe(true);
+    expect(copyOf(workspace)?.startsWith(`${join(dataDir, "sandbox", "plans")}/`)).toBe(true);
     expect(readFileSync(copyOf(library)!, "utf8")).toBe(readFileSync(join(library, ".git", "config"), "utf8"));
     const includedCopy = run.find((mount) => mount.endsWith(`:${library}/.gitconfig:ro`))?.split(":")[0];
     expect(includedCopy?.startsWith(`${join(dataDir, "sandbox", "room-1", "folder-git-config")}/`)).toBe(true);
