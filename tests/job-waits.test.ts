@@ -351,6 +351,9 @@ exec /bin/sh -c "$*"
 });
 
 describe.if(process.platform === "win32")("job waits on Windows", () => {
+  /** Not the number of a process that just ended: Windows soon gives that to the next one. */
+  const PID_OF_NO_PROCESS = 2_147_483_644;
+
   const environmentWithFirstOnPath = (bin: string) => ({
     ...Object.fromEntries(Object.entries(process.env).filter(([name]) => name.toUpperCase() !== "PATH")),
     PATH: `${bin};${process.env.PATH}`,
@@ -380,7 +383,7 @@ describe.if(process.platform === "win32")("job waits on Windows", () => {
     expect(output).toMatch(/\nRunning for: \d\d:\d\d:\d\d\n/);
     expect(output).toContain("On Windows this tab cannot find the file its output goes to");
     expect(output).toEndWith(`\nProcess ${job.pid} ended.\nPress Enter to close this tab.`);
-    expect(await follow({ job: { kind: "process", pid: job.pid }, sshHost: null }, bin)).toEndWith(`Process ${job.pid} is not running.\nPress Enter to close this tab.`);
+    expect(await follow({ job: { kind: "process", pid: PID_OF_NO_PROCESS }, sshHost: null }, bin)).toEndWith(`Process ${PID_OF_NO_PROCESS} is not running.\nPress Enter to close this tab.`);
   }, 20_000);
 });
 
