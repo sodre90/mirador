@@ -1,3 +1,4 @@
+import { flushSync } from "react-dom";
 import { useCallback, useLayoutEffect, useRef, type ClipboardEvent, type CSSProperties, type KeyboardEvent, type RefObject } from "react";
 import { LexicalComposer } from "@lexical/react/LexicalComposer";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
@@ -228,7 +229,8 @@ function Bridge({ text, facade, onText, onCaret, onKeyDown, onPaste, element }: 
           const changed = written.markdown !== box.current.written.markdown;
           box.current = { written, selection: selection ?? box.current.selection };
           if (tags.has(LOADING)) return;
-          if (changed) handlers.current.onText(written.markdown, box.current.selection.start);
+          // At once, as a textarea tells its text in a React event: Enter right after a paste comes before a later render.
+          if (changed) flushSync(() => handlers.current.onText(written.markdown, box.current.selection.start));
           else if (selection) handlers.current.onCaret(selection.start);
           if (changed && selection && selection.start === selection.end) formatWhatWasTyped(editor, written, selection.start);
         }),

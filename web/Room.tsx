@@ -215,8 +215,6 @@ function useTagMenu({ taggable, text, caret, take }: { taggable: Taggable[]; tex
   return { onKeyDown, textareaAttributes: suggestionAttributes(TAG_MENU_ID, open, pickedIndex), menu };
 }
 
-const isTooLongForARoom = (message: string) => roomMessageLength(message) > ROOM_MESSAGE_MOST_CHARACTERS;
-
 interface RoomComposerHandle {
   /** Tags the agent where the caret is and gives the composer the focus, to go on writing its task. */
   tag: (agent: RoomAgentShown) => void;
@@ -263,17 +261,18 @@ function RoomComposer({
   useImperativeHandle(ref, () => ({ tag: (agent) => write(withTagAtCaret(text, caret, agent.name), agent) }));
   const tagMenu = useTagMenu({ taggable: [...agents.map((agent) => ({ agent })), ...people.map((person) => ({ person }))], text, caret, take });
   const boxAttributes = { ...typingAidAttributes, ...tagMenu.textareaAttributes };
-  const tooLong = isTooLongForARoom(text);
+  const length = roomMessageLength(text);
+  const tooLong = length > ROOM_MESSAGE_MOST_CHARACTERS;
   const typed = (value: string, caretAfter: number) => {
     setText(value);
     setCaret(caretAfter);
     writingSignals.typed(value);
   };
-  const send = (message = text) => {
-    if (!message.trim() || isTooLongForARoom(message)) return;
+  const send = () => {
+    if (!text.trim() || tooLong) return;
     onSend(
-      message,
-      tagged.filter(({ name }) => message.includes(`@${name}`)).map(({ profileId }) => profileId),
+      text,
+      tagged.filter(({ name }) => text.includes(`@${name}`)).map(({ profileId }) => profileId),
     );
     writingSignals.sent();
     setText("");
@@ -283,8 +282,7 @@ function RoomComposer({
     if (tagMenu.onKeyDown(event) || movedCaretToLineEdge(event.nativeEvent)) return;
     if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing || !enterSends(event)) return;
     event.preventDefault();
-    // The formatted box tells its text as it changes, but this handler may be the last render's, from before.
-    send(event.currentTarget.value);
+    send();
   };
   return (
     <div className="composer-area room-composer">
@@ -307,14 +305,14 @@ function RoomComposer({
         )}
         <div className="composer-actions">
           {messageBox === "formatted" && <FormatBarToggle />}
-          <button type="button" className="primary" disabled={!text.trim() || tooLong} onClick={() => send()}>
+          <button type="button" className="primary" disabled={!text.trim() || tooLong} onClick={send}>
             {words.send}
           </button>
         </div>
       </div>
       {tooLong && (
         <div className="notice-line room-message-too-long" role="alert">
-          {words.messageTooLong(formatNumber(roomMessageLength(text)), formatNumber(ROOM_MESSAGE_MOST_CHARACTERS))}
+          {words.messageTooLong(formatNumber(length), formatNumber(ROOM_MESSAGE_MOST_CHARACTERS))}
         </div>
       )}
     </div>

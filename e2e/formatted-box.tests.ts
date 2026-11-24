@@ -323,6 +323,15 @@ export function formattedBoxTests() {
     await expect(box()).toHaveText("");
   });
 
+  test("Enter pressed before the page shows a paste into an empty box empties it", async () => {
+    const before = promptsSoFar().length;
+    await pasteAndPressEnterAtOnce(box(), "pasted alone");
+    await expect.poll(() => promptsSoFar().slice(before)).toContain("pasted alone");
+    await waitForTurnToEnd(page);
+    await expect(box()).toHaveText("");
+    expect(await boxValue()).toBe("");
+  });
+
   test("in a code block, Enter and Shift+Enter each add a line, however many are empty, and ↓ at its end steps out of it", async () => {
     await page.keyboard.type("```");
     await page.keyboard.type("abc");
@@ -495,6 +504,12 @@ export function formattedBoxTests() {
       await page.keyboard.type("Look: ");
       await pasteAndPressEnterAtOnce(roomBox, "pasted");
       await expect(entries.last().locator(".message.user")).toHaveText("Look: pasted");
+      await expect(roomBox).toHaveText("");
+    });
+
+    await test.step("also into an empty box, which it empties", async () => {
+      await pasteAndPressEnterAtOnce(roomBox, "pasted alone");
+      await expect(entries.last().locator(".message.user")).toHaveText("pasted alone");
       await expect(roomBox).toHaveText("");
     });
 

@@ -2167,8 +2167,7 @@ function Composer({
     const lastQueued = queued.at(-1);
     if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing && enterSends(event)) {
       event.preventDefault();
-      // The formatted box tells its text as it changes, but this handler may be the last render's, from before.
-      send(afterTurnFor(event), event.currentTarget.value);
+      send(afterTurnFor(event));
     } else if (event.key === "ArrowUp" && !text && lastQueued) {
       event.preventDefault();
       pullBack(lastQueued);
