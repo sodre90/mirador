@@ -1,9 +1,9 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { spawn, type ChildProcess } from "node:child_process";
 import { createPrivateKey, createPublicKey, generateKeyPairSync, sign, type KeyObject } from "node:crypto";
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { delimiter, join } from "node:path";
 import { freePorts } from "../e2e/free-ports.ts";
 import { DeviceService, inviteKey } from "../host/devices.ts";
 import { conversationStandIn } from "../host/person-view.ts";
@@ -17,6 +17,7 @@ import { OUT_OF_ROOMS_CLOSE_CODE, TOKEN_COOKIE, type ClientMessage, type ServerM
 import { inviteIn, machineAddress } from "../shared/machines.ts";
 import { ALL_OF_CLAUDE_SETUP, type ClaudeSetup } from "../shared/room-agent-setup.ts";
 import { type Room, type RoomInviteLetsIn, type RoomInviteSeats, type RoomRole, type RoomThread } from "../shared/rooms.ts";
+import { fakeProgram } from "./fake-program.ts";
 
 /**
  * A real host, with the owner and three other people of the machine, each signed in on a device of their own: Mia and
@@ -379,8 +380,7 @@ function seed() {
   writeFileSync(join(projectDir, "README.md"), "# project\n");
   writeFileSync(promptsFile, "");
   mkdirSync(fakePrograms, { recursive: true });
-  writeFileSync(join(fakePrograms, "opencode"), `#!/bin/sh\nexec bun '${join(repoRoot, "e2e", "fake-acp-agent.ts")}' "$@"\n`);
-  chmodSync(join(fakePrograms, "opencode"), 0o755);
+  fakeProgram(fakePrograms, "opencode", `await import(${JSON.stringify(join(repoRoot, "e2e", "fake-acp-agent.ts"))});\n`);
   const store = new Store(join(dataDir, "state.sqlite"));
   profile = { id: crypto.randomUUID(), name: "Builder", harness: "opencode", environment: `OPENCODE_FAKE_ACP_PROMPTS=${promptsFile}\nOPENCODE_FAKE_ACP_COMMANDS='${JSON.stringify(OWNERS_COMMANDS)}'\nROOM_ONLY_SECRET_NAME=room-only`, prelaunch: `echo ${PRELAUNCH_SECRET}`, model: null, mode: null, effort: null, bypassPermissions: false, askMode: "wait", color: null, pluginsOff: [PLUGIN_OFF_SECRET], createdAt: Date.now() };
   store.saveProfile(profile);
@@ -397,10 +397,10 @@ function seed() {
 
 /** The host's own environment, none of the MIRADOR_ settings of the one running the tests. */
 function hostEnvironment() {
-  const inherited = Object.fromEntries(Object.entries(process.env).filter(([name]) => !name.startsWith("MIRADOR_")));
+  const inherited = Object.fromEntries(Object.entries(process.env).filter(([name]) => !name.startsWith("MIRADOR_") && name.toUpperCase() !== "PATH"));
   return {
     ...inherited,
-    PATH: `${fakePrograms}:${process.env.PATH}`,
+    PATH: [fakePrograms, process.env.PATH].join(delimiter),
     CLAUDE_CONFIG_DIR: join(root, "claude-config"),
     SHELL: "/bin/sh",
     MIRADOR_PORT: String(port),

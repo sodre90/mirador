@@ -17,6 +17,7 @@ import { MOST_WORKSPACE_CALLS_A_MINUTE, MOST_WORKSPACE_CALLS_AT_ONCE, MOST_WORKS
 import type { RoomRole } from "../shared/rooms.ts";
 import type { ServerMessage } from "../shared/protocol.ts";
 import { commandHere } from "./in-vm-here.ts";
+import { RUNS_SANDBOXES } from "./sandbox-computer.ts";
 
 const profile = (id: string, name: string): Profile => ({ id, name, harness: "claude", environment: "", prelaunch: "", model: null, mode: null, effort: null, bypassPermissions: false, askMode: "wait", color: null, pluginsOff: [], createdAt: 1 });
 
@@ -202,7 +203,7 @@ describe("letting a brought agent into the room's workspace", () => {
   });
 });
 
-describe.skipIf(process.platform === "win32")("a brought agent in a sandboxed room", () => {
+describe("a brought agent in a sandboxed room", () => {
   const freely: SandboxSetting = { on: true, workFreely: true, allowsSharedKernel: false, network: "closed" };
   const asking: SandboxSetting = { on: true, workFreely: false, allowsSharedKernel: false, network: "closed" };
 
@@ -246,7 +247,7 @@ describe.skipIf(process.platform === "win32")("a brought agent in a sandboxed ro
     expect(existsSync(inWorkspace("ran"))).toBe(false);
   });
 
-  test("works there without asking where agents work freely in it", async () => {
+  test.skipIf(!RUNS_SANDBOXES)("works there without asking where agents work freely in it", async () => {
     const { ownerTasks, call, answerTo, waiting, shown, inWorkspace } = await sandboxedRoom(freely);
     const taskId = ownerTasks();
     expect(await answerTo(call(taskId, edit))).toEqual({ done: true, text: "Changed a.txt." });
@@ -256,7 +257,7 @@ describe.skipIf(process.platform === "win32")("a brought agent in a sandboxed ro
     expect(shown().map(({ state, answeredBy }) => [state, answeredBy])).toEqual([["done", null], ["done", null]]);
   });
 
-  test("asks before each change and command where they don't, saying they are done in the sandbox", async () => {
+  test.skipIf(!RUNS_SANDBOXES)("asks before each change and command where they don't, saying they are done in the sandbox", async () => {
     const { rooms, room, ownerId, ownerTasks, call, answerTo, waits, inWorkspace } = await sandboxedRoom(asking);
     const taskId = ownerTasks();
     for (const asked of [edit, run("touch ran")]) {
@@ -269,7 +270,7 @@ describe.skipIf(process.platform === "win32")("a brought agent in a sandboxed ro
     expect(existsSync(inWorkspace("ran"))).toBe(true);
   });
 
-  test("says what its sandbox reaches where it asks, as the owner changes that, which ends nothing of it", async () => {
+  test.skipIf(!RUNS_SANDBOXES)("says what its sandbox reaches where it asks, as the owner changes that, which ends nothing of it", async () => {
     const { rooms, room, agentId, ownerId, store, ownerTasks, call, answerTo, waiting, waits, stopped, networkTold, inWorkspace } = await sandboxedRoom(asking);
     const callId = call(ownerTasks(), run("touch ran"));
     const { callId: shownId } = await waits();

@@ -16,7 +16,7 @@ const PROFILE = { id: "opencode-profile", name: "Builder", harness: "opencode", 
 
 test("the sessions to continue leave out those a room's agent works in", async () => {
   const store = new Store(":memory:");
-  const project = realpathSync(mkdtempSync(join(scratch, "project-")));
+  const project = realpathSync.native(mkdtempSync(join(scratch, "project-")));
   store.saveProfile(PROFILE);
   store.insertWorkspace({ id: "w1", name: "p", path: project, defaultLaunch: { harness: "opencode", profileId: PROFILE.id }, createdAt: 1 });
   const conversations = new ConversationService(store, new Hub(), loadConfig({ MIRADOR_DATA_DIR: join(scratch, "data") }), {} as never, {} as never, {} as never, new SystemNotifications(store, new Hub()));

@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { HeldFiles, type HeldSandbox } from "../host/sandbox/held-files.ts";
 import { putPlacesBack, type PlacesPutBack, type PlacesRequest } from "../host/sandbox/in-vm/held-places.ts";
 import { HELD_CHANGES_MOST, isHeldConfigPath, roomSandbox } from "../shared/sandbox.ts";
+import { RUNS_SANDBOXES } from "./sandbox-computer.ts";
 
 const scratch = realpathSync(mkdtempSync(join(tmpdir(), "held-files-")));
 afterAll(() => rmSync(scratch, { recursive: true, force: true }));
@@ -78,13 +79,14 @@ describe("the held files of a sandboxed room", () => {
     room.running = false;
     rmSync(at("AGENTS.md"));
     symlinkSync("/etc/passwd", at("AGENTS.md"));
+    const elsewhere = readlinkSync(at("AGENTS.md"));
     writeFileSync(at(".claude/settings.json"), "the owner's own edit\n");
     expect(await held.check()).toBe(true);
 
     expect(readlinkSync(at("AGENTS.md"))).toBe("CLAUDE.md");
     expect(readFileSync(at(".claude/settings.json"), "utf8")).toBe("the owner's own edit\n");
     expect(held.changes().map(({ path, kind }) => ({ path, kind }))).toEqual([{ path: "AGENTS.md", kind: "change" }]);
-    expect(held.textOf(changeAt("AGENTS.md").id)).toEqual({ before: "→ CLAUDE.md", after: "→ /etc/passwd" });
+    expect(held.textOf(changeAt("AGENTS.md").id)).toEqual({ before: "→ CLAUDE.md", after: `→ ${elsewhere}` });
     await held.stop();
   });
 
@@ -139,7 +141,7 @@ describe("the held files of a sandboxed room", () => {
     await held.stop();
   });
 
-  test("replaced by a folder, a link or a pipe are taken away whole, without following a link, and the rest still looked at", async () => {
+  test.skipIf(!RUNS_SANDBOXES)("replaced by a folder, a link or a pipe are taken away whole, without following a link, and the rest still looked at", async () => {
     const outside = join(scratch, `outside-${crypto.randomUUID()}`);
     mkdirSync(outside);
     writeFileSync(join(outside, "keep.txt"), "the Mac's own file\n");

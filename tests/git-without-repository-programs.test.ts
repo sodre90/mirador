@@ -1,8 +1,8 @@
 import { NO_SANDBOX } from "../shared/sandbox.ts";
 import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
+import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, relative } from "node:path";
+import { join, relative, sep } from "node:path";
 import { workspaceChangedSince } from "../host/apps/workspace-git.ts";
 import { Checkpoints } from "../host/checkpoints.ts";
 import { commitFiles } from "../host/commit-files.ts";
@@ -13,6 +13,8 @@ import type { Workspace } from "../shared/model.ts";
 setDefaultTimeout(20_000);
 
 const hostFolder = join(import.meta.dir, "..", "host");
+
+const inHostFolder = (path: string) => relative(hostFolder, path).split(sep).join("/");
 
 const sourcesUnder = (folder: string): string[] =>
   readdirSync(folder).flatMap((name) => {
@@ -53,7 +55,7 @@ const markerProgramIn = (folder: string, marker: string) => {
 
 describe("Mirador's own git", () => {
   test("every git the host starts runs without the repository's fsmonitor, and without its hooks unless the owner asked", () => {
-    const starts = sourcesUnder(hostFolder).flatMap((path) => gitStartsIn(readFileSync(path, "utf8")).map((rest) => ({ file: relative(hostFolder, path), rest })));
+    const starts = sourcesUnder(hostFolder).flatMap((path) => gitStartsIn(readFileSync(path, "utf8")).map((rest) => ({ file: inHostFolder(path), rest })));
     expect(starts.length).toBeGreaterThan(8);
     const unguarded = starts.filter(({ rest }) => !/^\.\.\.(GIT_WITHOUT_REPOSITORY_PROGRAMS|GIT_WITH_OWNERS_HOOKS|\(ownersHooks \? GIT_WITH_OWNERS_HOOKS : GIT_WITHOUT_REPOSITORY_PROGRAMS\))/.test(rest));
     expect(unguarded).toEqual([]);
@@ -62,13 +64,13 @@ describe("Mirador's own git", () => {
   test("every git the host starts in a workspace takes the repository's own common folder, never one its .git/commondir names", () => {
     const outsideWorkspaces = new Set(["newer-version.ts", "apps/installed-plugins.ts"]);
     const startingGit = sourcesUnder(hostFolder).filter((path) => gitStartsIn(readFileSync(path, "utf8")).length > 0);
-    const unpinned = startingGit.map((path) => relative(hostFolder, path)).filter((file) => !outsideWorkspaces.has(file) && !/gitEnvironmentFor\(|ownCommonFolderOf\(/.test(readFileSync(join(hostFolder, file), "utf8")));
+    const unpinned = startingGit.map(inHostFolder).filter((file) => !outsideWorkspaces.has(file) && !/gitEnvironmentFor\(|ownCommonFolderOf\(/.test(readFileSync(join(hostFolder, file), "utf8")));
     expect(startingGit.length).toBeGreaterThan(5);
     expect(unpinned).toEqual([]);
   });
 
   test("every git status or diff the host runs leaves the contents of submodules and nested repositories unlooked at", () => {
-    const comparisons = sourcesUnder(hostFolder).flatMap((path) => comparisonsIn(readFileSync(path, "utf8")).map((call) => ({ file: relative(hostFolder, path), call })));
+    const comparisons = sourcesUnder(hostFolder).flatMap((path) => comparisonsIn(readFileSync(path, "utf8")).map((call) => ({ file: inHostFolder(path), call })));
     expect(comparisons.length).toBeGreaterThan(8);
     expect(comparisons.filter(({ call }) => !call.includes('"--ignore-submodules=dirty"'))).toEqual([]);
   });
@@ -141,7 +143,7 @@ describe("Mirador's own git", () => {
       setUp("add", "-A");
       setUp("commit", "-q", "-m", "first");
       const planted = join(root, "planted");
-      Bun.spawnSync(["cp", "-R", join(repository, ".git"), planted]);
+      cpSync(join(repository, ".git"), planted, { recursive: true });
       Bun.spawnSync(["git", "config", "--file", join(planted, "config"), "filter.planted.clean", markerProgramIn(root, "filter-ran")]);
       writeFileSync(join(repository, ".git", "commondir"), `${planted}\n`);
       writeFileSync(join(repository, "notes.txt"), "secon\n");

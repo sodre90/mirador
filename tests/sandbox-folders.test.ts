@@ -18,6 +18,7 @@ import { ALL_OF_CLAUDE_SETUP } from "../shared/room-agent-setup.ts";
 import { DEFAULT_PERMISSION_PRESET } from "../shared/room-permissions.ts";
 import { NO_SANDBOX, roomSandbox, workspaceSandbox, type HeldChange, type SandboxFolder, type SandboxOwner, type SandboxSetting } from "../shared/sandbox.ts";
 import { FakeContainerCli } from "./fake-container-cli.ts";
+import { RUNS_SANDBOXES } from "./sandbox-computer.ts";
 
 setDefaultTimeout(20_000);
 
@@ -54,7 +55,7 @@ const refusalOf = (folder: string, surroundings: FolderSurroundings, others: str
 const writableRefusalOf = (folder: string, surroundings: FolderSurroundings) => addedFolderRefusal({ path: folder, writable: true }, surroundings, []);
 
 describe("a folder added to a sandbox", () => {
-  test("goes in from inside the owner's home, outside its hidden folders, its Library, Mirador's own places and the workspace", async () => {
+  test.skipIf(!RUNS_SANDBOXES)("goes in from inside the owner's home, outside its hidden folders, its Library, Mirador's own places and the workspace", async () => {
     const { home, checkout, surroundings } = homeOfTheOwner();
     const notes = folderIn(home, "notes");
 
@@ -77,7 +78,7 @@ describe("a folder added to a sandbox", () => {
     expect(await refusalOf(notes, surroundings, [join(notes, "deep")])).toEqual({ kind: "overlaps-folder", folder: join(notes, "deep") });
   });
 
-  test("keeps clear of Mirador's data and the computer's own folders where they aren't hidden, and of every VM's sockets", async () => {
+  test.skipIf(!RUNS_SANDBOXES)("keeps clear of Mirador's data and the computer's own folders where they aren't hidden, and of every VM's sockets", async () => {
     const { home, surroundings } = homeOfTheOwner();
     const dataDir = folderIn(home, "mirador-data");
     const storage = folderIn(home, "data", "containers");
@@ -92,7 +93,7 @@ describe("a folder added to a sandbox", () => {
     expect(await refusalOf(folderIn(socketsParent, "downloads"), around)).toBeNull();
   });
 
-  test("never shadows where Mirador puts its scripts and sockets in the VM, nor the sandbox's config folder or the agents' packages", async () => {
+  test.skipIf(!RUNS_SANDBOXES)("never shadows where Mirador puts its scripts and sockets in the VM, nor the sandbox's config folder or the agents' packages", async () => {
     const { home, checkout, surroundings } = homeOfTheOwner();
     const homeAt = (place: string): FolderSurroundings => ({ ...surroundings, places: { ...surroundings.places, home: place } });
 
@@ -104,7 +105,7 @@ describe("a folder added to a sandbox", () => {
     expect(await refusalOf(folderIn(checkout, "node_modules"), surroundings)).toEqual({ kind: "is-mirador" });
   });
 
-  test("is found as typed, without links, `~` standing for home; a file, a relative path or nothing there is no folder", async () => {
+  test.skipIf(!RUNS_SANDBOXES)("is found as typed, without links, `~` standing for home; a file, a relative path or nothing there is no folder", async () => {
     const { home } = homeOfTheOwner();
     const notes = folderIn(home, "notes");
     symlinkSync(notes, join(home, "notes-link"));
@@ -117,7 +118,7 @@ describe("a folder added to a sandbox", () => {
     expect(await folderToAdd("notes")).toEqual({ refused: { kind: "not-a-folder" } });
   });
 
-  test("is looked at again as the VM starts: one gone is missing, one turned into a link or now refused is left out, and the others are mounted", async () => {
+  test.skipIf(!RUNS_SANDBOXES)("is looked at again as the VM starts: one gone is missing, one turned into a link or now refused is left out, and the others are mounted", async () => {
     const { home, surroundings } = homeOfTheOwner();
     const notes = folderIn(home, "notes");
     const deep = folderIn(home, "notes", "deep");
@@ -140,7 +141,7 @@ describe("a folder added to a sandbox", () => {
 });
 
 describe("a folder added read and write", () => {
-  test("must be a git repository's own top folder, whose config and hooks can be kept read-only, where read only takes any folder", async () => {
+  test.skipIf(!RUNS_SANDBOXES)("must be a git repository's own top folder, whose config and hooks can be kept read-only, where read only takes any folder", async () => {
     const { home, surroundings } = homeOfTheOwner();
     const notes = folderIn(home, "notes");
     const repository = repositoryIn(home, "library");
@@ -163,7 +164,7 @@ describe("a folder added read and write", () => {
     expect(await Promise.all([notes, join(repository, "src"), worktree, borrowing].map((folder) => refusalOf(folder, surroundings)))).toEqual([null, null, null, null]);
   });
 
-  test("keeps clear of every folder another sandbox writes in, and of those this computer runs programs from, where read only needn't", async () => {
+  test.skipIf(!RUNS_SANDBOXES)("keeps clear of every folder another sandbox writes in, and of those this computer runs programs from, where read only needn't", async () => {
     const { home, surroundings } = homeOfTheOwner();
     const repository = repositoryIn(home, "work", "library");
     const ofTools = repositoryIn(home, "tools", "cli");
@@ -183,7 +184,7 @@ describe("a folder added read and write", () => {
     expect(await refusalOf(ofTools, runningPrograms)).toBeNull();
   });
 
-  test("read only, keeps out of where another sandbox that is on writes, which could swap it for a link as its VM starts, but may be or hold that folder", async () => {
+  test.skipIf(!RUNS_SANDBOXES)("read only, keeps out of where another sandbox that is on writes, which could swap it for a link as its VM starts, but may be or hold that folder", async () => {
     const { home, surroundings } = homeOfTheOwner();
     const theirWorkspace = folderIn(home, "work", "app");
     const theirFolder = folderIn(home, "work", "lib");
@@ -264,7 +265,7 @@ describe("the sandbox's VM", () => {
     return { home, workspace: surroundings.workspace!, dataDir: host.dataDir, cli, sandboxes, launch, setFolders, setOthers, started, held, mounts };
   }
 
-  test("keeps a sandbox from turning on in a workspace another sandbox that is on has read and write, in or around it, but says nothing of it to one on already", async () => {
+  test.skipIf(!RUNS_SANDBOXES)("keeps a sandbox from turning on in a workspace another sandbox that is on has read and write, in or around it, but says nothing of it to one on already", async () => {
     const { home, workspace, sandboxes, setOthers } = sandboxWithFolders();
     const around = dirname(workspace);
     const inside = folderIn(workspace, "packages");
@@ -281,7 +282,7 @@ describe("the sandbox's VM", () => {
     expect(await sandboxes.workspaceRefusal(workspace, ROOM)).toBeNull();
   });
 
-  test("mounts each added folder read-only at its own path, says where each stands, and runs on with other folders while an agent works", async () => {
+  test.skipIf(!RUNS_SANDBOXES)("mounts each added folder read-only at its own path, says where each stands, and runs on with other folders while an agent works", async () => {
     const { home, cli, sandboxes, launch, setFolders, started, mounts } = sandboxWithFolders();
     const notes = folderIn(home, "notes");
     const docs = folderIn(home, "docs");
@@ -315,7 +316,7 @@ describe("the sandbox's VM", () => {
     expect(sandboxes.mountedFolders(ROOM)).toEqual([]);
   });
 
-  test("mounts a folder read and write as it does the workspace: its git config and hooks read-only, from copies of its own, and its agent config files too", async () => {
+  test.skipIf(!RUNS_SANDBOXES)("mounts a folder read and write as it does the workspace: its git config and hooks read-only, from copies of its own, and its agent config files too", async () => {
     const { home, workspace, dataDir, cli, sandboxes, launch, setFolders, mounts } = sandboxWithFolders();
     const library = repositoryIn(home, "library");
     writeFileSync(join(library, "AGENTS.md"), "Be kind.\n");
@@ -345,7 +346,7 @@ describe("the sandbox's VM", () => {
     await sandboxes.stopAll();
   });
 
-  test("holds an agent config file planted in a folder read and write, says which folder it is in, and lets the owner allow it, or discard it once the VM stopped", async () => {
+  test.skipIf(!RUNS_SANDBOXES)("holds an agent config file planted in a folder read and write, says which folder it is in, and lets the owner allow it, or discard it once the VM stopped", async () => {
     const { home, sandboxes, launch, setFolders, held } = sandboxWithFolders();
     const library = repositoryIn(home, "library");
     setFolders(readAndWrite(library));
@@ -377,7 +378,7 @@ describe("the sandbox's VM", () => {
     await sandboxes.stopAll();
   });
 
-  test("leaves out whole, as the VM starts, a folder read and write that is no repository now, holds what it can't keep read-only, or that another sandbox writes in, and starts without it", async () => {
+  test.skipIf(!RUNS_SANDBOXES)("leaves out whole, as the VM starts, a folder read and write that is no repository now, holds what it can't keep read-only, or that another sandbox writes in, and starts without it", async () => {
     const { home, cli, sandboxes, launch, setFolders, setOthers, mounts } = sandboxWithFolders();
     const notes = folderIn(home, "notes");
     const piped = repositoryIn(home, "piped");

@@ -9,6 +9,7 @@ import { ANTHROPIC_API } from "../host/sandbox/model-proxy.ts";
 import { computersOwnOnLinux, containersLabelled, imageNamesIn, Podman } from "../host/sandbox/podman.ts";
 import { Sandboxes, type AgentInSandbox, type SandboxHost } from "../host/sandbox/sandboxes.ts";
 import { FakePodmanCli, NODE_IMAGE } from "./fake-podman-cli.ts";
+import { RUNS_SANDBOXES } from "./sandbox-computer.ts";
 
 const scratch = mkdtempSync(join(tmpdir(), "podman-sandbox-"));
 afterAll(() => rmSync(scratch, { recursive: true, force: true }));
@@ -64,7 +65,7 @@ const mountedAt = (run: string[], target: string) => valuesAfter(run, "-v").find
 const modeOf = (path: string) => statSync(path).mode & 0o777;
 
 describe("a room's sandbox on rootless Podman", () => {
-  test("runs its relays as nobody and its agents as the agent user, who is this computer's user there, with no capability nor any to gain, no network, limits, a capped log, and the repository's config and hooks read-only; the key is nowhere in it", async () => {
+  test.skipIf(!RUNS_SANDBOXES)("runs its relays as nobody and its agents as the agent user, who is this computer's user there, with no capability nor any to gain, no network, limits, a capped log, and the repository's config and hooks read-only; the key is nowhere in it", async () => {
     const workspace = repository();
     const { host, setups } = hostFor(workspace);
     const cli = new FakePodmanCli();

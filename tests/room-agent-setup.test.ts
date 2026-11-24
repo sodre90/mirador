@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { claudeRoomSessionMeta, profileEnvironment, settingSourcesLeftOut } from "../host/acp/harnesses.ts";
+import { currentPath } from "../host/current-path.ts";
 import type { Profile } from "../shared/model.ts";
 import { parseEnvironment } from "../shared/profile-environment.ts";
 import { NO_SANDBOX, type SandboxSetting } from "../shared/sandbox.ts";
@@ -263,7 +264,7 @@ describe("a room's agent's process environment", () => {
       const profile: Profile = { id: "p1", name: "Codex", harness: "codex", environment: "CODEX_HOME=/codex\nDEPLOY_TOKEN=deploy", prelaunch: "", model: null, mode: null, effort: null, bypassPermissions: false, askMode: "wait", color: null, pluginsOff: [], createdAt: 1 };
       const launched = profileEnvironment(profile, (host, environment) => environmentInRoom("codex", host, environment, NOTHING_CHOSEN));
       expect(launched.CODEX_HOME).toBe("/codex");
-      expect(launched.PATH).toBe(process.env.PATH!);
+      expect(launched.PATH).toBe(currentPath()!);
       expect(launched).not.toHaveProperty("DEPLOY_TOKEN");
       expect(launched).not.toHaveProperty("ROOM_TEST_HOST_SECRET");
       expect(profileEnvironment(profile)).toMatchObject({ DEPLOY_TOKEN: "deploy", ROOM_TEST_HOST_SECRET: "host-secret" });

@@ -1,5 +1,5 @@
 import { afterAll, expect, setDefaultTimeout, test } from "bun:test";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadConfig } from "../host/config.ts";
@@ -16,6 +16,7 @@ import { NO_SANDBOX, type SandboxSetting } from "../shared/sandbox.ts";
 import { agentWithModes } from "./agent-with-modes.ts";
 import { FakeContainerCli } from "./fake-container-cli.ts";
 import { FakeVmLauncher } from "./fake-vm-launcher.ts";
+import { programLeavingAMark } from "./program-leaving-a-mark.ts";
 
 setDefaultTimeout(20_000);
 
@@ -32,17 +33,8 @@ function stoppedAfterAll(sandboxes: Sandboxes) {
   return sandboxes;
 }
 
-/**
- * Claude Code as this computer runs it: asked its version, it says it; run for anything else, as an agent on this
- * computer would run it, it leaves a mark.
- */
-function claudeCodeLeavingAMark() {
-  const mark = join(scratch, `ran-on-this-computer-${crypto.randomUUID()}`);
-  const program = join(scratch, `claude-${crypto.randomUUID()}`);
-  writeFileSync(program, `#!/bin/sh\nif [ "$1" = "--version" ]; then echo "2.1.330 (Claude Code)"; exit 0; fi\ntouch "${mark}"\nexit 1\n`);
-  chmodSync(program, 0o755);
-  return { program, ranHere: () => existsSync(mark) };
-}
+/** Claude Code as this computer runs it. */
+const claudeCodeLeavingAMark = () => programLeavingAMark(scratch, "claude", "2.1.330 (Claude Code)");
 
 function sandboxedRoom(sandbox: SandboxSetting) {
   const claude = claudeCodeLeavingAMark();
@@ -59,7 +51,7 @@ function sandboxedRoom(sandbox: SandboxSetting) {
   const conversations = new ConversationService(store, new Hub(), config, { mute: () => {} } as never, {} as never, {} as never, new SystemNotifications(store, new Hub()));
   const conversation = conversations.startInRoom("r1", "w1", launch, "Launch: Builder");
   const turnFailure = () => store.listEvents(conversation.id).findLast(({ event }) => event.type === "error" && event.endsTurn)?.event;
-  const sandboxHost = { dataDir: config.dataDir, workspaceOf: () => realpathSync(project), canvasOf: () => ({ belongs: () => false, tokenOf: () => "", handle: () => new Response() }), atWork: () => ({ agents: [], conversationIds: [] }), setupChanged: () => {}, heldChanged: () => {}, foldersOf: () => [], networkOf: () => "closed" as const, otherSandboxes: () => ({ workspaces: [], writableFolders: [], writableFoldersOn: [] }), foldersStarted: () => {}, places: { home: "/nonexistent-home", dataDir: config.dataDir, checkout: "/nonexistent-checkout", computersOwn: [] } };
+  const sandboxHost = { dataDir: config.dataDir, workspaceOf: () => realpathSync.native(project), canvasOf: () => ({ belongs: () => false, tokenOf: () => "", handle: () => new Response() }), atWork: () => ({ agents: [], conversationIds: [] }), setupChanged: () => {}, heldChanged: () => {}, foldersOf: () => [], networkOf: () => "closed" as const, otherSandboxes: () => ({ workspaces: [], writableFolders: [], writableFoldersOn: [] }), foldersStarted: () => {}, places: { home: "/nonexistent-home", dataDir: config.dataDir, checkout: "/nonexistent-checkout", computersOwn: [] } };
   return { store, config, conversations, conversation, claude, turnFailure, project, sandboxHost };
 }
 
@@ -196,7 +188,7 @@ test("an agent session on this computer does not start in a folder where a sandb
 
   const failure = store.listEvents(onThisMac.id).findLast(({ event }) => event.type === "error")?.event;
   expect(failure).toMatchObject({ problem: { code: "sandbox-held-files-unsettled" } });
-  expect(new Set(settled)).toEqual(new Set([realpathSync(store.findWorkspace("w1")!.path)]));
+  expect(new Set(settled)).toEqual(new Set([realpathSync.native(store.findWorkspace("w1")!.path)]));
   expect(store.findConversation(onThisMac.id)?.acpSessionId).toBeNull();
   await conversations.shutdown();
 });

@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { askedIn, NETWORK_PROXY_LIMITS, startNetworkProxy, type NetworkProxy, type NetworkProxyLimits } from "../host/sandbox/network-proxy.ts";
 import type { SandboxNetwork } from "../shared/sandbox.ts";
+import { RUNS_SANDBOXES } from "./sandbox-computer.ts";
 
 const scratch = mkdtempSync(join(tmpdir(), "np-"));
 afterAll(() => rmSync(scratch, { recursive: true, force: true }));
@@ -111,9 +112,13 @@ const statusOf = (answer: string) => answer.split("\r\n")[0];
 const reasonOf = (answer: string) => answer.split("\r\n\r\n")[1];
 
 describe("a sandbox's way out", () => {
-  test.skipIf(process.platform === "win32")("is a socket of its owner's alone, which is gone once it stops, and its connections with it", async () => {
-    const { proxy, socketPath } = await proxyWith({ names: { "a.test": [HERE] } });
+  test.skipIf(!RUNS_SANDBOXES)("is a socket of its owner's alone", async () => {
+    const { socketPath } = await proxyWith({ names: { "a.test": [HERE] } });
     expect(statSync(socketPath).mode & 0o777).toBe(0o600);
+  });
+
+  test("is gone once it stops, and its connections with it", async () => {
+    const { proxy, socketPath } = await proxyWith({ names: { "a.test": [HERE] } });
     const { port, connections } = await echo();
     const { say, hears, isOver } = program(socketPath);
     say(connectTo("a.test", port));

@@ -7,7 +7,7 @@ import { DeviceService, inviteKey } from "../host/devices.ts";
 import { JoinRequestService } from "../host/join-requests.ts";
 import { fetchAnswered, forwardedCanvasHeaders, forwardedHeaders, joinRefusalIn, machineClosedSocket, MachineRelays, pageSocketOpened, pathPastKey, relayedHeaders } from "../host/machine-relays.ts";
 import type { MachineReach } from "../host/machine-tunnels.ts";
-import { atAddress, tunnelOriginsOf, type Forward } from "../host/p2p/dial.ts";
+import { atAddress, DIALS_THROUGH_SOCKETS, tunnelOriginsOf, type Forward } from "../host/p2p/dial.ts";
 import type { Machine } from "../shared/model.ts";
 import type { RelayedSocket } from "../host/machine-relays.ts";
 import { newChallenge, NO_AUTHORITY, ownerKey, signedRoomJoin, type OwnerKey } from "../host/person-keys.ts";
@@ -327,8 +327,8 @@ describe("a machine reached through a dial's forward", () => {
   const origins = tunnelOriginsOf(places);
 
   /**
-   * Stands in for a dial's sockets and the machine beyond them, which takes an Origin only of its Host's, as it does
-   * through the tunnel, and says what it was asked.
+   * Stands in for a dial's sockets, or on Windows its ports on IPv6's loopback, and the machine beyond them, which takes
+   * an Origin only of its Host's, as it does through the tunnel, and says what it was asked.
    */
   function forwardToMachine(says: string): { forward: Pick<Forward, "web" | "canvas">; asked: string[] } {
     const folder = mkdtempSync(join(tmpdir(), "mirador-forward-"));
@@ -340,19 +340,19 @@ describe("a machine reached through a dial's forward", () => {
       return null;
     };
     const sockets = { web: join(folder, "w"), canvas: join(folder, "c") };
-    const servers = [
-      Bun.serve({
-        unix: sockets.web,
-        fetch: (request, server) => refused("page", request) ?? (server.upgrade(request) ? undefined : new Response(`${says}'s page`)),
-        websocket: { open: (socket) => void socket.send(`${says}'s socket`), message() {} },
-      }),
-      Bun.serve({ unix: sockets.canvas, fetch: (request) => refused("canvas", request) ?? new Response(`${says}'s canvas`) }),
-    ];
+    const listeningAt = (socket: string) => (DIALS_THROUGH_SOCKETS ? { unix: socket } : { hostname: "::1", port: 0 });
+    const web = Bun.serve({
+      ...listeningAt(sockets.web),
+      fetch: (request, server) => refused("page", request) ?? (server.upgrade(request) ? undefined : new Response(`${says}'s page`)),
+      websocket: { open: (socket) => void socket.send(`${says}'s socket`), message() {} },
+    });
+    const canvas = Bun.serve({ ...listeningAt(sockets.canvas), fetch: (request) => refused("canvas", request) ?? new Response(`${says}'s canvas`) });
+    const wayThrough = (origin: string, socket: string, port?: number) => (DIALS_THROUGH_SOCKETS ? { origin, socket } : atAddress(`http://[::1]:${port}`));
     cleanUps.push(() => {
-      servers.forEach((server) => server.stop(true));
+      [web, canvas].forEach((server) => server.stop(true));
       rmSync(folder, { recursive: true, force: true });
     });
-    return { forward: { web: { origin: origins.web, socket: sockets.web }, canvas: { origin: origins.canvas, socket: sockets.canvas } }, asked };
+    return { forward: { web: wayThrough(origins.web, sockets.web, web.port), canvas: wayThrough(origins.canvas, sockets.canvas, canvas.port) }, asked };
   }
 
   function machineThrough(firstForward: Pick<Forward, "web" | "canvas">) {

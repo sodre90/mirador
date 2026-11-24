@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { forgetSignInAt, leftEveryRoomAt, signInRevoked } from "../host/machine-sign-in.ts";
 import type { MachineReach } from "../host/machine-tunnels.ts";
 import { MachineWatch, MOST_ROOM_CALLS_A_MINUTE } from "../host/machine-watch.ts";
-import type { Way } from "../host/p2p/dial.ts";
+import { atAddress, DIALS_THROUGH_SOCKETS, type Way } from "../host/p2p/dial.ts";
 import { Store } from "../host/store.ts";
 import type { Machine, MachineStatus } from "../shared/model.ts";
 import { OUT_OF_ROOMS_CLOSE_CODE, type ServerMessage } from "../shared/protocol.ts";
@@ -591,12 +591,15 @@ describe("a machine reached through a dial's forward", () => {
   const tunnelOrigin = `http://[${places.hostAddress}]:4600`;
   const HEARTBEAT_MS = 100;
 
-  /** A dial's socket, in a folder of its own, with `fetch` answering there as the machine through the tunnel, which takes an Origin only of its Host's. */
-  function socketTo(fetch: (request: Request, server: Bun.Server<{ path: string }>) => Response | Promise<Response> | undefined, websocket?: Bun.WebSocketHandler<{ path: string }>) {
+  /**
+   * A dial's socket, in a folder of its own, or on Windows its port on IPv6's loopback, with `fetch` answering there as
+   * the machine through the tunnel, which takes an Origin only of its Host's.
+   */
+  function wayTo(fetch: (request: Request, server: Bun.Server<{ path: string }>) => Response | Promise<Response> | undefined, websocket?: Bun.WebSocketHandler<{ path: string }>) {
     const folder = mkdtempSync(join(tmpdir(), "mirador-forward-"));
     const socket = join(folder, "w");
     const server = Bun.serve<{ path: string }>({
-      unix: socket,
+      ...(DIALS_THROUGH_SOCKETS ? { unix: socket } : { hostname: "::1", port: 0 }),
       fetch: (request, server) => {
         const origin = request.headers.get("origin");
         if (origin !== null && origin !== `http://${request.headers.get("host")}`) return new Response("forbidden origin", { status: 403 });
@@ -608,14 +611,14 @@ describe("a machine reached through a dial's forward", () => {
       server.stop(true);
       rmSync(folder, { recursive: true, force: true });
     });
-    return { origin: tunnelOrigin, socket };
+    return DIALS_THROUGH_SOCKETS ? { origin: tunnelOrigin, socket } : atAddress(`http://[::1]:${server.port}`);
   }
 
   /** The forward and the machine beyond it: it answers pings until it goes quiet, as when its owner unpinned this computer, after which nothing answers at all. */
   function machineBeyondForward() {
     const sockets: Socket[] = [];
     const state = { quiet: false };
-    const way = socketTo(
+    const way = wayTo(
       (request, server) => {
         if (state.quiet) return new Promise<Response>(() => {});
         return server.upgrade(request, { data: { path: new URL(request.url).pathname } }) ? undefined : new Response("no", { status: 400 });
@@ -694,7 +697,7 @@ describe("a machine reached through a dial's forward", () => {
 
   test("counts a 401 as this computer revoked only when it came while the dial's process held the forward the whole time, and sends no token through one it no longer holds", async () => {
     const asked: string[] = [];
-    const turnsAway = socketTo(async (request) => {
+    const turnsAway = wayTo(async (request) => {
       asked.push(request.headers.get("cookie") ?? "");
       await Bun.sleep(100);
       return new Response("unauthorized", { status: 401 });

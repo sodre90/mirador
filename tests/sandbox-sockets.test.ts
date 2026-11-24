@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { startCanvasSocket } from "../host/sandbox/canvas-socket.ts";
 import { modelRouteOf, startModelProxy, type ModelRoute, type RunningSocket } from "../host/sandbox/model-proxy.ts";
+import { RUNS_SANDBOXES } from "./sandbox-computer.ts";
 
 const scratch = mkdtempSync(join(tmpdir(), "sbx-sockets-"));
 const KEY = "sk-ant-the-profiles-own-key-5678";
@@ -75,7 +76,7 @@ afterAll(async () => {
 const modelRequest = (requestLine: string, host = `127.0.0.1:${MODEL_PORT}`, extra = "") => rawRequest(modelSocket, `${requestLine}\nHost: ${host}\n${extra}Connection: close\n\n`);
 
 describe("a room's model proxy", () => {
-  test("is a socket only this Mac user reaches", () => {
+  test.skipIf(!RUNS_SANDBOXES)("is a socket only this Mac user reaches", () => {
     expect(statSync(modelSocket).mode & 0o777).toBe(0o600);
     expect(statSync(canvasSocketPath).mode & 0o777).toBe(0o600);
   });

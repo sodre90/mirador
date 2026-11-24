@@ -10,6 +10,7 @@ import { ANTHROPIC_API } from "../host/sandbox/model-proxy.ts";
 import { Sandboxes, type AgentInSandbox, type BroughtAgentInSandbox, type SandboxHost } from "../host/sandbox/sandboxes.ts";
 import { FakeContainerCli } from "./fake-container-cli.ts";
 import { FakeVmLauncher } from "./fake-vm-launcher.ts";
+import { RUNS_SANDBOXES } from "./sandbox-computer.ts";
 
 const scratch = mkdtempSync(join(tmpdir(), "brought-sandboxes-"));
 const socketFolders: string[] = [];
@@ -106,8 +107,8 @@ async function saidBy(socket: string, request: string) {
   return connection.said;
 }
 
-describe.skipIf(process.platform === "win32")("the VM of an agent someone brought into a sandboxed room", () => {
-  test("sees the workspace as the room's own agents' does, and nothing else of them or of this computer", async () => {
+describe("the VM of an agent someone brought into a sandboxed room", () => {
+  test.skipIf(!RUNS_SANDBOXES)("sees the workspace as the room's own agents' does, and nothing else of them or of this computer", async () => {
     const { workspace, host, cli, folders, sandboxes } = sandboxedRoom();
     folders.push({ path: repository(), writable: false } as SandboxFolder);
     writeFileSync(join(workspace, "CLAUDE.md"), "The owner's.\n");
@@ -145,7 +146,7 @@ describe.skipIf(process.platform === "win32")("the VM of an agent someone brough
     await sandboxes.stopAll();
   });
 
-  test("has the sandbox's way out alone, which reaches what the owner has the sandbox reach, and is gone with it", async () => {
+  test.skipIf(!RUNS_SANDBOXES)("has the sandbox's way out alone, which reaches what the owner has the sandbox reach, and is gone with it", async () => {
     const { workspace, cli, sandboxes } = sandboxedRoom();
     await sandboxes.launchForBrought(brought(workspace));
     const socket = mountsIn(cli.callsOf("run")[0]!).at(-1)!.split(":")[0]!;
@@ -155,7 +156,7 @@ describe.skipIf(process.platform === "win32")("the VM of an agent someone brough
     expect(existsSync(socket)).toBe(false);
   });
 
-  test.skipIf(THIS_COMPUTERS_ADDRESS === undefined)("reaches what its sandbox does, at once as the owner changes it, and so does the VM of the sandbox's own agents", async () => {
+  test.skipIf(!RUNS_SANDBOXES || THIS_COMPUTERS_ADDRESS === undefined)("reaches what its sandbox does, at once as the owner changes it, and so does the VM of the sandbox's own agents", async () => {
     const { workspace, cli, reached, sandboxes } = sandboxedRoom();
     await sandboxes.launch(ownAgent(workspace));
     await sandboxes.launchForBrought(brought(workspace));
@@ -183,7 +184,7 @@ describe.skipIf(process.platform === "win32")("the VM of an agent someone brough
     await sandboxes.stopAll();
   });
 
-  test("is that agent's alone, started once for its calls, and stops a while after its last", async () => {
+  test.skipIf(!RUNS_SANDBOXES)("is that agent's alone, started once for its calls, and stops a while after its last", async () => {
     const { workspace, cli, sandboxes } = sandboxedRoom({ broughtIdleStopMs: IDLE_STOP_MS });
     const [first, second] = await Promise.all([sandboxes.launchForBrought(brought(workspace)), sandboxes.launchForBrought(brought(workspace))]);
     const bobs = await sandboxes.launchForBrought(brought(workspace, { agentId: "bobs-coder" }));
@@ -200,7 +201,7 @@ describe.skipIf(process.platform === "win32")("the VM of an agent someone brough
     await sandboxes.stopAll();
   });
 
-  test("stops alone once its agent works there no longer, and the room's own agents' stops without it", async () => {
+  test.skipIf(!RUNS_SANDBOXES)("stops alone once its agent works there no longer, and the room's own agents' stops without it", async () => {
     const { workspace, cli, sandboxes } = sandboxedRoom();
     await sandboxes.launch(ownAgent(workspace));
     await sandboxes.launchForBrought(brought(workspace));
@@ -220,7 +221,7 @@ describe.skipIf(process.platform === "win32")("the VM of an agent someone brough
     expect(cli.vms.size).toBe(0);
   });
 
-  test("starts anew where the room moved to another workspace", async () => {
+  test.skipIf(!RUNS_SANDBOXES)("starts anew where the room moved to another workspace", async () => {
     const { workspaces, workspace, cli, sandboxes } = sandboxedRoom();
     await sandboxes.launchForBrought(brought(workspace));
     workspaces.current = repository();
@@ -270,11 +271,11 @@ const gitFolder = (folder: string) => {
   writeFileSync(join(folder, "config"), "[core]\n");
 };
 
-describe.skipIf(process.platform === "win32")("a VM that starts beside another, which may swap what it finds for a link to elsewhere", () => {
+describe("a VM that starts beside another, which may swap what it finds for a link to elsewhere", () => {
   const module = (workspace: string, name = "a") => join(workspace, ".git", "modules", name);
   const ofWorkspace = (run: string[], workspace: string) => mountsIn(run).filter((mount) => mount.split(":")[1]!.startsWith(workspace));
 
-  test("mounts what that one did, each of it a mount point nothing in that one can move, and nothing made there since", async () => {
+  test.skipIf(!RUNS_SANDBOXES)("mounts what that one did, each of it a mount point nothing in that one can move, and nothing made there since", async () => {
     const { workspace, cli, sandboxes } = sandboxedRoom();
     gitFolder(module(workspace));
     await sandboxes.launchForBrought(brought(workspace));
@@ -291,7 +292,7 @@ describe.skipIf(process.platform === "win32")("a VM that starts beside another, 
     await sandboxes.stopAll();
   });
 
-  test.each([
+  test.skipIf(!RUNS_SANDBOXES).each([
     ["a link out of the workspace", (folder: string) => symlinkSync(scratch, folder)],
     ["a folder made anew", gitFolder],
     ["nothing", () => {}],
@@ -331,7 +332,7 @@ describe.skipIf(process.platform === "win32")("a VM that starts beside another, 
     await sandboxes.stopAll();
   });
 
-  test("in another workspace leaves that one the copies of git's config it mounted", async () => {
+  test.skipIf(!RUNS_SANDBOXES)("in another workspace leaves that one the copies of git's config it mounted", async () => {
     const { workspaces, workspace, cli, sandboxes } = sandboxedRoom();
     const copyOfConfig = (run: string[]) => mountsIn(run).find((mount) => mount.endsWith("/.git/config:ro"))!.split(":")[0]!;
     await sandboxes.launchForBrought(brought(workspace));
@@ -345,7 +346,7 @@ describe.skipIf(process.platform === "win32")("a VM that starts beside another, 
 
   const OTHER_ROOM = roomSandbox("room-2");
 
-  test("of another room or workspace: a brought agent's does not start there, and the own agents' stops the brought ones first", async () => {
+  test.skipIf(!RUNS_SANDBOXES)("of another room or workspace: a brought agent's does not start there, and the own agents' stops the brought ones first", async () => {
     const { workspace, cli, sandboxes } = sandboxedRoom();
     const others = brought(workspace, { owner: OTHER_ROOM, agentId: "zoes-coder" });
     const overlapping = notReady({ kind: "blocked", blocker: { kind: "workspace-overlaps-sandbox-folder", folder: workspace } });
@@ -396,7 +397,7 @@ describe.skipIf(process.platform === "win32")("a VM that starts beside another, 
   });
 });
 
-test("a VM refused before it was launched holds up no other there, also while the runtime does not answer", async () => {
+test.skipIf(!RUNS_SANDBOXES)("a VM refused before it was launched holds up no other there, also while the runtime does not answer", async () => {
   const launcher = new FakeVmLauncher();
   const { workspace, sandboxes } = sandboxedRoom({ launcher });
   await sandboxes.launch(ownAgent(workspace));

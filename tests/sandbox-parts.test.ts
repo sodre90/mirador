@@ -11,6 +11,7 @@ import { baseImageOf, buildArguments, buildStepIn, imageReferencesIn, imageTag, 
 import { PODMAN_READS } from "../host/sandbox/podman.ts";
 import { gitFoldersOf, sandboxRefusalOf, workspaceMounts, type MiradorPlaces } from "../host/sandbox/workspace-mounts.ts";
 import { keepingNetworkOf, narrowsSandbox, NO_SANDBOX, reachesMoreThan, SANDBOX_NETWORKS, sandboxSettingIn, sameSandbox, sharesKernel, signInElsewhere, type SandboxNetwork, type SandboxSetting } from "../shared/sandbox.ts";
+import { RUNS_SANDBOXES } from "./sandbox-computer.ts";
 
 const scratch = realpathSync(mkdtempSync(join(tmpdir(), "sandbox-parts-")));
 afterAll(() => rmSync(scratch, { recursive: true, force: true }));
@@ -163,7 +164,7 @@ test("podman's exec process reads only this computer's own of the variables Podm
   expect(execProcessEnvironment(agents, here, PODMAN_READS)).toEqual({ DEPLOY: "staging", PATH: "/usr/bin", XDG_RUNTIME_DIR: "/run/user/1000", CONTAINERS_STORAGE_CONF: "/home/me/storage.conf" });
 });
 
-test("a workspace's repository and its submodules keep copies of their config, and their hooks and worktrees read-only, in folders that can't be moved aside, and a hooks folder its config names in the workspace too", async () => {
+test.skipIf(!RUNS_SANDBOXES)("a workspace's repository and its submodules keep copies of their config, and their hooks and worktrees read-only, in folders that can't be moved aside, and a hooks folder its config names in the workspace too", async () => {
   const workspace = repositoryIn("workspace");
   Bun.spawnSync(["git", "-C", workspace, "config", "core.hooksPath", ".husky"]);
   const submodule = join(workspace, ".git/modules/lib");
@@ -199,7 +200,7 @@ test("a workspace's repository and its submodules keep copies of their config, a
   expect(readdirSync(copies)).toHaveLength(2);
 });
 
-test("a repository that reads per-worktree config gets an empty one, read-only in the VM, where it has none yet", async () => {
+test.skipIf(!RUNS_SANDBOXES)("a repository that reads per-worktree config gets an empty one, read-only in the VM, where it has none yet", async () => {
   const workspace = repositoryIn("worktree-config");
   Bun.spawnSync(["git", "-C", workspace, "config", "extensions.worktreeConfig", "true"]);
   const plain = repositoryIn("no-worktree-config");
@@ -213,7 +214,7 @@ test("a repository that reads per-worktree config gets an empty one, read-only i
   expect(existsSync(join(plain, ".git/config.worktree"))).toBe(false);
 });
 
-test("held files and folders are read-only in the VM, outermost only, with each folder holding them mounted so it can't be moved aside", async () => {
+test.skipIf(!RUNS_SANDBOXES)("held files and folders are read-only in the VM, outermost only, with each folder holding them mounted so it can't be moved aside", async () => {
   const workspace = repositoryIn("held");
   mkdirSync(join(workspace, "pkg/app/.vscode"), { recursive: true });
   mkdirSync(join(workspace, ".claude/commands"), { recursive: true });
@@ -297,7 +298,7 @@ test("a held folder an agent turned into a link to this computer's files is neve
 
 const includes = (repository: string, path: string, key = "include.path") => Bun.spawnSync(["git", "-C", repository, "config", "--add", key, path]);
 
-test("files of the workspace the config includes, at its root, through a chain of includes and on a condition, are read-only in the VM from copies, each folder on git's way to them mounted, while Mirador's git reads the files themselves", async () => {
+test.skipIf(!RUNS_SANDBOXES)("files of the workspace the config includes, at its root, through a chain of includes and on a condition, are read-only in the VM from copies, each folder on git's way to them mounted, while Mirador's git reads the files themselves", async () => {
   const workspace = repositoryIn("include");
   mkdirSync(join(workspace, "config"));
   mkdirSync(join(workspace, "tools"));
@@ -342,7 +343,7 @@ function secretsOfThisComputer() {
   return secrets;
 }
 
-test("a file of the workspace the config includes that isn't there, or whose folder isn't, is refused, as the VM could make it", async () => {
+test.skipIf(!RUNS_SANDBOXES)("a file of the workspace the config includes that isn't there, or whose folder isn't, is refused, as the VM could make it", async () => {
   const missing = repositoryIn("include-missing");
   includes(missing, "../.gitconfig.local");
   expect(await sandboxRefusalOf(missing, ELSEWHERE)).toEqual({ kind: "config-includes-missing-file", file: ".gitconfig.local" });
@@ -352,7 +353,7 @@ test("a file of the workspace the config includes that isn't there, or whose fol
   expect(await sandboxRefusalOf(missingFolder, ELSEWHERE)).toEqual({ kind: "config-includes-missing-file", file: "shared/team.cfg" });
 });
 
-test("a file of the workspace a config git reads includes, reached through a link anywhere on the way, is refused with nothing copied, as the VM could change where git finds it", async () => {
+test.skipIf(!RUNS_SANDBOXES)("a file of the workspace a config git reads includes, reached through a link anywhere on the way, is refused with nothing copied, as the VM could change where git finds it", async () => {
   const secrets = secretsOfThisComputer();
 
   const linkedFolder = repositoryIn("include-linked-folder");
@@ -386,7 +387,7 @@ test("a file of the workspace a config git reads includes, reached through a lin
   expect(await sandboxRefusalOf(reachedFromOutside, ELSEWHERE)).toEqual({ kind: "config-read-through-link", file: join(toWorkspace, "team.cfg"), link: toWorkspace });
 });
 
-test("an included file of the workspace that is no regular file is refused, and files included from outside it are not", async () => {
+test.skipIf(!RUNS_SANDBOXES)("an included file of the workspace that is no regular file is refused, and files included from outside it are not", async () => {
   const secrets = secretsOfThisComputer();
 
   const folderIncluded = repositoryIn("include-folder");
@@ -400,7 +401,7 @@ test("an included file of the workspace that is no regular file is refused, and 
   expect(await sandboxRefusalOf(elsewhere, ELSEWHERE)).toBeNull();
 });
 
-test("this computer's own config, read through a link to a file of the workspace, is refused", async () => {
+test.skipIf(!RUNS_SANDBOXES)("this computer's own config, read through a link to a file of the workspace, is refused", async () => {
   const dotfiles = repositoryIn("dotfiles");
   writeFileSync(join(dotfiles, "gitconfig"), "[user]\n\tname = Owner\n");
   const globalConfig = join(scratch, `global-${crypto.randomUUID()}.gitconfig`);
@@ -415,7 +416,7 @@ test("this computer's own config, read through a link to a file of the workspace
   }
 });
 
-test("the home folder, a folder holding or within Mirador's data or its own checkout, and one that is or holds a folder this computer runs programs from, are never a sandbox's workspace", async () => {
+test.skipIf(!RUNS_SANDBOXES)("the home folder, a folder holding or within Mirador's data or its own checkout, and one that is or holds a folder this computer runs programs from, are never a sandbox's workspace", async () => {
   const workspace = repositoryIn("mirador-places");
   expect(await sandboxRefusalOf(workspace, { ...ELSEWHERE, home: workspace })).toEqual({ kind: "workspace-is-home" });
   expect(await sandboxRefusalOf(workspace, { ...ELSEWHERE, dataDir: join(workspace, "data") })).toEqual({ kind: "workspace-holds-mirador-data" });
@@ -429,7 +430,7 @@ test("the home folder, a folder holding or within Mirador's data or its own chec
   expect(await sandboxRefusalOf(workspace, { ...ELSEWHERE, computersOwn: [join(scratch, "elsewhere", ".local")] })).toBeNull();
 });
 
-test("a relative hooks folder this Mac's own config names is read-only in the VM, taken from the workspace", async () => {
+test.skipIf(!RUNS_SANDBOXES)("a relative hooks folder this Mac's own config names is read-only in the VM, taken from the workspace", async () => {
   const workspace = repositoryIn("global-hooks");
   const globalConfig = join(scratch, `global-${crypto.randomUUID()}.gitconfig`);
   writeFileSync(globalConfig, "[core]\n\thooksPath = .githooks\n");

@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterAll, afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -10,6 +10,16 @@ import { WorkspaceCallRefused } from "../host/sandbox/in-vm/workspace-files.ts";
 import { SandboxNotReady } from "../host/sandbox/vm-launcher.ts";
 import { WORKSPACE_FILE_MOST_BYTES } from "../shared/room-workspace.ts";
 import { commandHere } from "./in-vm-here.ts";
+
+const programs = mkdtempSync(join(tmpdir(), "room-sandbox-programs-"));
+afterAll(() => rmSync(programs, { recursive: true, force: true }));
+
+/** In a file, as Windows takes no command line as long as an answer may be. */
+function programRunning(script: string) {
+  const program = join(programs, `${crypto.randomUUID()}.js`);
+  writeFileSync(program, script);
+  return [process.execPath, program];
+}
 
 let workspace: string;
 const inWorkspace = (...path: string[]) => join(workspace, ...path);
@@ -33,7 +43,7 @@ function vm({ running = null as string | null, limits = {} as Partial<typeof LIM
       launch: async (command) => {
         await launching();
         happened.push("launched");
-        return { command: running === null ? commandHere(command) : [process.execPath, "-e", running], environment: {}, gone: () => void happened.push("gone") };
+        return { command: running === null ? commandHere(command) : programRunning(running), environment: {}, gone: () => void happened.push("gone") };
       },
       stop: async () => void happened.push("stopped"),
     },
@@ -169,7 +179,7 @@ describe("what the sandbox answers, which anything running there may have writte
     await expect(read(largerThanAnyFile.place, "a.txt")).rejects.toThrow("The room's sandbox gave no answer.");
   }, 60_000);
 
-  test.skipIf(process.platform === "win32")("a command's ending is one of those it may have", async () => {
+  test("a command's ending is one of those it may have", async () => {
     const noEndings = [undefined, {}, { by: "exit" }, { by: "exit", code: "0" }, { by: "exit", code: 0.5 }, { by: "signal", signal: "SIGKILL\nAllowed by Ann" }, { by: "signal", signal: 9 }, { by: "whim" }];
     for (const ended of noEndings) await expect(commandRun("true", answering(ran(ended)).place, unstopped)).rejects.toThrow("The room's sandbox gave no answer.");
     await expect(commandRun("true", answering(ran({ by: "exit", code: 0 }, 5)).place, unstopped)).rejects.toThrow(WorkspaceCallRefused);

@@ -1,7 +1,7 @@
 import { afterAll, expect, setDefaultTimeout, test } from "bun:test";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import type { RequestPermissionRequest } from "@agentclientprotocol/sdk";
 import type { SessionConfigOption } from "@agentclientprotocol/sdk/unstable";
 import { loadConfig } from "../host/config.ts";
@@ -21,6 +21,7 @@ import { DEFAULT_PERMISSION_PRESET } from "../shared/room-permissions.ts";
 import { NO_SANDBOX, ownerKey, roomSandbox, workspaceSandbox, type SandboxOwner, type SandboxSetting } from "../shared/sandbox.ts";
 import { agentWithModes } from "./agent-with-modes.ts";
 import { FakeVmLauncher } from "./fake-vm-launcher.ts";
+import { programLeavingAMark } from "./program-leaving-a-mark.ts";
 
 setDefaultTimeout(20_000);
 
@@ -34,23 +35,14 @@ afterAll(async () => {
 const SANDBOX_ON: SandboxSetting = { on: true, workFreely: true, allowsSharedKernel: false, network: "closed" };
 const BUILDER = { harness: "claude" as const, profileId: "builder" };
 
-/**
- * Claude Code as this computer runs it: asked its version, it says it; run for anything else, as an agent on this
- * computer would run it, it leaves a mark.
- */
-function claudeCodeLeavingAMark() {
-  const mark = join(scratch, `ran-on-this-computer-${crypto.randomUUID()}`);
-  const program = join(scratch, `claude-${crypto.randomUUID()}`);
-  writeFileSync(program, `#!/bin/sh\nif [ "$1" = "--version" ]; then echo "2.1.330 (Claude Code)"; exit 0; fi\ntouch "${mark}"\nexit 1\n`);
-  chmodSync(program, 0o755);
-  return { program, ranHere: () => existsSync(mark) };
-}
+/** Claude Code as this computer runs it. */
+const claudeCodeLeavingAMark = () => programLeavingAMark(scratch, "claude", "2.1.330 (Claude Code)");
 
 function repository() {
   const folder = join(scratch, `project-${crypto.randomUUID()}`);
   mkdirSync(folder);
   Bun.spawnSync(["git", "init", "-q", folder]);
-  return realpathSync(folder);
+  return realpathSync.native(folder);
 }
 
 const profileOf = (id: string, name: string, harness: HarnessId, environment: string): Profile => ({
@@ -256,10 +248,7 @@ test("a sandboxed workspace's conversation moved to a profile that can't run in 
  * gateway provider whose key comes from the profile, an auth.json and an extension the VM must never see.
  */
 function piLeavingAMark(settings: Record<string, unknown>) {
-  const mark = join(scratch, `pi-ran-on-this-computer-${crypto.randomUUID()}`);
-  const program = join(scratch, `pi-${crypto.randomUUID()}`);
-  writeFileSync(program, `#!/bin/sh\nif [ "$1" = "--version" ]; then echo "1.6.0"; exit 0; fi\ntouch "${mark}"\nexit 1\n`);
-  chmodSync(program, 0o755);
+  const pi = programLeavingAMark(scratch, "pi", "1.6.0");
   const agentFolder = join(scratch, `pi-agent-${crypto.randomUUID()}`);
   mkdirSync(join(agentFolder, "extensions"), { recursive: true });
   const provider = { baseUrl: "https://llm-gateway.example/v1", api: "openai-responses", apiKey: "${LLM_GATEWAY_KEY}", models: [{ id: "gpt-6.1" }] };
@@ -267,7 +256,7 @@ function piLeavingAMark(settings: Record<string, unknown>) {
   writeFileSync(join(agentFolder, "settings.json"), JSON.stringify({ packages: ["npm:pi-web-access"], ...settings }));
   writeFileSync(join(agentFolder, "auth.json"), JSON.stringify({ anthropic: { type: "api_key", key: "sk-ant-in-auth-json-of-this-mac" } }));
   writeFileSync(join(agentFolder, "extensions", "session.ts"), "export default () => {};\n");
-  return { program, agentFolder, ranHere: () => existsSync(mark) };
+  return { ...pi, agentFolder };
 }
 
 const GATEWAY_KEY = "gw-key-kept-on-this-mac-2468";
@@ -283,7 +272,7 @@ test("a sandboxed workspace's pi conversation starts pi in the VM from its own i
   expect(launcher.prepared).toContainEqual({ harness: "pi", version: "1.6.0" });
   const [agent] = launcher.agents.filter(({ environment }) => environment.MIRADOR_PI_MODELS !== undefined);
   expect(agent).toBeDefined();
-  expect(agent!.command.slice(0, 2)).toEqual(["/usr/local/bin/bun", Bun.resolveSync("pi-acp/package.json", import.meta.dir).replace(/package\.json$/, "dist/index.js")]);
+  expect(agent!.command.slice(0, 2)).toEqual(["/usr/local/bin/bun", join(dirname(Bun.resolveSync("pi-acp/package.json", import.meta.dir)), "dist", "index.js")]);
   const { environment } = agent!;
   expect(JSON.stringify(environment)).not.toContain(GATEWAY_KEY);
   expect(JSON.stringify(environment)).not.toContain(pi.agentFolder);
@@ -495,7 +484,7 @@ test("turning a workspace's sandbox off stops its agents in the VM, starts its c
   expect(store.listEventsOfTypes(conversation.id, ["context-cleared"])).toHaveLength(1);
   expect(claude.ranHere()).toBe(true);
   const project = store.findWorkspace("w1")!.path;
-  const [{ leftAt: turnedOffAt }] = store.foldersSandboxesLeft().filter(({ path }) => path === realpathSync(project));
+  const [{ leftAt: turnedOffAt }] = store.foldersSandboxesLeft().filter(({ path }) => path === realpathSync.native(project));
   expect(turnedOffAt).toBeGreaterThanOrEqual(before);
   expect(repositoryHooksOff(store, [project], turnedOffAt + HOOKS_OFF_AFTER_SANDBOX_MS - 1)).toBe(true);
   expect(repositoryHooksOff(store, [project], turnedOffAt + HOOKS_OFF_AFTER_SANDBOX_MS)).toBe(false);

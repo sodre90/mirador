@@ -9,6 +9,7 @@ import { ANTHROPIC_API } from "../host/sandbox/model-proxy.ts";
 import { AppleContainer } from "../host/sandbox/apple-container.ts";
 import { Sandboxes, type AgentInSandbox, type SandboxHost } from "../host/sandbox/sandboxes.ts";
 import { FakeContainerCli } from "./fake-container-cli.ts";
+import { RUNS_SANDBOXES } from "./sandbox-computer.ts";
 
 const scratch = mkdtempSync(join(tmpdir(), "room-sandboxes-"));
 afterAll(() => rmSync(scratch, { recursive: true, force: true }));
@@ -64,7 +65,7 @@ const mountOf = (run: string[], source: string) => run.find((arg, index) => run[
 const socketsFolderOf = (run: string[]) => dirname(run.find((arg, index) => run[index - 1] === "-v" && arg.endsWith(":/run/mirador/canvas.sock"))!.split(":")[0]!);
 
 describe("a room's sandbox", () => {
-  test("starts an agent in the room's VM as the agent user, never root, with no network, the repository's config and hooks read-only, and the key nowhere in it", async () => {
+  test.skipIf(!RUNS_SANDBOXES)("starts an agent in the room's VM as the agent user, never root, with no network, the repository's config and hooks read-only, and the key nowhere in it", async () => {
     const workspace = repository();
     const { host, setups } = hostFor(workspace);
     const cli = new FakeContainerCli();
@@ -168,7 +169,7 @@ describe("a room's sandbox", () => {
     await sandboxes.stopAll();
   });
 
-  test("removes each VM's socket folder once it stops or fails to start, and at start the ones of hosts that are gone", async () => {
+  test.skipIf(!RUNS_SANDBOXES)("removes each VM's socket folder once it stops or fails to start, and at start the ones of hosts that are gone", async () => {
     const workspace = repository();
     const { host } = hostFor(workspace);
     const cli = new FakeContainerCli();
@@ -219,7 +220,7 @@ describe("a room's sandbox", () => {
     expect(cli.vms.size).toBe(0);
   });
 
-  test("stops the VMs of rooms working in a folder before Mirador writes there, and leaves the others", async () => {
+  test.skipIf(!RUNS_SANDBOXES)("stops the VMs of rooms working in a folder before Mirador writes there, and leaves the others", async () => {
     const workspace = repository();
     const cli = new FakeContainerCli();
     const sandboxes = new Sandboxes(new AppleContainer(cli, AVAILABLE), hostFor(workspace).host, 60_000);
@@ -363,13 +364,13 @@ describe("a room's sandbox that is not ready fails the agent's start, and starts
     await failingStart({ kind: "blocked", blocker: { kind: "workspace-has-commondir" } }, (_, workspace) => writeFileSync(join(workspace, ".git/commondir"), "/elsewhere/.git\n"));
   });
 
-  test("in a repository whose config includes a file of the workspace that isn't there, which the VM could make", async () => {
+  test.skipIf(!RUNS_SANDBOXES)("in a repository whose config includes a file of the workspace that isn't there, which the VM could make", async () => {
     await failingStart({ kind: "blocked", blocker: { kind: "config-includes-missing-file", file: "team.gitconfig" } }, (_, workspace) => {
       Bun.spawnSync(["git", "-C", workspace, "config", "include.path", "../team.gitconfig"]);
     });
   });
 
-  test("in the home folder, or a folder holding Mirador's data or its own checkout", async () => {
+  test.skipIf(!RUNS_SANDBOXES)("in the home folder, or a folder holding Mirador's data or its own checkout", async () => {
     await failingStart({ kind: "blocked", blocker: { kind: "workspace-is-home" } }, (_, workspace, host) => void (host.places = { ...host.places, home: workspace }));
     await failingStart({ kind: "blocked", blocker: { kind: "workspace-holds-mirador-data" } }, (_, workspace, host) => void (host.places = { ...host.places, dataDir: join(workspace, ".mirador") }));
     await failingStart({ kind: "blocked", blocker: { kind: "workspace-is-mirador" } }, (_, workspace, host) => void (host.places = { ...host.places, checkout: workspace }));

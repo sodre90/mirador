@@ -203,7 +203,7 @@ describe("the ways to a machine", () => {
     expect(await opensThrough("józsef")).toEqual({ allowed: false, opened: false });
   });
 
-  test("dials need a folder whose sockets' paths fit a Unix socket's address and a ws+unix URL carries as they are", () => {
+  test.skipIf(process.platform === "win32")("dials need a folder whose sockets' paths fit a Unix socket's address and a ws+unix URL carries as they are", () => {
     ["/Users/ann/.mirador/machine-tunnels", "/home/ann/m&m's[old]+%41|~!$;=@/machine-tunnels"].forEach((folder) => expect(socketFolderProblem(folder)).toBeNull());
     const tooLong = `/Users/ann/${"x".repeat(80)}/machine-tunnels`;
     expect(socketFolderProblem(tooLong)).toEqual({ code: "dial-folder-too-long", folder: tooLong });

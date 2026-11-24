@@ -477,13 +477,22 @@ describe("a person's public key", () => {
 });
 
 describe("the owner's key", () => {
-  test("is made once, readable by this account alone, and signs what it is asked", () => {
+  test("is made once, and signs what it is asked", () => {
     const dataDir = mkdtempSync(join(tmpdir(), "mirador-owner-key-"));
     try {
       const first = ownerKey(dataDir);
       expect(ownerKey(dataDir).publicKey).toBe(first.publicKey);
-      expect(statSync(join(dataDir, "owner-key.pem")).mode & 0o777).toBe(0o600);
       expect(Buffer.from(first.publicKey, "base64url")).toHaveLength(32);
+    } finally {
+      rmSync(dataDir, { recursive: true, force: true });
+    }
+  });
+
+  test.skipIf(process.platform === "win32")("is readable by this account alone", () => {
+    const dataDir = mkdtempSync(join(tmpdir(), "mirador-owner-key-"));
+    try {
+      ownerKey(dataDir);
+      expect(statSync(join(dataDir, "owner-key.pem")).mode & 0o777).toBe(0o600);
     } finally {
       rmSync(dataDir, { recursive: true, force: true });
     }
