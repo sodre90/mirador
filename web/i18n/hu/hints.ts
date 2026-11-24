@@ -206,7 +206,7 @@ export const hints: Messages["hints"] = {
   waitingCount: "A munkaterület rád váró beszélgetései.",
   workspaceColor: "Adj színt ennek a munkaterületnek, hogy megkülönböztesd az oldalsávban. Minden ablak mutatja.",
   workspaceColorStyle:
-    "Hogyan mutatja a színét egy munkaterület, amelynek színt adtál: az egész kártyáján, csak a fejlécén, vagy csíkként a szélén egy halványabb árnyalat fölött. Kattints egy munkaterület monogramjára, hogy színt adj neki.",
+    "Hogyan mutatja a színét egy munkaterület, amelynek színt adtál: az egész kártyáján, csak a fejlécén, vagy csíkként a szélén egy halványabb árnyalat fölött. Kattints egy munkaterület monogramjára vagy ikonjára, hogy színt adj neki.",
   newConversation: "Beszélgetés indítása ezen a munkaterületen, a kártyán kiválasztott profilon.",
   continueSession: "Egy terminálban indított munkamenet folytatása beszélgetésként ezen a munkaterületen.",
   whereConversationsWork: "Annak megadása, hogy az új beszélgetések a projektmappában vagy mindegyik saját git worktree-ben dolgozzon.",

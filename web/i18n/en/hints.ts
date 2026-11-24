@@ -195,7 +195,7 @@ export const hints = {
   waitingCount: "Conversations in this workspace waiting for you.",
   workspaceColor: "Give this workspace a colour, to tell it apart in the sidebar. Every window shows it.",
   workspaceColorStyle:
-    "How a workspace you gave a colour shows it: on its whole card, on its heading only, or as a stripe down its edge over a softer tint. Click a workspace's initials to give it a colour.",
+    "How a workspace you gave a colour shows it: on its whole card, on its heading only, or as a stripe down its edge over a softer tint. Click a workspace's initials or icon to give it a colour.",
   newConversation: "Start a conversation in this workspace, on the profile picked in this card.",
   continueSession: "Continue a session that was started in a terminal, as a conversation in this workspace.",
   whereConversationsWork: "Choose whether new conversations work in the project folder or each in a git worktree of its own.",

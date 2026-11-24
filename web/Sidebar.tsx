@@ -36,6 +36,7 @@ import { shortcutKeys } from "./shortcuts.ts";
 import { shownTitle } from "./shown-title.ts";
 import { statusDetailOf } from "./status-detail.ts";
 import type { AppAction, AppState, DevicesListed, Overlay } from "./state.ts";
+import { useShownTheme } from "./theme.ts";
 import { useTypingAidAttributes } from "./typing-aids.ts";
 import { WorktreeIcon, WorktreeMark } from "./Worktrees.tsx";
 import { canMarkUnread, markRead, markUnread } from "./unread.ts";
@@ -46,6 +47,7 @@ import { CONVERSATION_ORDERS, landingBeforeInCustomOrder, usualDirection, type C
 import { markInitials, workspaceMarkColor } from "../shared/marks.ts";
 import { sidebarItems, type SidebarItem } from "../shared/sidebar-order.ts";
 import { forgetFoldsOfDeleted, setDelegationsOpen, setGroupFolded, setWorkspaceFolded, useFoldedGroups, useFoldedWorkspaces, useOpenedDelegations } from "./workspace-groups.ts";
+import { iconInTheme, type WorkspaceIcon } from "../shared/workspace-icon.ts";
 import { landingBefore, movesWorkspace, workspaceDropAt, type SidebarRow, type WorkspaceDrop } from "../shared/workspace-drop.ts";
 
 function useDirectoryCompletions(prefix: string) {
@@ -456,6 +458,7 @@ function ConversationOrderMenu({ order }: { order: ConversationOrder }) {
 
 function WorkspaceSection({
   workspace,
+  icon,
   conversations,
   olderAfter,
   draggable,
@@ -471,6 +474,7 @@ function WorkspaceSection({
   onConversationMenu,
 }: {
   workspace: Workspace;
+  icon: WorkspaceIcon | null | undefined;
   conversations: Conversation[];
   olderAfter: OlderAfter;
   /** Only the custom order has places to drag a conversation to. */
@@ -487,6 +491,9 @@ function WorkspaceSection({
   onConversationMenu: (conversation: Conversation, event: ReactMouseEvent) => void;
 }) {
   const mark = useRef<HTMLButtonElement>(null);
+  const ownIcon = iconInTheme(icon, useShownTheme());
+  const [brokenIcon, setBrokenIcon] = useState<string | null>(null);
+  const shownIcon = ownIcon === brokenIcon ? null : ownIcon;
   const closePicker = useCallback(() => dispatch({ type: "close-overlay" }), [dispatch]);
   const togglePicker = () => dispatch(pickingColor ? { type: "close-overlay" } : { type: "open-overlay", overlay: { kind: "workspace-color", workspaceId: workspace.id } });
   const toggleFolded = () => setWorkspaceFolded(workspace.id, !folded);
@@ -569,13 +576,13 @@ function WorkspaceSection({
           ref={mark}
           type="button"
           className="workspace-mark"
-          style={{ background: workspaceMarkColor(workspace.name) }}
+          style={{ background: shownIcon ? "none" : workspaceMarkColor(workspace.name) }}
           aria-label={words.workspaceColour}
           aria-expanded={pickingColor}
           data-hint={hints.workspaceColor}
           onClick={togglePicker}
         >
-          {markInitials(workspace.name)}
+          {shownIcon ? <img src={shownIcon} alt="" draggable={false} onError={() => setBrokenIcon(shownIcon)} /> : markInitials(workspace.name)}
         </button>
         <div className="workspace-heading" title={workspace.path}>
           <div className="workspace-name">{workspace.name}</div>
@@ -837,6 +844,13 @@ function ConnectedDevices({ listed, onOpen }: { listed: DevicesListed | null; on
   );
 }
 
+function useWorkspaceIconsFound(workspaces: Workspace[]) {
+  const ids = workspaces.map(({ id }) => id).sort().join(" ");
+  useEffect(() => {
+    if (ids) connection.send({ type: "workspaces.find-icons" });
+  }, [ids]);
+}
+
 export function Sidebar({ state, dispatch }: { state: AppState; dispatch: Dispatch<AppAction> }) {
   const adding = state.overlay?.kind === "add-workspace";
   const setAdding = (open: boolean) => dispatch(open ? { type: "open-overlay", overlay: { kind: "add-workspace" } } : { type: "close-overlay" });
@@ -849,6 +863,7 @@ export function Sidebar({ state, dispatch }: { state: AppState; dispatch: Dispat
   const foldedWorkspaces = useFoldedWorkspaces();
   useUnfoldAroundOpenConversation(state);
   useFoldsOfDeletedForgotten(state);
+  useWorkspaceIconsFound(state.workspaces);
   const items = sidebarItems(state.workspaces, state.workspaceGroups);
   const [conversationMenu, setConversationMenu] = useState<{ conversationId: string; x: number; y: number } | null>(null);
   const openConversationMenu = (conversation: Conversation, event: ReactMouseEvent) => {
@@ -879,6 +894,7 @@ export function Sidebar({ state, dispatch }: { state: AppState; dispatch: Dispat
       dragClasses={[workspaceDrag.drag?.id === workspace.id && "dragged", ...dragClasses].filter((name): name is string => Boolean(name))}
       onStartDrag={(event) => startWorkspaceDrag(workspace, event)}
       workspace={workspace}
+      icon={state.workspaceIcons[workspace.id]}
       conversations={conversationsIn(state, workspace.id)}
       olderAfter={state.olderAfter}
       draggable={state.conversationOrder.by === "custom"}

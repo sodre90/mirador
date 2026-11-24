@@ -215,7 +215,7 @@ export const hints: Messages["hints"] = {
   waitingCount: "Unterhaltungen in diesem Arbeitsbereich, die auf dich warten.",
   workspaceColor: "Gib diesem Arbeitsbereich eine Farbe, um ihn in der Seitenleiste zu unterscheiden. Jedes Fenster zeigt sie.",
   workspaceColorStyle:
-    "Wie ein Arbeitsbereich, dem du eine Farbe gegeben hast, sie zeigt: auf seiner ganzen Karte, nur an seiner Überschrift oder als Streifen an seinem Rand über einer zarteren Tönung. Klicke auf die Initialen eines Arbeitsbereichs, um ihm eine Farbe zu geben.",
+    "Wie ein Arbeitsbereich, dem du eine Farbe gegeben hast, sie zeigt: auf seiner ganzen Karte, nur an seiner Überschrift oder als Streifen an seinem Rand über einer zarteren Tönung. Klicke auf die Initialen oder das Symbol eines Arbeitsbereichs, um ihm eine Farbe zu geben.",
   newConversation: "Starte eine Unterhaltung in diesem Arbeitsbereich, mit dem Profil, das in dieser Karte gewählt ist.",
   continueSession: "Setze eine Sitzung, die in einem Terminal gestartet wurde, als Unterhaltung in diesem Arbeitsbereich fort.",
   whereConversationsWork: "Wähle, ob neue Unterhaltungen im Projektordner oder jede in einem eigenen git-Worktree arbeiten.",

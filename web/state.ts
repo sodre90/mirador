@@ -15,6 +15,7 @@ import { withStreamedEvent } from "../shared/timeline.ts";
 import { defaultVoiceSettings, type VoiceSettings } from "../shared/voice.ts";
 import type { VoiceEngineStatus } from "../shared/voice-engine.ts";
 import { lastsUntilOpened } from "../shared/waiting.ts";
+import type { WorkspaceIcon } from "../shared/workspace-icon.ts";
 import { describedText, hostErrorText } from "./host-error.ts";
 
 export interface OpenConversation {
@@ -65,6 +66,8 @@ export interface PluginTabState {
 export interface AppState {
   workspaces: Workspace[];
   workspaceGroups: WorkspaceGroup[];
+  /** By workspace id, as the host finds them. */
+  workspaceIcons: Record<string, WorkspaceIcon | null>;
   conversations: Conversation[];
   profiles: Profile[];
   promptTemplates: PromptTemplate[];
@@ -168,6 +171,7 @@ export type AppAction =
 export const initialState: AppState = {
   workspaces: [],
   workspaceGroups: [],
+  workspaceIcons: {},
   conversations: [],
   profiles: [],
   promptTemplates: [],
@@ -365,6 +369,8 @@ function applyServerMessage(state: AppState, message: ServerMessage): AppState {
         workspaces: state.workspaces.filter(({ id }) => id !== message.workspaceId),
         workspaceToDelete: state.workspaceToDelete?.workspaceId === message.workspaceId ? null : state.workspaceToDelete,
       };
+    case "workspace.icon":
+      return { ...state, workspaceIcons: { ...state.workspaceIcons, [message.workspaceId]: message.icon } };
     case "workspace-group.upserted":
       return { ...state, workspaceGroups: upsert(state.workspaceGroups, message.group).sort(inSidebarOrder) };
     case "workspace-group.deleted":

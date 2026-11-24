@@ -57,6 +57,7 @@ import type { PushRegistration, PushRelaySetting } from "./push.ts";
 import type { SubagentUsage } from "./subagent-usage.ts";
 import type { VoiceSettings } from "./voice.ts";
 import type { VoiceEngineStatus } from "./voice-engine.ts";
+import type { WorkspaceIcon } from "./workspace-icon.ts";
 
 export interface TerminalSplit {
   terminalId: string;
@@ -105,6 +106,8 @@ export type ClientMessage =
    */
   | { type: "workspace.move"; workspaceId: string; groupId?: string | null; beforeWorkspaceId: string | null; beforeGroupId?: string | null }
   | { type: "workspace.set-color"; workspaceId: string; color: Pastel | null }
+  /** Answered with a workspace.icon for each workspace, as its folder is looked through. */
+  | { type: "workspaces.find-icons" }
   | { type: "workspace.set-worktree-settings"; workspaceId: string; newConversationsIn: ConversationPlace; worktreeSetup: string }
   | { type: "workspace-group.create"; name: string }
   | { type: "workspace-group.rename"; groupId: string; name: string }
@@ -504,6 +507,7 @@ export type ServerMessage =
   | { type: "voice.engine"; engine: VoiceEngineStatus }
   | { type: "workspace.upserted"; workspace: Workspace }
   | { type: "workspace.deleted"; workspaceId: string }
+  | { type: "workspace.icon"; workspaceId: string; icon: WorkspaceIcon | null }
   | { type: "workspace-group.upserted"; group: WorkspaceGroup }
   | { type: "workspace-group.deleted"; groupId: string }
   | { type: "conversation.upserted"; conversation: Conversation }
