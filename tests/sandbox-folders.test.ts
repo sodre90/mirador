@@ -329,11 +329,13 @@ describe("the sandbox's VM", () => {
     const run = mounts(cli.callsOf("run")[0]!);
     expect(run).toContain(`${library}:${library}`);
     expect(run).toContain(`${library}/.git/hooks:${library}/.git/hooks:ro`);
-    expect(run).toContain(`${library}/AGENTS.md:${library}/AGENTS.md:ro`);
     const copyOf = (repository: string) => run.find((mount) => mount.endsWith(`:${repository}/.git/config:ro`))?.split(":")[0];
     expect(copyOf(library)?.startsWith(`${join(dataDir, "sandbox", "room-1", "folder-git-config")}/`)).toBe(true);
     expect(copyOf(workspace)?.startsWith(`${join(dataDir, "sandbox", "plans")}/`)).toBe(true);
     expect(readFileSync(copyOf(library)!, "utf8")).toBe(readFileSync(join(library, ".git", "config"), "utf8"));
+    const heldCopy = run.find((mount) => mount.endsWith(`:${library}/AGENTS.md:ro`))?.split(":")[0];
+    expect(heldCopy?.startsWith(`${join(dataDir, "sandbox", "room-1", "folder-git-config")}/`)).toBe(true);
+    expect(readFileSync(heldCopy!, "utf8")).toBe("Be kind.\n");
     const includedCopy = run.find((mount) => mount.endsWith(`:${library}/.gitconfig:ro`))?.split(":")[0];
     expect(includedCopy?.startsWith(`${join(dataDir, "sandbox", "room-1", "folder-git-config")}/`)).toBe(true);
     expect(readFileSync(includedCopy!, "utf8")).toBe("[user]\n\tname = Team\n");

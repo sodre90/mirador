@@ -307,8 +307,7 @@ async function readsWorktreeConfig(gitFolder: string) {
 
 /**
  * What of a git folder the VM may only read: its hooks and its worktrees' folders, made here when it has none, and its
- * config and per-worktree config, as copies taken now, an empty per-worktree config made first where git would read one. A file mounted from its own folder would take the place of that
- * folder's mount, which keeps the folder from being moved aside and made anew, writable.
+ * config and per-worktree config, as copies taken now, an empty per-worktree config made first where git would read one.
  */
 async function readOnlyPartsOf(gitFolder: string, copies: string, isTopRepository: boolean): Promise<Mount[]> {
   const folders = isTopRepository ? ["hooks", "worktrees"] : ["hooks"];
@@ -323,13 +322,20 @@ async function readOnlyPartsOf(gitFolder: string, copies: string, isTopRepositor
   return [...folders.map((name) => atItsOwnPath(join(gitFolder, name), true)), ...configs.flat()];
 }
 
-/** A copy of the file taken now, under its own name in a folder of its own in `copies`, which the VM reads where the file is. */
+/**
+ * A copy of the file taken now, under its own name in a folder of its own in `copies`, which the VM reads where the file
+ * is. Apple's `container` would let a file mounted from its own folder take the place of that folder's mount: the
+ * workspace's itself, or the one that keeps a folder from being moved aside and made anew, writable.
+ */
 async function readOnlyCopyOf(original: string, copies: string): Promise<Mount> {
   const copy = join(copies, crypto.randomUUID(), basename(original));
   await mkdir(dirname(copy), { recursive: true, mode: 0o700 });
   await copyRegularFile(original, copy);
   return { source: copy, target: original, readOnly: true };
 }
+
+/** A held file as a copy, a held folder as it is. */
+const heldMount = async (path: string, copies: string) => ((await kindOf(path)) === "file" ? readOnlyCopyOf(path, copies) : atItsOwnPath(path, true));
 
 /** The outermost of the read-only mounts, each once: one inside another is read-only already. */
 function outermostOf(mounts: Mount[]) {
@@ -376,8 +382,8 @@ async function configuredHooksInside(workspace: string): Promise<Mount[]> {
 /**
  * The workspace at its own path, with what of it would run on this computer read-only: the config, hooks and worktrees'
  * folders of the repository, its submodules' config and hooks, the files of the workspace their config includes, the
- * config files as copies kept in `copies`, the held files and folders there are, and every folder holding them, or on
- * git's way to them, mounted too, so that none can be moved aside. A workspace with no repository of its own is not
+ * held files and folders there are, each file as a copy kept in `copies`, and every folder holding them, or on git's way
+ * to them, mounted too, so that none can be moved aside. A workspace with no repository of its own is not
  * shown to a sandbox: the agents could make one there, with a config of their own that Mirador's git would read. Nor
  * is a git worktree, whose repository lies elsewhere, nor a git folder that takes another's config with `commondir`, nor
  * a config that includes a file of the workspace the VM could make, or reaches one through a link.
@@ -391,16 +397,16 @@ export async function workspaceMounts(givenWorkspace: string, copies: string, pl
   await rm(copies, { recursive: true, force: true });
   const gitParts = (await Promise.all(gitFolders.map((folder) => readOnlyPartsOf(folder, copies, folder === gitFolder)))).flat();
   const includedFiles = await Promise.all(included.files.map((file) => readOnlyCopyOf(file, copies)));
-  const held = heldReadOnly.map((path) => atItsOwnPath(join(workspace, path), true));
+  const held = await Promise.all(heldReadOnly.map((path) => heldMount(join(workspace, path), copies)));
   const readOnly = outermostOf([...gitParts, ...includedFiles, ...(await configuredHooksInside(workspace)), ...held]);
   const parentsFirst = [atItsOwnPath(workspace, false), ...foldersHolding(workspace, readOnly, included.folders), ...readOnly].toSorted((a, b) => (a.target < b.target ? -1 : a.target > b.target ? 1 : 0));
   const reachingOut = await mountReachingOut(workspace, copies, parentsFirst);
   return reachingOut ? { refused: { kind: "part-is-link", part: reachingOut } } : { mounts: parentsFirst };
 }
 
-/** A mount's source, and what entry of the disk it was as the mount was planned; null for one that was none of its own then, nothing or reached through a link. */
-export interface StoodSource {
-  source: string;
+/** A place of the workspace mounted over, and what entry of the disk it was as that was planned; null for one that was none of its own then, nothing or reached through a link. */
+export interface StoodPlace {
+  place: string;
   entry: string | null;
 }
 
@@ -411,12 +417,12 @@ async function entryOf(path: string): Promise<string | null> {
   return stats && real === path ? `${stats.dev}:${stats.ino}` : null;
 }
 
-export const asTheyStand = (mounts: Mount[]): Promise<StoodSource[]> => Promise.all(mounts.map(async ({ source }) => ({ source, entry: await entryOf(source) })));
+export const asTheyStand = (mounts: Mount[]): Promise<StoodPlace[]> => Promise.all(mounts.map(async ({ target }) => ({ place: target, entry: await entryOf(target) })));
 
-/** The first of these sources that is no longer what it was; null where each still is. */
-export async function replacedAmong(stood: StoodSource[]): Promise<string | null> {
-  const still = await Promise.all(stood.map(async ({ source, entry }) => entry !== null && (await entryOf(source)) === entry));
-  return stood.find((_, index) => !still[index])?.source ?? null;
+/** The first of these places that is no longer what it was, whose mount a running VM may have lost; null where each still is. */
+export async function replacedAmong(stood: StoodPlace[]): Promise<string | null> {
+  const still = await Promise.all(stood.map(async ({ place, entry }) => entry !== null && (await entryOf(place)) === entry));
+  return stood.find((_, index) => !still[index])?.place ?? null;
 }
 
 /**

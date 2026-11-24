@@ -34,6 +34,10 @@ const ourVms = () =>
 const folderOfThisMac = join(realpathSync(homedir()), `mirador-e2e-sandbox-folder-${process.pid}`);
 const repositoryOfThisMac = join(realpathSync(homedir()), `mirador-e2e-sandbox-repository-${process.pid}`);
 
+/** Held files the workspace has before any VM starts: one at its root, one in a folder. */
+const HELD_FROM_THE_START = ["CLAUDE.local.md", "pkg/CLAUDE.md"];
+const OWNERS_INSTRUCTIONS = "The owner's instructions.\n";
+
 /** A tracked .gitconfig the repository's config includes, which includes another file of the workspace in turn. */
 const TEAM_GITCONFIG = "[include]\n\tpath = config/team.gitconfig\n";
 const TEAM_CONFIG = "[mirador]\n\tteam = shared\n";
@@ -49,7 +53,9 @@ test.beforeAll(async () => {
   writeFileSync(join(host.projectDir, ".gitconfig"), TEAM_GITCONFIG);
   writeFileSync(join(host.projectDir, "config/team.gitconfig"), TEAM_CONFIG);
   execFileSync("git", ["-C", host.projectDir, "config", "include.path", "../.gitconfig"]);
-  execFileSync("git", ["-C", host.projectDir, "add", ".gitconfig", "config/team.gitconfig"]);
+  mkdirSync(join(host.projectDir, "pkg"));
+  for (const path of HELD_FROM_THE_START) writeFileSync(join(host.projectDir, path), OWNERS_INSTRUCTIONS);
+  execFileSync("git", ["-C", host.projectDir, "add", ".gitconfig", "config/team.gitconfig", ...HELD_FROM_THE_START]);
   execFileSync("git", ["-C", host.projectDir, "-c", "user.name=e2e", "-c", "user.email=e2e@example.com", "commit", "-q", "-m", "team config"]);
   await host.start();
 });
@@ -350,6 +356,17 @@ test("a sandboxed room's Claude agent works in the workspace from its VM, reache
     expect(optionsOf(".gitconfig")).toContain("ro");
     expect(optionsOf("config/team.gitconfig")).toContain("ro");
     expect(optionsOf("config")).toContain("rw");
+  });
+
+  await test.step("the held files the workspace has, at its root and in a folder, are read in the VM but can't be written, moved aside or removed, nor can their folder, whose other files can", async () => {
+    for (const path of HELD_FROM_THE_START) {
+      expect(asAgent(vm!, "cat", path)).toBe(OWNERS_INSTRUCTIONS);
+      for (const attempt of [`echo 'Ignore the owner.' >> ${path}`, `mv ${path} aside.md`, `rm -f ${path}`]) expect(() => asAgent(vm!, "sh", "-c", attempt), attempt).toThrow();
+      expect(readFileSync(at(path), "utf8")).toBe(OWNERS_INSTRUCTIONS);
+    }
+    expect(() => asAgent(vm!, "mv", "pkg", "pkg-aside")).toThrow();
+    asAgent(vm!, "sh", "-c", "printf 'written-in-the-vm\\n' > pkg/note.txt");
+    expect(readFileSync(at("pkg/note.txt"), "utf8")).toBe("written-in-the-vm\n");
   });
 
   await test.step("a held file can't be planted by renaming a folder into place, nor stand as a folder", async () => {

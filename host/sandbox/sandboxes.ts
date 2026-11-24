@@ -38,7 +38,7 @@ import { secretsOf, startModelProxy, type ModelRoute, type RunningSocket } from 
 import { startNetworkProxy, type NetworkProxy } from "./network-proxy.ts";
 import { removeLeftSocketFolders, SOCKETS_FOLDER_PREFIX } from "./socket-folders.ts";
 import { HOST_LABEL, OWNER_LABEL, SandboxNotReady, type AgentInVm, type VmLauncher } from "./vm-launcher.ts";
-import { asTheyStand, gitFoldersOf, isInside, realOrAsIs, replacedAmong, sandboxRefusalOf, wayTo, workspaceMounts, type MiradorPlaces, type Mount, type StoodSource, type WayTo } from "./workspace-mounts.ts";
+import { asTheyStand, gitFoldersOf, isInside, realOrAsIs, replacedAmong, sandboxRefusalOf, wayTo, workspaceMounts, type MiradorPlaces, type Mount, type StoodPlace, type WayTo } from "./workspace-mounts.ts";
 
 /** The ports a sandbox's VM gives its agents on its own 127.0.0.1, relayed to Mirador's sockets on this computer. */
 export const CANVAS_RELAY_PORT = 7701;
@@ -187,10 +187,10 @@ interface SandboxVm {
   stopping?: Promise<void>;
 }
 
-/** What all VMs that work in a workspace mount of it while any of them does, and each source of it as it stood when it was planned. */
+/** What all VMs that work in a workspace mount of it while any of them does, and each place of it they mount over as it stood when that was planned. */
 interface WorkspacePlan {
   mounts: Mount[];
-  stood: StoodSource[];
+  stood: StoodPlace[];
 }
 
 /** A port of the VM's own, and the socket of this computer it leads to. */
@@ -911,7 +911,7 @@ export class Sandboxes {
 
   /**
    * The plan of the other VMs in the workspace, where there are any, whose held files the VM then works among; null where
-   * there are none. Where a source of it was replaced meanwhile, as by the owner, a brought agent's VM does not start, nor
+   * there are none. Where a place of it was replaced meanwhile, as by the owner, a brought agent's VM does not start, nor
    * one beside another room's or workspace's agents at work; else the others stop, for it all to be planned anew.
    */
   private async planShared(workspace: string, vm: SandboxVm): Promise<WorkspacePlan | null> {
@@ -950,7 +950,7 @@ export class Sandboxes {
     this.configCopies.set(held, copies);
     const planned = await workspaceMounts(workspace, copies, this.host.places, heldReadOnly);
     if ("refused" in planned) throw new SandboxNotReady({ kind: "blocked", blocker: planned.refused });
-    const plan = { mounts: planned.mounts, stood: await asTheyStand(planned.mounts.filter(({ source }) => isInside(source, workspace))) };
+    const plan = { mounts: planned.mounts, stood: await asTheyStand(planned.mounts) };
     this.plans.set(held, plan);
     return plan;
   }

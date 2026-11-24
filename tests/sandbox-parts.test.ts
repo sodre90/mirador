@@ -1,7 +1,7 @@
 import { afterAll, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { environmentInVm, KEY_PLACEHOLDER } from "../host/sandbox/agent-environment.ts";
 import { CONTAINER_READS, execArguments, vmIdsLabelled } from "../host/sandbox/apple-container.ts";
 import { appleContainerAvailability, appleContainerRuntime, podmanAvailability, podmanStorageIn, selinuxEnforcingAt } from "../host/sandbox/availability.ts";
@@ -218,19 +218,42 @@ test.skipIf(!RUNS_SANDBOXES)("held files and folders are read-only in the VM, ou
   const workspace = repositoryIn("held");
   mkdirSync(join(workspace, "pkg/app/.vscode"), { recursive: true });
   mkdirSync(join(workspace, ".claude/commands"), { recursive: true });
+  const heldFiles = { "CLAUDE.md": "The owner's.\n", "pkg/AGENTS.md": "The owner's here.\n" };
+  for (const [path, text] of Object.entries(heldFiles)) writeFileSync(join(workspace, path), text);
+  const copies = join(scratch, `copies-${crypto.randomUUID()}`);
 
-  const planned = await workspaceMounts(workspace, join(scratch, `copies-${crypto.randomUUID()}`), ELSEWHERE, ["CLAUDE.md", "pkg/app/.vscode", ".claude", ".claude/commands"]);
+  const planned = await workspaceMounts(workspace, copies, ELSEWHERE, ["CLAUDE.md", "pkg/AGENTS.md", "pkg/app/.vscode", ".claude", ".claude/commands"]);
 
   if ("refused" in planned) throw new Error(`refused: ${planned.refused.kind}`);
   const outsideGit = planned.mounts.filter(({ target }) => !target.startsWith(join(workspace, ".git")));
+  const aCopy = expect.stringMatching(new RegExp(`^${RegExp.escape(copies)}/[^/]+/[^/]+$`));
   expect(outsideGit).toEqual([
     { source: workspace, target: workspace, readOnly: false },
     { source: join(workspace, ".claude"), target: join(workspace, ".claude"), readOnly: true },
-    { source: join(workspace, "CLAUDE.md"), target: join(workspace, "CLAUDE.md"), readOnly: true },
+    { source: aCopy, target: join(workspace, "CLAUDE.md"), readOnly: true },
     { source: join(workspace, "pkg"), target: join(workspace, "pkg"), readOnly: false },
+    { source: aCopy, target: join(workspace, "pkg/AGENTS.md"), readOnly: true },
     { source: join(workspace, "pkg/app"), target: join(workspace, "pkg/app"), readOnly: false },
     { source: join(workspace, "pkg/app/.vscode"), target: join(workspace, "pkg/app/.vscode"), readOnly: true },
   ]);
+  const copyOf = (path: string) => outsideGit.find(({ target }) => target === join(workspace, path))!.source;
+  for (const [path, text] of Object.entries(heldFiles)) expect(readFileSync(copyOf(path), "utf8")).toBe(text);
+});
+
+test.skipIf(!RUNS_SANDBOXES)("no file the VM sees is mounted from a folder mounted too, whose mount Apple's container would leave out for it", async () => {
+  const workspace = repositoryIn("files-in-folders");
+  mkdirSync(join(workspace, "pkg"));
+  for (const path of ["CLAUDE.md", "pkg/AGENTS.md", ".gitconfig"]) writeFileSync(join(workspace, path), "");
+  for (const [name, value] of [["include.path", "../.gitconfig"], ["extensions.worktreeConfig", "true"]]) Bun.spawnSync(["git", "-C", workspace, "config", name!, value!]);
+
+  const planned = await workspaceMounts(workspace, join(scratch, `copies-${crypto.randomUUID()}`), ELSEWHERE, ["CLAUDE.md", "pkg/AGENTS.md"]);
+
+  if ("refused" in planned) throw new Error(`refused: ${planned.refused.kind}`);
+  const sources = planned.mounts.map(({ source }) => source);
+  const files = sources.filter((source) => lstatSync(source).isFile());
+  expect(files).toHaveLength(5);
+  expect(files.filter((file) => sources.includes(dirname(file)))).toEqual([]);
+  expect(new Set(files.map((file) => dirname(file))).size).toBe(files.length);
 });
 
 test("a workspace that isn't a repository of its own, a git worktree, or a git folder taking another's config is refused", async () => {

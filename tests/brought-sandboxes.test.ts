@@ -125,7 +125,7 @@ describe("the VM of an agent someone brought into a sandboxed room", () => {
     const ofWorkspace = (mounts: string[]) => mounts.filter((mount) => mount.split(":")[1]!.startsWith(workspace));
     expect(ofWorkspace(mountsIn(run!))).toEqual(ofWorkspace(mountsIn(ownRun!)));
     expect(mountsIn(run!).some((mount) => mount.startsWith(`${copies}/`) && mount.endsWith(`:${workspace}/.git/config:ro`))).toBe(true);
-    expect(mountsIn(run!)).toContain(`${workspace}/CLAUDE.md:${workspace}/CLAUDE.md:ro`);
+    expect(mountsIn(run!).some((mount) => mount.startsWith(`${copies}/`) && mount.endsWith(`:${workspace}/CLAUDE.md:ro`))).toBe(true);
     const others = mountsIn(run!).filter((mount) => !mount.split(":")[1]!.startsWith(workspace));
     expect(others.map((mount) => mount.split(":")[1])).toEqual(["/mirador/sandbox", "/run/mirador/network.sock"]);
     expect(run!.slice(-4)).toEqual(["sh", "/mirador/sandbox/room-vm.sh", "root", "7703=/run/mirador/network.sock"]);
