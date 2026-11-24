@@ -286,6 +286,8 @@ export const hints: Messages["hints"] = {
   sideChatClose: "收起旁聊。它会留在侧边栏中它的对话下面。",
   sideChatPromote: "把它变成一个独立的对话，使用主对话的模式，这样它就可以更改文件。",
   sideChatSendToMain: "把这个回答以引用形式放进对话的消息框，供你编辑后发送。",
+  canvasOfMainChat: "显示对话自己的画布。",
+  canvasOfSideChat: "显示旁聊的画布。它提出的问题会自动显示在最前面。",
   askInSideChat: "在对话旁边就这段文字提问，不打断它。",
   quoteInReply: "把这段文字以引用形式放进消息框。",
   delegatedWorking: "工作中：一个委派任务仍在运行。它的回复会作为此 Agent 的下一条消息到达。",

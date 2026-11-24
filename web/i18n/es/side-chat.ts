@@ -15,6 +15,8 @@ export const sideChat: Messages["sideChat"] = {
   close: "Cerrar chat lateral",
   openAsConversation: "Abrir como conversación",
   sendToMainChat: "Enviar a la conversación principal",
+  mainChat: "Conversación principal",
+  canvasSwitch: "Qué lienzo se muestra",
   selectionActions: "Texto seleccionado",
   askInSideChat: "Preguntar en chat lateral",
   quoteInReply: "Citar en la respuesta",

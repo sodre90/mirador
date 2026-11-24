@@ -313,6 +313,8 @@ export const hints: Messages["hints"] = {
   sideChatClose: "Guarda el chat lateral. Sigue debajo de su conversación en la barra lateral.",
   sideChatPromote: "Lo convierte en una conversación propia, en el modo de la conversación principal, para que pueda cambiar archivos.",
   sideChatSendToMain: "Pone esta respuesta en el cuadro de mensaje de la conversación, citada, para editarla y enviarla.",
+  canvasOfMainChat: "Muestra el lienzo de la propia conversación.",
+  canvasOfSideChat: "Muestra el lienzo del chat lateral. Si hace una pregunta, pasa al frente por sí sola.",
   askInSideChat: "Pregunta sobre este texto junto a la conversación, sin interrumpirla.",
   quoteInReply: "Pone este texto en el cuadro de mensaje, citado.",
   delegatedWorking: "Trabajando: una tarea delegada sigue en marcha. Su respuesta llega como el siguiente mensaje de este agente.",

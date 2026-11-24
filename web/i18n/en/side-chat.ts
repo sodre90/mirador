@@ -13,6 +13,8 @@ export const sideChat = {
   close: "Close side chat",
   openAsConversation: "Open as conversation",
   sendToMainChat: "Send to main chat",
+  mainChat: "Main chat",
+  canvasSwitch: "Whose canvas is shown",
   selectionActions: "Selected text",
   askInSideChat: "Ask in side chat",
   quoteInReply: "Quote in reply",

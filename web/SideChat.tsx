@@ -13,7 +13,9 @@ import { setSideChatSize, useSideChatSize } from "./paneLayouts.ts";
 import { shortcutKeys } from "./shortcuts.ts";
 import { shownTitle } from "./shown-title.ts";
 import { addToComposer, askInSideChat, closeSideChat, dropQuote, firstMessage, startSideChat } from "./side-chats.ts";
+import { questionWaitsOn } from "./side-chat-canvas.ts";
 import { Splitter } from "./Splitter.tsx";
+import type { OpenConversation } from "./state.ts";
 import { useTypingAidAttributes } from "./typing-aids.ts";
 
 const words = t.sideChat;
@@ -131,6 +133,27 @@ function AccessChip({ sideChat, switchedOn, parent }: { sideChat: SideChatLabell
         ))}
       </select>
     </span>
+  );
+}
+
+/** Above the canvas, once a side chat has something on its own: shows the one canvas or the other. */
+export function SideChatCanvasSwitch({ main, side, sideChatInFront, onPick }: { main: OpenConversation; side: OpenConversation; sideChatInFront: boolean; onPick: (sideChat: boolean) => void }) {
+  const canvases = [
+    { label: words.mainChat, hint: hints.canvasOfMainChat, sideChat: false, waits: questionWaitsOn(main) },
+    { label: words.label, hint: hints.canvasOfSideChat, sideChat: true, waits: questionWaitsOn(side) },
+  ];
+  return (
+    <div className="canvas-switch" role="group" aria-label={words.canvasSwitch}>
+      {canvases.map(({ label, hint, sideChat, waits }) => {
+        const inFront = sideChat === sideChatInFront;
+        return (
+          <button key={label} type="button" aria-pressed={inFront} data-hint={hint} onClick={() => onPick(sideChat)}>
+            {label}
+            {waits && !inFront && <span className="canvas-outcome status-waiting">{t.canvas.outcome.needsYourAnswer}</span>}
+          </button>
+        );
+      })}
+    </div>
   );
 }
 

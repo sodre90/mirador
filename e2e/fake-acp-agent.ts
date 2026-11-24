@@ -20,9 +20,10 @@ import { END_OF_OTHERS_WORDS, ROOM_MESSAGES_HEADING } from "../shared/rooms.ts";
  * with the agent process's environment variable NAME, or nothing when it isn't set; no other command fills them in.
  * `{"usage": "<used> <size> [costUsd]"}` reports that usage as `USAGE ` does, and ends the turn with those tokens as
  * the turn's own, so a run's totals show them; `{"tokens": "<input> <output> <cachedRead> <cachedWrite>"}` ends it with
- * those as the turn's own instead, and `{"pause": "<ms>"}` takes that long before the next step. `SAY `
- * followed by text answers with that text, as markdown, `TITLE ` followed by text titles the session so, as agents
- * rename a conversation from its work, and answers,
+ * those as the turn's own instead, and `{"pause": "<ms>"}` takes that long before the next step. `CANVAS `, a canvas
+ * tool's name and its JSON arguments call that tool of the canvas server the session was given, and answer with its
+ * result. `SAY ` followed by text answers with that text, as markdown, `TITLE ` followed by text titles the session so,
+ * as agents rename a conversation from its work, and answers,
  * `USAGE ` followed by the tokens used, the window's size and, if given, a cost in US dollars reports that usage,
  * and `/compact` reports the context shrunk to a tenth of the window last reported, as an agent's summary leaves it,
  * and `FAIL ` followed by text fails the turn with that text as its error. `SUBAGENT ASKS ` followed by a title starts a
@@ -50,8 +51,7 @@ import { END_OF_OTHERS_WORDS, ROOM_MESSAGES_HEADING } from "../shared/rooms.ts";
  * completes with a many-line command as its description. The
  * `_session/async_task/stop` request stops one and says so, logging it.
  * A room's message reaching it is answered with a look through the room, then the words after the last `SAY ` in the
- * last line, the message it is asked. `CANVAS ` there, a canvas tool's name and its JSON arguments call that tool of
- * the canvas server the session was given, and answer with its result. `PINGPONG ` and two agents' names, another's
+ * last line, the message it is asked. `CANVAS ` works there too. `PINGPONG ` and two agents' names, another's
  * and its own, tag the other with room_tag and answer `PINGPONG ` with the names swapped, so two agents tag each other
  * for as long as the room lets them. `ASK ` there and a JSON array of steps asks permission for one tool after another,
  * each once the one before was answered: `{"kind": toolKind, "title": text}` with a `"command"` it would run or a
@@ -456,10 +456,7 @@ async function answerAsked(client: acp.AgentContext, sessionId: string, asked: s
   while (waitFor && !existsSync(waitFor)) await Bun.sleep(50);
   const after = (word: string) => (asked.includes(word) ? asked.slice(asked.lastIndexOf(word) + word.length) : null);
   const canvasCall = after("CANVAS ");
-  if (canvasCall !== null) {
-    const [tool, ...input] = canvasCall.split(" ");
-    return sayText(client, sessionId, await callCanvasTool(sessionId, tool!, JSON.parse(input.join(" "))));
-  }
+  if (canvasCall !== null) return sayCanvasAnswer(client, sessionId, canvasCall);
   const steps = after("ASK ");
   if (steps !== null) return askOneByOne(client, sessionId, JSON.parse(steps));
   const pingPong = after("PINGPONG ");
@@ -523,6 +520,11 @@ async function callCanvasTool(sessionId: string, name: string, input: unknown) {
   const event = body.split("\n").find((line) => line.startsWith("data: "));
   const reply = JSON.parse(event ? event.slice("data: ".length) : body) as { result?: { content: { text: string }[] }; error?: { message: string } };
   return reply.result ? reply.result.content.map(({ text }) => text).join("\n") : `The canvas server refused: ${reply.error?.message}`;
+}
+
+async function sayCanvasAnswer(client: acp.AgentContext, sessionId: string, call: string) {
+  const [tool, ...input] = call.split(" ");
+  return sayText(client, sessionId, await callCanvasTool(sessionId, tool!, JSON.parse(input.join(" "))));
 }
 
 async function runTools(client: acp.AgentContext, sessionId: string, tools: { title: string; kind: acp.ToolKind; rawInput: unknown }[]) {
@@ -651,6 +653,7 @@ acp
     return { sessionId };
   })
   .onRequest(acp.methods.agent.session.load, async (ctx) => {
+    keepCanvasServer(ctx.params.sessionId, ctx.params.mcpServers);
     if (forkedSessions.has(ctx.params.sessionId)) return offersModes ? { configOptions: offeredOptions(ctx.params.sessionId) } : {};
     if (ctx.params.sessionId !== history?.sessionId) throw acp.RequestError.internalError(undefined, "No such session");
     for (const update of history.updates) await ctx.client.notify(acp.methods.client.session.update, { sessionId: history.sessionId, update });
@@ -697,6 +700,7 @@ acp
       return reportUsage(ctx.client, ctx.params.sessionId, size / 10, size);
     }
     if (startsWith(prompt, "SAY ")) return sayText(ctx.client, ctx.params.sessionId, text.slice("SAY ".length));
+    if (startsWith(prompt, "CANVAS ")) return sayCanvasAnswer(ctx.client, ctx.params.sessionId, text.slice("CANVAS ".length));
     if (startsWith(prompt, "TITLE ")) return titleSession(ctx.client, ctx.params.sessionId, text.slice("TITLE ".length));
     if (startsWith(prompt, "CHOICES")) return sayChoices(ctx.client, ctx.params.sessionId);
     if (startsWith(prompt, "FOLDER")) return sayText(ctx.client, ctx.params.sessionId, `Working in ${sessionFolders.get(ctx.params.sessionId)}`);

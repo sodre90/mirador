@@ -1,6 +1,6 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 import { addWorkspace, clickWorkspaceButton, createProfile, openSettings, sendMessage, signIn, startConversation, waitForTurnToEnd, workspaceCard } from "./helpers.ts";
 import { TestHost, writeBunProgram } from "./test-host.ts";
 import type { ClientMessage } from "../shared/protocol.ts";
@@ -398,6 +398,83 @@ test("a side chat is switched to change files and back while it is open, and its
     await askWithBtw("CHOICES as chosen beforehand");
     await expect(sideAnswers().last()).toContainText("mode default");
   });
+});
+
+const canvas = () => page.locator(".canvas-panel:visible");
+const canvasPageHeading = () => page.frameLocator(".canvas-panel:visible .canvas-frame.show iframe").locator("h1");
+const canvasSwitch = () => page.locator(".canvas-switch:visible");
+const switchTo = (name: "Main chat" | "Side chat") => canvasSwitch().getByRole("button", { name });
+const showPage = (title: string) => `CANVAS show ${JSON.stringify({ title, html: `<h1>${title}</h1>` })}`;
+const askOnCanvas = (question: string) => `CANVAS ask ${JSON.stringify({ question, options: [{ label: "Upload it" }, { label: "Leave it" }] })}`;
+
+async function sendIn(chat: Locator, text: string) {
+  const composer = chat.locator(".composer textarea");
+  await composer.fill(text);
+  await composer.press("Enter");
+  await expect(composer).toHaveValue("");
+}
+
+async function startWithMainPageAndSideChat() {
+  const mainId = await startOn("Forks");
+  await sendMessage(page, showPage("Main page"));
+  await expect(canvasPageHeading()).toHaveText("Main page");
+  await waitForTurnToEnd(page);
+  await askWithBtw("SAY ready");
+  await expect(sideAnswers().last()).toHaveText("ready");
+  return mainId;
+}
+
+test("what a side chat asks and shows comes up on the canvas, which goes back to the conversation's once its question is answered", async () => {
+  const mainId = await startWithMainPageAndSideChat();
+  const question = canvas().locator(".ask h3");
+  await expect(canvasSwitch(), "a side chat with nothing on its canvas leaves the pane to its conversation").toHaveCount(0);
+
+  await sendIn(sideChat(), askOnCanvas("Replace the guide?"));
+  await expect(question).toHaveText("Replace the guide?");
+  await expect(switchTo("Side chat")).toHaveAttribute("aria-pressed", "true");
+
+  await test.step("the user looks at the conversation's canvas and back, and is told that the question still waits", async () => {
+    await switchTo("Main chat").click();
+    await expect(canvasPageHeading()).toHaveText("Main page");
+    await expect(switchTo("Side chat")).toContainText("needs your answer");
+    await switchTo("Side chat").click();
+    await expect(question).toHaveText("Replace the guide?");
+  });
+
+  await test.step("a page the conversation shows meanwhile leaves the question in front", async () => {
+    await sendIn(mainChat(), showPage("Newer page"));
+    await waitForTurnToEnd(page);
+    await expect(question).toHaveText("Replace the guide?");
+  });
+
+  await test.step("its answer goes to the side chat's agent, and the conversation's newer page takes the canvas", async () => {
+    await canvas().getByRole("radio", { name: "Upload it" }).check();
+    await canvas().getByRole("button", { name: "Submit" }).click();
+    await expect(sideAnswers().last()).toContainText("Upload it");
+    await expect(mainChat().locator(".timeline")).not.toContainText("Upload it");
+    await expect(canvasPageHeading()).toHaveText("Newer page");
+    await expect(switchTo("Main chat")).toHaveAttribute("aria-pressed", "true");
+  });
+
+  await test.step("a page it shows comes up too, until the side chat is put away, and again once it is back", async () => {
+    await sendIn(sideChat(), showPage("Side page"));
+    await expect(canvasPageHeading()).toHaveText("Side page");
+    await sideChat().getByRole("button", { name: "Close side chat" }).click();
+    await expect(canvasPageHeading()).toHaveText("Newer page");
+    await expect(canvasSwitch()).toHaveCount(0);
+    const row = page.locator(".workspace li.side-chat-row", { hasText: "SAY ready" });
+    if (!(await row.isVisible())) await sidebarRow(mainId).locator(".delegated-toggle").click();
+    await row.click();
+    await expect(canvasPageHeading()).toHaveText("Side page");
+  });
+});
+
+test("a hidden canvas comes back with what a side chat asks", async () => {
+  await startWithMainPageAndSideChat();
+  await canvas().locator(".canvas-hide").click();
+  await expect(canvas()).toHaveCount(0);
+  await sendIn(sideChat(), askOnCanvas("Leave it as it is?"));
+  await expect(canvas().locator(".ask h3")).toHaveText("Leave it as it is?");
 });
 
 test("there is nothing to switch beside an agent that can't be held to reading", async () => {

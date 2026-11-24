@@ -315,6 +315,8 @@ export const hints: Messages["hints"] = {
   sideChatClose: "Legt den Nebenchat weg. Er bleibt in der Seitenleiste unter seiner Unterhaltung.",
   sideChatPromote: "Macht daraus eine eigene Unterhaltung im Modus der Hauptunterhaltung, damit sie Dateien ändern kann.",
   sideChatSendToMain: "Setzt diese Antwort zitiert ins Nachrichtenfeld der Unterhaltung, zum Bearbeiten und Senden.",
+  canvasOfMainChat: "Zeige den Canvas der Unterhaltung selbst.",
+  canvasOfSideChat: "Zeige den Canvas des Nebenchats. Stellt er eine Frage, kommt sie von selbst nach vorn.",
   askInSideChat: "Frag zu diesem Text neben der Unterhaltung, ohne sie zu unterbrechen.",
   quoteInReply: "Setzt diesen Text zitiert ins Nachrichtenfeld.",
   delegatedWorking: "Arbeitet: Eine delegierte Aufgabe läuft noch. Ihre Antwort kommt als nächste Nachricht dieses Agenten.",

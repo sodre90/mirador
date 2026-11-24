@@ -10,9 +10,10 @@ import { groupHolds, groupsWithPaths, shownGroupOf, sidebarItems } from "../shar
 import { countWaiting, roomsWaitingFor } from "../shared/waiting.ts";
 import { isMuted } from "../shared/room-reading.ts";
 import { canFork, canvasPageHasFocus, findInCanvasPage, findInOpenConversation, focusPane, forkConversation, startConversationIn, startRenamingOpenConversation } from "./actions.ts";
-import { bringsHiddenCanvasBack, latestCanvasNews, type CanvasNews } from "./canvas-news.ts";
+import { bringsHiddenCanvasBack, latestCanvasNews, newerNews, type CanvasNews } from "./canvas-news.ts";
 import { ChatPanel } from "./Chat.tsx";
-import { ConversationWithSide, NewSideChat, SelectionActions, SideChatColumn, timelineSelection } from "./SideChat.tsx";
+import { ConversationWithSide, NewSideChat, SelectionActions, SideChatCanvasSwitch, SideChatColumn, timelineSelection } from "./SideChat.tsx";
+import { useSideChatCanvas } from "./side-chat-canvas.ts";
 import { askInSideChat, closeSideChat, forgetSideChatsOfDeleted, newSideChatMayChangeFiles, selectingBeside, toggleSideChat, useSideChatsShown, type SideChatShown } from "./side-chats.ts";
 import { connection, type ConnectionStatus } from "./connection.ts";
 import { useClosesAsDialog } from "./desktop-close.ts";
@@ -395,6 +396,9 @@ function useShowCanvasForNews(news: CanvasNews | undefined, layout: PaneLayout, 
 /** Moving a drawn conversation within the page would lose its scroll position, so they keep one order whichever is selected. */
 const inFixedOrder = (kept: OpenConversation[]) => kept.toSorted((a, b) => a.conversationId.localeCompare(b.conversationId));
 
+/** The kept conversations and the side chats beside them; a side chat just opened as a conversation is in both for a moment. */
+const withSideChats = ({ kept, sideChats }: AppState) => [...kept, ...sideChats.filter(({ conversationId }) => !kept.some((each) => each.conversationId === conversationId))];
+
 /** React still redraws hidden content as its props change; a hidden conversation instead catches up on what its agent did in one go when shown. */
 const RedrawnOnlyWhenShown = memo(
   ({ children }: { shown: boolean; children: ReactNode }) => children,
@@ -482,9 +486,19 @@ export function App() {
   const canvasInView = inView(layout, "canvas");
   const terminalInView = inView(layout, "terminals");
   const open = selectedOpen(state);
+  const sideChatsShown = useSideChatsShown();
+  const sideChatIdBeside = (conversationId: string) => {
+    const side = sideChatsShown[conversationId];
+    return side && "sideChatId" in side ? side.sideChatId : null;
+  };
+  const sideChatIdBesideSelected = state.selectedConversationId ? sideChatIdBeside(state.selectedConversationId) : null;
+  const openSideChat = state.sideChats.find(({ conversationId }) => conversationId === sideChatIdBesideSelected) ?? null;
+  const sideChatCanvas = useSideChatCanvas(open, openSideChat, state.openApps);
+  const canvasInFrontId = sideChatCanvas?.inFront ? sideChatIdBesideSelected : state.selectedConversationId;
+  const newsOn = ({ canvas, conversationId }: OpenConversation) => latestCanvasNews(canvas, state.openApps, conversationId);
   const canvasNews =
     open && state.selectedConversationId
-      ? latestCanvasNews(open.canvas, state.openApps, state.selectedConversationId)
+      ? newerNews(newsOn(open), openSideChat ? newsOn(openSideChat) : undefined)
       : state.roomTimeline
         ? latestCanvasNews(state.roomTimeline.canvas, [], state.roomTimeline.roomId)
         : undefined;
@@ -601,13 +615,7 @@ export function App() {
     return unsubscribe;
   }, []);
 
-  const sideChatsShown = useSideChatsShown();
-  const sideChatsBesideKept = state.kept
-    .flatMap(({ conversationId }) => {
-      const side = sideChatsShown[conversationId];
-      return side && "sideChatId" in side ? [side.sideChatId] : [];
-    })
-    .join(" ");
+  const sideChatsBesideKept = state.kept.flatMap(({ conversationId }) => sideChatIdBeside(conversationId) ?? []).join(" ");
   useEffect(() => dispatch({ type: "keep-side-chats", conversationIds: sideChatsBesideKept ? sideChatsBesideKept.split(" ") : [] }), [sideChatsBesideKept]);
   useEffect(() => {
     if (state.hostRunId !== null) forgetSideChatsOfDeleted(state.conversations);
@@ -638,10 +646,9 @@ export function App() {
     [state.machines],
   );
   const openRoom = useCallback((roomId: string, machineId?: string) => (machineId ? openJoinedRoom(machineId, roomId) : dispatch({ type: "select-room", roomId })), [machines]);
-  const sideChatShownBesideSelected = state.selectedConversationId ? sideChatsShown[state.selectedConversationId] : undefined;
   useSystemNotifications(
     shownMachine ? null : state.selectedConversationId,
-    !shownMachine && sideChatShownBesideSelected && "sideChatId" in sideChatShownBesideSelected ? sideChatShownBesideSelected.sideChatId : null,
+    shownMachine ? null : sideChatIdBesideSelected,
     shownMachine ? null : state.selectedRoomId,
     status === "open",
     openConversation,
@@ -716,9 +723,10 @@ export function App() {
   const keptCanvases = (
     <OpensIn.Provider value={state.editor.opensIn}>
       <KnownConversations.Provider value={state.conversations}>
+        {showCanvas && sideChatCanvas && <SideChatCanvasSwitch main={open} side={openSideChat!} sideChatInFront={sideChatCanvas.inFront} onPick={sideChatCanvas.pick} />}
         <KeptCanvases
-          kept={inFixedOrder(state.kept)}
-          shownId={showCanvas ? conversation!.id : null}
+          kept={inFixedOrder(withSideChats(state))}
+          shownId={showCanvas ? canvasInFrontId : null}
           workspaceOf={(conversationId) => state.conversations.find(({ id }) => id === conversationId)?.workspaceId}
           workingCopyOf={(conversationId) => {
             const each = state.conversations.find(({ id }) => id === conversationId);
@@ -794,7 +802,7 @@ export function App() {
           ownerId={state.ownerId}
           onManageTemplates={() => dispatch({ type: "open-overlay", overlay: { kind: "settings", page: "conversations" } })}
           open={opened}
-          canvasVisible={false}
+          canvasVisible={canvasInView && canvasInFrontId === sideChat.id}
           onFork={() => {}}
           reminderMorning={state.reminderMorning}
           dispatch={dispatch}
@@ -838,7 +846,7 @@ export function App() {
                           ownerId={state.ownerId}
                           onManageTemplates={() => dispatch({ type: "open-overlay", overlay: { kind: "settings", page: "conversations" } })}
                           open={kept}
-                          canvasVisible={canvasInView}
+                          canvasVisible={canvasInView && canvasInFrontId === keptConversation.id}
                           onFork={(throughTurnSeq) => forkConversation(keptConversation, dispatch, throughTurnSeq)}
                           reminderMorning={state.reminderMorning}
                           dispatch={dispatch}

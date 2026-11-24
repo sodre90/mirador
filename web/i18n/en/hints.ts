@@ -288,6 +288,8 @@ export const hints = {
   sideChatClose: "Put the side chat away. It stays under its conversation in the sidebar.",
   sideChatPromote: "Make it a conversation of its own, in the main conversation's mode, so it can change files.",
   sideChatSendToMain: "Put this answer in the conversation's message box, quoted, to edit and send.",
+  canvasOfMainChat: "Show the conversation's own canvas.",
+  canvasOfSideChat: "Show the side chat's canvas. A question it asks comes to the front by itself.",
   askInSideChat: "Ask about this text beside the conversation, without interrupting it.",
   quoteInReply: "Put this text in the message box, quoted.",
   delegatedWorking: "Working: a delegated task is still running. Its reply comes as this agent's next message.",

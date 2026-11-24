@@ -305,6 +305,8 @@ export const hints: Messages["hints"] = {
   sideChatClose: "A mellékszál elrakása. Az oldalsávban a beszélgetése alatt marad.",
   sideChatPromote: "Önálló beszélgetés lesz belőle, a fő beszélgetés módjában, így fájlokat is módosíthat.",
   sideChatSendToMain: "Ez a válasz idézetként a beszélgetés üzenetmezőjébe kerül, hogy szerkeszd és elküldd.",
+  canvasOfMainChat: "A beszélgetés saját vásznának megjelenítése.",
+  canvasOfSideChat: "A mellékszál vásznának megjelenítése. Ha kérdez, a kérdése magától előtérbe kerül.",
   askInSideChat: "Kérdezz erről a szövegről a beszélgetés mellett, anélkül hogy megszakítanád.",
   quoteInReply: "Ez a szöveg idézetként az üzenetmezőbe kerül.",
   delegatedWorking: "Dolgozik: egy átadott feladat még fut. A válasza ennek az ágensnek a következő üzeneteként érkezik.",

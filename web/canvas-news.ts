@@ -11,13 +11,21 @@ export interface CanvasNews {
 
 const isNews = (item: CanvasItem) => !(item.kind === "ask" && item.status !== "waiting") && !(item.kind === "plugin" && item.dismissed);
 
-export function latestCanvasNews(items: CanvasItem[], openApps: OpenApp[], conversationId: string): CanvasNews | undefined {
-  const fromItems = items.filter(isNews).map(({ id, createdAt }) => ({ key: id, at: createdAt }));
-  const fromApps = openApps.flatMap(({ conversationId: shownIn, workspaceId, app, shownAt }) =>
+const arrivalsOf = (items: CanvasItem[], openApps: OpenApp[], conversationId: string): CanvasNews[] => [
+  ...items.map(({ id, createdAt }) => ({ key: id, at: createdAt })),
+  ...openApps.flatMap(({ conversationId: shownIn, workspaceId, app, shownAt }) =>
     shownIn === conversationId && shownAt !== undefined ? [{ key: `${workspaceId}:${app}@${shownAt}`, at: shownAt }] : [],
-  );
-  return [...fromItems, ...fromApps].toSorted((a, b) => b.at - a.at)[0];
-}
+  ),
+];
+
+const newestOf = (arrivals: CanvasNews[]): CanvasNews | undefined => arrivals.toSorted((a, b) => b.at - a.at)[0];
+
+/** The latest thing to come on the canvas, also one that is no news any more, such as an answered question. */
+export const latestCanvasArrival = (items: CanvasItem[], openApps: OpenApp[], conversationId: string) => newestOf(arrivalsOf(items, openApps, conversationId));
+
+export const latestCanvasNews = (items: CanvasItem[], openApps: OpenApp[], conversationId: string) => newestOf(arrivalsOf(items.filter(isNews), openApps, conversationId));
+
+export const newerNews = (one: CanvasNews | undefined, other: CanvasNews | undefined) => newestOf([one, other].filter((news) => news !== undefined));
 
 /**
  * News newer than what the canvas had when the user hid it shows it again, there and then or when they come back to the

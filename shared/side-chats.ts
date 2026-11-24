@@ -128,7 +128,7 @@ export function sideChatBrief(handover: string | null, mayChangeFiles: boolean):
     context,
     "The main conversation goes on without you, and nothing said here reaches it unless the user sends it there.",
     mayChangeFiles ? CHANGING_FILES : READING_ONLY,
-    "Answer here in text: a side chat shows no canvas, so pages you show and questions you ask there go unseen.",
+    "This side chat has a canvas of its own: the user sees the pages you show and the questions you ask there beside it.",
     `</${SIDE_CHAT_BRIEF_TAG}>`,
   ].join("\n");
 }

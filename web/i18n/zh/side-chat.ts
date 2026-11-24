@@ -15,6 +15,8 @@ export const sideChat: Messages["sideChat"] = {
   close: "关闭旁聊",
   openAsConversation: "作为对话打开",
   sendToMainChat: "发送到主对话",
+  mainChat: "主对话",
+  canvasSwitch: "显示哪个画布",
   selectionActions: "选中的文字",
   askInSideChat: "在旁聊中提问",
   quoteInReply: "在回复中引用",

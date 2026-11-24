@@ -15,6 +15,8 @@ export const sideChat: Messages["sideChat"] = {
   close: "Nebenchat schließen",
   openAsConversation: "Als Unterhaltung öffnen",
   sendToMainChat: "An Hauptunterhaltung senden",
+  mainChat: "Hauptunterhaltung",
+  canvasSwitch: "Welcher Canvas gezeigt wird",
   selectionActions: "Markierter Text",
   askInSideChat: "Im Nebenchat fragen",
   quoteInReply: "In Antwort zitieren",

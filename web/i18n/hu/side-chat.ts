@@ -15,6 +15,8 @@ export const sideChat: Messages["sideChat"] = {
   close: "Mellékszál bezárása",
   openAsConversation: "Megnyitás beszélgetésként",
   sendToMainChat: "Küldés a fő beszélgetésbe",
+  mainChat: "Fő beszélgetés",
+  canvasSwitch: "Melyik vászon látszik",
   selectionActions: "Kijelölt szöveg",
   askInSideChat: "Kérdezés mellékszálban",
   quoteInReply: "Idézés a válaszban",
