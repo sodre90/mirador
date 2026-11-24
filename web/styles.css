@@ -3162,6 +3162,26 @@ input.picker-search {
   width: min(520px, 100%);
 }
 
+.modal.rename-machine {
+  width: min(420px, 100%);
+}
+
+.modal.rename-machine form {
+  display: grid;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.modal.rename-machine label {
+  display: grid;
+  gap: 4px;
+}
+
+.modal.rename-machine .actions {
+  display: flex;
+  gap: 8px;
+}
+
 .modal.worktrees fieldset {
   display: flex;
   flex-direction: column;

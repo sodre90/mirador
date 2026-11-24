@@ -219,6 +219,7 @@ const EVERY_CLIENT_MESSAGE: Record<ClientMessage["type"], true> = {
   "voice.engine.remove": true,
   "voice.engine.remove-model": true,
   "machine.add": true,
+  "machine.rename": true,
   "machine.remove": true,
   "machine.set-color": true,
   "machine.hide": true,

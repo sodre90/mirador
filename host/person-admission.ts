@@ -274,6 +274,7 @@ const admissions: { [K in ClientMessage["type"]]: K extends PersonMessageType ? 
   "voice.engine.remove": OWNER_ONLY,
   "voice.engine.remove-model": OWNER_ONLY,
   "machine.add": OWNER_ONLY,
+  "machine.rename": OWNER_ONLY,
   "machine.remove": OWNER_ONLY,
   "machine.set-color": OWNER_ONLY,
   "machine.hide": OWNER_ONLY,

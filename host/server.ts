@@ -798,6 +798,14 @@ export function startServer(services: HostServices) {
     broadcastMachines();
   }
 
+  /** What this computer calls the machine in its rail and lists; the machine's own Mirador keeps its own name. */
+  function renameMachine(machineId: string, name: string) {
+    const shown = name.trim().slice(0, LONGEST_MACHINE_NAME);
+    if (!shown || !store.findMachine(machineId)) return;
+    store.setMachineName(machineId, shown);
+    broadcastMachines();
+  }
+
   /** It stays out of the rail too, where it would come back while another machine has joined it. */
   function removeMachine(machineId: string) {
     const machine = store.findMachine(machineId);
@@ -2149,6 +2157,8 @@ export function startServer(services: HostServices) {
         const added = await addMachine(message.name, message.address).catch((error) => ({ machineId: null, roomId: null, waiting: false, ...problemFieldsOf(error, errorMessage(error)) }));
         return reply({ type: "machine.added", requestId: message.requestId, ...added });
       }
+      case "machine.rename":
+        return renameMachine(message.machineId, message.name);
       case "machine.remove":
         return removeMachine(message.machineId);
       case "machine.set-color":

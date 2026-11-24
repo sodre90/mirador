@@ -492,6 +492,14 @@ describe("Store", () => {
     expect(store.listMachines()[0]?.color).toBeNull();
   });
 
+  test("keeps the name this computer gives a machine, and lists it by that name", () => {
+    const store = new Store(":memory:");
+    store.insertMachine({ id: "m1", name: "Home server", origin: "https://home-server.example", createdAt: 1 });
+    store.setMachineName("m1", "Studio");
+    expect(store.findMachine("m1")?.name).toBe("Studio");
+    expect(store.listMachines()[0]?.name).toBe("Studio");
+  });
+
   test("keeps the id a machine's Mirador goes by, once this host has heard it", () => {
     const store = new Store(":memory:");
     store.insertMachine({ id: "m1", name: "Home server", origin: "https://home-server.example", createdAt: 1 });

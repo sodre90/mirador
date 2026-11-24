@@ -11,6 +11,7 @@ import { t } from "./i18n/index.ts";
 import { machineRemovalAsked, removeMachine } from "./machine-removal.ts";
 import { colorAttributes, reachedAt, seenPart } from "./MachineRail.tsx";
 import { NameToJoinWith, useNameToJoinWith, type JoiningPerson } from "./name-to-join.tsx";
+import { RenameMachineDialog } from "./RenameMachineDialog.tsx";
 
 /** Where this host cannot show the machine (a page opened from another device), a tab of its own, used again next time. */
 export function openMachine(origin: string, conversationId: string | null = null) {
@@ -98,6 +99,7 @@ function AddMachine({ machines, person, onJoined }: { machines: Machine[]; perso
 
 function MachineRow({ machine, onOpen }: { machine: Machine; onOpen: (machine: Machine) => void }) {
   const [pickingColor, setPickingColor] = useState(false);
+  const [renaming, setRenaming] = useState(false);
   const choose = (color: Pastel | null) => {
     connection.send({ type: "machine.set-color", machineId: machine.id, color });
     setPickingColor(false);
@@ -121,10 +123,14 @@ function MachineRow({ machine, onOpen }: { machine: Machine; onOpen: (machine: M
       <button type="button" onClick={() => onOpen(machine)}>
         {words.open}
       </button>
+      <button type="button" onClick={() => setRenaming(true)}>
+        {words.rename}
+      </button>
       <ConfirmButton className="danger" {...machineRemovalAsked(machine)} onConfirm={() => removeMachine(machine.id)}>
         {words.remove}
       </ConfirmButton>
       {pickingColor && <ColorSwatches label={words.colourOf(machine.name)} chosen={machine.color} onChoose={choose} />}
+      {renaming && <RenameMachineDialog machine={machine} onClose={() => setRenaming(false)} />}
     </li>
   );
 }

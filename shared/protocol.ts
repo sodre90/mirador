@@ -459,6 +459,7 @@ export type ClientMessage =
   | { type: "voice.engine.remove-model"; model: string }
   /** address is what the user typed or pasted: a name on the network, an address, or an invite link; name may be empty. */
   | { type: "machine.add"; requestId: string; name: string; address: string }
+  | { type: "machine.rename"; machineId: string; name: string }
   | { type: "machine.remove"; machineId: string }
   | { type: "machine.set-color"; machineId: string; color: Pastel | null }
   /** Keeps a machine one of this computer's machines has joined out of the rail; machine.show-again brings it back. */

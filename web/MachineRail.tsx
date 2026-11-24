@@ -16,6 +16,7 @@ import { machineRemovalAsked, removeMachine } from "./machine-removal.ts";
 import { giveMessageBoxToMachine, useFormatBar, useMessageBox } from "./message-box.ts";
 import { NameToJoinWith, useNameToJoinWith, type JoiningPerson } from "./name-to-join.tsx";
 import { pastelVariables } from "./pastels.ts";
+import { RenameMachineDialog } from "./RenameMachineDialog.tsx";
 import { giveThemeToMachine } from "./theme.ts";
 import { NAME_FIELD_ATTRIBUTES } from "./typing-aids.ts";
 import { mostUrgentTone } from "./waiting.ts";
@@ -147,6 +148,7 @@ function useMenuAtPointer() {
 
 function MachineButton({ machine, status, shown, onShow }: { machine: Machine; status: MachineStatus | undefined; shown: boolean; onShow: () => void }) {
   const { menuAt, openMenu, closeMenu } = useMenuAtPointer();
+  const [renaming, setRenaming] = useState(false);
   const away = !machine.joined || status?.reachable === false;
   return (
     <>
@@ -169,11 +171,13 @@ function MachineButton({ machine, status, shown, onShow }: { machine: Machine; s
           at={menuAt}
           entries={[
             { label: words.open, icon: "open", onChoose: onShow },
+            { label: words.rename, icon: "pencil", onChoose: () => setRenaming(true) },
             { label: words.remove, icon: "trash", asked: machineRemovalAsked(machine), onChoose: () => removeMachine(machine.id) },
           ]}
           onClose={closeMenu}
         />
       )}
+      {renaming && <RenameMachineDialog machine={machine} onClose={() => setRenaming(false)} />}
     </>
   );
 }

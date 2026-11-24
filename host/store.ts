@@ -2398,6 +2398,11 @@ export class Store {
     this.db.query("UPDATE machines SET color = ? WHERE id = ?").run(color, id);
   }
 
+  /** What this computer calls the machine, as its rail and lists show it; the machine itself keeps its own name. */
+  setMachineName(id: string, name: string) {
+    this.db.query("UPDATE machines SET name = ? WHERE id = ?").run(name, id);
+  }
+
   deleteMachine(id: string) {
     this.db.query("DELETE FROM machines WHERE id = ?").run(id);
   }
