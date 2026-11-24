@@ -2,7 +2,7 @@ import type { PlanEntry } from "@agentclientprotocol/sdk/unstable";
 import { Fragment, createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type KeyboardEvent, type RefObject } from "react";
 import { buildCanvasDocument, canvasHiddenMessage, canvasPageMessage, canvasRoomMessage, canvasShellUrl, canvasTextScaleMessage, canvasThemeMessage, isCanvasFrameMessage, type CanvasFrameMessage, type CanvasPagePolicy } from "../shared/canvas-document.ts";
 import { appKey, type AppDocumentState, type InstalledApp, type OpenApp } from "../shared/apps.ts";
-import { answersSummary, answerTo, isOwnAnswer, questionsOf } from "../shared/ask.ts";
+import { answersSummary, answerTo, isOwnAnswer, ownTextIn, questionsOf, tickedLabelsIn, TICKED_JOINER } from "../shared/ask.ts";
 import type { AskItem, AskQuestion, CanvasItem, ShowItem } from "../shared/model.ts";
 import { AppView } from "./AppView.tsx";
 import { BarMenu, type BarMenuEntry } from "./BarMenu.tsx";
@@ -278,12 +278,20 @@ const SOMETHING_ELSE = Symbol("something else");
 
 interface AskDraft {
   choice: string | typeof SOMETHING_ELSE | null;
+  /** For a question that takes several: the labels ticked, and whether the user's own answer is ticked too. */
+  ticked: string[];
+  otherTicked: boolean;
   other: string;
   note: string;
 }
 
-const emptyDraft = (): AskDraft => ({ choice: null, other: "", note: "" });
-const draftAnswer = ({ choice, other }: AskDraft) => (choice === SOMETHING_ELSE ? other.trim() : choice) || null;
+const emptyDraft = (): AskDraft => ({ choice: null, ticked: [], otherTicked: false, other: "", note: "" });
+function draftAnswer(draft: AskDraft, question: AskQuestion) {
+  if (!question.multiple) return (draft.choice === SOMETHING_ELSE ? draft.other.trim() : draft.choice) || null;
+  const own = draft.otherTicked ? draft.other.trim() : "";
+  const lines = [...question.options.map(({ label }) => label).filter((label) => draft.ticked.includes(label)), ...(own ? [own] : [])];
+  return lines.length > 0 ? lines.join(TICKED_JOINER) : null;
+}
 
 interface AskProgress {
   drafts: AskDraft[];
@@ -336,23 +344,27 @@ function AskQuestionFields({
     ...(widestPreview > 0 && { "--preview-width": `${widestPreview}px` }),
     ...(question.optionWidth && { "--option-width": `${question.optionWidth}px` }),
   } as CSSProperties;
-  const isChosen = (label: string) => (waiting ? draft.choice === label : chosenLabel === label);
-  const ownAnswerGiven = !waiting && chosenLabel !== undefined && isOwnAnswer(question, chosenLabel) ? chosenLabel : undefined;
+  const multiple = question.multiple === true;
+  const answeredLabels = tickedLabelsIn(question, chosenLabel);
+  const isChosen = (label: string) => (waiting ? (multiple ? draft.ticked.includes(label) : draft.choice === label) : multiple ? answeredLabels.includes(label) : chosenLabel === label);
+  const otherChosen = multiple ? draft.otherTicked : draft.choice === SOMETHING_ELSE;
+  const toggle = (label: string) => onChange({ ticked: draft.ticked.includes(label) ? draft.ticked.filter((each) => each !== label) : [...draft.ticked, label] });
+  const ownAnswerGiven = waiting || chosenLabel === undefined ? undefined : multiple ? ownTextIn(question, chosenLabel) : isOwnAnswer(question, chosenLabel) ? chosenLabel : undefined;
 
   return (
     <>
       {question.html && <CanvasFrame frameId={`${idPrefix}-context`} html={question.html} assetsOrigin={assetsOrigin} className="ask-context" panelFinds fitsContent followsTextSize />}
-      <div className="ask-options" role="radiogroup" aria-label={question.question} style={optionsStyle}>
+      <div className="ask-options" role={multiple ? "group" : "radiogroup"} aria-label={question.question} style={optionsStyle}>
         {question.options.map((option, index) => (
           <label key={option.label} className={`ask-option ${isChosen(option.label) ? "chosen" : ""}`}>
             <span className="ask-option-head">
               <input
-                type="radio"
+                type={multiple ? "checkbox" : "radio"}
                 name={radioName}
                 aria-label={option.label}
                 checked={isChosen(option.label)}
                 disabled={!waiting}
-                onChange={() => onChange({ choice: option.label })}
+                onChange={() => (multiple ? toggle(option.label) : onChange({ choice: option.label }))}
               />
               <span className="ask-option-label">{option.label}</span>
               {option.recommended && <span className="ask-option-recommended">{words.ask.recommended}</span>}
@@ -385,15 +397,21 @@ function AskQuestionFields({
       {waiting && (
         <div className="ask-extras">
           {question.allowOther && (
-            <label className={`ask-other ${draft.choice === SOMETHING_ELSE ? "chosen" : ""}`}>
-              <input type="radio" name={radioName} aria-label={words.ask.somethingElseLabel} checked={draft.choice === SOMETHING_ELSE} onChange={() => onChange({ choice: SOMETHING_ELSE })} />
+            <label className={`ask-other ${otherChosen ? "chosen" : ""}`}>
+              <input
+                type={multiple ? "checkbox" : "radio"}
+                name={radioName}
+                aria-label={words.ask.somethingElseLabel}
+                checked={otherChosen}
+                onChange={() => (multiple ? onChange({ otherTicked: !draft.otherTicked }) : onChange({ choice: SOMETHING_ELSE }))}
+              />
               <textarea
                 {...typingAidAttributes}
                 rows={Math.min(6, draft.other.split("\n").length)}
                 value={draft.other}
                 placeholder={words.ask.somethingElse}
                 aria-label={words.ask.ownAnswer}
-                onFocus={() => onChange({ choice: SOMETHING_ELSE })}
+                onFocus={() => onChange(multiple ? { otherTicked: true } : { choice: SOMETHING_ELSE })}
                 onChange={(event) => onChange({ other: event.target.value })}
                 onKeyDown={answerOnEnter}
               />
@@ -452,7 +470,7 @@ function AskView({
   const waiting = item.status === "waiting" && answerable;
   const typingAidAttributes = useTypingAidAttributes();
   const { drafts, page, setPage, changeDraft, note, setNote } = useAskProgress(item.id, questions.length);
-  const answers = drafts.map(draftAnswer);
+  const answers = drafts.map((draft, index) => draftAnswer(draft, questions[index]!));
   const onReviewPage = several && waiting && page >= questions.length;
   const shownQuestion = questions[Math.min(page, questions.length - 1)];
   const questionIndex = several ? Math.min(page, questions.length - 1) : 0;
@@ -464,7 +482,7 @@ function AskView({
         return;
       }
       if (answers.some((answer) => !answer)) return;
-      const entries = drafts.map((draft) => ({ label: draftAnswer(draft)!, note: draft.note.trim() || undefined }));
+      const entries = drafts.map((draft, index) => ({ label: answers[index]!, note: draft.note.trim() || undefined }));
       connection.send({ type: "ask.answer", itemId: item.id, label: answersSummary(entries), answers: entries, note: note.trim() || undefined });
       return;
     }
@@ -550,7 +568,7 @@ function AskView({
         })}
       {waiting && !several && (
         <div className="ask-submit">
-          <span className="ask-selection">{currentAnswer ? <>{words.ask.yourAnswer} <strong>{currentAnswer}</strong></> : words.ask.pickAnOption}</span>
+          <span className="ask-selection">{currentAnswer ? <>{words.ask.yourAnswer} <strong>{currentAnswer}</strong></> : shownQuestion.multiple ? words.ask.tickOptions : words.ask.pickAnOption}</span>
           <button type="submit" className="primary" disabled={!currentAnswer}>
             {words.ask.submit}
           </button>
@@ -573,7 +591,7 @@ function AskView({
           <button type="button" disabled={page === 0} onClick={() => setPage(page - 1)}>
             {words.ask.back}
           </button>
-          <span className="ask-selection">{onReviewPage ? "" : currentAnswer ? <>{words.ask.yourAnswer} <strong>{currentAnswer}</strong></> : words.ask.pickAnOption}</span>
+          <span className="ask-selection">{onReviewPage ? "" : currentAnswer ? <>{words.ask.yourAnswer} <strong>{currentAnswer}</strong></> : shownQuestion.multiple ? words.ask.tickOptions : words.ask.pickAnOption}</span>
           {onReviewPage ? (
             <button key="submit" type="submit" className="primary" disabled={answers.some((answer) => !answer)}>
               {words.ask.submit}

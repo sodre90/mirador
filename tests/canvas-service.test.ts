@@ -7,7 +7,7 @@ import { answerAsToolResult, CanvasService, severalQuestionsRequest } from "../h
 import { Hub } from "../host/hub.ts";
 import { Store } from "../host/store.ts";
 import type { SystemNotifications } from "../host/system-notifications.ts";
-import { questionsOf } from "../shared/ask.ts";
+import { questionsOf, tickedLabelsIn } from "../shared/ask.ts";
 import type { AskItem, CanvasItem } from "../shared/model.ts";
 import type { NotificationReason } from "../shared/system-notifications.ts";
 import { completeDirectories } from "../host/paths.ts";
@@ -264,6 +264,15 @@ describe("CanvasService", () => {
     const { ask, askSeveral } = setUp();
     expect(questionsOf(ask())).toEqual([{ question: "Color?", options: [{ label: "Red" }, { label: "Blue" }], allowOther: false }]);
     expect(questionsOf(askSeveral()).map(({ question }) => question)).toEqual(["Color?", "Size?"]);
+  });
+
+  test("a question that takes several keeps its flag, and the ticked options are read back from the answer line", () => {
+    const { canvas } = setUp();
+    const asked = canvas.openAsk("c1", { question: "Which apply?", options: [{ label: "Red" }, { label: "Blue" }, { label: "Green" }], multiple: true });
+    const [question] = questionsOf(asked);
+    expect(question!.multiple).toBe(true);
+    expect(tickedLabelsIn(question!, "Red; Green")).toEqual(["Red", "Green"]);
+    expect(tickedLabelsIn(question!, undefined)).toEqual([]);
   });
 
   test("withdrawing waiting asks fails their tool calls and refuses later answers", async () => {

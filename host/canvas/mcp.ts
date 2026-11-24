@@ -43,6 +43,7 @@ const optionShape = {
 const askQuestionShape = {
   html: z.string().optional(),
   allowOther: z.boolean().optional(),
+  multiple: z.boolean().optional(),
   optionWidth: z.number().int().positive().optional(),
 };
 
@@ -62,6 +63,7 @@ const describedOptionSchema = z.object(
 const describedAskQuestionShape = describedFields(askQuestionShape, {
   html: "Optional HTML shown above the options: the explanation or mockup the question is about, with any diagram drawn in HTML and CSS, inline SVG or Mermaid, not ASCII art. Put it here rather than in a show call just before.",
   allowOther: "Let the user type an answer that is not one of the options.",
+  multiple: "Let the user tick several options, as for \"tick all that apply\"; without it they choose exactly one. Their answer comes back as the ticked labels, separated by \"; \".",
   optionWidth:
     "Optional least width of each answer box in CSS pixels, for options whose descriptions need more room. Boxes still sit side by side while they fit and never get wider than the canvas. Without it they are at least 200px, or as wide as the widest preview.",
 });

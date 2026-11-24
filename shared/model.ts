@@ -903,6 +903,8 @@ export interface AskQuestion {
   html?: string;
   options: AskOption[];
   allowOther?: boolean;
+  /** The user may tick several options; their answer lists the ones they ticked. */
+  multiple?: boolean;
   /** The least width, in CSS pixels, the agent asked for each answer box. */
   optionWidth?: number;
 }
@@ -969,6 +971,8 @@ export interface AskItem extends CanvasItemBase {
   html?: string;
   options?: AskOption[];
   allowOther?: boolean;
+  /** The user may tick several options; their answer lists the ones they ticked. */
+  multiple?: boolean;
   /** The least width, in CSS pixels, the agent asked for each answer box. */
   optionWidth?: number;
   /** An ask of several questions, one page each; then `title` and `question` say so and name the first, for readers that know one question. */

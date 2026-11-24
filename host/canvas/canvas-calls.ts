@@ -68,7 +68,7 @@ export async function rebuildCanvas(conversationId: string, events: StoredEvent[
 const showRequestOf = ({ title, html }: Record<string, unknown>): ShowRequest | null =>
   typeof title === "string" && typeof html === "string" ? { title, html } : null;
 
-function askRequestOf({ questions, question, options, html, allowOther, optionWidth }: Record<string, unknown>): AskRequest | null {
+function askRequestOf({ questions, question, options, html, allowOther, multiple, optionWidth }: Record<string, unknown>): AskRequest | null {
   if (Array.isArray(questions)) return severalQuestionsRequest(questions as AskQuestion[], typeof html === "string" ? html : undefined);
   if (typeof question !== "string" || !Array.isArray(options)) return null;
   return {
@@ -76,6 +76,7 @@ function askRequestOf({ questions, question, options, html, allowOther, optionWi
     options: options as AskOption[],
     ...(typeof html === "string" && { html }),
     ...(typeof allowOther === "boolean" && { allowOther }),
+    ...(multiple === true && { multiple }),
     ...(typeof optionWidth === "number" && { optionWidth }),
   };
 }
