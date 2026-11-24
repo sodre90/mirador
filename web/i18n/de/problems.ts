@@ -45,6 +45,7 @@ export const problems: Messages["problems"] = {
     "job-wait-gone": "Mirador wartet nicht mehr auf diesen Job.",
     "conversation-workspace-gone": "Der Arbeitsbereich dieser Unterhaltung existiert nicht mehr.",
     "permission-no-longer-pending": "Diese Genehmigungsanfrage steht nicht mehr aus.",
+    "room-agent-turn-not-started": "Der Agent konnte seine Runde nicht beginnen. Warum, sieht nur der Besitzer des Raums.",
     "room-approval-not-yours": "Nur der Besitzer des Raums und seine Genehmiger können die Anfragen seiner Agenten beantworten.",
     "only-the-owner": "Das kann nur der Besitzer dieser Maschine.",
     "room-guests-only-write": "Ein Gast des Raums schreibt darin, markiert aber keinen Agenten und antwortet in keinem Thread.",

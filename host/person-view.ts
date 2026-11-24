@@ -1,4 +1,5 @@
-import type { CanvasItem, Conversation, Profile, StoredEvent } from "../shared/model.ts";
+import { englishProblem, type HostProblem } from "../shared/host-problems.ts";
+import type { CanvasItem, Conversation, ConversationEvent, Profile, StoredEvent } from "../shared/model.ts";
 import { DEFAULT_CONVERSATIONS_SHOWN, DEFAULT_OLDER_AFTER, DEFAULT_SIDE_CHAT_ACCESS } from "../shared/model.ts";
 import type { ServerMessage } from "../shared/protocol.ts";
 import { ALL_OF_CLAUDE_SETUP } from "../shared/room-agent-setup.ts";
@@ -109,17 +110,32 @@ const measuresSeen = (spend: Partial<Record<(typeof MEASURES_SEEN)[number], numb
 /** What an agent's session tells of its own state, which is the owner's: its commands, its title and its model choices. */
 const OWNERS_SESSION_STATE = new Set(["available_commands_update", "session_info_update", "config_option_update"]);
 
+type ConversationError = Extract<ConversationEvent, { type: "error" }>;
+
+/** Any other error is about the owner's setup, and may hold what the owner's commands printed. */
+const cameOfAgentsWork = ({ continuable, usageLimit }: ConversationError) => continuable === true || usageLimit !== undefined;
+
+const TURN_NOT_STARTED: HostProblem = { code: "room-agent-turn-not-started" };
+
+function errorSeen(event: ConversationError): ConversationError | null {
+  const { message, problem, usageLimit, authRequired, continuable, endsTurn } = event;
+  if (cameOfAgentsWork(event)) {
+    return { type: "error", message, ...(problem && { problem }), ...(usageLimit && { usageLimit }), ...(authRequired && { authRequired }), ...(continuable && { continuable }), ...(endsTurn && { endsTurn }), ...measuresSeen(event) };
+  }
+  return endsTurn ? { type: "error", message: englishProblem(TURN_NOT_STARTED), problem: TURN_NOT_STARTED, endsTurn, ...measuresSeen(event) } : null;
+}
+
 /**
- * An event of a room agent's conversation as a person who reads its work sees it: none of the session's own state, and
- * a turn's end or failure without what it took; null for one they don't see.
+ * An event of a room agent's conversation as a person who reads its work sees it: none of the session's own state, a
+ * turn's end or failure without what it took, and of a turn that could not start only that; null for one they don't see.
  */
-function eventSeen(stored: StoredEvent): StoredEvent | null {
+export function eventSeen(stored: StoredEvent): StoredEvent | null {
   const { event } = stored;
   if (event.type === "acp" && OWNERS_SESSION_STATE.has(event.update.sessionUpdate)) return null;
   if (event.type === "turn-end") return { ...stored, event: { type: "turn-end", stopReason: event.stopReason, ...(event.cutShortByRestart && { cutShortByRestart: true }), ...measuresSeen(event) } };
   if (event.type === "error") {
-    const { message, problem, usageLimit, authRequired, continuable, endsTurn } = event;
-    return { ...stored, event: { type: "error", message, ...(problem && { problem }), ...(usageLimit && { usageLimit }), ...(authRequired && { authRequired }), ...(continuable && { continuable }), ...(endsTurn && { endsTurn }), ...measuresSeen(event) } };
+    const error = errorSeen(event);
+    return error && { ...stored, event: error };
   }
   return stored;
 }

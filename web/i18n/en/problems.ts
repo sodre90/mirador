@@ -45,6 +45,7 @@ export const problems = {
     "job-wait-gone": "Mirador no longer waits for that job.",
     "conversation-workspace-gone": "This conversation's workspace no longer exists.",
     "permission-no-longer-pending": "This permission request is no longer pending.",
+    "room-agent-turn-not-started": "The agent could not start its turn. Only the room's owner sees why.",
     "room-approval-not-yours": "Only the room's owner and its approvers can answer its agents' requests.",
     "only-the-owner": "Only the machine's owner can do that.",
     "room-guests-only-write": "A guest of the room writes in it, but tags no agent and follows up in no thread.",

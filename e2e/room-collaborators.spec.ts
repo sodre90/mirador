@@ -1,8 +1,9 @@
+import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type Browser, type Page } from "@playwright/test";
 import type { ServerMessage } from "../shared/protocol.ts";
 import type { Room } from "../shared/rooms.ts";
-import { addWorkspace, createProfile, createRoom, openRoomSettings, signIn } from "./helpers.ts";
+import { addWorkspace, addWorkspaceFromSidebar, createProfile, createRoom, openRoomSettings, signIn } from "./helpers.ts";
 import { TestHost, writeBunProgram } from "./test-host.ts";
 
 const host = new TestHost({ fakePrograms: true });
@@ -18,8 +19,7 @@ test.afterAll(async () => {
 
 type Role = "Collaborator" | "Member";
 
-const roomComposer = (page: Page) => page.getByRole("textbox", { name: "Write in Launch, @ tags an agent…" });
-const thread = (page: Page) => page.getByRole("complementary", { name: "Thread of Builder" });
+const thread = (page: Page, agent = "Builder") => page.getByRole("complementary", { name: `Thread of ${agent}` });
 
 /** What the host sends the page, from the moment this is called. */
 function receivedBy(page: Page) {
@@ -28,16 +28,22 @@ function receivedBy(page: Page) {
   return received;
 }
 
-async function tagBuilder(page: Page, rest: string) {
-  await roomComposer(page).fill("@Bu");
-  await page.getByRole("listbox", { name: "Agents and people of the room" }).getByRole("option", { name: "@Builder" }).click();
-  await roomComposer(page).fill(`@Builder ${rest}`);
-  await roomComposer(page).press("Enter");
+async function tagAgent(page: Page, agent: string, rest: string, room = "Launch") {
+  const composer = page.getByRole("textbox", { name: `Write in ${room}, @ tags an agent…` });
+  await composer.fill(`@${agent.slice(0, 2)}`);
+  await page.getByRole("listbox", { name: "Agents and people of the room" }).getByRole("option", { name: `@${agent}` }).click();
+  await composer.fill(`@${agent} ${rest}`);
+  await composer.press("Enter");
 }
 
-/** Gives the person the role in Launch, letting them in first when they are not in it yet. */
-async function setRoleInLaunch(page: Page, person: string, role: Role) {
-  const dialog = await openRoomSettings(page, "Launch");
+async function openThreadOfFailedTurn(page: Page) {
+  await expect(page.locator(".room-timeline")).toContainText("The turn failed.");
+  await page.locator(".room-timeline").getByRole("button", { name: "Open thread" }).click();
+}
+
+/** Gives the person the role in the room, letting them in first when they are not in it yet. */
+async function setRole(page: Page, person: string, role: Role, room = "Launch") {
+  const dialog = await openRoomSettings(page, room);
   if ((await dialog.getByLabel(`Role of ${person}`).count()) === 0) await dialog.getByRole("combobox", { name: "Add someone you let in before" }).selectOption({ label: person });
   await dialog.getByLabel(`Role of ${person}`).selectOption({ label: role });
   await expect(dialog.getByLabel(`Role of ${person}`)).toHaveValue(role.toLowerCase());
@@ -45,14 +51,18 @@ async function setRoleInLaunch(page: Page, person: string, role: Role) {
   await expect(dialog).toBeHidden();
 }
 
-async function openLaunchAs(browser: Browser, cookie: ReturnType<TestHost["admitPerson"]>["cookie"]) {
+async function openRoom(page: Page, room: string) {
+  await page.locator(".sidebar .rooms .room-card-name", { hasText: room }).click();
+  await expect(page.getByRole("heading", { name: `# ${room}` })).toBeVisible();
+}
+
+async function openRoomAs(browser: Browser, cookie: ReturnType<TestHost["admitPerson"]>["cookie"], room = "Launch") {
   const context = await browser.newContext();
   await context.addCookies([cookie]);
   const page = await context.newPage();
   const received = receivedBy(page);
   await page.goto(host.origin);
-  await page.locator(".sidebar .rooms .room-card-name", { hasText: "Launch" }).click();
-  await expect(page.getByRole("heading", { name: "# Launch" })).toBeVisible();
+  await openRoom(page, room);
   return { context, page, received };
 }
 
@@ -67,13 +77,13 @@ test("a collaborator reads the agent's work in its thread as the owner does, wit
   await profiles.getByRole("button", { name: "Close" }).click();
   await addWorkspace(page, host.projectDir, "Builder · opencode");
   await createRoom(page, "Launch", ["Builder"]);
-  await setRoleInLaunch(page, "Mia", "Collaborator");
-  await setRoleInLaunch(page, "Gus", "Member");
-  const asMia = await openLaunchAs(browser, mia.cookie);
-  const asGus = await openLaunchAs(browser, gus.cookie);
+  await setRole(page, "Mia", "Collaborator");
+  await setRole(page, "Gus", "Member");
+  const asMia = await openRoomAs(browser, mia.cookie);
+  const asGus = await openRoomAs(browser, gus.cookie);
 
   await test.step("while the agent waits for the owner's OK to run a command, Mia's thread shows its request with no way to answer it, and Gus's shows the task alone", async () => {
-    await tagBuilder(page, `ASK ${JSON.stringify([{ kind: "execute", title: "Run pwd", command: "pwd" }])}`);
+    await tagAgent(page, "Builder", `ASK ${JSON.stringify([{ kind: "execute", title: "Run pwd", command: "pwd" }])}`);
     for (const { page: person } of [asMia, asGus]) await person.locator(".room-timeline > .room-thread-line").getByRole("button", { name: "Open thread" }).click();
     await expect(thread(asMia.page).locator(".permission.pending")).toContainText("pwd");
     await expect(thread(asMia.page).locator(".permission.pending button")).toHaveCount(0);
@@ -103,10 +113,37 @@ test("a collaborator reads the agent's work in its thread as the owner does, wit
   });
 
   await test.step("made a member, Mia's open thread keeps the answer but no longer shows the work", async () => {
-    await setRoleInLaunch(page, "Mia", "Member");
+    await setRole(page, "Mia", "Member");
     await expect(thread(asMia.page).locator(".permission, .tool")).toHaveCount(0);
     await expect(thread(asMia.page).locator(".message.agent")).toHaveText(["Run pwd: allow"]);
   });
 
   await Promise.all([asMia.context.close(), asGus.context.close()]);
+});
+
+test("a collaborator reads only that the agent could not start its turn, while its owner reads what the profile's command said", async ({ page, browser }) => {
+  const ida = host.admitPerson("Ida");
+  const repairsFolder = join(host.root, "repairs");
+  mkdirSync(repairsFolder);
+  await signIn(page, host);
+  const profiles = await createProfile(page, "Mender", "MENDER_TOKEN=$(echo the-owners-vault-is-locked >&2; exit 3)", "", "opencode");
+  await profiles.getByRole("button", { name: "Close" }).click();
+  await addWorkspaceFromSidebar(page, repairsFolder, "Mender · opencode");
+  await createRoom(page, "Repairs", ["Mender"], { workspace: "repairs" });
+  await setRole(page, "Ida", "Collaborator", "Repairs");
+  const asIda = await openRoomAs(browser, ida.cookie, "Repairs");
+  const idasThread = thread(asIda.page, "Mender");
+  const couldNotStart = "The agent could not start its turn. Only the room's owner sees why.";
+
+  await tagAgent(page, "Mender", "SAY Mended", "Repairs");
+  for (const reader of [page, asIda.page]) await openThreadOfFailedTurn(reader);
+  await expect(thread(page, "Mender").locator(".error-line")).toContainText("the-owners-vault-is-locked");
+  await expect(idasThread.locator(".error-line")).toHaveText(couldNotStart);
+
+  await asIda.page.reload();
+  await openRoom(asIda.page, "Repairs");
+  await openThreadOfFailedTurn(asIda.page);
+  await expect(idasThread.locator(".error-line")).toHaveText(couldNotStart);
+  for (const ownersAlone of ["the-owners-vault-is-locked", "MENDER_TOKEN"]) expect(JSON.stringify(asIda.received)).not.toContain(ownersAlone);
+  await asIda.context.close();
 });
