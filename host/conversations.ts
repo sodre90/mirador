@@ -83,7 +83,7 @@ import { endsTurn, joinedRunningTurn, lastAgentMessageId, pendingReverts, REVERT
 import { MODE_NAME_META_KEY } from "../shared/notices.ts";
 import { returnedSteerSeqs } from "../shared/steered-messages.ts";
 import { miradorCommandEnvironment } from "./acp/environment.ts";
-import { CANVAS_SERVER_NAME, harnessSpec, isAuthRequiredError, launchEnvironment, loginCommand, profileEnvironment, sessionMeta, sessionSystemPrompt } from "./acp/harnesses.ts";
+import { CANVAS_SERVER_NAME, harnessSpec, isAuthRequiredError, launchEnvironment, loginCommand, profileEnvironment, profileEnvironmentOnceRead, sessionMeta, withEnvironment, sessionSystemPrompt } from "./acp/harnesses.ts";
 import { canvasFollowUp, canvasUseOf, isCanvasFollowUp, type TurnToolCall } from "./canvas/reply-check.ts";
 import { HarnessProcess, type ConfigValue } from "./acp/harness.ts";
 import { awaitsItsInput, ToolCallReportsHeard, withReportedToolCall } from "./acp/reported-tool-call.ts";
@@ -1427,7 +1427,7 @@ export class ConversationService {
     try {
       const spec = harnessSpec(profile, this.store.claudeProgramSetting());
       harness = new HarnessProcess(
-        { ...spec, logName: logApart ? `${spec.logName}.check` : spec.logName, environment: { ...spec.environment, ...this.scriptEnvironment(spec.environment.PATH) } },
+        { ...withEnvironment(spec, (environment) => ({ ...environment, ...this.scriptEnvironment(environment.PATH) })), logName: logApart ? `${spec.logName}.check` : spec.logName },
         {
           onSessionUpdate: () => {},
           onPermissionRequest: async () => ({ outcome: { outcome: "cancelled" as const } }),
@@ -1948,11 +1948,11 @@ export class ConversationService {
   }
 
   /** Runs a `!` command from the message box where the conversation works, with the environment its agent gets. */
-  runCommand(conversationId: string, command: string) {
+  async runCommand(conversationId: string, command: string) {
     const conversation = this.get(conversationId);
     const workspace = this.store.findWorkspace(conversation.workspaceId);
     if (!workspace) throw new HostProblemError({ code: "conversation-workspace-gone" });
-    const environment = profileEnvironment(this.profileOf(conversation));
+    const environment = await profileEnvironmentOnceRead(this.profileOf(conversation));
     void this.commands.run(command, workingCopyOf(workspace, conversation).path, environment, (event) => this.append(conversationId, event));
   }
 
@@ -1974,20 +1974,26 @@ export class ConversationService {
   }
 
   /** The agent's own sign-in, with the environment of the conversation's profile, so a profile with its own account signs that one in. */
-  loginProgram(conversationId: string, pageOnHost: boolean): TerminalProgram {
+  async loginProgram(conversationId: string, pageOnHost: boolean): Promise<TerminalProgram> {
     const conversation = this.get(conversationId);
-    const environment = launchEnvironment(conversation.harness, this.profileOf(conversation), this.store.claudeProgramSetting());
+    const environment = await this.programEnvironment(conversation);
     return { tabName: `${harnessLabels[conversation.harness]} sign-in`, command: loginCommand(conversation.harness, environment, undefined, pageOnHost), environment };
   }
 
   /** A command Claude Code shows a panel for only in its own terminal, run in a tab of the conversation's terminals. */
-  panelCommandProgram(conversationId: string, line: string): TerminalProgram {
+  async panelCommandProgram(conversationId: string, line: string): Promise<TerminalProgram> {
     const command = panelCommandRun(line);
     if (command === null) throw new HostProblemError({ code: "not-a-slash-command", line });
     const conversation = this.get(conversationId);
     if (conversation.harness !== "claude") throw new HostProblemError({ code: "agent-has-no-such-command", agent: harnessLabels[conversation.harness], line });
-    const environment = launchEnvironment(conversation.harness, this.profileOf(conversation), this.store.claudeProgramSetting());
+    const environment = await this.programEnvironment(conversation);
     return { tabName: command, command: [environment.CLAUDE_CODE_EXECUTABLE!, command], environment, key: `panel ${command}` };
+  }
+
+  private async programEnvironment(conversation: Conversation) {
+    const profile = this.profileOf(conversation);
+    await profileEnvironmentOnceRead(profile);
+    return launchEnvironment(conversation.harness, profile, this.store.claudeProgramSetting());
   }
 
   loginEnded(conversationId: string, signedIn: boolean) {
@@ -2276,7 +2282,7 @@ export class ConversationService {
     }
     if (!workspace.worktreeSetup) return;
     this.setBusy(conversation.id, "setting-up-worktree");
-    const environment = { ...profileEnvironment(this.profileOf(conversation)), MIRADOR_WORKSPACE: workspace.path };
+    const environment = { ...(await profileEnvironmentOnceRead(this.profileOf(conversation))), MIRADOR_WORKSPACE: workspace.path };
     let setupCommandId: string | undefined;
     let succeeded = false;
     const runtime = this.runtimes.get(conversation.id);
@@ -2729,7 +2735,7 @@ export class ConversationService {
     if (existing) return existing;
     const spec = harnessSpec(profile, this.store.claudeProgramSetting());
     const harness = new HarnessProcess(
-      { ...spec, environment: { ...spec.environment, ...this.scriptEnvironment(spec.environment.PATH), ...this.testModelEnvironment(launch) } },
+      withEnvironment(spec, (environment) => ({ ...environment, ...this.scriptEnvironment(environment.PATH), ...this.testModelEnvironment(launch) })),
       {
         onSessionUpdate: (notification) => this.handleSessionUpdate(notification),
         onPermissionRequest: (request, signal) => this.handlePermissionRequest(request, signal),

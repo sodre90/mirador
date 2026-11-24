@@ -60,7 +60,7 @@ import { useMessageBox } from "./message-box.ts";
 import { FormatBarToggle } from "./FormatBar.tsx";
 import { ReadAloud, ReadsRepliesAloud } from "./ReadAloud.tsx";
 import { CopyReply, TimelineNow } from "./CopyReply.tsx";
-import { replyEnds } from "../shared/replies.ts";
+import { replyEnds, type ReplyEnd } from "../shared/replies.ts";
 import { awaitSpokenReply, forgetSpokenReply, readWhenSpokenTurnEnds, stopReading, stopReadingIn } from "./reply-player.ts";
 import { canFork } from "./actions.ts";
 import { hints, statusHints } from "./hints.ts";
@@ -819,8 +819,8 @@ const TimestampedEntry = memo(function TimestampedEntry({
   startsGroup: boolean;
   harness: HarnessId;
   conversationId: string;
-  /** Whether it is the turn's last text, under which the whole reply can be copied. */
-  endsReply: boolean;
+  /** Set on the turn's last text, under which the reply can be copied. */
+  endsReply: ReplyEnd | undefined;
 }) {
   const author = authorOf(block);
   return (
@@ -852,7 +852,7 @@ function ForkThroughTurnButton({ turnSeq }: { turnSeq: number }) {
   );
 }
 
-function TimelineEntry({ block, conversationId, harness, canRewind, endsReply }: { block: TimelineBlock; conversationId: string; harness: HarnessId; canRewind: boolean; endsReply?: boolean }) {
+function TimelineEntry({ block, conversationId, harness, canRewind, endsReply }: { block: TimelineBlock; conversationId: string; harness: HarnessId; canRewind: boolean; endsReply?: ReplyEnd }) {
   const askToRevert = useContext(AskToRevert);
   switch (block.kind) {
     case "user":
@@ -886,7 +886,7 @@ function TimelineEntry({ block, conversationId, harness, canRewind, endsReply }:
             )}
           </div>
           <div className="reply-actions">
-            {endsReply && <CopyReply replyKey={block.key} />}
+            {endsReply && <CopyReply replyKey={block.key} end={endsReply} />}
             <ReadAloud conversationId={conversationId} replyKey={block.key} reply={block.text} />
           </div>
         </>
@@ -2288,7 +2288,7 @@ export function ChatPanel({
                               startsGroup={offset === 0 || startsAuthorGroup(timeline, firstLoaded + offset)}
                               harness={conversation.harness}
                               conversationId={conversation.id}
-                              endsReply={endsOfReplies.has(block.key)}
+                              endsReply={endsOfReplies.get(block.key)}
                             />
                           ))}
                           {conversation.status === "running" && <div className="working">{words.timeline.working}</div>}

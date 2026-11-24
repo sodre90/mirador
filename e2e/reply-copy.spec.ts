@@ -46,7 +46,7 @@ const clipboard = (page: Page) =>
     }
   });
 
-test("a turn's whole reply copies as formatted text with its Markdown, or as Markdown alone, without the tools between", async ({ page, context }) => {
+test("a turn's whole reply, or only its last message, copies as formatted text with its Markdown, or as Markdown alone, without the tools between", async ({ page, context }) => {
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   await signIn(page, host);
   await addWorkspace(page, host.projectDir);
@@ -62,6 +62,9 @@ test("a turn's whole reply copies as formatted text with its Markdown, or as Mar
   const [firstTurn, secondTurn] = ["128 files changed", NEXT].map((text) => page.locator(".timeline-entry").filter({ hasText: text }));
   const copyReply = firstTurn.getByRole("button", { name: "Copy reply", exact: true });
   const copyMarkdown = firstTurn.getByRole("button", { name: "Copy reply as Markdown" });
+  const copyLastMessage = firstTurn.getByRole("button", { name: "Copy last message", exact: true });
+  const copyLastMessageAsMarkdown = firstTurn.getByRole("button", { name: "Copy last message as Markdown" });
+  await expect(page.getByRole("button", { name: "Copy last message", exact: true }), "a reply of a single message has the one way to copy it").toHaveCount(1);
 
   await test.step("the buttons float on the reply's edge while the pointer is over it, taking no room", async () => {
     const toolbar = firstTurn.locator(".copy-reply");
@@ -71,6 +74,8 @@ test("a turn's whole reply copies as formatted text with its Markdown, or as Mar
     await expect(toolbar).toHaveCSS("opacity", "1");
     await expect(copyReply).toBeVisible();
     await expect(copyMarkdown).toBeVisible();
+    await expect(copyLastMessage).toBeVisible();
+    await expect(copyLastMessageAsMarkdown).toBeVisible();
   });
 
   await test.step("Copy reply puts the turn's text on the clipboard formatted, with its Markdown as the plain text", async () => {
@@ -89,6 +94,25 @@ test("a turn's whole reply copies as formatted text with its Markdown, or as Mar
     await firstTurn.hover();
     await copyMarkdown.click();
     await expect.poll(() => clipboard(page)).toEqual({ text: asCopied(`${BEFORE}\n\n${AFTER}`), html: null });
+  });
+
+  await test.step("Copy last message puts only what the agent wrote after its last tool on the clipboard, formatted", async () => {
+    await firstTurn.hover();
+    await copyLastMessage.click();
+    await expect(firstTurn.getByRole("button", { name: "Copied" }), "only the button clicked says so").toHaveCount(1);
+    await expect(copyReply).toBeVisible();
+    await expect.poll(async () => (await clipboard(page))?.text).toBe(asCopied(AFTER));
+    const copied = (await clipboard(page))!;
+    expect(copied.html).toContain("<code>main</code>");
+    expect(copied.html).toContain("<li>128 files changed</li>");
+    expect(copied.html).not.toContain("Pulling");
+    await expect(copyLastMessage, "and goes back to Copy last message").toBeVisible();
+  });
+
+  await test.step("Copy last message as Markdown puts only its Markdown on the clipboard", async () => {
+    await firstTurn.hover();
+    await copyLastMessageAsMarkdown.click();
+    await expect.poll(() => clipboard(page)).toEqual({ text: asCopied(AFTER), html: null });
   });
 
   await test.step("the next turn copies only its own reply", async () => {

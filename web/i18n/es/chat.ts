@@ -125,6 +125,8 @@ export const chat: Messages["chat"] = {
     copy: "Copiar",
     copyReply: "Copiar respuesta",
     copyReplyAsMarkdown: "Copiar respuesta como Markdown",
+    copyLastMessage: "Copiar último mensaje",
+    copyLastMessageAsMarkdown: "Copiar último mensaje como Markdown",
     copied: "Copiado",
     copyFailed: "No se pudo copiar",
   },

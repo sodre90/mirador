@@ -11,7 +11,7 @@ import {
   type VoiceSettings,
   type VoiceSource,
 } from "../../shared/voice.ts";
-import { profileEnvironment } from "../acp/harnesses.ts";
+import { profileEnvironmentOnceRead } from "../acp/harnesses.ts";
 import { speakingVoice } from "./engine/catalog.ts";
 import { speak, transcribe, type ChatEndpoint, type Transcript } from "./endpoints.ts";
 import { mp3Of } from "./mp3.ts";
@@ -31,8 +31,8 @@ const DEFAULT_ANTHROPIC_URL = "https://api.anthropic.com";
 const DEFAULT_OPENAI_URL = "https://api.openai.com/v1";
 
 /** A profile's API as its agent would reach it: Anthropic's names win, as Claude Code reads them first. */
-export function profileVoiceModel(profile: Profile, model: string): ChatEndpoint {
-  const environment = profileEnvironment(profile);
+export async function profileVoiceModel(profile: Profile, model: string): Promise<ChatEndpoint> {
+  const environment = await profileEnvironmentOnceRead(profile);
   const apiKey = environment.ANTHROPIC_API_KEY || null;
   const authToken = environment.ANTHROPIC_AUTH_TOKEN || null;
   if (apiKey || authToken) return { api: "anthropic", baseUrl: environment.ANTHROPIC_BASE_URL || DEFAULT_ANTHROPIC_URL, apiKey, authToken, model };
@@ -130,12 +130,12 @@ export class Voice {
   }
 
   /** This Mac's voice model is asked not to think first, which only slows it down for translating and summing up. */
-  private withVoiceModel<T>(source: Exclude<VoiceModelSource, { kind: "off" }>, work: (endpoint: ChatEndpoint) => Promise<T>) {
+  private async withVoiceModel<T>(source: Exclude<VoiceModelSource, { kind: "off" }>, work: (endpoint: ChatEndpoint) => Promise<T>) {
     if (source.kind === "this-mac") return this.thisMac("voiceModel", source.model, (endpoint) => work({ api: "openai", ...endpoint, turnsThinkingOff: true }));
-    return work(this.voiceModelEndpoint(source));
+    return work(await this.voiceModelEndpoint(source));
   }
 
-  private voiceModelEndpoint(source: Exclude<VoiceModelSource, { kind: "off" | "this-mac" }>): ChatEndpoint {
+  private async voiceModelEndpoint(source: Exclude<VoiceModelSource, { kind: "off" | "this-mac" }>): Promise<ChatEndpoint> {
     switch (source.kind) {
       case "custom":
         return { api: "openai", ...source.endpoint, turnsThinkingOff: source.turnsThinkingOff, suggestsNotThinking: !source.turnsThinkingOff };

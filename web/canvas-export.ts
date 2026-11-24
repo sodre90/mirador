@@ -3,6 +3,7 @@ import { markdownRequest, pageFileName, type MarkdownDelivery } from "../shared/
 import type { ShowItem } from "../shared/model.ts";
 import type { ServerMessage } from "../shared/protocol.ts";
 import { connection } from "./connection.ts";
+import { downloadFile } from "./download-file.ts";
 import { t } from "./i18n/index.ts";
 import { currentPageLibraries } from "./page-libraries.ts";
 import { hostErrorText } from "./host-error.ts";
@@ -116,13 +117,7 @@ export function askAgentForMarkdown(page: ShowItem, delivery: MarkdownDelivery, 
   if (!connection.send({ type: "conversation.prompt", conversationId: page.conversationId, text, imageIds: [], afterTurn })) throw new Error(words.notConnected);
 }
 
-const DOWNLOAD_LINK_LIFETIME_MS = 60_000;
-
 export async function downloadPage(page: { id: string; title: string }) {
   const html = await exportedPage(page.id);
-  const link = document.createElement("a");
-  link.href = URL.createObjectURL(new Blob([html], { type: "text/html" }));
-  link.download = pageFileName(page.title);
-  link.click();
-  setTimeout(() => URL.revokeObjectURL(link.href), DOWNLOAD_LINK_LIFETIME_MS);
+  downloadFile(pageFileName(page.title), new Blob([html], { type: "text/html" }));
 }

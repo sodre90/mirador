@@ -33,6 +33,8 @@ export const hints = {
   stopReadingAloud: "Stops reading this reply aloud.",
   copyReply: "Copies this turn's reply as formatted text, without the tools it ran.",
   copyReplyAsMarkdown: "Copies this turn's reply as Markdown, without the tools it ran.",
+  copyLastMessage: "Copies only the agent's last message in this turn, as formatted text.",
+  copyLastMessageAsMarkdown: "Copies only the agent's last message in this turn, as Markdown.",
   keepTalking: "Once the reply to what you dictated has been read aloud, the microphone opens again and what you say next is sent right away. Saying \"stop\" or \"thanks\", or Esc, ends it. A question the agent asks meanwhile is read aloud for you to answer by voice; say \"help\" to hear what you can say.",
   sendMessage: "Sends the message. Shift+Enter starts a new line, / lists the agent's commands, @ completes a path, and ! runs a shell command.",
   sendRightAway: "Sends what you said as soon as it is text, instead of leaving it in the message box for you to check first.",

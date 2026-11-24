@@ -1,5 +1,7 @@
 import type { Messages } from "../en/index.ts";
 
+const plural = (count: number, one: string, many: string) => (count === 1 ? one : many);
+
 export const settings: Messages["settings"] = {
   title: "Configuración",
   close: "Cerrar",
@@ -157,5 +159,52 @@ export const settings: Messages["settings"] = {
     hint: "Lo que macOS puede hacer con tus palabras en la aplicación de escritorio: corregirlas al escribir un espacio y ofrecer en gris el resto de una palabra. Las faltas de ortografía siguen subrayadas en ambos casos; haz clic derecho en una para corregirla.",
     autocorrect: "Corregir la ortografía automáticamente",
     predictions: "Predicciones en línea",
+  },
+  transfer: {
+    needsNewerHost: "El Mirador que se ejecuta aquí es anterior a esta página. Reinícialo para exportar e importar ajustes.",
+    exportTitle: "Exportar",
+    exportHint:
+      "Un archivo con tus perfiles, plantillas de prompt, espacios de trabajo, plugins y preferencias, para llevarlos a Mirador en otra máquina. Las conversaciones, los dispositivos y lo que recuerda este navegador se quedan aquí.",
+    includeSecrets: "Incluir secretos",
+    secretsLeftOut: "Los valores del entorno, los ajustes secretos de los plugins y las claves de API de voz no se incluyen: complétalos después de importar. Los comandos previos al inicio se incluyen tal como están escritos.",
+    secretsIncluded: "El archivo tendrá los valores del entorno, los ajustes secretos de los plugins y las claves de API de voz. Guárdalo en un lugar seguro.",
+    export: "Exportar ajustes",
+    importTitle: "Importar",
+    importHint: "Trae un archivo exportado. Eliges qué entra antes de que cambie nada. Los perfiles y los espacios de trabajo ejecutan comandos, así que importa solo un archivo en el que confíes.",
+    file: "Archivo de ajustes",
+    reading: "Leyendo el archivo…",
+    nothingInFile: "El archivo no tiene nada que traer.",
+    allHereAlready: "Ya está todo aquí.",
+    sameHere: (count) => plural(count, "1 ya está aquí como en el archivo.", `${count} ya están aquí como en el archivo.`),
+    kinds: {
+      profile: "Perfiles",
+      "prompt-template": "Plantillas de prompt",
+      group: "Grupos",
+      workspace: "Espacios de trabajo",
+      "sidebar-order": "Barra lateral",
+      preference: "Preferencias",
+      "plugin-settings": "Ajustes de plugins",
+    },
+    sidebarOrder: "Orden de los espacios de trabajo y grupos",
+    group: "Grupo",
+    overwrites: "Sobrescribe lo que hay aquí",
+    overwritesFields: (fields) => `Sobrescribe lo que hay aquí: ${fields}`,
+    needsValue: (names) => `Completa después de importar: ${names}`,
+    import: "Importar",
+    dontImport: "No importar",
+    importing: "Importando…",
+    added: (count) => plural(count, "1 agregado", `${count} agregados`),
+    overwritten: (count) => plural(count, "1 sobrescrito", `${count} sobrescritos`),
+    nothingImported: "No se trajo nada.",
+    pluginsTitle: "Plugins que no están instalados aquí",
+    otherCommit: (commit) => `El exportado estaba en el commit ${commit}, así que este código no es el mismo.`,
+    pluginInstalled: "Instalado, se usa desde el próximo inicio",
+    configTitle: "Archivo de configuración",
+    configHint:
+      "Mirador lee este archivo al iniciar, y agrega o sobrescribe los perfiles, plantillas de prompt y espacios de trabajo que nombra. Se escribe como un archivo exportado; los plugins y preferencias que tenga se ignoran.",
+    configOff: "Desactivado con MIRADOR_CONFIG_FILE.",
+    configNotFound: "No había ningún archivo ahí cuando Mirador inició.",
+    configRead: (added, overwritten, same) => `Leído cuando Mirador inició: agregados: ${added}, sobrescritos: ${overwritten}, ya como en el archivo: ${same}.`,
+    inConfigFile: "Lo define el archivo de configuración: lo que cambies aquí dura hasta el próximo inicio de Mirador.",
   },
 };

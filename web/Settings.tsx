@@ -6,6 +6,7 @@ import { OLDER_AFTER_CHOICES, type CanvasUse, type KeepAwake, type KeepDeletedCa
 import type { VoiceSettings as VoiceSettingsValue } from "../shared/voice.ts";
 import type { VoiceEngineStatus } from "../shared/voice-engine.ts";
 import type { NewerVersion } from "../shared/newer-version.ts";
+import type { ConfigFileStatus } from "../shared/settings-file.ts";
 import { FontSizePreview, MachineColorPreview, ShellLookPreview, ShellOutputPreview, ThemePreview, WaitingPreview, WorkspaceColorPreview } from "./appearance-previews.tsx";
 import { enterWhileBusyLabels, setEnterWhileBusy, useEnterWhileBusy, type EnterWhileBusy } from "./busy-sending.ts";
 import { formatBarLabels, messageBoxLabels, setFormatBar, setMessageBox, useFormatBar, useMessageBox, type FormatBarChoice, type MessageBox } from "./message-box.ts";
@@ -40,6 +41,7 @@ import {
   type ShellColours,
   type ShellFontSize,
 } from "./shell-look.ts";
+import { SettingsTransfer } from "./SettingsTransfer.tsx";
 import { setShellOutputStyle, useShellOutputStyle } from "./shell-output.ts";
 import { isMac } from "./shortcuts.ts";
 import type { DevicesListed, SettingsPage } from "./state.ts";
@@ -117,6 +119,7 @@ export function SettingsDialog({
   profiles,
   version,
   newerVersion,
+  configFile,
   layoutDefault,
   onChange,
   onClose,
@@ -141,6 +144,7 @@ export function SettingsDialog({
   profiles: Profile[];
   version: string;
   newerVersion: NewerVersion | null;
+  configFile: ConfigFileStatus | null | undefined;
   layoutDefault: LayoutDefault;
   onChange: (layoutDefault: LayoutDefault) => void;
   onClose: () => void;
@@ -162,7 +166,7 @@ export function SettingsDialog({
     conversations: () => (
       <>
         <SendingSettings />
-        <PromptTemplateSettings templates={promptTemplates} />
+        <PromptTemplateSettings templates={promptTemplates} configFileTemplateIds={configFile?.promptTemplateIds ?? []} />
         <ExternalImageSettings />
         <FileLinkSettings scriptProgram={scriptProgram} />
         <EditorSettings editor={editor} />
@@ -199,6 +203,7 @@ export function SettingsDialog({
         <PushRelaySettings pushRelay={pushRelay} />
       </>
     ),
+    transfer: () => <SettingsTransfer configFile={configFile} />,
     about: () => <AboutSettings version={version} newerVersion={newerVersion} claudeProgram={claudeProgram} />,
   };
 

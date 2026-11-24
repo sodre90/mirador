@@ -9,6 +9,7 @@ import { appKey, type AppDocumentState, type AppliedPluginUpdate, type Installed
 import type { ServerMessage } from "../shared/protocol.ts";
 import type { Turn } from "../shared/reverts.ts";
 import { CUSTOM_ORDER, type ConversationOrder } from "../shared/conversation-order.ts";
+import type { ConfigFileStatus } from "../shared/settings-file.ts";
 import { turnTimesOf, type HeldTurnTimes } from "./navigation.ts";
 import { inSidebarOrder } from "../shared/sidebar-order.ts";
 import { withStreamedEvent } from "../shared/timeline.ts";
@@ -51,7 +52,7 @@ export type Overlay =
   | { kind: "settings"; page?: SettingsPage };
 
 /** A part of Settings to open at, rather than at the top. */
-export type SettingsPage = "appearance" | "conversations" | "agents" | "voice" | "terminal" | "canvas" | "layout" | "devices" | "notifications" | "about";
+export type SettingsPage = "appearance" | "conversations" | "agents" | "voice" | "terminal" | "canvas" | "layout" | "devices" | "notifications" | "transfer" | "about";
 
 export type DevicesListed = Extract<ServerMessage, { type: "devices.listed" }>;
 
@@ -77,6 +78,8 @@ export interface AppState {
   /** Minutes after midnight that "morning" means for reminders. */
   reminderMorning: number;
   conversationOrder: ConversationOrder;
+  /** The settings file the host read as it started; null when there is to be none, unknown to an older host. */
+  configFile: ConfigFileStatus | null | undefined;
   olderAfter: OlderAfter;
   heldTurnTimes: HeldTurnTimes | null;
   /** The reminder this page set last, until its toast goes. */
@@ -180,6 +183,7 @@ export const initialState: AppState = {
   keepDeletedCanvas: "30-days",
   reminderMorning: DEFAULT_MORNING_MINUTES,
   conversationOrder: CUSTOM_ORDER,
+  configFile: undefined,
   olderAfter: DEFAULT_OLDER_AFTER,
   heldTurnTimes: null,
   reminderUndo: null,
@@ -318,6 +322,7 @@ function applyServerMessage(state: AppState, message: ServerMessage): AppState {
         reminderMorning: message.reminderMorning ?? DEFAULT_MORNING_MINUTES,
         conversationOrder: message.conversationOrder ?? CUSTOM_ORDER,
         olderAfter: message.olderAfter,
+        configFile: message.configFile,
         claudeProgram: message.claudeProgram,
         scriptProgram: message.scriptProgram,
         editor: message.editor ?? UNKNOWN_EDITOR,
@@ -511,6 +516,9 @@ function applyServerMessage(state: AppState, message: ServerMessage): AppState {
     case "machine.join-asked":
     case "machine.join-answered":
     case "settings.saved":
+    case "settings.exported":
+    case "settings.import-planned":
+    case "settings.imported":
     case "app.storage":
     case "plugins.listed":
     case "plugins.changed":
