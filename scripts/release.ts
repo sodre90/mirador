@@ -430,8 +430,15 @@ interface UnitRun {
 
 const unitRunIn = (results: string, name: string): UnitRun => ({ report: join(results, `${name}-results.xml`), output: join(results, `${name}-output.txt`) });
 
+/**
+ * As in package.json's test script. A loaded machine takes seconds to start git, and a Windows runner Git Bash or
+ * PowerShell, so tests that start several run past bun's 5 s; a test past its time is killed with the processes it
+ * started, which then fail in other ways.
+ */
+const UNIT_TEST_LIMIT_MS = 20_000;
+
 function runBunTest({ report, output }: UnitRun, args: string[], cwd: string) {
-  const command = ["bun", "test", ...args, "--reporter=junit", `--reporter-outfile=${report}`];
+  const command = ["bun", "test", ...args, "--timeout", String(UNIT_TEST_LIMIT_MS), "--reporter=junit", `--reporter-outfile=${report}`];
   console.log(`$ ${command.join(" ")}`);
   const { exitCode } = Bun.spawnSync(["bash", "-c", 'set -o pipefail; "$@" 2>&1 | tee "$0"', output, ...command], { cwd, stdio: ["inherit", "inherit", "inherit"] });
   if (exitCode !== 0) throw new Error(`${command.join(" ")} failed with exit code ${exitCode}; its output: ${output}`);

@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
 // Each test runs the install script with fake downloads; a loaded machine takes longer than Bun's 5 s default.
-setDefaultTimeout(15_000);
+setDefaultTimeout(20_000);
 
 const INSTALL_SCRIPT = join(import.meta.dir, "..", "install.sh");
 const LINUX_LIBRARIES = ["libgtk-3.so.0", "libwebkit2gtk-4.1.so.0", "libayatana-appindicator3.so.1", "librsvg-2.so.2"];

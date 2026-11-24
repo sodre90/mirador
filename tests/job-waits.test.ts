@@ -10,7 +10,7 @@ import { waitingOnJobsHint } from "../web/job-waits.ts";
 import { fakeProgram } from "./fake-program.ts";
 
 // These tests start real processes and follow them for a few seconds; a loaded machine takes longer than Bun's 5 s default.
-setDefaultTimeout(15_000);
+setDefaultTimeout(20_000);
 
 /** What ssh runs on the far machine, and the program a tab follows a job with off Windows, are POSIX shell, which Windows has none of. */
 const hasPosixShell = process.platform !== "win32";

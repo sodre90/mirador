@@ -40,6 +40,4 @@ jobs:
           "core.autocrlf: $(git config --get core.autocrlf)"
           where.exe git bun pwsh powershell bash sh sleep openssl
           "::endgroup::"
-          # Starting git, Git Bash or PowerShell takes the runner up to seconds each, so tests that start several run past
-          # bun's 5 s; a test past its time is killed with the processes it started, which then fail in other ways.
-          bun run test --timeout 20000
+          bun run test

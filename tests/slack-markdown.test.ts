@@ -211,6 +211,8 @@ function cheapestRead(line: string) {
 const ONE_PASS_RATIO = 32;
 /** How many pairs to read while noise keeps them over the bound: a busy machine can slow one read and not the other, but a quadratic read is slow every time. */
 const PAIR_ATTEMPTS = 5;
+/** A few seconds of work, which a busy machine spreads over most of a minute. */
+const READING_LIMIT_MS = 120_000;
 
 test("a long line of openers that never close, or of ordinary formatting, is read in one pass", () => {
   for (const [piece, times] of [["x *a ", 20_000], [" **a", 20_000], ["some **bold** and *it* text ", 3_200]] as const) {
@@ -218,4 +220,4 @@ test("a long line of openers that never close, or of ordinary formatting, is rea
     for (let attempt = 0; attempt < PAIR_ATTEMPTS && ratio >= ONE_PASS_RATIO; attempt++) ratio = cheapestRead(piece.repeat(times * 8)) / cheapestRead(piece.repeat(times));
     expect(ratio).toBeLessThan(ONE_PASS_RATIO);
   }
-});
+}, READING_LIMIT_MS);

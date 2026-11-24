@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
 // Each test runs a dozen git commands; a loaded machine takes longer than Bun's 5 s default.
-setDefaultTimeout(15_000);
+setDefaultTimeout(20_000);
 
 const LAND_SCRIPT = join(import.meta.dir, "..", "scripts", "land.sh");
 const roots: string[] = [];

@@ -32,10 +32,10 @@ jobs:
           RUNS: ${{ inputs.runs }}
         run: |
           failed=0
-          for run in $(seq "$RUNS"); do bun test $FILES || failed=$((failed + 1)); done
+          for run in $(seq "$RUNS"); do bun test --timeout 20000 $FILES || failed=$((failed + 1)); done
           echo "failed runs: $failed of $RUNS"
           test "$failed" = 0
-      # The same PATH and timeout as the Unit tests workflow gives Windows.
+      # The same PATH as the Unit tests workflow gives Windows.
       - if: runner.os == 'Windows'
         shell: pwsh
         env:
