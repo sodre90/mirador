@@ -520,17 +520,28 @@ describe("the held files several VMs of one sandbox work among", () => {
     await sandboxes.stopAll();
   });
 
-  test("stop every VM there, so nothing is put back on this computer while one writes, once they hold as many changes as they may", async () => {
+  test("stop only the brought agent's VM once it holds as many changes as it may, leaving the room's own VM running", async () => {
     const { workspace, cli, sandboxes } = sandboxedRoom();
     await sandboxes.launch(ownAgent(workspace));
     await sandboxes.launchForBrought(brought(workspace));
+    const [own] = cli.callsOf("run").map(nameIn);
     Array.from({ length: HELD_CHANGES_MOST + 5 }, (_, index) => `pkg-${index}`).forEach((name) => {
       mkdirSync(join(workspace, name));
       plant(workspace, join(name, "CLAUDE.md"));
     });
     await sandboxes.turnEnded(ROOM);
-    expect(cli.vms.size).toBe(0);
+    expect([...cli.vms.keys()]).toEqual([own!]);
+    expect(sandboxes.holdingTooMany()).toEqual([]);
     await expect(sandboxes.launchForBrought(brought(workspace))).rejects.toMatchObject(notReady({ kind: "too-many-held-changes", most: HELD_CHANGES_MOST }));
+    await sandboxes.launch(ownAgent(workspace));
+    Array.from({ length: HELD_CHANGES_MOST + 5 }, (_, index) => `own-${index}`).forEach((name) => {
+      mkdirSync(join(workspace, name));
+      plant(workspace, join(name, "CLAUDE.md"));
+    });
+    await sandboxes.turnEnded(ROOM);
+    expect(cli.vms.size).toBe(0);
+    expect(sandboxes.holdingTooMany()).toEqual([ROOM]);
+    await expect(sandboxes.launch(ownAgent(workspace))).rejects.toMatchObject(notReady({ kind: "too-many-held-changes", most: HELD_CHANGES_MOST }));
     await sandboxes.stopAll();
   });
 

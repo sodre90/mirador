@@ -31,13 +31,16 @@ async function eventually(check: () => void, timeoutMs = 3000) {
 /** A room's VM as the held files see it: running until halted, its put-backs done here as the in-VM helper would. */
 class FakeRoom implements HeldSandbox {
   running = true;
+  brought = false;
   halts = 0;
+  broughtHalts = 0;
   told = 0;
   readonly putBacks: PlacesRequest[] = [];
   /** What a put-back in the VM does instead of putting places back, where a test says. */
   putBackInVm: (request: PlacesRequest) => Promise<PlacesPutBack> = async (request) => putPlacesBack(request);
 
   atWork = () => ({ agents: ["builder"], conversationIds: ["conversation-1"] });
+  broughtAtWork = () => this.brought;
   changed = () => void (this.told += 1);
   inVm = () =>
     this.running
@@ -49,6 +52,10 @@ class FakeRoom implements HeldSandbox {
   halt = async () => {
     this.halts += 1;
     this.running = false;
+  };
+  haltBrought = async () => {
+    this.broughtHalts += 1;
+    this.brought = false;
   };
   untilStopped = async () => true;
 }
@@ -306,6 +313,26 @@ describe("the held files of a sandboxed room", () => {
     expect(Bun.spawnSync(["find", at("many"), "-name", "CLAUDE.md"]).stdout.toString()).toBe("");
     await held.answer(held.changesFor(ROOM)[0]!.id, "discard");
     expect(held.full()).toBe(false);
+    await held.stop();
+  });
+
+  test(`count a brought agent's ${HELD_CHANGES_MOST} held changes apart, halting only its VM while the room's own stays running`, async () => {
+    const { held, room, at } = await heldWorkspace();
+    room.brought = true;
+    mkdirSync(at("brought"));
+    for (let file = 0; file <= HELD_CHANGES_MOST; file++) {
+      mkdirSync(at(`brought/${file}`));
+      writeFileSync(at(`brought/${file}/CLAUDE.md`), `${file}`);
+    }
+    await held.check();
+    expect(held.changesFor(ROOM)).toHaveLength(HELD_CHANGES_MOST);
+    expect(held.fullForBrought()).toBe(true);
+    expect(held.full()).toBe(false);
+    expect(room.broughtHalts).toBe(1);
+    expect(room.halts).toBe(0);
+    expect(room.running).toBe(true);
+    await held.answer(held.changesFor(ROOM)[0]!.id, "discard");
+    expect(held.fullForBrought()).toBe(false);
     await held.stop();
   });
 

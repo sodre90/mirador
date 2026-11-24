@@ -29,11 +29,15 @@ interface WorksThere {
 export interface HeldSandbox {
   /** The agents at work in their VMs there, by profile id, and their conversations. */
   atWork(): { agents: string[]; conversationIds: string[] };
+  /** Whether a brought agent's VM is working in the folder. */
+  broughtAtWork(): boolean;
   changed(): void;
   /** Puts places back inside one of the VMs, as its agent user, while one runs; null where none does. */
   inVm(): ((request: PlacesRequest) => Promise<PlacesPutBack>) | null;
   /** Stops the VMs, once their agents held too many changes, or a put-back did not hold. */
   halt(): Promise<void>;
+  /** Stops only the brought agents' VMs, once they held too many changes. */
+  haltBrought(): Promise<void>;
   /** Once each stop asked for is done: whether none of the VMs runs any longer, so this computer may put places back with none racing it. */
   untilStopped(): Promise<boolean>;
 }
@@ -74,6 +78,7 @@ interface Held {
   change: ChangeKept;
   before: PlaceEntry;
   proposed: PlaceEntry;
+  byBrought: boolean;
 }
 
 /**
@@ -179,9 +184,20 @@ export class HeldFiles {
     return this.held.size > 0;
   }
 
-  /** Whether it holds as many changes as a sandbox may: its VM does not start again until the owner answers some. */
+  /** Whether the sandbox's own agents hold as many changes as a sandbox may: their VM does not start again until the owner answers some. */
   full() {
-    return this.held.size >= HELD_CHANGES_MOST;
+    return this.count(false) >= HELD_CHANGES_MOST;
+  }
+
+  /** Whether brought agents hold as many changes as they may: their VMs do not start again until the owner answers some. */
+  fullForBrought() {
+    return this.count(true) >= HELD_CHANGES_MOST;
+  }
+
+  private count(byBrought: boolean) {
+    let total = 0;
+    for (const entry of this.held.values()) if (entry.byBrought === byBrought) total += 1;
+    return total;
   }
 
   textOf(changeId: string): HeldChangeText | null {
@@ -242,9 +258,16 @@ export class HeldFiles {
     const inVm = this.sandbox.inVm();
     if (inVm) {
       const putBack = await inVm(this.requestFor(differing)).catch(() => null);
-      if (putBack) await this.keepAside(putBack.found.filter(({ path }) => isPathUnderAny(path, differing)));
-      const left = await this.differingAmong(differing);
+      const haltedBrought = putBack ? await this.keepAside(putBack.found.filter(({ path }) => isPathUnderAny(path, differing))) : false;
+      let left = await this.differingAmong(differing);
       if (left.length === 0) return;
+      const stillInVm = haltedBrought ? this.sandbox.inVm() : null;
+      if (stillInVm) {
+        const retry = await stillInVm(this.requestFor(left)).catch(() => null);
+        if (retry) await this.keepAside(retry.found.filter(({ path }) => isPathUnderAny(path, left)));
+        left = await this.differingAmong(left);
+        if (left.length === 0) return;
+      }
       await this.sandbox.halt();
     }
     if (await this.sandbox.untilStopped()) await this.keepAside(putPlacesBack(this.requestFor(await this.differingAmong(differing))).found);
@@ -255,11 +278,18 @@ export class HeldFiles {
     return { workspace: this.workspace, places, mostBytesEach: HELD_FILE_MOST_BYTES, mostBytes: PUT_BACK_MOST_BYTES, mostFound: PUT_BACK_MOST_FOUND };
   }
 
-  private async keepAside(found: FoundEntry[]) {
+  private async keepAside(found: FoundEntry[]): Promise<boolean> {
+    const byBrought = this.sandbox.broughtAtWork();
     const proposals = found.filter(({ path, found }) => !this.gitRedirects.includes(path) && !this.isAsLeft(path, found));
-    const overflowing = proposals.filter(({ path, found }) => !this.hold(path, found));
+    const overflowing = proposals.filter(({ path, found }) => !this.hold(path, found, byBrought));
     if (proposals.length > overflowing.length) this.sandbox.changed();
-    if (overflowing.length > 0) await this.sandbox.halt();
+    if (overflowing.length === 0) return false;
+    if (byBrought) {
+      await this.sandbox.haltBrought();
+      return true;
+    }
+    await this.sandbox.halt();
+    return false;
   }
 
   private isAsLeft(path: string, found: PlaceEntry) {
@@ -268,9 +298,9 @@ export class HeldFiles {
   }
 
   /** Keeps the proposal aside, in place of one for the same path; false where the sandbox holds as many as it may. */
-  private hold(path: string, proposed: PlaceEntry) {
+  private hold(path: string, proposed: PlaceEntry, byBrought: boolean) {
     const kept = this.held.get(path);
-    if (!kept && this.full()) return false;
+    if (!kept && (byBrought ? this.fullForBrought() : this.full())) return false;
     const before = this.expected.get(path) ?? NONE;
     const [beforeText, afterText] = [textOf(before), textOf(proposed)];
     const unshown = beforeText === undefined || afterText === undefined;
@@ -282,7 +312,7 @@ export class HeldFiles {
       ...(unshown && { unshown: true as const }),
       at: Date.now(),
     };
-    this.held.set(path, { change, before, proposed });
+    this.held.set(path, { change, before, proposed, byBrought: kept?.byBrought ?? byBrought });
     return true;
   }
 

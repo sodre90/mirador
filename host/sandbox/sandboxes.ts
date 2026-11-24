@@ -471,7 +471,7 @@ export class Sandboxes {
    * Throws SandboxNotReady when anything of it is not ready; nothing here ever runs the agent on this computer.
    */
   async launch(agent: AgentInSandbox): Promise<AgentLaunch> {
-    this.assertMayLaunch(agent);
+    this.assertMayLaunch(agent, false);
     const { harness } = agent.kind;
     const vm = await this.oneLaunchAtATime(agent.owner, () => this.startedAgentsVm(agent.owner, { harness, version: agent.version }));
     const places = { configFolder: sandboxConfigFolder(this.host.dataDir, agent.owner, harness), modelBaseUrl: modelAddress(agent.profileId) };
@@ -486,16 +486,16 @@ export class Sandboxes {
    * throws SandboxNotReady as `launch` does.
    */
   async launchForBrought(agent: BroughtAgentInSandbox): Promise<AgentLaunch> {
-    this.assertMayLaunch(agent);
+    this.assertMayLaunch(agent, true);
     const vm = await this.oneLaunchAtATime(agent.owner, () => this.startedBroughtVm(agent));
     return this.launchedIn(vm, { workingDirectory: agent.workingDirectory, environment: { ...IN_VM }, command: agent.command });
   }
 
-  private assertMayLaunch({ owner, allowsSharedKernel }: Pick<AgentInSandbox, "owner" | "allowsSharedKernel">) {
+  private assertMayLaunch({ owner, allowsSharedKernel }: Pick<AgentInSandbox, "owner" | "allowsSharedKernel">, brought: boolean) {
     const available = this.availability();
     if (!available.available) throw new SandboxNotReady({ kind: "unavailable", why: available.why });
     if (sharesKernel(available.kind) && !allowsSharedKernel) throw new SandboxNotReady({ kind: "shared-kernel-not-allowed" });
-    if (this.holdsTooMany(owner)) throw new SandboxNotReady({ kind: "too-many-held-changes", most: HELD_CHANGES_MOST });
+    if (this.tooManyHeldFor(owner, brought)) throw new SandboxNotReady({ kind: "too-many-held-changes", most: HELD_CHANGES_MOST });
   }
 
   private launchedIn(vm: SandboxVm, process: Pick<AgentInVm, "workingDirectory" | "environment" | "command">): AgentLaunch {
@@ -556,6 +556,15 @@ export class Sandboxes {
   /** Whether the held files of the workspace or of a folder hold as many changes as each may: past that, the VM does not start until the owner answers some. */
   private holdsTooMany(owner: SandboxOwner) {
     return this.heldsOf(owner).some((held) => held.full());
+  }
+
+  /** Whether brought agents hold as many changes in the folder as they may: past that, only their VMs stay stopped. */
+  private holdsTooManyForBrought(owner: SandboxOwner) {
+    return this.heldsOf(owner).some((held) => held.fullForBrought());
+  }
+
+  private tooManyHeldFor(owner: SandboxOwner, brought: boolean) {
+    return this.holdsTooMany(owner) || (brought && this.holdsTooManyForBrought(owner));
   }
 
   private heldChanged(owner: SandboxOwner) {
@@ -719,13 +728,19 @@ export class Sandboxes {
         const agents = [...working.flatMap((atWork) => atWork.agents), ...[...vms].flatMap(({ broughtAgent }) => broughtAgent ?? [])];
         return { agents: [...new Set(agents)], conversationIds: working.flatMap(({ conversationIds }) => conversationIds) };
       },
+      broughtAtWork: () => [...vms].some(isBrought),
       changed: () => owners().forEach((owner) => this.heldChanged(owner)),
       inVm: () => {
-        const vm = [...vms].find(({ running }) => running);
+        const vm = [...vms].find((candidate) => candidate.running && !isBrought(candidate)) ?? [...vms].find(({ running }) => running);
         return vm ? (request) => this.putBackInVm(vm, request) : null;
       },
       halt: async () => {
         const working = [...vms].filter(({ left }) => !left);
+        await Promise.all(working.map((vm) => this.haltOrSay(vm)));
+        working.forEach((vm) => void this.stopVm(vm));
+      },
+      haltBrought: async () => {
+        const working = [...vms].filter((vm) => !vm.left && isBrought(vm));
         await Promise.all(working.map((vm) => this.haltOrSay(vm)));
         working.forEach((vm) => void this.stopVm(vm));
       },
@@ -892,7 +907,7 @@ export class Sandboxes {
     await this.untilNoneLingersOnTheWay(way);
     if ((await realpath(vm.workspace!).catch(() => null)) !== workspace) throw new HeldFilesRefused("the workspace was moved or replaced");
     const plan = shared ?? (await this.newPlan(workspace, vm));
-    if (this.holdsTooMany(vm.owner)) throw new SandboxNotReady({ kind: "too-many-held-changes", most: HELD_CHANGES_MOST });
+    if (this.tooManyHeldFor(vm.owner, isBrought(vm))) throw new SandboxNotReady({ kind: "too-many-held-changes", most: HELD_CHANGES_MOST });
     return plan.mounts;
   }
 
