@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { isPrivateHostname, wayToMachine } from "../host/machine-trust.ts";
 import {
   authorityFingerprintIn,
+  fittedMachineName,
   hashOfMiradorLink,
   inviteConnectFor,
   inviteIn,
@@ -23,6 +24,13 @@ import {
 import { MOST_COUNTED } from "../shared/room-reading.ts";
 import type { Machine, MachineSeen } from "../shared/model.ts";
 import { checkedDeviceTunnel, tunnelOrigin, type InviteTunnel } from "../shared/tunnel.ts";
+
+test("a machine's name is kept on one line, trimmed, and no longer than a device's lists fit", () => {
+  expect(fittedMachineName("  Home\nserver  ")).toBe("Home server");
+  expect(fittedMachineName("x".repeat(60))).toBe("x".repeat(40));
+  expect(fittedMachineName(`${"x".repeat(39)} tail`)).toBe("x".repeat(39));
+  expect(fittedMachineName("   ")).toBe("");
+});
 
 test("a machine is added by its name on the network, its address or an invite link from it", () => {
   expect(machineAddress("home-server.tailnet.ts.net")).toEqual({ origin: "https://home-server.tailnet.ts.net", joinCode: null, authorityFingerprint: null, forRoom: false, tunnel: null, name: null });

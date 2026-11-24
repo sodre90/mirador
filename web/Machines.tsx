@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { machineAddress, type MachineToJoin } from "../shared/machines.ts";
+import { LONGEST_MACHINE_NAME, machineAddress, type MachineToJoin } from "../shared/machines.ts";
 import { markInitials } from "../shared/marks.ts";
 import type { Machine, Pastel } from "../shared/model.ts";
 import { tunnelOrigin } from "../shared/tunnel.ts";
@@ -63,7 +63,12 @@ function AddMachine({ machines, person, onJoined }: { machines: Machine[]; perso
     <form className="add-machine" onSubmit={(event) => void add(event)}>
       <label>
         {words.name}
-        <input value={name} onChange={(event) => setName(event.target.value)} placeholder={parsed?.tunnel?.name ?? words.namePlaceholder} />
+        <input
+          value={name}
+          maxLength={LONGEST_MACHINE_NAME}
+          onChange={(event) => setName(event.target.value)}
+          placeholder={parsed?.tunnel?.name ?? words.namePlaceholder}
+        />
       </label>
       <label>
         {words.address}

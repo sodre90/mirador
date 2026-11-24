@@ -81,10 +81,10 @@ import { admittedFromPerson, type PersonInRooms } from "./person-admission.ts";
 import { RoomPresenceService } from "./room-presence.ts";
 import { conversationBehindStandIn, namesOthersGoBy, personView } from "./person-view.ts";
 import type { SystemNotifications } from "./system-notifications.ts";
-import { inviteIn, isRoomId, isRoomInviteConnect, LONGEST_MACHINE_NAME, machineAddress, roomInviteText, type RoomInviteConnect } from "../shared/machines.ts";
+import { fittedMachineName, inviteIn, isRoomId, isRoomInviteConnect, machineAddress, roomInviteText, type RoomInviteConnect } from "../shared/machines.ts";
 import { nameRefused, nameTaken, personName, readsAsMiradorsWords } from "../shared/people.ts";
 import { MIRADOR_VERSION } from "../shared/version.ts";
-import { oneLine, shownAsWritten } from "../shared/written-text.ts";
+import { shownAsWritten } from "../shared/written-text.ts";
 import { placesIn, type InviteTunnel } from "../shared/tunnel.ts";
 import { isLoopback, pageOnHost, socketData, webSocketCompression, type BrowserSocket, type Hub, type SignedIn, type SocketData } from "./hub.ts";
 import { insertWorkspaceOf } from "./new-workspace.ts";
@@ -761,7 +761,7 @@ export function startServer(services: HostServices) {
     const { origin, tunnel, trustsOnFirstUse } = wayToMachine(parsed, whyNotDialing);
     if (store.findMachineByOrigin(origin)) throw new HostProblemError({ code: "machine-already-added", origin });
     const machineId = crypto.randomUUID();
-    const shownName = name.trim() || nameInInvite(parsed.tunnel?.name ?? parsed.name) || new URL(origin).hostname;
+    const shownName = fittedMachineName(name) || nameInInvite(parsed.tunnel?.name ?? parsed.name) || fittedMachineName(new URL(origin).hostname);
     store.insertMachine({ id: machineId, name: shownName, origin, createdAt: Date.now() });
     if (tunnel) store.setMachineTunnelPlaces(machineId, placesIn(tunnel));
     if (forRoom) store.setMachineJoinedAs(machineId, { asPerson: true, relayKey: null });
@@ -788,7 +788,7 @@ export function startServer(services: HostServices) {
 
   /** The name the machine gave itself in the invite, on one line and as long as a machine's name may be, unless it reads other than it is written. */
   function nameInInvite(given: string | null) {
-    const name = oneLine(shownAsWritten(given ?? "")).slice(0, LONGEST_MACHINE_NAME).trim();
+    const name = fittedMachineName(shownAsWritten(given ?? ""));
     return name && !nameRefused(name) ? name : null;
   }
 
@@ -800,7 +800,7 @@ export function startServer(services: HostServices) {
 
   /** What this computer calls the machine in its rail and lists; the machine's own Mirador keeps its own name. */
   function renameMachine(machineId: string, name: string) {
-    const shown = oneLine(name).slice(0, LONGEST_MACHINE_NAME).trim();
+    const shown = fittedMachineName(name);
     if (!shown || !store.findMachine(machineId)) return;
     store.renameMachine(machineId, shown);
     broadcastMachines();

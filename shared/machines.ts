@@ -6,6 +6,9 @@ import { oneLine, shownAsWritten } from "./written-text.ts";
 /** How long a name Settings give a machine can be, so it fits a device's lists. */
 export const LONGEST_MACHINE_NAME = 40;
 
+/** A name as this computer keeps it for a machine: one line, trimmed, and no longer than a name may be. */
+export const fittedMachineName = (name: string) => oneLine(name).slice(0, LONGEST_MACHINE_NAME).trim();
+
 /**
  * What someone else's machine's pages may do: run scripts and send forms, in an opaque origin of their own, in their
  * frame and anywhere else they open, as their relay serves them sandboxed too.

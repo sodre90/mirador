@@ -92,3 +92,21 @@ test("a machine is renamed from its rail menu and from Machines, for this comput
 
   await otherPage.context().close();
 });
+
+test("a name typed for a new machine is kept within what a machine's name may be", async ({ page }) => {
+  const typed = "Far too long a machine name for the lists of devices";
+  const kept = typed.slice(0, 40).trim();
+  await signIn(page, laptop);
+  await page.locator(".sidebar").getByRole("button", { name: "Machines…" }).click();
+  const machines = page.getByRole("dialog", { name: "Machines" });
+  /** Past what the field takes, as another Mirador's page or phone can send a longer name; the host keeps it short too. */
+  await machines.getByLabel("Name").evaluate((element, value) => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(element, value);
+    element.dispatchEvent(new Event("input", { bubbles: true }));
+  }, typed);
+  await machines.getByLabel("Address or invite link").fill("http://127.0.0.1:9");
+  await machines.getByRole("button", { name: "Add", exact: true }).click();
+  await expect(machines.locator(".machine-name", { hasText: kept })).toHaveText(kept);
+  await machines.getByRole("button", { name: "Close" }).click();
+  await expect(page.getByRole("navigation", { name: "Machines" }).getByRole("button", { name: kept })).toBeVisible();
+});

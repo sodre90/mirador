@@ -30,7 +30,7 @@ import type {
 } from "../shared/model.ts";
 import { DEFAULT_CONVERSATIONS_SHOWN, DEFAULT_OLDER_AFTER, DEFAULT_SIDE_CHAT_ACCESS, isCanvasUse, isConversationPlace, isConversationsShown, isKeepAwake, isKeepDeletedCanvas, isOlderAfter, isPastel, isSideChatAccess, keptForMs, type CanvasUse, type ConversationPlace, type ConversationsShown, type ConversationWorktree, type KeepAwake, type OlderAfter, type KeepDeletedCanvas, type JoinedRoom, type Pastel, type SideChatAccess } from "../shared/model.ts";
 import { defaultPromptTemplates } from "../shared/prompt-templates.ts";
-import { isRoomInviteConnect, joinedRoomsIn, LONGEST_MACHINE_NAME, type RoomInviteConnect } from "../shared/machines.ts";
+import { fittedMachineName, isRoomInviteConnect, joinedRoomsIn, type RoomInviteConnect } from "../shared/machines.ts";
 import type { TunnelPlaces } from "../shared/tunnel.ts";
 import { computerName } from "./machine-name.ts";
 import type { PushRegistration, PushRelaySetting } from "../shared/push.ts";
@@ -2115,7 +2115,7 @@ export class Store {
   }
 
   setMachineNameSetting(name: string) {
-    this.setSetting("machine_name", name.trim().slice(0, LONGEST_MACHINE_NAME) || null);
+    this.setSetting("machine_name", fittedMachineName(name) || null);
   }
 
   machineName(): string {
