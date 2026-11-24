@@ -22,6 +22,7 @@ import type {
   RoomThread,
   RoomTimeline,
 } from "./rooms.ts";
+import type { RoomWorkspaceAnswer, RoomWorkspaceApproval, RoomWorkspaceCall, WorkspaceCall, WorkspaceCallResult } from "./room-workspace.ts";
 import type { BroughtAgentHere, BroughtTaskWaiting, OthersTasks } from "./brought-agents.ts";
 import type { RoomAlert, RoomReading } from "./room-reading.ts";
 import type { RoomConfirmedAnswer, RoomQuestionVotes } from "./room-votes.ts";
@@ -468,7 +469,7 @@ export type ClientMessage =
   /** Forgets that the owner of a machine joined as a person turned this computer's owner away from one of its rooms. */
   | { type: "machine.dismiss-knock"; machineId: string; roomId: string }
   /** Brings an agent of one of your profiles into a room of a machine joined as a person, to work in one of your workspaces; the host answers `machine.agent-brought`. */
-  | { type: "machine.bring-agent"; requestId: string; machineId: string; roomId: string; profileId: string; workspaceId: string; othersTasks: OthersTasks }
+  | { type: "machine.bring-agent"; requestId: string; machineId: string; roomId: string; profileId: string; workspaceId: string | null; othersTasks: OthersTasks }
   | { type: "machine.take-agent-out"; broughtId: string }
   /** Your OK, or not, for a task someone else gave an agent you brought into a room. */
   | { type: "brought-task.answer"; taskId: string; answer: "allow" | "deny" }
@@ -536,7 +537,7 @@ export type ClientMessage =
   /** Whether the room's members may bring agents of their own Miradors into it; turned off, those already there go. */
   | { type: "room.set-members-bring-agents"; roomId: string; allowed: boolean }
   /** From a member's own Mirador: an agent of theirs joins the room under this name, of this kind; the host answers `room.agent-brought`. */
-  | { type: "room.bring-agent"; requestId: string; roomId: string; name: string; harness: HarnessId }
+  | { type: "room.bring-agent"; requestId: string; roomId: string; name: string; harness: HarnessId; worksInRoom: boolean }
   /** Its bringer, or the room's owner, takes an agent someone brought out of the room. */
   | { type: "room.take-agent-out"; roomId: string; agentId: string }
   /** From a person's own Mirador: it takes the tasks of the agents they brought on this socket, from now on. */
@@ -544,7 +545,14 @@ export type ClientMessage =
   /** From a person's own Mirador: the agent they brought began a turn on the task. */
   | { type: "room.brought-task-started"; roomId: string; agentId: string; taskId: string }
   /** From a person's own Mirador: the final answer of the agent they brought to the task, or how it ended without one. */
-  | { type: "room.brought-task-answered"; roomId: string; agentId: string; taskId: string; text: string; ended: BroughtAnswerEnd | null };
+  | { type: "room.brought-task-answered"; roomId: string; agentId: string; taskId: string; text: string; ended: BroughtAnswerEnd | null }
+  /** From a person's own Mirador: the agent they brought asks for this to be done in the room's workspace, for the task; the host answers `room.workspace-answered`. */
+  | { type: "room.workspace-call"; roomId: string; agentId: string; taskId: string; callId: string; call: WorkspaceCall }
+  /** From a person's own Mirador: a call is no longer wanted, as the agent's turn ended or was stopped. */
+  | { type: "room.workspace-call-stopped"; roomId: string; agentId: string; callId: string }
+  /** The owner or an approver lets an agent someone brought work in the room's workspace, or no longer. */
+  | { type: "room.answer-workspace"; roomId: string; agentId: string; answer: RoomWorkspaceAnswer }
+  | { type: "room.answer-workspace-call"; roomId: string; callId: string; answer: "allow" | "deny" };
 
 export type ServerMessage =
   | {
@@ -558,6 +566,8 @@ export type ServerMessage =
       roomApprovals: RoomApproval[];
       /** The tasks of people other than the owner that wait for an approver, oldest first. */
       roomTasksWaiting: RoomTaskApproval[];
+      /** What agents people brought wait on for an approver, to work in the rooms' workspaces. */
+      roomWorkspaceWaiting: RoomWorkspaceApproval[];
       /** Where setting up sandboxes stands on this computer. */
       sandboxSetup: SandboxSetup;
       /** The agent config files sandboxed agents changed, put back and held for the owner's OK, oldest first. */
@@ -721,7 +731,11 @@ export type ServerMessage =
   /** To a person other than the owner alone: the rooms they wait to be let into, by id alone, each time that changes. */
   | { type: "rooms.waiting-to-join"; personId: string; roomIds: string[] }
   /** With the pages and questions of the room's canvas, which come as `canvas.upserted` from then on, and the votes on its questions, which come as `room.votes`. */
-  | ({ type: "room.timeline"; roomId: string; canvas: CanvasItem[]; votes: RoomQuestionVotes[] } & RoomTimeline)
+  | ({ type: "room.timeline"; roomId: string; canvas: CanvasItem[]; votes: RoomQuestionVotes[]; workspaceCalls: RoomWorkspaceCall[] } & RoomTimeline)
+  /** A call of an agent someone brought, in the room's workspace, as it begins and each time it changes. */
+  | { type: "room.workspace-call-shown"; call: RoomWorkspaceCall }
+  /** To the person's own Mirador alone: what came of a call of the agent they brought. */
+  | { type: "room.workspace-answered"; personId: string; roomId: string; agentId: string; callId: string; result: WorkspaceCallResult }
   /** The picks on a question of a subscribed room's agent, and who may confirm its answer, each time either changes. */
   | { type: "room.votes"; roomId: string; votes: RoomQuestionVotes }
   /** To the person alone: how far they have read each of their rooms and what waits for them there, each time it changes. */
@@ -731,7 +745,7 @@ export type ServerMessage =
   /** A new message of a subscribed room, with the threads it starts, one for each agent it tags; one the room holds already is written anew, in its place by its seq. */
   | { type: "room.message"; message: RoomMessage; threads: RoomThread[] }
   /** All the room's agents wait on, and the people's tasks that wait for an approver, oldest first, each time one starts or stops waiting. */
-  | { type: "room.approvals"; roomId: string; approvals: RoomApproval[]; tasks: RoomTaskApproval[] }
+  | { type: "room.approvals"; roomId: string; approvals: RoomApproval[]; tasks: RoomTaskApproval[]; workspace: RoomWorkspaceApproval[] }
   /** What stands in the way of the room's sandbox, if anything, to the page that asked. */
   | ({ type: "room.sandbox-checked"; requestId: string; roomId: string } & SandboxCheck)
   /** What stands in the way of the workspace's sandbox, if anything, to the page that asked. */

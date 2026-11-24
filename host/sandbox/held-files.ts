@@ -16,16 +16,16 @@ export const HELD_MOUNTS_MOST = 100;
 
 export class HeldFilesRefused extends Error {}
 
-/** What the held files of a sandbox ask of it. */
+/** What the held files of a folder ask of its sandbox, all of whose VMs that write in the folder share them. */
 export interface HeldSandbox {
   /** The agents at work in the sandbox, by profile id, and their conversations. */
   atWork(): { agents: string[]; conversationIds: string[] };
   changed(): void;
-  /** Puts places back inside the VM, as its agent user, while it runs; null once it doesn't. */
+  /** Puts places back inside one of the VMs, as its agent user, while one runs; null where none does. */
   inVm(): ((request: PlacesRequest) => Promise<PlacesPutBack>) | null;
-  /** Stops the VM, once its agents held too many changes, or its put-back did not hold. */
+  /** Stops the VMs, once their agents held too many changes, or a put-back did not hold. */
   halt(): Promise<void>;
-  /** Once a stop asked for is done: whether the sandbox's VM no longer runs, so this computer may put places back with none racing it. */
+  /** Once each stop asked for is done: whether none of the VMs runs any longer, so this computer may put places back with none racing it. */
   untilStopped(): Promise<boolean>;
 }
 

@@ -133,9 +133,10 @@ export interface ThisHost {
   origins: readonly string[];
 }
 
-/** What follows the rooms of the machines this computer joined as a person, beyond the watch itself: their sockets opening, and all they say. */
+/** What follows the rooms of the machines this computer joined as a person, beyond the watch itself: their sockets opening and closing, and all they say. */
 export interface RoomMachineListener {
   opened(machineId: string): void;
+  closed(machineId: string): void;
   heard(machineId: string, message: ServerMessage): void;
 }
 
@@ -238,7 +239,7 @@ export class MachineWatch {
   private readonly watched = new Map<string, WatchedMachine>();
   private readonly roomCalls = new SenderLimit(Date.now, MOST_ROOM_CALLS_A_MINUTE);
   private readonly calledRooms = new Set<string>();
-  private roomMachineListener: RoomMachineListener = { opened: () => {}, heard: () => {} };
+  private roomMachineListener: RoomMachineListener = { opened: () => {}, closed: () => {}, heard: () => {} };
 
   constructor(
     private readonly store: Store,
@@ -293,6 +294,7 @@ export class MachineWatch {
       },
       closed: (code: number, reached: Machine) => {
         this.update(watched, { reachable: false });
+        if (machine.asPerson) this.roomMachineListener.closed(machineId);
         if (code === OUT_OF_ROOMS_CLOSE_CODE && this.tunnels.stillReaches(reached)) this.signedOut(machineId);
       },
       refused: (reached: Machine) => signInRevoked(this.store, reached, this.tunnels).then((revoked) => revoked && this.signedOut(machineId)),

@@ -7,6 +7,7 @@ import { harnessIds } from "../shared/model.ts";
 import { LONGEST_PERSON_NAME } from "../shared/people.ts";
 import { MOST_OWN_ANSWER_CHARACTERS } from "../shared/room-votes.ts";
 import { isRoomApprovalAnswer } from "../shared/room-permissions.ts";
+import { isRoomWorkspaceAnswer, workspaceCallIn } from "../shared/room-workspace.ts";
 import { approvesAs, asksAgentsAs, isBroughtAnswerEnd, mayWriteAs, ROOM_MESSAGE_MOST_CHARACTERS, type RoomRole } from "../shared/rooms.ts";
 
 /** A signed-in person other than the machine's owner, as far as what they send goes: the role they have in each room they are in. */
@@ -347,8 +348,8 @@ const admissions: { [K in ClientMessage["type"]]: K extends PersonMessageType ? 
   "room.leave": ({ roomId }, person) => void roleOf(person, roomId),
   "room.set-members-bring-agents": OWNER_ONLY,
   /** Into a room the person is in; that only a member brings one, never a guest, while the room lets them, and how many, the room's host checks and answers. */
-  "room.bring-agent": ({ requestId, roomId, name, harness }, person) => {
-    if (!isRequestId(requestId) || typeof name !== "string" || name.length > MOST_AGENT_NAME_SENT || !harnessIds.includes(harness)) throw unreadable();
+  "room.bring-agent": ({ requestId, roomId, name, harness, worksInRoom }, person) => {
+    if (!isRequestId(requestId) || typeof name !== "string" || name.length > MOST_AGENT_NAME_SENT || !harnessIds.includes(harness) || typeof worksInRoom !== "boolean") throw unreadable();
     void roleOf(person, roomId);
   },
   /** Whose agent it is, the room's host checks: a person takes out only the agents they brought. */
@@ -368,6 +369,25 @@ const admissions: { [K in ClientMessage["type"]]: K extends PersonMessageType ? 
     assertTaskNamed(message);
     if (typeof message.text !== "string" || message.text.length > MOST_ANSWER_SENT || !(message.ended === null || isBroughtAnswerEnd(message.ended))) throw unreadable();
     void roleOf(person, message.roomId);
+  },
+  /** Only a call of a form the host knows, no larger than it may be; what it may do, the room's host checks and answers. */
+  "room.workspace-call": ({ type, roomId, agentId, taskId, callId, call }, person) => {
+    assertTaskNamed({ agentId, taskId });
+    const known = workspaceCallIn(call);
+    if (!isRoomId(callId) || !known || !asksAgentsAs(roleOf(person, roomId))) throw unreadable();
+    return { type, roomId, agentId, taskId, callId, call: known };
+  },
+  "room.workspace-call-stopped": ({ roomId, agentId, callId }, person) => {
+    if (!isRoomId(agentId) || !isRoomId(callId)) throw unreadable();
+    void roleOf(person, roomId);
+  },
+  "room.answer-workspace": ({ roomId, agentId, answer }, person) => {
+    if (!isRoomId(agentId) || !isRoomWorkspaceAnswer(answer)) throw unreadable();
+    if (!approvesAs(roleOf(person, roomId))) throw new HostProblemError({ code: "room-approval-not-yours" });
+  },
+  "room.answer-workspace-call": ({ roomId, callId, answer }, person) => {
+    if (!isRoomId(callId) || (answer !== "allow" && answer !== "deny")) throw unreadable();
+    if (!approvesAs(roleOf(person, roomId))) throw new HostProblemError({ code: "room-approval-not-yours" });
   },
 };
 

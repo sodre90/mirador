@@ -25,7 +25,7 @@ import { MachineRelays } from "./machine-relays.ts";
 import { forgetMachine, forgetSignInAt, leftEveryRoomAt } from "./machine-sign-in.ts";
 import { MachineTunnels } from "./machine-tunnels.ts";
 import { MachineWatch } from "./machine-watch.ts";
-import { BroughtAgents } from "./brought-agents.ts";
+import { BroughtAgents, broughtAgentsFolder } from "./brought-agents.ts";
 import { ownPageOrigins } from "./addresses.ts";
 import { ConversationSearch } from "./search.ts";
 import { signedInWith } from "./sign-in.ts";
@@ -39,7 +39,9 @@ import { VoiceEngineInstaller } from "./voice/engine/installer.ts";
 import { VoiceEngineServers } from "./voice/engine/servers.ts";
 import { VoiceEngine } from "./voice/engine/engine.ts";
 import { MUTED_LIST_FILE, NotifierMute } from "./notifier.ts";
+import { agentEnvironment } from "./acp/environment.ts";
 import { installedHarnesses } from "./acp/harnesses.ts";
+import { basicEnvironment } from "../shared/room-agent-setup.ts";
 import { giveEveryWorkspaceAProfile, moveProfilelessOntoProfiles, ProfileService } from "./profiles.ts";
 import { RoomService } from "./rooms.ts";
 import { RoomQuestions } from "./room-questions.ts";
@@ -181,12 +183,12 @@ await apps.reopenAll();
 const stopWatchingViews = watchViews(loadedPlugins, () =>
   hub.broadcast({ type: "plugins.views", installedApps: apps.installed(), canvasViews: canvasPlugins.viewPaths() }),
 );
-const rooms = new RoomService(store, hub, conversations, notifications, config.dataDir);
+const rooms = new RoomService(store, hub, conversations, notifications, config.dataDir, () => basicEnvironment(agentEnvironment()));
 conversations.followsRoomRulesOf(rooms);
 const roomQuestions = new RoomQuestions(store, hub, canvas);
 const roomReading = new RoomReadingService(store, hub, notifications);
 rooms.hearPostsWith((message, newlyTagged, by) => roomReading.posted(message, newlyTagged, by));
-rooms.hearWaitingWith((roomId, approvals, tasks) => roomReading.waitingChanged(roomId, approvals, tasks));
+rooms.hearWaitingWith((roomId, approvals, tasks, workspace) => roomReading.waitingChanged(roomId, approvals, tasks, workspace));
 roomReading.countsWaitingWith((roomId) => rooms.countWaiting(roomId));
 canvas.hearRoomQuestionsWith((roomId, item, startsWaiting) => {
   const room = store.findRoom(roomId);
@@ -203,6 +205,7 @@ const mcp = new CanvasMcpEndpoints({
   catalog,
   store,
   rooms,
+  roomsWorkspaces: { callInWorkspace: (conversationId, call, signal) => broughtAgents.callInWorkspace(conversationId, call, signal) },
   antigravityAskWaitMs: config.antigravityAskWaitMs,
 });
 const podman = process.platform === "linux" ? Podman.here(config.sandboxContainer, currentPath() ?? "", config.selinuxEnforceFile) : null;
@@ -221,7 +224,7 @@ const sandboxes = new Sandboxes(podman ?? AppleContainer.here(config.sandboxCont
   atWork: (owner) => {
     const working =
       owner.kind === "room"
-        ? (store.findRoom(owner.id)?.agents ?? []).filter(({ answering }) => answering !== null).map(({ profileId, conversationId }) => ({ profileId, id: conversationId }))
+        ? (store.findRoom(owner.id)?.agents ?? []).filter(({ answering, brought }) => answering !== null && !brought).map(({ profileId, conversationId }) => ({ profileId, id: conversationId }))
         : store.listConversations().filter((conversation) => belongsToSandbox(conversation, owner) && conversations.isAtWork(conversation.id));
     return {
       agents: [...new Set(working.flatMap(({ profileId }) => profileId ?? []))],
@@ -241,6 +244,9 @@ const sandboxControl: SandboxControl = {
   prepare: (profiles) => void agentImagesOf(profiles, store.claudeProgramSetting()).then((images) => images.forEach((image) => sandboxes.prepareInBackground(image))),
   answerHeldChange: (owner, changeId, answer) => sandboxes.answerHeldChange(owner, changeId, answer),
   workspaceRefusal: (workspace, turningOn) => sandboxes.workspaceRefusal(workspace, turningOn),
+  launchForBrought: ({ profiles, ...call }) => sandboxes.launchForBrought({ ...call, images: () => agentImagesOf(profiles, store.claudeProgramSetting()) }),
+  stopBrought: (owner, agentId) => sandboxes.stopBrought(owner, agentId),
+  turnEnded: (owner) => sandboxes.turnEnded(owner),
   ownerGone: (owner) => {
     sandboxFolders.ownerGone(owner);
     return sandboxes.ownerGone(owner);
@@ -301,8 +307,12 @@ const watch = new MachineWatch(
   machineSignedOut,
   tunnels,
 );
-const broughtAgents = new BroughtAgents(store, hub, watch, conversations, notifications);
-watch.hearRoomMachinesWith({ opened: (machineId) => broughtAgents.connected(machineId), heard: (machineId, message) => broughtAgents.heard(machineId, message) });
+const broughtAgents = new BroughtAgents(store, hub, watch, conversations, notifications, broughtAgentsFolder(config.dataDir));
+watch.hearRoomMachinesWith({
+  opened: (machineId) => broughtAgents.connected(machineId),
+  closed: (machineId) => broughtAgents.disconnected(machineId),
+  heard: (machineId, message) => broughtAgents.heard(machineId, message),
+});
 conversations.followsBroughtTasksOf(broughtAgents);
 conversations.hearTurnsWith({
   turnStarted: (conversationId, turnSeq) => {
@@ -396,6 +406,7 @@ function machineSignedOut(machineId: string) {
 
 async function stopServices() {
   stopWatchingViews();
+  rooms.shutdown();
   const voiceEngineStopped = voiceEngine.stop();
   terminalSessions.stop();
   sourceWatcher.stop();
@@ -433,6 +444,7 @@ for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"] as const) {
 }
 process.on("exit", () => {
   tunnels.stopAll();
+  rooms.shutdown();
   conversations.shutdown();
   voiceEngine.killServersNow();
 });

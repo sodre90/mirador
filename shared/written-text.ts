@@ -61,3 +61,22 @@ export const squareBracketsMadeRound = (text: string) => text.replace(OPENING_SQ
 
 /** Whether it holds a bidirectional control, which can show its characters in another order than they are read. */
 export const reordersWhatShows = (text: string) => /\p{Bidi_Control}/u.test(text);
+
+const asItsCode = (character: string) => [...character].map((each) => `\\u{${each.codePointAt(0)!.toString(16)}}`).join("");
+
+/**
+ * Text with nothing in it left unseen, for whoever allows it to run or be written as it is: what shows nothing or
+ * reorders what shows, and every control character but a new line and a tab, written out as its code.
+ */
+export const everyCharacterShown = (text: string) =>
+  text
+    .replace(UNSEEN_UNLESS_JOINING_AN_EMOJI, (unseen: string, joining: string | undefined) => joining ?? asItsCode(unseen))
+    .replace(/[\u2028\u2029]/g, asItsCode)
+    .replace(CONTROLS_BUT_NEW_LINE_AND_TAB, asItsCode);
+
+const BLANKS_BUT_SPACE_AND_TAB = /[^\S\n\t ]|\u2800/gu;
+
+const blankLinesCounted = (run: string) => `\n\n\n${asItsCode("\n")}{${run.split("\n").length - 4}}\n`;
+
+/** A command with nothing in it left unseen, nor put out of sight: every blank but a space and a tab written out as its code, and the blank lines beyond two in a row counted. */
+export const commandShown = (command: string) => everyCharacterShown(command).replace(BLANKS_BUT_SPACE_AND_TAB, asItsCode).replace(BLANK_LINES_BEYOND_TWO, blankLinesCounted);

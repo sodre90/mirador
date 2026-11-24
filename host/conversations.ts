@@ -1,5 +1,6 @@
 import { realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
+import { worksInRoomsWorkspaces } from "../shared/brought-agents.ts";
 import type { PluginActivity } from "../shared/canvas-plugins.ts";
 import { activityOf, turnEndedAs } from "../shared/plugin-activity.ts";
 import { canvasToolName, toolNameOf } from "../shared/tool-title.ts";
@@ -114,7 +115,7 @@ import { modelInSandbox } from "./sandbox/sandbox-control.ts";
 import { NO_SANDBOX, ownerKey, type SandboxOwner } from "../shared/sandbox.ts";
 import { awaitsItsInput, ToolCallReportsHeard, withReportedToolCall } from "./acp/reported-tool-call.ts";
 import { canvasToolAskedFor, isPreAllowedCanvasTool } from "./canvas/permission.ts";
-import { ROOM_CANVAS_TOOLS } from "./canvas/tool-names.ts";
+import { ROOM_CANVAS_TOOLS, ROOMS_WORKSPACE_CANVAS_TOOLS } from "./canvas/tool-names.ts";
 import { agentLogsDirectory, type HostConfig } from "./config.ts";
 import type { Hub } from "./hub.ts";
 import type { DroppedFiles } from "./dropped-files.ts";
@@ -448,8 +449,6 @@ const replaysHistoryOnResume = (harness: HarnessId) => harness === "antigravity"
  */
 const readsFilesNamedInLastBlock = (harness: HarnessId) => harness === "claude";
 
-const carriesOthersWords = ({ roomId, broughtIntoRoom }: Pick<Conversation, "roomId" | "broughtIntoRoom">) => roomId !== undefined || broughtIntoRoom === true;
-
 /**
  * Agents that read their settings, MCP servers among them, anew for each session they open, so a /reload reopens only the
  * conversation's session. opencode reads them once per process, so a /reload starts that again, as it does Antigravity's,
@@ -473,7 +472,10 @@ const SANDBOXED_KEY_SUFFIX = "sandboxed";
  * What picks the agent process a conversation runs on: its launch, and, for a conversation that exists, its id, its
  * workspace and the room it works for.
  */
-export type ProcessLaunch = Launch & { id?: string; workspaceId?: string } & Pick<Conversation, "roomId" | "broughtIntoRoom">;
+export type ProcessLaunch = Launch & { id?: string; workspaceId?: string } & Pick<Conversation, "roomId" | "broughtIntoRoom" | "worksInRoomsWorkspace">;
+
+/** An agent you brought that works in the workspace of its room: of this computer it has nothing. */
+const HELD_TO_A_ROOMS_WORKSPACE = { broughtIntoRoom: true, worksInRoomsWorkspace: true } as const;
 
 /**
  * The agent process serving a conversation. Antigravity keeps one canvas MCP server per process, the one its first
@@ -1081,12 +1083,13 @@ export class ConversationService {
     mode: AdoptMode,
     forkPoint: SessionForkPoint | null = null,
     worktree?: ConversationWorktree,
+    heldTo: Pick<Conversation, "broughtIntoRoom" | "worksInRoomsWorkspace"> = {},
   ): Conversation {
     if (mode === "continue" && this.store.listConversations().some(({ acpSessionId }) => acpSessionId === session.sessionId)) {
       throw new HostProblemError({ code: "session-already-open" });
     }
     const title = session.title || UNTITLED;
-    const conversation = this.insertConversation(workspaceId, launch, mode === "fork" ? forkTitle(title) : withoutForkMarks(title), session.titleSetByUser, worktree);
+    const conversation = this.insertConversation(workspaceId, launch, mode === "fork" ? forkTitle(title) : withoutForkMarks(title), session.titleSetByUser, worktree, undefined, heldTo);
     this.ensureSession(conversation.id, () => this.loadExternalSession(conversation.id, session.sessionId, mode, forkPoint)).catch(() => {});
     return conversation;
   }
@@ -1095,13 +1098,13 @@ export class ConversationService {
    * Copies the agent's session into a new conversation on the same profile: as it stands, or through the turn begun
    * with the message at `throughTurnSeq`, its reply included. A turn running in it goes on undisturbed. A title the
    * user or a plugin gave it stays theirs in the fork, safe from the agent's renaming. The fork works where the
-   * conversation does, as the agent keeps a session by its folder.
+   * conversation does, as the agent keeps a session by its folder, with no more of this computer than it has.
    */
   fork(conversationId: string, throughTurnSeq?: number): Conversation {
-    const { workspaceId, harness, profileId, acpSessionId, title, titleSetByUser, worktree } = this.get(conversationId);
+    const { workspaceId, harness, profileId, acpSessionId, title, titleSetByUser, worktree, broughtIntoRoom, worksInRoomsWorkspace } = this.get(conversationId);
     if (!acpSessionId || !this.canFork(conversationId)) throw new HostProblemError({ code: "nothing-to-fork-yet" });
     const forkPoint = throughTurnSeq === undefined ? null : this.forkPointThrough(conversationId, throughTurnSeq);
-    const forked = this.adoptSession(workspaceId, { harness, profileId }, { sessionId: acpSessionId, title, titleSetByUser }, "fork", forkPoint, worktree);
+    const forked = this.adoptSession(workspaceId, { harness, profileId }, { sessionId: acpSessionId, title, titleSetByUser }, "fork", forkPoint, worktree, { broughtIntoRoom, worksInRoomsWorkspace });
     this.store.copyLoadedPlugins(conversationId, forked.id);
     return forked;
   }
@@ -1133,7 +1136,7 @@ export class ConversationService {
     const asked = this.get(conversationId);
     const parent = asked.sideChatOf ? this.get(asked.sideChatOf) : asked;
     if (parent.roomId && this.sandboxOf(parent)) throw new HostProblemError({ code: "sandboxed-room-side-chat" });
-    const { workspaceId, harness, profileId, worktree } = parent;
+    const { workspaceId, harness, profileId, worktree, broughtIntoRoom, worksInRoomsWorkspace } = parent;
     const mayChangeFiles = sideChatMayChangeFiles({
       parent,
       openedByOwner: authorId !== undefined && authorId === this.store.ownerId(),
@@ -1141,7 +1144,7 @@ export class ConversationService {
       setting: this.store.sideChatAccess(),
     });
     const title = titleFrom(askedOutsideQuotes(text)) || UNTITLED;
-    const sideChat = this.insertConversation(workspaceId, { harness, profileId }, title, true, worktree, { of: parent.id, mayChangeFiles });
+    const sideChat = this.insertConversation(workspaceId, { harness, profileId }, title, true, worktree, { of: parent.id, mayChangeFiles }, { broughtIntoRoom, worksInRoomsWorkspace });
     this.store.copyLoadedPlugins(parent.id, sideChat.id);
     this.ensureSession(sideChat.id, () => this.openSideChatSession(sideChat.id, parent.id)).catch(() => {});
     this.send(sideChat.id, text, [], { authorId }).catch(() => {});
@@ -1180,8 +1183,12 @@ export class ConversationService {
     return { sessionId: copyId, configOptions };
   }
 
-  /** An agent brought into someone else's room asks as usual, so its profile's mode holds only where that mode still asks. */
+  /**
+   * An agent brought into someone else's room asks as usual, so its profile's mode holds only where that mode still asks;
+   * one that works in the room's workspace runs in the mode that asks, whatever its profile or the user's own settings say.
+   */
   private profileModeFor(conversation: Conversation, profile: Profile | undefined) {
+    if (conversation.worksInRoomsWorkspace) return askingDefaultModeOf(conversation.harness) ?? undefined;
     return conversation.broughtIntoRoom ? askingModeOf(conversation.harness, profile?.mode) : profile?.mode;
   }
 
@@ -1602,10 +1609,12 @@ export class ConversationService {
 
   /**
    * The conversation of an agent you brought into a room of someone else's machine, which shows with your others and asks
-   * you as they do; as the room's text drives it, it gets of Mirador no more than a room's agent does.
+   * you as they do; as the room's text drives it, it gets of Mirador no more than a room's agent does. One that works in
+   * the room's own workspace gets nothing else of this computer either, nor does anything started in that one's folder,
+   * where the agent's session, with the room's text in it, could be taken up again.
    */
-  createBroughtIntoRoom(workspaceId: string, launch: Launch, title: string): Conversation {
-    const conversation = this.insertConversation(workspaceId, launch, title, true, undefined, undefined, { broughtIntoRoom: true });
+  createBroughtIntoRoom(workspaceId: string, launch: Launch, title: string, inRoomsWorkspace: boolean): Conversation {
+    const conversation = this.insertConversation(workspaceId, launch, title, true, undefined, undefined, inRoomsWorkspace ? HELD_TO_A_ROOMS_WORKSPACE : { broughtIntoRoom: true });
     this.ensureSession(conversation.id).catch(() => {});
     return conversation;
   }
@@ -1617,9 +1626,9 @@ export class ConversationService {
     titleSetByUser = false,
     worktree?: ConversationWorktree,
     sideChat?: { of: string; mayChangeFiles: boolean },
-    { roomId, broughtIntoRoom }: Pick<Conversation, "roomId" | "broughtIntoRoom"> = {},
+    worksFor: Pick<Conversation, "roomId" | "broughtIntoRoom" | "worksInRoomsWorkspace"> = {},
   ): Conversation {
-    this.existingWorkspace(workspaceId);
+    const { roomId, broughtIntoRoom, worksInRoomsWorkspace } = this.existingWorkspace(workspaceId).forBroughtAgents ? { ...worksFor, ...HELD_TO_A_ROOMS_WORKSPACE } : worksFor;
     const profile = profileToLaunch(this.store, launch);
     const now = Date.now();
     const conversation = this.store.insertConversation({
@@ -1631,7 +1640,7 @@ export class ConversationService {
       titleSetByUser,
       acpSessionId: null,
       askMode: roomId ? "next-message" : profile.askMode,
-      bypassPermissions: sideChat === undefined && roomId === undefined && !broughtIntoRoom && profile.bypassPermissions,
+      bypassPermissions: sideChat === undefined && !worksForARoom({ roomId, broughtIntoRoom, worksInRoomsWorkspace }) && profile.bypassPermissions,
       status: "idle",
       statusDetail: null,
       openInTerminal: null,
@@ -1650,6 +1659,7 @@ export class ConversationService {
       ...(sideChat?.mayChangeFiles && { sideChatMayChangeFiles: true as const }),
       ...(roomId && { roomId }),
       ...(broughtIntoRoom && { broughtIntoRoom }),
+      ...(worksInRoomsWorkspace && { worksInRoomsWorkspace }),
       createdAt: now,
       updatedAt: now,
     });
@@ -1905,8 +1915,9 @@ export class ConversationService {
 
   /** The profile's own agent, which only a conversation that has not begun may move to. */
   private agentToSwitchTo(conversationId: string, profileId: string): HarnessId {
-    const { harness } = this.get(conversationId);
+    const { harness, worksInRoomsWorkspace } = this.get(conversationId);
     const target = this.store.findProfile(profileId);
+    if (target && worksInRoomsWorkspace) assertWorksInRoomsWorkspaces(target.harness);
     if (!target || target.harness === harness || !hasBegun(this.store.listEvents(conversationId))) return target?.harness ?? harness;
     throw new HostProblemError({ code: "conversation-runs-on-other-agent", agent: harnessLabels[harness], profile: target.name, profileAgent: harnessLabels[target.harness] });
   }
@@ -3333,13 +3344,16 @@ export class ConversationService {
 
   /** The canvas tools that only show things in Mirador run without asking; for a room, only the room's. */
   private preAllowsCanvasTool(conversationId: string, tool: string | null) {
-    if (worksForARoom(this.get(conversationId))) return tool !== null && ROOM_CANVAS_TOOLS.includes(tool);
+    const conversation = this.get(conversationId);
+    if (conversation.worksInRoomsWorkspace) return tool !== null && ROOMS_WORKSPACE_CANVAS_TOOLS.includes(tool);
+    if (worksForARoom(conversation)) return tool !== null && ROOM_CANVAS_TOOLS.includes(tool);
     return isPreAllowedCanvasTool(tool, this.canvasPlugins(conversationId).toolNames);
   }
 
   /** A test host's own Claude Code works without the settings and instructions of the user who runs the tests. */
   private async sessionRequest(conversationId: string) {
     const conversation = this.get(conversationId);
+    if (conversation.worksInRoomsWorkspace) assertWorksInRoomsWorkspaces(conversation.harness);
     const withoutUserSettings = this.config.testSkipsUserSettings && this.onUsersOwnSetup(conversation);
     const canvasUse = this.store.canvasUse();
     const canvasPlugins = this.canvasPlugins(conversationId);
@@ -3359,6 +3373,7 @@ export class ConversationService {
         canvasPlugins,
         idleCompaction,
         inRoom: worksForARoom(conversation),
+        inRoomsWorkspace: conversation.worksInRoomsWorkspace === true,
         claudeSetup,
         keptProtections: await this.claudeProtectionsKept(conversation, settingSourcesLeftOut(claudeSetup, withoutUserSettings), cwd),
         sandboxFolders,
@@ -3632,7 +3647,7 @@ export class ConversationService {
     if (launch.roomId && !this.store.findRoom(launch.roomId)) throw new HostProblemError({ code: "room-gone" });
     const sandbox = this.sandboxOf(launch);
     if (!sandbox && !launch.roomId) throw new HostProblemError({ code: "workspace-sandbox-turned-off" });
-    if (sandbox && launch.broughtIntoRoom) throw new HostProblemError({ code: "brought-agent-in-sandboxed-workspace" });
+    if (sandbox && (launch.broughtIntoRoom || launch.worksInRoomsWorkspace)) throw new HostProblemError({ code: "brought-agent-in-sandboxed-workspace" });
     if (!sandbox) {
       this.startedOnThisComputer.add(harness);
       return onThisComputer;
@@ -4059,7 +4074,7 @@ export class ConversationService {
   private async promptContent(conversationId: string, text: string, imageIds: string[]): Promise<acp.ContentBlock[]> {
     const images = await Promise.all(imageIds.map((imageId) => this.images.contentBlock(conversationId, imageId)));
     const conversation = this.get(conversationId);
-    const endsInMiradorsWords = carriesOthersWords(conversation) && readsFilesNamedInLastBlock(conversation.harness);
+    const endsInMiradorsWords = worksForARoom(conversation) && readsFilesNamedInLastBlock(conversation.harness);
     return [{ type: "text", text }, ...images, ...(endsInMiradorsWords ? [{ type: "text" as const, text: END_OF_OTHERS_WORDS }] : [])];
   }
 
@@ -4077,7 +4092,7 @@ export class ConversationService {
     if (allowOptionId && this.preAllowsCanvasTool(conversationId, canvasToolAskedFor(request.toolCall, reports))) {
       return { outcome: { outcome: "selected", optionId: allowOptionId } };
     }
-    if (isToReadOnly(this.get(conversationId))) return turnedDown(request.options);
+    if (isToReadOnly(this.get(conversationId)) || this.get(conversationId).worksInRoomsWorkspace) return turnedDown(request.options);
     const runtime = this.runtime(conversationId);
     const askedAbout = this.toolCallAskedAbout(conversationId, request.toolCall, signal).then(async (toolCall) => ({ toolCall, edits: await this.editsAskedFor(conversationId, toolCall) }));
     const inArrivalOrder = (runtime.permissionArriving ?? Promise.resolve()).then(() => askedAbout);
@@ -4659,10 +4674,14 @@ const textBlock = (text: string): acp.ContentBlock => ({ type: "text", text });
 
 const sideChatSwitchWords = ({ sideChatAccessToTell }: Pick<Runtime, "sideChatAccessToTell">) => (sideChatAccessToTell ? [textBlock(sideChatAccessNote(sideChatAccessToTell))] : []);
 
+function assertWorksInRoomsWorkspaces(harness: HarnessId) {
+  if (!worksInRoomsWorkspaces(harness)) throw new HostProblemError({ code: "agent-cannot-work-in-rooms-workspace" });
+}
+
 /** A side chat that is to read and search only, whether its agent holds it to that or is only asked to. */
 const isToReadOnly = ({ sideChatOf, sideChatMayChangeFiles }: Pick<Conversation, "sideChatOf" | "sideChatMayChangeFiles">) => sideChatOf !== undefined && !sideChatMayChangeFiles;
 
-/** A side chat's agent is told no once, so it can still ask for something else. */
+/** The agent is told no once, so it can still ask for something else. */
 function turnedDown(options: acp.PermissionOption[]): acp.RequestPermissionResponse {
   const rejecting = optionThatRejects(options);
   return rejecting ? { outcome: { outcome: "selected", optionId: rejecting } } : { outcome: { outcome: "cancelled" } };

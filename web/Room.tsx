@@ -34,12 +34,14 @@ import {
   type RoomMessageSentAlong,
   type RoomPresence,
   type RoomRole,
+  type RoomTask,
   type RoomTaskApproval,
   type RoomThread,
   type RoomTimeline,
   type RoomWriter,
   type WorkPending,
 } from "../shared/rooms.ts";
+import type { RoomWorkspaceApproval, RoomWorkspaceCall } from "../shared/room-workspace.ts";
 import type { HeldChange } from "../shared/sandbox.ts";
 import { placedBelowOnItsSide, useClosing, useKeptInWindow } from "./BarMenu.tsx";
 import { CanvasPanel, CanvasShown, type WorkspaceApps } from "./Canvas.tsx";
@@ -66,6 +68,7 @@ import { ModelChoice, offeredAlready } from "./RoomAgents.tsx";
 import { HeldChangeCard } from "./Sandbox.tsx";
 import { JoinerAtTheDoor, RemovePerson, WaitingToJoin } from "./RoomSettings.tsx";
 import { RoomVote } from "./RoomVote.tsx";
+import { WorkspaceAccessApproval, WorkspaceAccessLine, WorkspaceCallApproval, WorkspaceCalls } from "./RoomWorkspace.tsx";
 import { useTypingAidAttributes } from "./typing-aids.ts";
 import type { WorkspacePluginTab } from "./WorkspaceTabView.tsx";
 
@@ -338,25 +341,52 @@ const approve = ({ roomId, profileId, request }: RoomApproval, answer: RoomAppro
 
 const answerTask = ({ roomId, messageId }: RoomTaskApproval, answer: "allow" | "deny") => connection.send({ type: "room.answer-task", roomId, messageId, answer });
 
-type WaitingForYou = { kind: "request"; approval: RoomApproval; at: number } | { kind: "task"; task: RoomTaskApproval; at: number };
+type WaitingForYou =
+  | { kind: "request"; approval: RoomApproval; at: number }
+  | { kind: "task"; task: RoomTaskApproval; at: number }
+  | { kind: "workspace"; asked: RoomWorkspaceApproval; at: number };
 
-/** What waits for you in the room, oldest first: the agents' requests, and the tasks people other than the owner gave them. */
-const waitingInOrder = (approvals: RoomApproval[], tasks: RoomTaskApproval[]): WaitingForYou[] =>
-  [...approvals.map((approval) => ({ kind: "request" as const, approval, at: approval.at })), ...tasks.map((task) => ({ kind: "task" as const, task, at: task.at }))].toSorted(
-    (a, b) => a.at - b.at,
-  );
+/** What waits for you in the room, oldest first: the agents' requests, the tasks people other than the owner gave them, and what agents people brought ask to do in the room's workspace. */
+const waitingInOrder = (approvals: RoomApproval[], tasks: RoomTaskApproval[], workspace: RoomWorkspaceApproval[]): WaitingForYou[] =>
+  [
+    ...approvals.map((approval) => ({ kind: "request" as const, approval, at: approval.at })),
+    ...tasks.map((task) => ({ kind: "task" as const, task, at: task.at })),
+    ...workspace.map((asked) => ({ kind: "workspace" as const, asked, at: asked.at })),
+  ].toSorted((a, b) => a.at - b.at);
 
 /** What waits for you in the room, oldest first: the first with its answers, and how many wait in all. */
-function ApprovalStrip({ approvals, tasks = [], agentsById, you }: { approvals: RoomApproval[]; tasks?: RoomTaskApproval[]; agentsById: Map<string, RoomAgentShown>; you: string | null }) {
-  const waiting = waitingInOrder(approvals, tasks);
+function ApprovalStrip({
+  approvals,
+  tasks = [],
+  workspace,
+  agentsById,
+  you,
+}: {
+  approvals: RoomApproval[];
+  tasks?: RoomTaskApproval[];
+  workspace: RoomWorkspaceApproval[];
+  agentsById: Map<string, RoomAgentShown>;
+  you: string | null;
+}) {
+  const waiting = waitingInOrder(approvals, tasks, workspace);
   const first = waiting[0];
   if (!first) return null;
   const count = waiting.length > 1 && <span className="room-approval-count">{words.approvalPosition(waiting.length)}</span>;
-  return first.kind === "task" ? (
-    <TaskApproval key={first.task.messageId} task={first.task} agentsById={agentsById} count={count} />
-  ) : (
-    <RequestApproval approval={first.approval} agentsById={agentsById} you={you} count={count} />
-  );
+  switch (first.kind) {
+    case "task":
+      return <TaskApproval key={first.task.messageId} task={first.task} agentsById={agentsById} count={count} />;
+    case "request":
+      return <RequestApproval approval={first.approval} agentsById={agentsById} you={you} count={count} />;
+    case "workspace": {
+      const { asked } = first;
+      const agentName = agentNames([asked.agentId], agentsById);
+      return asked.asks === "access" ? (
+        <WorkspaceAccessApproval key={asked.agentId} asked={asked} agentName={agentName} count={count} />
+      ) : (
+        <WorkspaceCallApproval key={asked.callId} asked={asked} agentName={agentName} count={count} task={asked.task && <TaskOfApproval task={asked.task} you={you} />} />
+      );
+    }
+  }
 }
 
 /**
@@ -423,8 +453,13 @@ function MessagesSentAlong({ messages, agentsById }: { messages: RoomMessageSent
   );
 }
 
+/** Whose task the agent asks for it on, so the approver judges the two together. */
+function TaskOfApproval({ task, you }: { task: RoomTask; you: string | null }) {
+  const personName = usePersonName(task.personId);
+  return <div className="room-approval-task">{task.personId === you ? words.yourTask(task.text) : words.approvalTask(personName, words.authorRoles[task.role], task.text)}</div>;
+}
+
 function RequestApproval({ approval: first, agentsById, you, count }: { approval: RoomApproval; agentsById: Map<string, RoomAgentShown>; you: string | null; count: ReactNode }) {
-  const personName = usePersonName(first.task?.personId ?? null);
   const detail = first.request.command ?? first.file;
   return (
     <section className="room-approvals" aria-label={words.approvalsWaiting} data-permission-id={first.request.permissionId}>
@@ -435,11 +470,7 @@ function RequestApproval({ approval: first, agentsById, you, count }: { approval
       </div>
       {detail && <code className="room-approval-detail">{detail}</code>}
       {first.outsideWorkspace && <div className="room-approval-outside">{words.outsideWorkspace}</div>}
-      {first.task && (
-        <div className="room-approval-task">
-          {first.task.personId === you ? words.yourTask(first.task.text) : words.approvalTask(personName, words.authorRoles[first.task.role], first.task.text)}
-        </div>
-      )}
+      {first.task && <TaskOfApproval task={first.task} you={you} />}
       <div className="permission-options">
         <button type="button" className="option-allow_once" onClick={() => approve(first, "allow")}>
           {words.allow}
@@ -455,7 +486,13 @@ function RequestApproval({ approval: first, agentsById, you, count }: { approval
   );
 }
 
-const waitsInThread = (approvals: RoomApproval[], threadId: string) => approvals.some((approval) => approval.threadId === threadId);
+const callsWaiting = (workspace: RoomWorkspaceApproval[]) => workspace.flatMap((asked) => (asked.asks === "call" ? [asked] : []));
+
+/** The threads in which an agent waits for an approver, for a request or to do something in the room's workspace. */
+const threadsWaiting = (approvals: RoomApproval[], workspace: RoomWorkspaceApproval[]) => new Set([...approvals, ...callsWaiting(workspace)].flatMap(({ threadId }) => threadId ?? []));
+
+/** What an agent someone brought did in the room's workspace after the thread's message and before the next one. */
+const callsAfter = (calls: RoomWorkspaceCall[], message: RoomMessage, next: RoomMessage | undefined) => calls.filter(({ at }) => at >= message.at && (next === undefined || at < next.at));
 
 /** A guest writes in the room, but tags none of its agents and follows up in none of their threads; the owner is no guest anywhere. */
 const isGuestIn = (room: Room, you: string | null) => room.people.some(({ personId, role }) => personId === you && role === "guest");
@@ -471,8 +508,11 @@ function ThreadColumn({
   agent,
   opened,
   agentsById,
-  approvals,
+  waitedIn,
   waitingForYou,
+  workspaceCalls,
+  workspaceWaitingForYou,
+  answersWorkspace,
   you,
   followsUp,
   onlyReads,
@@ -486,8 +526,13 @@ function ThreadColumn({
   agent: RoomAgentShown;
   opened: OpenConversation | undefined;
   agentsById: Map<string, RoomAgentShown>;
-  approvals: RoomApproval[];
+  /** The threads in which an agent waits for an approver. */
+  waitedIn: Set<string>;
   waitingForYou: RoomApproval[];
+  workspaceCalls: RoomWorkspaceCall[];
+  workspaceWaitingForYou: RoomWorkspaceApproval[];
+  /** You let agents people brought into the room's workspace, and take that away. */
+  answersWorkspace: boolean;
   you: string | null;
   followsUp: boolean;
   /** Someone other than the machine's owner reads the agent's work there, and acts on none of it. */
@@ -498,7 +543,9 @@ function ThreadColumn({
 }) {
   const shownHere = threadMessagesShown(timeline, thread, agent);
   const firstReached = firstReachingTheAgent(timeline, thread, agent.answering);
-  const workingLine = workUnderWay(pending, agentsById, approvals).find((work) => work.thread.id === thread.id)?.text;
+  const workingLine = workUnderWay(pending, agentsById, waitedIn).find((work) => work.thread.id === thread.id)?.text;
+  const callsHere = workspaceCalls.filter(({ threadId }) => threadId === thread.id);
+  const access = agent.brought?.workspace;
   const { ref: threadTimeline, onScroll, jumpToLatest } = useScrollAnchor();
   const closeOnEscape = (event: KeyboardEvent<HTMLElement>) => {
     if (event.key !== "Escape" || event.defaultPrevented) return;
@@ -515,18 +562,25 @@ function ThreadColumn({
           ×
         </button>
       </header>
+      {access && <WorkspaceAccessLine roomId={thread.roomId} agentId={agent.profileId} agentName={agent.name} access={access} answers={answersWorkspace} />}
       <div className="timeline" ref={threadTimeline} onScroll={onScroll}>
         {agent.conversation && opened?.loaded && firstReached && <HistoryReachingBack opened={opened} messageId={firstReached.id} />}
-        {shownHere.map((message) => (
+        {shownHere.map((message, index) => (
           <div key={message.id} className="room-thread-turn">
             <RoomEntry message={message} agentsById={agentsById} />
+            <WorkspaceCalls calls={callsAfter(callsHere, message, shownHere[index + 1])} />
             {agent.conversation && opened?.loaded && <TimelineOfEvents conversation={agent.conversation} events={eventsAnswering(opened.events, message.id)} agentName={agent.name} onlyReads={onlyReads} />}
           </div>
         ))}
         {workingLine && <div className="working">{workingLine}</div>}
         <WritingLine writing={writing} threadId={thread.id} you={you} />
       </div>
-      <ApprovalStrip approvals={waitingForYou.filter(({ threadId }) => threadId === thread.id)} agentsById={agentsById} you={you} />
+      <ApprovalStrip
+        approvals={waitingForYou.filter(({ threadId }) => threadId === thread.id)}
+        workspace={callsWaiting(workspaceWaitingForYou).filter(({ threadId }) => threadId === thread.id)}
+        agentsById={agentsById}
+        you={you}
+      />
       {followsUp && (
         <RoomComposer
           placeholder={words.followUpPlaceholder(agent.name)}
@@ -557,7 +611,7 @@ function HistoryReachingBack({ opened, messageId }: { opened: OpenConversation; 
  * What the room shows of its agents' work under way: a line for each message an agent has to answer, and whether it
  * works on it, waits for approval in it, comes to it later, or waits for its task to be allowed.
  */
-function workUnderWay(pending: WorkPending[], agentsById: Map<string, RoomAgentShown>, approvals: RoomApproval[]) {
+function workUnderWay(pending: WorkPending[], agentsById: Map<string, RoomAgentShown>, waitedIn: Set<string>) {
   const sent = pending.filter(({ message }) => !taskWaits(message));
   return pending.map(({ message, thread }) => {
     const agent = agentsById.get(thread.profileId);
@@ -565,7 +619,7 @@ function workUnderWay(pending: WorkPending[], agentsById: Map<string, RoomAgentS
     const first = sent.find((each) => each.thread.profileId === thread.profileId)?.message === message;
     const text = taskWaits(message)
       ? words.taskWaits(name)
-      : waitsInThread(approvals, thread.id)
+      : waitedIn.has(thread.id)
         ? words.waitingForApproval(name)
         : !first
           ? words.waiting(name)
@@ -592,7 +646,9 @@ function modelNameOf(agent: RoomAgentShown) {
 /** An agent in the room's bar: its mark and name, and for the owner its model quietly beside them; cut short where the bar is narrow, whole in a hint then. */
 function AgentChip({ agent, showsModel }: { agent: RoomAgentShown; showsModel: boolean }) {
   const model = showsModel ? modelNameOf(agent) : null;
-  const whereItRuns = agent.brought && (agent.brought.here ? words.onComputerOf(agent.brought.bringer) : words.awayFrom(agent.brought.bringer));
+  const whereItRuns =
+    agent.brought &&
+    [agent.brought.here ? words.onComputerOf(agent.brought.bringer) : words.awayFrom(agent.brought.bringer), agent.brought.workspace && words.workspaceAccess[agent.brought.workspace]].filter(Boolean).join(" · ");
   return (
     <li className={`agent-chip${agent.brought && !agent.brought.here ? " away" : ""}`} data-hint={whereItRuns || undefined}>
       <HintedWhenCutShort className="room-agent-label" whole={[agent.name, model, whereItRuns].filter(Boolean).join(" · ")}>
@@ -839,6 +895,7 @@ export function RoomView({
   ownerPicture,
   approvals,
   tasks,
+  workspaceWaiting,
   heldChanges,
   holdsTooMany,
   homeDir,
@@ -863,6 +920,8 @@ export function RoomView({
   approvals: RoomApproval[];
   /** The tasks of people other than the owner that wait for an approver, oldest first. */
   tasks: RoomTaskApproval[];
+  /** What agents people brought wait on for an approver, to work in the room's workspace. */
+  workspaceWaiting: RoomWorkspaceApproval[];
   /** The room's agent config file changes held for the owner, oldest first. */
   heldChanges: HeldChange[];
   /** Whether its sandbox stopped as it holds as many changes as a room may. */
@@ -902,6 +961,8 @@ export function RoomView({
   const peopleToTag = taggablePeople(room, ownerId, people, you);
   const waitingForYou = approvals.filter(({ approvers }) => you !== null && approvers.includes(you));
   const tasksWaitingForYou = tasks.filter(({ approvers }) => you !== null && approvers.includes(you));
+  const workspaceWaitingForYou = workspaceWaiting.filter(({ approvers }) => you !== null && approvers.includes(you));
+  const waitedIn = threadsWaiting(approvals, workspaceWaiting);
   const thread = timeline?.threads.find(({ id }) => id === threadId) ?? null;
   const threadAgent = thread ? agentsById.get(thread.profileId) : undefined;
   const threadConversationId = threadAgent?.conversation?.id ?? null;
@@ -968,12 +1029,12 @@ export function RoomView({
           );
         })}
         {timeline && questionsOfNoAnswer(timeline.canvas, canvasOfAnswers).map(voteOn)}
-        {workUnderWay(pending, agentsById, approvals).map(({ key, thread: working, text }) => <ThreadLink key={key} text={text} onOpen={() => setThreadId(working.id)} />)}
+        {workUnderWay(pending, agentsById, waitedIn).map(({ key, thread: working, text }) => <ThreadLink key={key} text={text} onOpen={() => setThreadId(working.id)} />)}
         <WritingLine writing={writing} threadId={null} you={you} />
       </div>
       {awayFromLatest && <JumpToLatest onJump={jumpToLatest} />}
       {owns && <HeldChangeCard changes={heldChanges} holdsTooMany={holdsTooMany} agentName={(profileId) => agentsById.get(profileId)?.name ?? words.agentGone} countOf={words.approvalPosition} homeDir={homeDir} />}
-      <ApprovalStrip approvals={waitingForYou} tasks={tasksWaitingForYou} agentsById={agentsById} you={you} />
+      <ApprovalStrip approvals={waitingForYou} tasks={tasksWaitingForYou} workspace={workspaceWaitingForYou} agentsById={agentsById} you={you} />
       <RoomComposer
         ref={composer}
         placeholder={tagsAgents ? words.placeholder(room.name) : words.guestPlaceholder(room.name)}
@@ -997,8 +1058,11 @@ export function RoomView({
         agent={threadAgent}
         opened={threadConversations.find(({ conversationId }) => conversationId === threadConversationId)}
         agentsById={agentsById}
-        approvals={approvals}
+        waitedIn={waitedIn}
         waitingForYou={waitingForYou}
+        workspaceCalls={timeline.workspaceCalls}
+        workspaceWaitingForYou={workspaceWaitingForYou}
+        answersWorkspace={owns || approvesIn(room, you)}
         you={you}
         followsUp={tagsAgents}
         onlyReads={!owns}

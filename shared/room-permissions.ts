@@ -1,4 +1,5 @@
 import type { ToolKind } from "@agentclientprotocol/sdk/unstable";
+import { asDisksCompare } from "./disk-names.ts";
 import type { HarnessId } from "./model.ts";
 
 /** What a room's agents may do without asking, as the room's owner chose it. */
@@ -67,7 +68,7 @@ const CLAUDE_SETUP_FILES = ["claude.md", "claude.local.md", ".mcp.json"];
 
 /** Where Claude Code finds what its later sessions load, hooks, allowed commands and MCP servers among it: a `.claude` folder, a CLAUDE.md or .mcp.json, named in any case. */
 export const holdsClaudeSetup = (path: string) => {
-  const parts = path.toLowerCase().split(/[\\/]+/);
+  const parts = path.split(/[\\/]+/).map(asDisksCompare);
   return parts.includes(".claude") || CLAUDE_SETUP_FILES.includes(parts.at(-1) ?? "");
 };
 

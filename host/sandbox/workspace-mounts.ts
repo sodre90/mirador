@@ -387,6 +387,27 @@ export async function workspaceMounts(givenWorkspace: string, copies: string, pl
   return reachingOut ? { refused: { kind: "part-is-link", part: reachingOut } } : { mounts: parentsFirst };
 }
 
+/** A mount's source, and what entry of the disk it was as the mount was planned; null for one that was none of its own then, nothing or reached through a link. */
+export interface StoodSource {
+  source: string;
+  entry: string | null;
+}
+
+/** The entry of the disk at the path, where no link leads to it; null otherwise. */
+async function entryOf(path: string): Promise<string | null> {
+  const real = await realpath(path).catch(() => null);
+  const stats = await lstat(path, { bigint: true }).catch(() => null);
+  return stats && real === path ? `${stats.dev}:${stats.ino}` : null;
+}
+
+export const asTheyStand = (mounts: Mount[]): Promise<StoodSource[]> => Promise.all(mounts.map(async ({ source }) => ({ source, entry: await entryOf(source) })));
+
+/** The first of these sources that is no longer what it was; null where each still is. */
+export async function replacedAmong(stood: StoodSource[]): Promise<string | null> {
+  const still = await Promise.all(stood.map(async ({ source, entry }) => entry !== null && (await entryOf(source)) === entry));
+  return stood.find((_, index) => !still[index])?.source ?? null;
+}
+
 /**
  * A mount whose source, other than a copy Mirador took, is or passes through a link, or lies outside the workspace: a
  * mount follows a link, so an agent that made one could have a folder or file of this computer shown to the VM. Null

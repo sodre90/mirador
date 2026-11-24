@@ -153,7 +153,7 @@ test("an agent brought into someone else's room asks as usual: never YOLO, and i
   const withSessions = conversations as unknown as { ensureSession: (id: string) => Promise<string> };
   const ensureSession = withSessions.ensureSession;
   withSessions.ensureSession = async () => "not-started";
-  const brought = conversations.createBroughtIntoRoom("w1", { harness: "codex", profileId: "p1" }, "Garden · Ann's machine");
+  const brought = conversations.createBroughtIntoRoom("w1", { harness: "codex", profileId: "p1" }, "Garden · Ann's machine", false);
   withSessions.ensureSession = ensureSession;
   (conversations as unknown as { agentProcesses: Map<string, unknown> }).agentProcesses.set(agentProcessKey(store.findProfile("p1")!, brought, false), agent);
   expect(conversations.get(brought.id).bypassPermissions).toBe(false);

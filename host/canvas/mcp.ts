@@ -29,9 +29,9 @@ import { registerUsageStatsTool } from "./usage-stats-tool.ts";
 import { registerPlanUsageTool } from "./plan-usage-tool.ts";
 import { registerLandTool } from "./land-tool.ts";
 import { registerRoomTools, type RoomTools } from "./room-tools.ts";
+import { registerRoomWorkspaceTools, type RoomsWorkspaces } from "./room-workspace-tools.ts";
+import { withProgressHeartbeat } from "./progress-heartbeat.ts";
 import { sandboxOfConversation } from "../sandbox/sandboxes.ts";
-
-const PROGRESS_HEARTBEAT_MS = 15_000;
 
 const optionShape = {
   label: z.string().min(1),
@@ -159,10 +159,14 @@ export interface CanvasServerParts {
   catalog?: PluginCatalog | null;
   store?: Store | null;
   rooms?: RoomTools | null;
+  roomsWorkspaces?: RoomsWorkspaces | null;
   antigravityAskWaitMs?: number;
 }
 
-/** A room's agent's conversation here, or that of an agent of yours brought into a room elsewhere, which gets only the canvas's show and ask, and the room's own tools for a room here. */
+/**
+ * A room's agent's conversation here, or that of an agent of yours brought into a room elsewhere, which gets only the
+ * canvas's show and ask, the room's own tools for a room here, and those for a room's workspace elsewhere for an agent that works there.
+ */
 const worksForARoomHere = (store: Store | null, conversationId: string) => {
   const conversation = store?.findConversation(conversationId);
   return conversation !== undefined && worksForARoom(conversation);
@@ -178,11 +182,11 @@ const runsInASandboxHere = (store: Store | null, conversationId: string) => {
 export type CanvasRequestFrom = "this-computer" | "sandbox";
 
 function buildCanvasServer(conversationId: string, parts: CanvasServerParts, cutInstructionsWarning: CutInstructionsWarning, from: CanvasRequestFrom) {
-  const { canvas, conversations, assetsOrigin, apps = null, canvasPlugins = null, catalog = null, store = null, rooms = null, antigravityAskWaitMs = ANTIGRAVITY_ASK_WAIT_MS } = parts;
+  const { canvas, conversations, assetsOrigin, apps = null, canvasPlugins = null, catalog = null, store = null, rooms = null, roomsWorkspaces = null, antigravityAskWaitMs = ANTIGRAVITY_ASK_WAIT_MS } = parts;
   const harness = store?.findConversation(conversationId)?.harness;
   const askWaitLimitMs = harness === "antigravity" ? antigravityAskWaitMs : null;
   const reviewFree = reviewFreeFor(harness);
-  const inRoom = Boolean(store?.findConversation(conversationId)?.roomId);
+  const { roomId, worksInRoomsWorkspace } = store?.findConversation(conversationId) ?? {};
   const showAndAskAlone = worksForARoomHere(store, conversationId) || from === "sandbox" || runsInASandboxHere(store, conversationId);
   const plugins = canvasPlugins?.guidanceFor(conversationId) ?? NO_CANVAS_PLUGINS;
   const pluginsHere = getsPluginLinesInSystemPrompt(harness) ? withoutPluginLines(plugins) : plugins;
@@ -261,31 +265,14 @@ function buildCanvasServer(conversationId: string, parts: CanvasServerParts, cut
           ],
         };
       }
-      const progressToken = ctx.mcpReq._meta?.progressToken;
-      let beats = 0;
-      const heartbeat =
-        progressToken === undefined
-          ? undefined
-          : setInterval(() => {
-              beats += 1;
-              ctx.mcpReq
-                .notify({
-                  method: "notifications/progress",
-                  params: { progressToken, progress: beats, message: "Waiting for the user's choice" },
-                })
-                .catch(() => {});
-            }, PROGRESS_HEARTBEAT_MS);
-      try {
-        const answer = await canvas.waitForAnswerDuringTurn(item, ctx.mcpReq.signal, askWaitLimitMs);
-        return { content: [{ type: "text", text: typeof answer === "string" ? ANSWER_COMES_LATER[answer] : answerAsToolResult(answer) }] };
-      } finally {
-        clearInterval(heartbeat);
-      }
+      const answer = await withProgressHeartbeat(ctx, "Waiting for the user's choice", () => canvas.waitForAnswerDuringTurn(item, ctx.mcpReq.signal, askWaitLimitMs));
+      return { content: [{ type: "text", text: typeof answer === "string" ? ANSWER_COMES_LATER[answer] : answerAsToolResult(answer) }] };
     },
   );
 
   if (showAndAskAlone) {
-    if (inRoom && rooms) registerRoomTools(server, rooms, callingConversation, { _meta: loadedUpFront, ...reviewFree });
+    if (roomId && rooms) registerRoomTools(server, rooms, callingConversation, { _meta: loadedUpFront, ...reviewFree });
+    if (worksInRoomsWorkspace && roomsWorkspaces && from === "this-computer") registerRoomWorkspaceTools(server, roomsWorkspaces, callingConversation, { _meta: loadedUpFront });
     return server;
   }
 

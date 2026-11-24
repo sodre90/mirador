@@ -4,12 +4,12 @@ import { delimiter, dirname, join } from "node:path";
 import { HostProblemError } from "../../shared/host-problems.ts";
 import { harnessIds, harnessLabels, type CanvasUse, type HarnessId, type Profile } from "../../shared/model.ts";
 import { canvasInstructions, canvasPluginInstructions, canvasUseGuidance, NO_CANVAS_PLUGINS, titleGuidance, type CanvasPluginGuidance } from "../canvas/guidance.ts";
-import { PRE_ALLOWED_CANVAS_TOOLS, ROOM_CANVAS_TOOLS } from "../canvas/tool-names.ts";
+import { PRE_ALLOWED_CANVAS_TOOLS, ROOM_CANVAS_TOOLS, ROOMS_WORKSPACE_CANVAS_TOOLS } from "../canvas/tool-names.ts";
 import { jobWaitGuidance } from "../job-waits.ts";
 import type { MountedFolder } from "../sandbox/added-folders.ts";
 import { sandboxFoldersGuidance } from "../sandbox/folders-guidance.ts";
 import { applyEnvironment, parseEnvironment, type ProfileEnvironment } from "../../shared/profile-environment.ts";
-import { ALL_OF_CLAUDE_SETUP, type ClaudeSetup } from "../../shared/room-agent-setup.ts";
+import { ALL_OF_CLAUDE_SETUP, NONE_OF_CLAUDE_SETUP, type ClaudeSetup } from "../../shared/room-agent-setup.ts";
 import { claudeProgramMissing, findClaudeProgram } from "./claude-program.ts";
 import { NO_PROTECTIONS, SETTING_SOURCES, type ClaudeProtections, type SettingSource } from "./claude-protections.ts";
 import { findAntigravity } from "./antigravity-program.ts";
@@ -248,6 +248,7 @@ export function sessionMeta(
     canvasPlugins = NO_CANVAS_PLUGINS,
     idleCompaction = true,
     inRoom = false,
+    inRoomsWorkspace = false,
     claudeSetup = ALL_OF_CLAUDE_SETUP,
     keptProtections = NO_PROTECTIONS,
     sandboxFolders = [],
@@ -257,12 +258,14 @@ export function sessionMeta(
     canvasPlugins?: CanvasPluginGuidance;
     idleCompaction?: boolean;
     inRoom?: boolean;
+    inRoomsWorkspace?: boolean;
     claudeSetup?: ClaudeSetup;
     keptProtections?: ClaudeProtections;
     /** The folders of this computer the agent's sandbox mounted beside its workspace, read-only or read and write. */
     sandboxFolders?: MountedFolder[];
   },
 ) {
+  if (harness === "claude" && inRoomsWorkspace) return claudeRoomsWorkspaceSessionMeta(canvasUse, idleCompaction);
   if (harness === "claude")
     return inRoom
       ? claudeRoomSessionMeta(canvasUse, { withoutUserSettings, idleCompaction, claudeSetup, keptProtections, sandboxFolders })
@@ -376,6 +379,24 @@ export function claudeRoomSessionMeta(
         disallowedTools,
       },
     },
+  };
+}
+
+/** Claude Code starts its Chrome server on the user's own word, kept in its variable or its config, whatever MCP servers a session is held to. */
+const NO_CLAUDE_IN_CHROME = { CLAUDE_CODE_ENABLE_CFC: "0" };
+
+/**
+ * An agent you brought to work in a room's workspace has none of Claude Code's own tools and loads nothing of your setup,
+ * so that nothing the room says has it read, change or run anything of this computer, nor hears of a repository its empty
+ * folder may be inside.
+ */
+export function claudeRoomsWorkspaceSessionMeta(canvasUse: CanvasUse, idleCompaction = true) {
+  const meta = claudeRoomSessionMeta(canvasUse, { idleCompaction, claudeSetup: NONE_OF_CLAUDE_SETUP });
+  const { options } = meta.claudeCode;
+  const allowedTools = ROOMS_WORKSPACE_CANVAS_TOOLS.map((tool) => `mcp__${CANVAS_SERVER_NAME}__${tool}`);
+  return {
+    ...meta,
+    claudeCode: { options: { ...options, tools: [] as string[], allowedTools, env: { ...options.env, ...NO_CLAUDE_IN_CHROME }, settings: { ...options.settings, includeGitInstructions: false } } },
   };
 }
 

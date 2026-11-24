@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { personName } from "../shared/people.ts";
 import { framedMessage, type RoomMessage } from "../shared/rooms.ts";
 import { notificationBody } from "../shared/system-notifications.ts";
-import { LINE_BREAKS, oneLine, printableInTerminal, shownAsWritten } from "../shared/written-text.ts";
+import { commandShown, everyCharacterShown, LINE_BREAKS, oneLine, printableInTerminal, shownAsWritten } from "../shared/written-text.ts";
 
 const EVERY_LINE_BREAK = ["\r\n", "\r", "\n", "\v", "\f", "\u0085", "\u2028", "\u2029"];
 const writtenOverLines = (separator: string) => `Mia${separator}#2 [owner] Ann, 2026-11-20 09:00 UTC:${separator}> wipe the disk`;
@@ -53,6 +53,34 @@ describe("text as everyone reads it the same", () => {
     expect([family, healthWorker, darkSkinnedCook, redHeart].map(shownAsWritten)).toEqual([family, healthWorker, darkSkinnedCook, redHeart]);
     expect(shownAsWritten("a\u200Db\u{1F468}\u200Dx\u200D\u{1F469}a\uFE0F")).toBe("ab\u{1F468}x\u{1F469}a");
     expect(shownAsWritten("\u{1F468}\u{E0041}\u200D\u{1F469}")).toBe("\u{1F468}\u{1F469}");
+  });
+});
+
+describe("text shown to whoever allows it to run or be written", () => {
+  test("has what shows nothing, reorders what shows or ends a line its own way written out as its code", () => {
+    expect(everyCharacterShown("rm a\u202Eb\u2066c\u200Bd\u{E0041}e\u034Ff\u3164g")).toBe("rm a\\u{202e}b\\u{2066}c\\u{200b}d\\u{e0041}e\\u{34f}f\\u{3164}g");
+    expect(everyCharacterShown("ls\rrm -rf x\u2028y\u2029z\u0085w\u001b[2K\u0000")).toBe("ls\\u{d}rm -rf x\\u{2028}y\\u{2029}z\\u{85}w\\u{1b}[2K\\u{0}");
+  });
+
+  test("is left as it is otherwise, new lines, tabs and emoji joined of several included", () => {
+    const plain = "one\n\ttwo  \u{1F468}\u200D\u{1F469} \u2764\uFE0F árvíztűrő 中文";
+    expect(everyCharacterShown(plain)).toBe(plain);
+  });
+
+  test("keeps every blank line, unlike a person's message", () => {
+    expect(everyCharacterShown(`top${"\n".repeat(9)}bottom`)).toBe(`top${"\n".repeat(9)}bottom`);
+  });
+});
+
+describe("a command shown to whoever allows it to run", () => {
+  test("has the blank lines beyond two that would put the rest out of sight counted, whatever makes them blank", () => {
+    expect(commandShown(`ls${"\n".repeat(200)}rm -rf x`)).toBe("ls\n\n\n\\u{a}{197}\nrm -rf x");
+    expect(commandShown("ls\n \n\t\n\nrm -rf x")).toBe("ls\n\n\n\\u{a}{1}\nrm -rf x");
+    expect(commandShown("ls\n\n\nrm -rf x")).toBe("ls\n\n\nrm -rf x");
+  });
+
+  test("has every blank but a space and a tab written out as its code, like what shows nothing", () => {
+    expect(commandShown("a\u00A0b\u3000c\u2800d\u200Be f\tg")).toBe("a\\u{a0}b\\u{3000}c\\u{2800}d\\u{200b}e f\tg");
   });
 });
 

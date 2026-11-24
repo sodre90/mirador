@@ -5,6 +5,7 @@ import type { RoomAuthorRole, RoomInviteLetsIn, RoomInviteLifetime, RoomRole } f
 import type { ClaudeSetupChoice, ClaudeSetupPart } from "../../../shared/room-agent-setup.ts";
 import type { SandboxFolderRefusal, SandboxFolderState, SandboxKind, SandboxSetupStage } from "../../../shared/sandbox.ts";
 import type { OthersTasks } from "../../../shared/brought-agents.ts";
+import type { RoomWorkspaceAccess, WorkspaceCallKind, WorkspaceCallState } from "../../../shared/room-workspace.ts";
 
 /** The parts of a room's settings, each on a page of its own. */
 export type RoomSettingsTab = "general" | "people" | "agents" | "permissions" | "usage";
@@ -422,7 +423,7 @@ export const rooms = {
   takeOutArmedHint: "Click again. The tasks it has not answered end, and its conversation stays on its bringer's computer.",
   membersBringAgents: "Members may bring agents of their own",
   membersBringAgentsHint:
-    "A member can bring an agent from their own Mirador: it runs on their computer, in their workspace, with their permissions, and its answers come into the room. It never reads your files. Turned off, those already here go.",
+    "A member can bring an agent from their own Mirador: it runs on their computer, in their workspace, with their permissions, and its answers come into the room. It never reads your files, unless it asks to work in this room's workspace and you let it. Turned off, those already here go.",
   moreFor: (room: string) => `More for ${room}`,
   leaveRoom: "Leave room",
   leaveArmed: "Leave for good?",
@@ -439,6 +440,50 @@ export const rooms = {
     "With “Only after my OK”, a task from anyone else waits in its conversation until you allow it. Your own tasks start at once.",
     "The room's machine says who wrote each task. Its owner could pass a task off as yours, and it would start without your OK; your permission settings still ask before its tools.",
   ],
+  roomsWorkspaceOf: (machine: string) => `The room's workspace, on ${machine}`,
+  onlyClaudeInRoomsWorkspace: "Only Claude Code profiles can work in the room's workspace so far.",
+  bringIntoWorkspaceMeaning: [
+    "The agent runs on this computer, on its profile's model and account, and has nothing else of this computer: no files, no commands, and none of your Claude Code settings, hooks, MCP servers, CLAUDE.md or memory. Its conversation shows with your others, in a workspace named after the room, whose folder stays empty.",
+    "Claude Code itself tells the agent your account's email address, which system this computer runs and where that folder is, with your user name in its path, so the room may learn these.",
+    "It works in the room's workspace instead, on the room's machine. Someone who approves there lets it in first, and can take that away at any time; it reads the files there, and they allow each change and each command, unless the room's sandbox lets agents work freely.",
+    "What it reads there goes to your model provider through your account. Its final answer to each task goes into the room; what it puts on the canvas stays here.",
+    "With “Only after my OK”, a task from anyone else waits in its conversation until you allow it. Your own tasks start at once. The room's machine says who wrote each task, so its owner could pass one off as yours.",
+  ],
+  asksToWorkHere: (agent: string) => `${agent} asks to work in this room's workspace`,
+  workHereMeaning:
+    "It runs on the computer of whoever brought it, and what it reads here goes there. For a task that the owner or an approver wrote or allowed, for an hour at most, it may read the workspace's files; each change and each command asks first, unless the room's sandbox lets agents work freely.",
+  letItWorkHere: "Let it work here",
+  decline: "Decline",
+  callAsks: {
+    read: (agent: string) => `${agent} asks to read`,
+    edit: (agent: string) => `${agent} asks to change a file`,
+    write: (agent: string) => `${agent} asks to write a file`,
+    run: (agent: string) => `${agent} asks to run a command`,
+  } satisfies Record<WorkspaceCallKind, (agent: string) => string>,
+  commandRunsAsOwner: "It runs on the room's machine with all its owner may do there, not only in the workspace.",
+  commandRunsInSandbox: "It runs in the room's sandbox, which sees the workspace and nothing else of the room's machine.",
+  workspaceAccess: {
+    asked: "Waits to be let into this room's workspace",
+    allowed: "Works in this room's workspace",
+    declined: "Not let into this room's workspace",
+  } satisfies Record<RoomWorkspaceAccess, string>,
+  takeWorkspaceAway: "Take away",
+  takeWorkspaceAwayOf: (agent: string) => `Take this room's workspace away from ${agent}`,
+  takeWorkspaceAwayArmed: "Take it away?",
+  takeWorkspaceAwayArmedHint: "Click again. What it has under way in the workspace stops.",
+  letWorkHereOf: (agent: string) => `Let ${agent} work in this room's workspace`,
+  workspaceCalls: "What it did in this room's workspace",
+  callDid: { read: "Read", edit: "Change", write: "Write", run: "Run" } satisfies Record<WorkspaceCallKind, string>,
+  callStates: {
+    waiting: "waits for an OK",
+    running: "under way",
+    done: "done",
+    refused: "not done",
+    denied: "denied",
+    stopped: "stopped",
+  } satisfies Record<WorkspaceCallState, string>,
+  callAllowedBy: (person: string) => `Allowed by ${person}`,
+  callDeniedBy: (person: string) => `Denied by ${person}`,
   bring: "Bring",
   bringing: "Bringing…",
   broughtTask: (person: string, role: string, room: string, machine: string) => `${person} (${role}) gives this agent a task in ${room} on ${machine}`,

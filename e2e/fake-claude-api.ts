@@ -120,6 +120,8 @@ export class FakeClaudeApi {
   planUsage: { fiveHour: number; fiveHourResetsAt: number; sevenDay: number; sevenDayResetsAt: number } | null = null;
   /** The kind of prompt cache every answer says it wrote, as the API does: one that lives an hour, or five minutes. */
   cacheWritten: "ephemeral_1h_input_tokens" | "ephemeral_5m_input_tokens" | null = null;
+  /** The `CALL ` message that stands for any message holding these words, as a task's do that a room quotes to an agent. */
+  readonly callsWhenSaid = new Map<string, string>();
   /** Ends every reply in text, e.g. with a question for the user. */
   replySuffix = "";
   readonly answered: string[] = [];
@@ -255,6 +257,8 @@ export class FakeClaudeApi {
       return this.send(body, response, [{ type: "text", text: this.replyAfterCalls(body) ?? `Result: ${results}` }]);
     }
     if (typed.startsWith(CALL)) return this.send(body, response, this.toolCalls(typed));
+    const callsForTheseWords = [...this.callsWhenSaid].find(([words]) => typed.includes(words))?.[1];
+    if (callsForTheseWords !== undefined && !asksForTitle(body)) return this.send(body, response, this.toolCalls(callsForTheseWords));
     if (offersBash(body) && typed.startsWith(ADVISOR_CUT_OFF) && this.runAfterCutOff === null) {
       this.runAfterCutOff = typed.slice(ADVISOR_CUT_OFF.length);
       return this.send(body, response, [this.advisorCall()], { pingsAfterBlocks: true });

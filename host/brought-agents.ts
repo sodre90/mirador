@@ -1,8 +1,11 @@
+import { mkdirSync } from "node:fs";
+import { join } from "node:path";
 import {
   BROUGHT_TASK_MOST_CHARACTERS,
   isOthersTasks,
   MOST_BROUGHT_TASKS_A_MINUTE,
   MOST_BROUGHT_TASKS_QUEUED,
+  worksInRoomsWorkspaces,
   type BroughtAgentHere,
   type BroughtTaskWaiting,
   type OthersTasks,
@@ -13,18 +16,52 @@ import { isRoomId, MOST_ROOMS_READ } from "../shared/machines.ts";
 import type { Conversation, Launch, StoredEvent } from "../shared/model.ts";
 import { LONGEST_PERSON_NAME, personName } from "../shared/people.ts";
 import type { ClientMessage, ServerMessage } from "../shared/protocol.ts";
+import { MOST_WORKSPACE_CALLS_A_MINUTE, MOST_WORKSPACE_CALLS_AT_ONCE, WORKSPACE_TASK_MS, workspaceCallResultIn, type WorkspaceCall, type WorkspaceCallResult } from "../shared/room-workspace.ts";
 import { broughtTaskPrompt, isRoomAuthorRole, MOST_AGENTS_BROUGHT, ROOM_MESSAGE_MOST_CHARACTERS, type BroughtAnswerEnd, type FramedAuthor } from "../shared/rooms.ts";
 import { shownAsWritten } from "../shared/written-text.ts";
 import type { Hub } from "./hub.ts";
 import { SenderLimit } from "./join-requests.ts";
+import { isInside, realOrAsIs } from "./sandbox/workspace-mounts.ts";
 import type { BroughtTask, Store } from "./store.ts";
 import type { SystemNotifications } from "./system-notifications.ts";
+
+/** Where the agents that work in rooms' workspaces start: a folder for each such room, with nothing in it. */
+export const broughtAgentsFolder = (dataDir: string) => join(dataDir, "brought-agents");
+
+/** Whether the folder is one of those, whichever way its path leads there. */
+export const isForBroughtAgents = async (dataDir: string, folder: string) => isInside(await realOrAsIs(folder), await realOrAsIs(broughtAgentsFolder(dataDir)));
 
 /** How long a room's machine has to let an agent in, after which your Mirador gives up on it. */
 export const LETTING_IN_MS = 15_000;
 
 /** An answered task is kept this long after its answer, so that one a room's machine sends again is answered again rather than run again. */
 export const ANSWERS_KEPT_MS = 24 * 60 * 60_000;
+
+/** How long past the time a room's machine gives a task your Mirador waits for it to answer a call in its workspace. */
+const ANSWER_LATE_MS = 60_000;
+
+const NOT_ON_A_TASK = "You work in the room's workspace only during a turn on a task the room gave you.";
+const NOT_ANSWERING = "The room's machine isn't answering, so nothing was done.";
+const CONNECTION_LOST = "The connection to the room's machine was lost before it answered, so this may or may not have been done: read what is there before you try again.";
+const ANSWER_UNREADABLE = "The room's machine answered with nothing that can be read.";
+const TURN_OVER = "Your turn ended before the room's machine answered.";
+const OUT_OF_THE_ROOM = "You are no longer in the room.";
+const NO_ANSWER_IN_TIME = "The room's machine didn't answer in time.";
+const TIME_IS_OVER = "This task's time in the room's workspace is over, so nothing was done.";
+const TOO_MANY_AT_ONCE = `Only ${MOST_WORKSPACE_CALLS_AT_ONCE} calls of yours wait or run at a time; let one of them end first.`;
+const TOO_MANY_A_MINUTE = "You make too many calls; wait a minute.";
+
+const callRefused = (text: string): WorkspaceCallResult => ({ done: false, text });
+
+/** A call of an agent you brought on its way to the workspace of its room, until the room's machine answers. */
+interface WorkspaceCallUnderWay {
+  broughtId: string;
+  conversationId: string;
+  machineId: string;
+  roomId: string;
+  agentId: string;
+  settle(result: WorkspaceCallResult): void;
+}
 
 /** What a room's machine may say kept an agent out, which your Mirador passes on; anything else it says counts as not letting it in. */
 const REFUSALS_PASSED_ON = ["room-bringing-not-yours", "room-agents-brought-too-many", "room-agent-name-taken", "room-bringing-too-fast"] as const;
@@ -37,7 +74,7 @@ export interface RoomMachines {
 
 /** The conversations of this computer the agents its owner brought work in. */
 export interface BroughtSessions {
-  createBroughtIntoRoom(workspaceId: string, launch: Launch, title: string): Conversation;
+  createBroughtIntoRoom(workspaceId: string, launch: Launch, title: string, inRoomsWorkspace: boolean): Conversation;
   send(conversationId: string, text: string, imageIds: string[], options: { fromScript: true; fromMirador: true; afterTurn: true; broughtTaskId: string }): Promise<void>;
   heldTasksChanged(conversationId: string): void;
   dropQueuedBroughtTasks(conversationId: string, taskIds: string[]): void;
@@ -76,15 +113,18 @@ const answerOf = (events: StoredEvent[]) => {
  * names the agent and the task only by ids of its own form, its task's text and author are cleaned and cut, it may send
  * only so many a minute and have only so many waiting, and a task can only become a prompt, written in this host's own
  * words before the room's, in the one conversation of that agent, or a card waiting for the owner's OK there; never a
- * choice of folder, profile, model or permission mode, which are the owner's.
+ * choice of folder, profile, model or permission mode, which are the owner's. An agent brought to work in the room's
+ * workspace has nothing of this computer at all, as that machine's files and commands speak to it directly.
  */
 export class BroughtAgents {
   private readonly lettingIn = new Map<string, { settle: (problem: HostProblem | null) => void; timer: ReturnType<typeof setTimeout> }>();
   private readonly tasksArriving: SenderLimit;
+  private readonly workspaceCallsMade: SenderLimit;
   /** Who this computer's owner is on each machine, as the machine last said. */
   private readonly you = new Map<string, string>();
-  /** The task each conversation's turn under way works on. */
-  private readonly turnsOnTasks = new Map<string, string>();
+  /** The task each conversation's turn under way works on, and since when. */
+  private readonly turnsOnTasks = new Map<string, { taskId: string; since: number }>();
+  private readonly workspaceCalls = new Map<string, WorkspaceCallUnderWay>();
   private holding: ReadonlySet<string>;
 
   constructor(
@@ -93,10 +133,12 @@ export class BroughtAgents {
     private readonly machines: RoomMachines,
     private readonly sessions: BroughtSessions,
     private readonly notifications: Pick<SystemNotifications, "notify">,
+    private readonly emptyFolders: string,
     private readonly now: () => number = Date.now,
     private readonly lettingInMs = LETTING_IN_MS,
   ) {
     this.tasksArriving = new SenderLimit(now, MOST_BROUGHT_TASKS_A_MINUTE);
+    this.workspaceCallsMade = new SenderLimit(now, MOST_WORKSPACE_CALLS_A_MINUTE);
     store.forgetBroughtTasksAnsweredBefore(now() - ANSWERS_KEPT_MS);
     store.forgetBroughtAgentsNotLetIn();
     this.holding = this.conversationsHolding();
@@ -116,18 +158,23 @@ export class BroughtAgents {
     return this.store.findBroughtTaskById(taskId)?.state === "sent";
   }
 
-  /** Asks the room's machine to let an agent of the profile in, under the profile's name; settles once it answers, or gives up. */
-  bring(machineId: string, roomId: string, profileId: string, workspaceId: string, othersTasks: OthersTasks): Promise<void> {
+  /**
+   * Asks the room's machine to let an agent of the profile in, under the profile's name, to work in the workspace, or in
+   * the room's where it is null; settles once it answers, or gives up.
+   */
+  bring(machineId: string, roomId: string, profileId: string, workspaceId: string | null, othersTasks: OthersTasks): Promise<void> {
     const machine = this.store.findMachine(machineId);
     const joined = machine?.asPerson === true && machine.joined && this.store.machineRooms(machineId).some(({ id }) => id === roomId);
     const profile = this.store.findProfile(profileId);
-    if (!joined || !profile || !this.store.findWorkspace(workspaceId) || !isOthersTasks(othersTasks)) throw new Error("An agent is brought into a room you joined, from one of your profiles, to work in one of your workspaces.");
-    if (this.store.findWorkspace(workspaceId)?.sandbox.on) throw new HostProblemError({ code: "brought-agent-in-sandboxed-workspace" });
+    const workspace = workspaceId === null ? null : this.store.findWorkspace(workspaceId);
+    if (!joined || !profile || workspace === undefined || workspace?.forBroughtAgents || !isOthersTasks(othersTasks)) throw new Error("An agent is brought into a room you joined, from one of your profiles, to work in one of your workspaces or the room's.");
+    if (workspace?.sandbox.on) throw new HostProblemError({ code: "brought-agent-in-sandboxed-workspace" });
+    if (workspace === null && !worksInRoomsWorkspaces(profile.harness)) throw new HostProblemError({ code: "agent-cannot-work-in-rooms-workspace" });
     if (this.broughtInto(machineId, roomId).length >= MOST_AGENTS_BROUGHT) throw new HostProblemError({ code: "room-agents-brought-too-many" });
     const name = personName(shownAsWritten(profile.name)) || profile.harness;
     const brought: BroughtAgentHere = { id: crypto.randomUUID(), machineId, roomId, agentId: null, profileId, workspaceId, othersTasks, conversationId: null };
     this.store.insertBroughtAgentHere(brought);
-    if (!this.machines.send(machineId, { type: "room.bring-agent", requestId: brought.id, roomId, name, harness: profile.harness })) {
+    if (!this.machines.send(machineId, { type: "room.bring-agent", requestId: brought.id, roomId, name, harness: profile.harness, worksInRoom: workspace === null })) {
       this.store.deleteBroughtAgentHere(brought.id);
       throw new HostProblemError({ code: "room-machine-not-answering" });
     }
@@ -163,7 +210,46 @@ export class BroughtAgents {
     this.machines.send(machineId, { type: "room.brought-agents-here" });
   }
 
-  /** What a machine joined as a person said: whether it let an agent in, a task for one, and its rooms with the agents still in them. */
+  /** The socket to the machine closed, so what it would have answered is not coming. */
+  disconnected(machineId: string) {
+    this.endWorkspaceCalls((call) => call.machineId === machineId, CONNECTION_LOST);
+  }
+
+  /**
+   * Has the room's machine do what the agent of the conversation asks in the room's workspace, only in a turn on a task
+   * of the room's, and tells the agent what that machine says came of it. That machine's limits are its own to keep, so
+   * this host keeps them too: no room keeps an agent calling, at its bringer's cost, for longer or faster than they allow.
+   */
+  async callInWorkspace(conversationId: string, call: WorkspaceCall, signal: AbortSignal): Promise<WorkspaceCallResult> {
+    const turn = this.turnsOnTasks.get(conversationId);
+    const task = turn && this.store.findBroughtTaskById(turn.taskId);
+    const brought = task?.state === "sent" ? this.store.findBroughtAgentHere(task.broughtId) : undefined;
+    if (!turn || !task || !brought?.agentId || brought.workspaceId !== null || signal.aborted) return callRefused(NOT_ON_A_TASK);
+    const { id: broughtId, machineId, roomId, agentId } = brought;
+    if (this.now() - turn.since > WORKSPACE_TASK_MS) return callRefused(TIME_IS_OVER);
+    if (this.callsUnderWay(conversationId) >= MOST_WORKSPACE_CALLS_AT_ONCE) return callRefused(TOO_MANY_AT_ONCE);
+    if (!this.workspaceCallsMade.allows(machineId)) return callRefused(TOO_MANY_A_MINUTE);
+    const callId = crypto.randomUUID();
+    if (!this.machines.send(machineId, { type: "room.workspace-call", roomId, agentId, taskId: task.taskId, callId, call })) return callRefused(NOT_ANSWERING);
+    return new Promise((resolve) => {
+      const giveUp = (why: string) => {
+        this.machines.send(machineId, { type: "room.workspace-call-stopped", roomId, agentId, callId });
+        this.workspaceCalls.get(callId)?.settle(callRefused(why));
+      };
+      const turnStopped = () => giveUp(TURN_OVER);
+      const timer = setTimeout(() => giveUp(NO_ANSWER_IN_TIME), WORKSPACE_TASK_MS + ANSWER_LATE_MS);
+      signal.addEventListener("abort", turnStopped, { once: true });
+      const settle = (result: WorkspaceCallResult) => {
+        if (!this.workspaceCalls.delete(callId)) return;
+        clearTimeout(timer);
+        signal.removeEventListener("abort", turnStopped);
+        resolve(result);
+      };
+      this.workspaceCalls.set(callId, { broughtId, conversationId, machineId, roomId, agentId, settle });
+    });
+  }
+
+  /** What a machine joined as a person said: whether it let an agent in, a task for one, how a call in its workspace came out, and its rooms with the agents still in them. */
   heard(machineId: string, message: ServerMessage) {
     const said = saidOf(message);
     switch (message.type) {
@@ -178,19 +264,22 @@ export class BroughtAgents {
         return this.agentLetIn(machineId, said);
       case "room.brought-task":
         return this.taskArrived(machineId, said);
+      case "room.workspace-answered":
+        return this.workspaceAnswered(machineId, said);
     }
   }
 
   turnStarted(conversationId: string, turnSeq: number) {
     const task = this.taskStarting(conversationId, turnSeq);
     if (!task) return;
-    this.turnsOnTasks.set(conversationId, task.id);
+    this.turnsOnTasks.set(conversationId, { taskId: task.id, since: this.now() });
     this.tellStarted(task);
   }
 
   /** The turn on a task ended: its final answer goes to the room, or how it ended without one. */
   turnEnded(conversationId: string, turnSeq: number) {
     this.turnsOnTasks.delete(conversationId);
+    this.stopWorkspaceCalls((call) => call.conversationId === conversationId);
     const task = this.taskStarting(conversationId, turnSeq);
     if (!task) return;
     const { text, ended } = answerOf(this.store.listEventsFrom(conversationId, turnSeq));
@@ -262,7 +351,7 @@ export class BroughtAgents {
   private sentAgain(task: BroughtTask) {
     if (task.state === "answered") return this.sendAnswer(task);
     const conversationId = this.store.findBroughtAgentHere(task.broughtId)?.conversationId;
-    if (task.state === "sent" && conversationId && this.turnsOnTasks.get(conversationId) === task.id) this.tellStarted(task);
+    if (task.state === "sent" && conversationId && this.turnsOnTasks.get(conversationId)?.taskId === task.id) this.tellStarted(task);
   }
 
   private hold(task: BroughtTask, brought: BroughtAgentHere) {
@@ -276,8 +365,30 @@ export class BroughtAgents {
     const conversationId = brought && this.conversationOf(brought);
     if (!brought || !conversationId) return this.finish(task, "", "failed");
     this.store.setBroughtTaskState(task.id, "sent");
-    const prompt = broughtTaskPrompt({ ...this.placeOf(brought), by: { role: task.byRole, name: task.byName }, text: task.text });
+    const prompt = broughtTaskPrompt({ ...this.placeOf(brought), by: { role: task.byRole, name: task.byName }, text: task.text, inRoomsWorkspace: brought.workspaceId === null });
     this.sessions.send(conversationId, prompt, [], { fromScript: true, fromMirador: true, afterTurn: true, broughtTaskId: task.id }).catch(() => this.finish(task, "", "failed"));
+  }
+
+  private workspaceAnswered(machineId: string, { roomId, agentId, callId, result }: Said) {
+    const call = typeof callId === "string" ? this.workspaceCalls.get(callId) : undefined;
+    if (call?.machineId !== machineId || call.roomId !== roomId || call.agentId !== agentId) return;
+    call.settle(workspaceCallResultIn(result) ?? callRefused(ANSWER_UNREADABLE));
+  }
+
+  private callsUnderWay(conversationId: string) {
+    return [...this.workspaceCalls.values()].filter((call) => call.conversationId === conversationId).length;
+  }
+
+  private endWorkspaceCalls(which: (call: WorkspaceCallUnderWay) => boolean, why: string) {
+    [...this.workspaceCalls.values()].filter(which).forEach(({ settle }) => settle(callRefused(why)));
+  }
+
+  /** The room's machine hears that they are no longer wanted. */
+  private stopWorkspaceCalls(which: (call: WorkspaceCallUnderWay) => boolean) {
+    [...this.workspaceCalls]
+      .filter(([, call]) => which(call))
+      .forEach(([callId, { machineId, roomId, agentId }]) => this.machines.send(machineId, { type: "room.workspace-call-stopped", roomId, agentId, callId }));
+    this.endWorkspaceCalls(which, TURN_OVER);
   }
 
   /** The task's answer, kept and sent to the room's machine once; one already answered, or of an agent taken out, is left. */
@@ -300,16 +411,34 @@ export class BroughtAgents {
     if (brought?.agentId) this.machines.send(brought.machineId, { type: "room.brought-task-started", roomId: brought.roomId, agentId: brought.agentId, taskId: task.taskId });
   }
 
-  /** The agent's conversation, made anew when there is none; null once its profile or workspace is gone. */
+  /** The agent's conversation, made anew when there is none; null once its profile or its workspace of yours is gone. */
   private conversationOf(brought: BroughtAgentHere): string | null {
     if (brought.conversationId && this.store.hasConversation(brought.conversationId)) return brought.conversationId;
     const profile = this.store.findProfile(brought.profileId);
-    if (!profile || !this.store.findWorkspace(brought.workspaceId)) return null;
-    const { roomName, machineName } = this.placeOf(brought);
-    const { id } = this.sessions.createBroughtIntoRoom(brought.workspaceId, { harness: profile.harness, profileId: profile.id }, `${roomName} · ${machineName}`);
+    if (!profile || (brought.workspaceId !== null && !this.store.findWorkspace(brought.workspaceId))) return null;
+    const inRoomsWorkspace = brought.workspaceId === null;
+    const launch = { harness: profile.harness, profileId: profile.id };
+    const workspaceId = brought.workspaceId ?? this.emptyWorkspaceFor(brought, launch);
+    const { id } = this.sessions.createBroughtIntoRoom(workspaceId, launch, this.titleOf(brought), inRoomsWorkspace);
     this.store.setBroughtAgentConversation(brought.id, id);
     this.publish();
     return id;
+  }
+
+  /** The workspace that shows the conversations of the agents that work in the room's: named as they are, its folder empty. */
+  private emptyWorkspaceFor(brought: BroughtAgentHere, defaultLaunch: Launch): string {
+    const path = join(this.emptyFolders, `${brought.machineId}-${brought.roomId}`);
+    mkdirSync(path, { recursive: true });
+    const existing = this.store.findWorkspaceByPath(path);
+    if (existing) return existing.id;
+    const workspace = this.store.insertWorkspace({ id: crypto.randomUUID(), name: this.titleOf(brought), path, defaultLaunch, createdAt: this.now(), forBroughtAgents: true });
+    this.hub.broadcast({ type: "workspace.upserted", workspace });
+    return workspace.id;
+  }
+
+  private titleOf(brought: BroughtAgentHere) {
+    const { roomName, machineName } = this.placeOf(brought);
+    return `${roomName} · ${machineName}`;
   }
 
   /** The room and its machine by this host's own record of them. */
@@ -350,6 +479,7 @@ export class BroughtAgents {
   private forget(brought: BroughtAgentHere) {
     const unanswered = this.store.broughtTasksQueued(brought.id).map(({ id }) => id);
     this.store.deleteBroughtAgentHere(brought.id);
+    this.endWorkspaceCalls((call) => call.broughtId === brought.id, OUT_OF_THE_ROOM);
     if (brought.conversationId) this.sessions.dropQueuedBroughtTasks(brought.conversationId, unanswered);
     this.settleLettingIn(brought.id, { code: "brought-agent-gone" });
     this.changed();

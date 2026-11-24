@@ -341,6 +341,10 @@ test("held are the files agents read their settings, instructions and MCP server
     ".pre-commit-config.yaml",
     "lefthook.yml",
     ".envrc",
+    ".v\u017Fcode/tasks.json",
+    "agent\u017F.md",
+    ".hus\u212Ay/pre-commit",
+    ".mcp\u200C.json",
   ];
   const free = ["package.json", "scripts/setup.sh", "README.md", ".git/hooks/pre-commit", "node_modules/x/CLAUDE.md", "claude.json", ".github/workflows/ci.yml", "envrc", "vscode/settings.json"];
   expect(held.filter(isHeldConfigPath)).toEqual(held);

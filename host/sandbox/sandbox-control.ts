@@ -12,10 +12,18 @@ import {
   type SandboxOwner,
   type SandboxSetting,
 } from "../../shared/sandbox.ts";
+import type { AgentLaunch } from "../acp/harness.ts";
 import { profileEnvironment } from "../acp/harnesses.ts";
 import type { SandboxedKind } from "./agent-environment.ts";
 import { modelRouteOf, type ModelRoute } from "./model-proxy.ts";
 import { piSandboxSetupFor } from "./pi-setup.ts";
+import type { BroughtAgentInSandbox } from "./sandboxes.ts";
+import { SandboxNotReady } from "./vm-launcher.ts";
+
+/** A call of an agent someone brought, with the profiles whose images its VM may run, the likeliest to be there first. */
+export interface BroughtCallInSandbox extends Omit<BroughtAgentInSandbox, "images"> {
+  profiles: Profile[];
+}
 
 /** What a room's or workspace's settings need of the sandboxes. */
 export interface SandboxControl {
@@ -27,6 +35,12 @@ export interface SandboxControl {
   ownerGone(owner: SandboxOwner): Promise<void>;
   /** Why a sandbox can't work in the workspace, or the room's or workspace's sandbox `turningOn` can't turn on there; null where it can. */
   workspaceRefusal(workspace: string, turningOn?: SandboxOwner): Promise<SandboxBlocker | null>;
+  /** The command that does the call in that agent's own VM of the sandbox, started first where it isn't running. */
+  launchForBrought(call: BroughtCallInSandbox): Promise<AgentLaunch>;
+  /** The agent someone brought works in the sandbox no longer: its VM stops. */
+  stopBrought(owner: SandboxOwner, agentId: string): Promise<void>;
+  /** An agent's turn, or a brought one's task, ended: the held files are looked at once more. */
+  turnEnded(owner: SandboxOwner): Promise<void>;
 }
 
 export const NO_SANDBOX_CONTROL: SandboxControl = {
@@ -35,6 +49,9 @@ export const NO_SANDBOX_CONTROL: SandboxControl = {
   answerHeldChange: async () => {},
   ownerGone: async () => {},
   workspaceRefusal: async () => null,
+  launchForBrought: () => Promise.reject(new SandboxNotReady({ kind: "unavailable", why: "turned-off" })),
+  stopBrought: async () => {},
+  turnEnded: async () => {},
 };
 
 /**

@@ -1,7 +1,14 @@
+import type { HarnessId } from "./model.ts";
 import type { RoomAuthorRole } from "./rooms.ts";
 
 /** Whether tasks others give an agent you brought into a room reach it only after your OK, or at any time. */
 export type OthersTasks = "after-ok" | "any-time";
+
+/**
+ * The agents that can be held to the canvas alone, as one that works in a room's workspace is: nothing of this computer is
+ * theirs to read, change or run, whatever the room says.
+ */
+export const worksInRoomsWorkspaces = (harness: HarnessId) => harness === "claude";
 
 export const OTHERS_TASKS: OthersTasks[] = ["after-ok", "any-time"];
 
@@ -9,7 +16,7 @@ export const isOthersTasks = (value: unknown): value is OthersTasks => OTHERS_TA
 
 /**
  * An agent of one of your profiles you brought into a room of someone else's machine: it works in one of your
- * workspaces, in a conversation of yours, and the room's machine knows it by `agentId` once it let it in.
+ * workspaces, or in the room's, in a conversation of yours, and the room's machine knows it by `agentId` once it let it in.
  */
 export interface BroughtAgentHere {
   id: string;
@@ -18,7 +25,8 @@ export interface BroughtAgentHere {
   /** The id the room's machine gave it; null while that machine has not let it in yet. */
   agentId: string | null;
   profileId: string;
-  workspaceId: string;
+  /** Null for one that works in the room's workspace, on the room's machine, once someone there allows it. */
+  workspaceId: string | null;
   othersTasks: OthersTasks;
   /** The conversation it works on the room's tasks in, made once the room let it in. */
   conversationId: string | null;

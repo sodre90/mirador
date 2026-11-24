@@ -132,7 +132,7 @@ function roomWithPeople() {
     new SenderLimit(() => clock.now, MOST_ALERTS_A_MINUTE),
   );
   rooms.hearPostsWith((message, newlyTagged, by) => reading.posted(message, newlyTagged, by));
-  rooms.hearWaitingWith((roomId, approvals, tasks) => reading.waitingChanged(roomId, approvals, tasks));
+  rooms.hearWaitingWith((roomId, approvals, tasks, workspace) => reading.waitingChanged(roomId, approvals, tasks, workspace));
   reading.countsWaitingWith((roomId) => rooms.countWaiting(roomId));
   canvas.hearRoomQuestionsWith((roomId, item, startsWaiting) => {
     const room = store.findRoom(roomId)!;

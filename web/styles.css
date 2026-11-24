@@ -10653,6 +10653,103 @@ button.link.more-rows {
   color: var(--danger);
 }
 
+.workspace-call-path {
+  max-height: calc(4lh + 4px);
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.workspace-call-text {
+  max-height: calc(12lh + 12px);
+  margin: 0;
+  padding: 6px 8px;
+  overflow-y: auto;
+  border-radius: 6px;
+  background: var(--panel);
+  font-size: calc(11.5px * var(--font-scale));
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.workspace-call-text.whole {
+  max-height: none;
+}
+
+.room-approvals .workspace-call-text.whole {
+  max-height: 60vh;
+}
+
+.workspace-diff-place {
+  color: var(--muted);
+}
+
+.workspace-access {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 8px;
+  color: var(--muted);
+  font-size: calc(12px * var(--font-scale));
+}
+
+.room-thread > .workspace-access {
+  padding: 6px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.room-settings-rows .workspace-access {
+  flex-basis: 100%;
+}
+
+.workspace-calls {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0 0 0 38px;
+  list-style: none;
+  font-size: calc(12px * var(--font-scale));
+}
+
+.workspace-call summary {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.workspace-call-did {
+  flex: none;
+  color: var(--text);
+  font-weight: 500;
+}
+
+.workspace-call-about {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-call-state {
+  flex: none;
+}
+
+.workspace-call:is([data-state="refused"], [data-state="denied"]) .workspace-call-state {
+  color: var(--danger);
+}
+
+.workspace-call[open] {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-bottom: 6px;
+}
+
 .room-role-label {
   padding: 0 6px;
   border: 1px solid var(--border);

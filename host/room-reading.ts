@@ -3,6 +3,7 @@ import type { AskItem } from "../shared/model.ts";
 import type { RoomMention } from "../shared/room-mentions.ts";
 import { alertText, ROOM_ALERT_KINDS, type RoomAlert, type RoomReading } from "../shared/room-reading.ts";
 import { agentStandIn, approvesIn, writtenByAgent, type Room, type RoomApproval, type RoomMessage, type RoomTaskApproval } from "../shared/rooms.ts";
+import type { RoomWorkspaceApproval } from "../shared/room-workspace.ts";
 import type { Hub, SocketData } from "./hub.ts";
 import { SenderLimit } from "./join-requests.ts";
 import { confirmersOf, questionsIn, type QuestionsStore } from "./room-questions.ts";
@@ -36,9 +37,10 @@ interface WaitingItem {
   sender: string;
 }
 
-const itemsWaiting = (approvals: RoomApproval[], tasks: RoomTaskApproval[]): WaitingItem[] => [
+const itemsWaiting = (approvals: RoomApproval[], tasks: RoomTaskApproval[], workspace: RoomWorkspaceApproval[]): WaitingItem[] => [
   ...approvals.map(({ request, conversationId }) => ({ key: request.permissionId, what: request.title, sender: conversationId })),
   ...tasks.map(({ messageId, text, personId }) => ({ key: messageId, what: text, sender: personId })),
+  ...workspace.map((waiting) => ({ key: waiting.asks === "call" ? waiting.callId : `access ${waiting.agentId}`, what: waiting.asks === "call" ? waiting.about : "", sender: waiting.agentId })),
 ];
 
 /**
@@ -111,11 +113,11 @@ export class RoomReadingService {
    * What waits in the room for an approver changed: its approvers' counts change, and the first of what just started
    * waiting calls those of them other than the owner, whom this machine notifies already.
    */
-  waitingChanged(roomId: string, approvals: RoomApproval[], tasks: RoomTaskApproval[]) {
+  waitingChanged(roomId: string, approvals: RoomApproval[], tasks: RoomTaskApproval[], workspace: RoomWorkspaceApproval[]) {
     const room = this.store.findRoom(roomId);
     if (!room) return;
     this.tellRoom(room);
-    const waiting = itemsWaiting(approvals, tasks);
+    const waiting = itemsWaiting(approvals, tasks, workspace);
     const seenBefore = this.waitingSeen.get(roomId) ?? new Set();
     this.waitingSeen.set(roomId, new Set(waiting.map(({ key }) => key)));
     const started = waiting.find(({ key }) => !seenBefore.has(key));

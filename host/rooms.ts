@@ -3,7 +3,7 @@ import { homedir, userInfo } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { HostProblemError } from "../shared/host-problems.ts";
 import { replyOf } from "../shared/last-words.ts";
-import { harnessIds, type CanvasItem, type Conversation, type HarnessId, type Launch } from "../shared/model.ts";
+import { harnessIds, type CanvasItem, type Conversation, type HarnessId, type Launch, type Profile } from "../shared/model.ts";
 import type { RoomUsage } from "../shared/room-usage.ts";
 import { agentsTaggedIn, mentionsIn, type RoomMention, type TaggableAgent } from "../shared/room-mentions.ts";
 import {
@@ -85,12 +85,16 @@ import {
 } from "../shared/sandbox.ts";
 import { assertSandboxCanRun, NO_SANDBOX_CONTROL, profileSandboxBlocker, type SandboxControl } from "./sandbox/sandbox-control.ts";
 import { sandboxLeft, sandboxLeftWritableFolders } from "./sandbox/hooks-off.ts";
+import { isRoomWorkspaceAnswer, type RoomWorkspaceAnswer, type RoomWorkspaceApproval, type RoomWorkspaceCall } from "../shared/room-workspace.ts";
 import { shownAsWritten } from "../shared/written-text.ts";
 import { firstGraphemes } from "../shared/text-cut.ts";
 import type { RoomRules, TurnListener, WaitingPermission } from "./conversations.ts";
 import type { Hub, SocketData } from "./hub.ts";
 import { SenderLimit } from "./join-requests.ts";
 import { EVENTS_OF_TURNS, roomUsage } from "./room-usage.ts";
+import { RoomWorkspaceCalls, type WorkspaceCallSent, type WorkspaceCallUnderWay } from "./room-workspace/calls.ts";
+import { inRoomsSandbox } from "./room-workspace/sandbox-place.ts";
+import { onThisComputer, type WorkspacePlace } from "./room-workspace/workspace-place.ts";
 import type { RoomBroughtTask, Store } from "./store.ts";
 import type { SystemNotifications } from "./system-notifications.ts";
 
@@ -148,13 +152,14 @@ function cutToRoomMessage(text: string) {
 /** Told of each message that goes up in a room: the people it tags that it didn't tag before, and its author's name. */
 export type PostListener = (message: RoomMessage, newlyTagged: RoomMention[], by: string) => void;
 
-export type WaitingListener = (roomId: string, approvals: RoomApproval[], tasks: RoomTaskApproval[]) => void;
+export type WaitingListener = (roomId: string, approvals: RoomApproval[], tasks: RoomTaskApproval[], workspace: RoomWorkspaceApproval[]) => void;
 
 export type TaskAnswer = "allow" | "deny";
 
 const distinct = (ids: string[]) => [...new Set(ids)];
 const hasAgent = (room: Room, profileId: string) => room.agents.some((agent) => agent.profileId === profileId);
 const broughtBy = (personId: string) => (agent: RoomAgent): agent is RoomAgent & { brought: BroughtAgent } => agent.brought?.personId === personId;
+const worksInWorkspace = (room: Room, agentId: string) => room.agents.some(({ profileId, brought }) => profileId === agentId && brought?.workspace === "allowed");
 const sameName = (named: string, name: string) => named.trim().replace(/^@/, "").toLowerCase() === name.toLowerCase();
 
 const leadsOut = (relativePath: string) => relativePath === ".." || relativePath.startsWith(`..${sep}`) || isAbsolute(relativePath);
@@ -241,6 +246,7 @@ export class RoomService implements RoomRules, TurnListener {
   private postListener: PostListener = () => {};
   private waitingListener: WaitingListener = () => {};
   private sandboxes = NO_SANDBOX_CONTROL;
+  private readonly workspaceCalls: RoomWorkspaceCalls;
 
   constructor(
     private readonly store: Store,
@@ -249,12 +255,25 @@ export class RoomService implements RoomRules, TurnListener {
     private readonly notifications: Pick<SystemNotifications, "notify" | "roomTaskHeld">,
     /** Mirador's data directory, with its tokens and database, which the agents never reach without asking. */
     private readonly dataDir: string,
+    /** What commands that agents people brought run in the rooms' workspaces get of this computer's environment. */
+    commandEnvironment: () => Record<string, string> = () => ({}),
     private readonly writing = new SenderLimit(Date.now, MOST_ROOM_MESSAGES_A_MINUTE),
     private readonly home: HostsHome = { directory: homedir(), user: userRunningTheHost() },
     private readonly bringing = new SenderLimit(Date.now, MOST_AGENTS_BROUGHT_A_MINUTE),
     private readonly broughtTaskStarts = new SenderLimit(Date.now, MOST_BROUGHT_TASK_STARTS_A_MINUTE),
   ) {
     store.forgetRoomAgentsAnswering();
+    this.workspaceCalls = new RoomWorkspaceCalls(store, hub, {
+      threadOf: (asked, agentId) => this.threadOf(asked, agentId),
+      waitingChanged: (roomId) => this.waitingChanged(roomId),
+      callWaits: (room, agentId) => this.workspaceWaits(room, agentId),
+      placeOf: (room, agentId) => this.workspacePlaceOf(room, agentId, commandEnvironment),
+    });
+  }
+
+  /** What agents people brought have under way in the rooms' workspaces ends with the host. */
+  shutdown() {
+    this.workspaceCalls.shutdown();
   }
 
   list(): Room[] {
@@ -341,6 +360,7 @@ export class RoomService implements RoomRules, TurnListener {
     if (workspaceId === room.workspaceId) return;
     room.agents.forEach(({ conversationId }) => conversationId && this.sessions.deleteWithAllItHolds(conversationId));
     this.sandboxLeaves(room);
+    this.workspaceIsAskedForAgain(room);
     this.store.setRoomWorkspace(roomId, workspaceId);
     this.publish(roomId);
     this.waitingChanged(roomId);
@@ -442,9 +462,12 @@ export class RoomService implements RoomRules, TurnListener {
     if (sandbox.on && !room.sandbox.on) assertSandboxCanRun(await this.sandboxCheck(roomId), sandbox);
     const now = this.existingRoom(roomId);
     if (!sandbox.on) this.sandboxLeaves(now);
+    const stopsTurn = narrowsSandbox(now.sandbox, sandbox);
+    if (sandbox.on !== now.sandbox.on) this.workspaceIsAskedForAgain(now);
+    else if (stopsTurn) this.allEndInWorkspace(now);
     this.store.setRoomSandbox(roomId, sandbox);
     this.publish(roomId);
-    const stopsTurn = narrowsSandbox(now.sandbox, sandbox);
+    this.waitingChanged(roomId);
     const ownAgents = now.agents.filter(({ brought }) => !brought);
     ownAgents.forEach((agent) => this.startAfresh(agent, stopsTurn));
     if (sandbox.on) this.sandboxes.prepare(ownAgents.flatMap(({ profileId }) => this.store.findProfile(profileId) ?? []));
@@ -496,6 +519,7 @@ export class RoomService implements RoomRules, TurnListener {
     if (comingIn && this.nameTakenIn(room, personId)) throw new HostProblemError({ code: "room-person-name-taken" });
     this.store.setRoomPersonRole(roomId, personId, role);
     if (!asksAgentsAs(role)) this.takeOutAgentsOf(roomId, personId);
+    else if (approvesIn(room, personId) && !approvesAs(role)) this.workspaceIsAskedForAgainOf(room, personId);
     this.peopleChanged(roomId);
     this.declineTasksNoLongerAsked(roomId);
     this.waitingChanged(roomId);
@@ -516,6 +540,7 @@ export class RoomService implements RoomRules, TurnListener {
   delete(roomId: string) {
     const room = this.existingRoom(roomId);
     room.agents.forEach(({ conversationId }) => conversationId && this.sessions.deleteWithAllItHolds(conversationId));
+    this.workspaceCalls.endAll((sent) => sent.roomId === roomId);
     void this.sandboxes.ownerGone(roomSandbox(roomId));
     this.sandboxLeaves(room);
     this.store.deleteRoom(roomId);
@@ -536,19 +561,118 @@ export class RoomService implements RoomRules, TurnListener {
 
   /**
    * An agent a member brings from their own Mirador, where it runs, under the name of its profile there, cleaned as a
-   * person's is and numbered when the room already has one that reads the same; the id this machine knows it by.
+   * person's is and numbered when the room already has one that reads the same; the id this machine knows it by. One
+   * brought to work in the room's workspace, here, does so only once the owner or an approver lets it.
    */
-  bringAgent(roomId: string, personId: string, name: string, harness: HarnessId): string {
+  bringAgent(roomId: string, personId: string, name: string, harness: HarnessId, worksInRoom = false): string {
     const room = this.existingRoom(roomId);
     const role = room.people.find((person) => person.personId === personId)?.role;
     if (!role || !asksAgentsAs(role) || !room.membersBringAgents) throw new HostProblemError({ code: "room-bringing-not-yours" });
-    if (typeof name !== "string" || !harnessIds.includes(harness)) throw new Error("An agent is brought by its name and kind.");
+    if (typeof name !== "string" || !harnessIds.includes(harness) || typeof worksInRoom !== "boolean") throw new Error("An agent is brought by its name and kind.");
     if (room.agents.filter(broughtBy(personId)).length >= MOST_AGENTS_BROUGHT) throw new HostProblemError({ code: "room-agents-brought-too-many" });
     if (!this.bringing.allows(personId)) throw new HostProblemError({ code: "room-bringing-too-fast" });
     const agentId = crypto.randomUUID();
-    this.store.addBroughtAgent(roomId, agentId, { personId, name: this.freeAgentName(room, personId, name), harness }, this.hub.carriesAgentsOf(personId));
+    this.store.addBroughtAgent(roomId, agentId, { personId, name: this.freeAgentName(room, personId, name), harness, ...(worksInRoom && { workspace: "asked" as const }) }, this.hub.carriesAgentsOf(personId));
     this.publish(roomId);
+    if (worksInRoom) {
+      this.waitingChanged(roomId);
+      this.workspaceWaits(this.existingRoom(roomId), agentId);
+    }
     return agentId;
+  }
+
+  /** The owner or an approver lets the agent someone brought for it work in the room's workspace, or no longer, which ends what it has under way there. */
+  answerWorkspace(roomId: string, agentId: string, answer: RoomWorkspaceAnswer, personId: string) {
+    const room = this.existingRoom(roomId);
+    this.assertMayApprove(room, personId);
+    if (!isRoomWorkspaceAnswer(answer)) throw new Error("An agent is let into the workspace or not.");
+    if (!room.agents.some(({ profileId, brought }) => profileId === agentId && brought?.workspace !== undefined)) throw new HostProblemError({ code: "brought-agent-gone" });
+    this.store.setBroughtAgentWorkspace(roomId, agentId, answer === "allow" ? "allowed" : "declined");
+    if (answer === "decline") this.endsInWorkspace(roomId, agentId);
+    this.publish(roomId);
+    this.waitingChanged(roomId);
+  }
+
+  answerWorkspaceCall(roomId: string, callId: string, answer: TaskAnswer, personId: string) {
+    const room = this.existingRoom(roomId);
+    this.assertMayApprove(room, personId);
+    if (answer !== "allow" && answer !== "deny") throw new Error(`There is no answer "${answer}" to a call.`);
+    this.workspaceCalls.answer(roomId, callId, answer, personId);
+  }
+
+  workspaceCalled(sent: WorkspaceCallSent) {
+    return this.workspaceCalls.called(sent);
+  }
+
+  workspaceCallStopped(stopped: Omit<WorkspaceCallSent, "taskId" | "call">) {
+    this.workspaceCalls.stopped(stopped);
+  }
+
+  /** What agents people brought did in the room's workspace, and have under way there. */
+  workspaceCallsIn(roomId: string): RoomWorkspaceCall[] {
+    return this.store.listWorkspaceCalls(roomId);
+  }
+
+  /** What agents people brought wait on for an approver, to work in the room's workspace: those still to be let in first. */
+  workspaceWaiting(roomId: string): RoomWorkspaceApproval[] {
+    const room = this.store.findRoom(roomId);
+    if (!room) return [];
+    const approvers = this.approversOf(room);
+    const asking = room.agents.filter(({ brought }) => brought?.workspace === "asked").map(({ profileId }) => ({ asks: "access" as const, roomId, agentId: profileId, at: 0, approvers }));
+    return [...asking, ...this.workspaceCalls.waitingIn(roomId).map((call) => this.workspaceCallWaiting(call, approvers))];
+  }
+
+  allWorkspaceWaiting(): RoomWorkspaceApproval[] {
+    return this.list().flatMap(({ id }) => this.workspaceWaiting(id));
+  }
+
+  private workspaceCallWaiting({ shown, whole, messageId, inSandbox }: WorkspaceCallUnderWay, approvers: string[]): RoomWorkspaceApproval {
+    const { id, roomId, agentId, threadId, at, kind, about } = shown;
+    const asked = this.store.findRoomMessage(messageId);
+    const messagesById = new Map(this.store.listRoomMessages(roomId).map((message) => [message.id, message]));
+    return { asks: "call", roomId, agentId, callId: id, threadId, at, kind, about, shown: whole, inSandbox, task: asked ? taskOf(asked, messagesById, this.store.ownerId()) : null, approvers };
+  }
+
+  /** Approvers hear of it as of a request. */
+  private workspaceWaits(room: Room, agentId: string) {
+    this.notifications.roomTaskHeld(room, { kind: "permission", tool: `the room's workspace, for ${this.nameOf({ profileId: agentId })}` });
+  }
+
+  /** Where the agent someone brought works in the room's workspace: in the room's sandbox alone where it has one, else on this computer; null where the workspace is gone. */
+  private workspacePlaceOf(room: Room, agentId: string, commandEnvironment: () => Record<string, string>): WorkspacePlace | null {
+    const given = this.store.findWorkspace(room.workspaceId)?.path;
+    const workspace = given === undefined ? null : realPathOrNull(given);
+    if (workspace === null) return null;
+    if (!room.sandbox.on) return onThisComputer(workspace, this.dataDir, commandEnvironment);
+    const owner = roomSandbox(room.id);
+    const worksHere = ({ id }: Profile) => room.agents.some(({ profileId }) => profileId === id);
+    const profiles = this.store.listProfiles().toSorted((a, b) => Number(worksHere(b)) - Number(worksHere(a)));
+    return inRoomsSandbox(workspace, {
+      launch: (command) => this.sandboxes.launchForBrought({ owner, agentId, allowsSharedKernel: room.sandbox.allowsSharedKernel, profiles, workingDirectory: workspace, command }),
+      stop: () => this.sandboxes.stopBrought(owner, agentId),
+    });
+  }
+
+  /** What the agent someone brought has under way in the room's workspace ends, and all that runs of it there with its VM. */
+  private endsInWorkspace(roomId: string, agentId: string) {
+    this.workspaceCalls.endAll((sent) => sent.roomId === roomId && sent.agentId === agentId);
+    void this.sandboxes.stopBrought(roomSandbox(roomId), agentId);
+  }
+
+  private allEndInWorkspace({ id, agents }: Room) {
+    agents.filter(({ brought }) => brought?.workspace !== undefined).forEach(({ profileId }) => this.endsInWorkspace(id, profileId));
+  }
+
+  /** The agents let into the room's workspace are asked about again, as it is another folder, or no longer the same place. */
+  private workspaceIsAskedForAgain(room: Room) {
+    this.allEndInWorkspace(room);
+    this.store.askForWorkspaceAgain(room.id);
+  }
+
+  /** Who approves no longer may have let their own agents in, and the tasks they gave them through: the agents are asked about again. */
+  private workspaceIsAskedForAgainOf(room: Room, personId: string) {
+    room.agents.filter(broughtBy(personId)).forEach(({ profileId }) => this.endsInWorkspace(room.id, profileId));
+    this.store.askForWorkspaceAgainOf(room.id, personId);
   }
 
   /** Its bringer, or the owner, takes the agent out: the tasks it has not answered say so in their threads. */
@@ -575,6 +699,7 @@ export class RoomService implements RoomRules, TurnListener {
   /** The person's own Mirador went: their agents show as away, working on nothing the room sees, until it is back. */
   bringerLeft(personId: string) {
     if (this.hub.carriesAgentsOf(personId)) return;
+    this.workspaceCalls.endAll((sent) => sent.personId === personId);
     this.store.setBroughtAgentsHere(personId, false).forEach((roomId) => this.publish(roomId));
   }
 
@@ -598,10 +723,12 @@ export class RoomService implements RoomRules, TurnListener {
    */
   broughtTaskAnswered(personId: string, roomId: string, agentId: string, taskId: string, text: string, ended: BroughtAnswerEnd | null) {
     const room = this.existingRoom(roomId);
-    this.broughtAgentOf(room, agentId, personId);
+    const agent = this.broughtAgentOf(room, agentId, personId);
     if (typeof text !== "string" || !(ended === null || isBroughtAnswerEnd(ended))) throw new Error("An answer is its text, and how it ended unless it finished.");
     const task = this.store.takeRoomBroughtTask(taskId, roomId, agentId);
     if (!task) throw new HostProblemError({ code: "room-brought-task-unknown" });
+    this.workspaceCalls.endAll((sent) => sent.roomId === roomId && sent.taskId === taskId);
+    if (agent.brought?.workspace !== undefined) void this.sandboxes.turnEnded(roomSandbox(roomId)).catch((error: unknown) => console.error(`looking at the held files of the room ${roomId} failed:`, error));
     this.store.setRoomAgentAnsweringIn(roomId, agentId, null);
     this.publish(roomId);
     const asked = this.store.findRoomMessage(task.messageId);
@@ -632,8 +759,12 @@ export class RoomService implements RoomRules, TurnListener {
     else passedOn.forEach((profileId) => this.ask(room, profileId, answer, undefined));
   }
 
-  /** While people's tasks wait, a brought agent's answer that tags any agent but those its bringer brought waits as their task, unless its bringer approves. */
+  /**
+   * While people's tasks wait, a brought agent's answer that tags any agent but those its bringer brought waits as their
+   * task, unless its bringer approves; one that tags an agent let into the room's workspace always does.
+   */
   private waitsAsBringersTask(room: Room, bringerId: string, tagged: string[]) {
+    if (tagged.some((profileId) => worksInWorkspace(room, profileId))) return true;
     const theirs = new Set(room.agents.filter(broughtBy(bringerId)).map(({ profileId }) => profileId));
     return room.peoplesTasksWait && !approvesIn(room, bringerId) && tagged.some((profileId) => !theirs.has(profileId));
   }
@@ -654,8 +785,9 @@ export class RoomService implements RoomRules, TurnListener {
   waitingChanged(roomId: string) {
     const approvals = this.approvals(roomId);
     const tasks = this.tasksWaiting(roomId);
-    this.hub.broadcast({ type: "room.approvals", roomId, approvals, tasks });
-    this.waitingListener(roomId, approvals, tasks);
+    const workspace = this.workspaceWaiting(roomId);
+    this.hub.broadcast({ type: "room.approvals", roomId, approvals, tasks, workspace });
+    this.waitingListener(roomId, approvals, tasks, workspace);
   }
 
   /** The tasks of people other than the owner, or of the agents they brought, that wait for an approver, oldest first. */
@@ -711,7 +843,7 @@ export class RoomService implements RoomRules, TurnListener {
     const room = this.store.findRoom(roomId);
     if (!room) return 0;
     const requests = room.agents.flatMap(({ conversationId }) => (conversationId ? this.sessions.waitingPermissions(conversationId) : []));
-    return requests.length + this.store.listRoomTasksWaiting(roomId).length;
+    return requests.length + this.store.listRoomTasksWaiting(roomId).length + this.workspaceWaiting(roomId).length;
   }
 
   allApprovals(): RoomApproval[] {
@@ -768,7 +900,8 @@ export class RoomService implements RoomRules, TurnListener {
   /**
    * A person's message, in the room or as a follow-up in a thread. Each agent it tags gets a thread of its own for it,
    * and with the thread's agent of a follow-up, is sent what it has missed of the room; unless a person other than the
-   * owner or an approver wrote it in a room whose people's tasks wait, when it waits for an approver instead.
+   * owner or an approver wrote it in a room whose people's tasks wait, or to an agent let into the room's workspace,
+   * when it waits for an approver instead.
    */
   write(roomId: string, personId: string, text: string, tags: string[], threadId: string | null): RoomMessage {
     const room = this.existingRoom(roomId);
@@ -780,7 +913,8 @@ export class RoomService implements RoomRules, TurnListener {
     if (tagged.some((profileId) => !this.answers(room, profileId))) throw new HostProblemError({ code: "room-message-misaddressed" });
     if (role !== null && !this.writing.allows(personId)) throw new HostProblemError({ code: "room-writing-too-fast" });
     const asked = thread ? [thread.profileId] : tagged;
-    const waits = role !== null && !approvesAs(role) && room.peoplesTasksWait && asked.length > 0;
+    const approves = role === null || approvesAs(role);
+    const waits = !approves && asked.length > 0 && (room.peoplesTasksWait || asked.some((profileId) => worksInWorkspace(room, profileId)));
     const message = this.store.appendRoomMessage({
       id: crypto.randomUUID(),
       roomId,
@@ -795,7 +929,7 @@ export class RoomService implements RoomRules, TurnListener {
     });
     this.post(message, tagged);
     if (waits) this.holdTask(room, message, asked);
-    else asked.forEach((profileId) => this.ask(room, profileId, message, personId));
+    else asked.forEach((profileId) => this.ask(room, profileId, message, personId, approves));
     return message;
   }
 
@@ -1002,7 +1136,7 @@ export class RoomService implements RoomRules, TurnListener {
     const writerId = writtenByAgent(task.author) ? undefined : task.author.personId;
     this.agentsAsked(task)
       .filter((profileId) => this.answers(room, profileId))
-      .forEach((profileId) => this.ask(room, profileId, task, writerId));
+      .forEach((profileId) => this.ask(room, profileId, task, writerId, true));
   }
 
   private declineTask(room: Room, waiting: RoomMessage) {
@@ -1101,7 +1235,9 @@ export class RoomService implements RoomRules, TurnListener {
       const asked = this.store.findRoomMessage(messageId);
       if (asked) this.postEnding(asked, agent.profileId, "taken-out");
     });
+    this.endsInWorkspace(room.id, agent.profileId);
     this.store.removeBroughtAgent(room.id, agent.profileId);
+    if (agent.brought?.workspace !== undefined) this.waitingChanged(room.id);
   }
 
   /**
@@ -1169,7 +1305,7 @@ export class RoomService implements RoomRules, TurnListener {
    * A task for an agent a person brought goes to their own Mirador as one of the room's own agents would be sent it, with
    * who wrote it in what role, once; while that Mirador is away, the task's thread says so and the agent reads it later.
    */
-  private askBrought(room: Room, agent: RoomAgent, brought: BroughtAgent, message: RoomMessage) {
+  private askBrought(room: Room, agent: RoomAgent, brought: BroughtAgent, message: RoomMessage, letThrough: boolean) {
     if (!this.hub.carriesAgentsOf(brought.personId)) return this.postEnding(message, agent.profileId, "away");
     const introduced = this.store.roomSeenThrough(room.id, agent.profileId) === 0;
     const prompt = this.catchUp(room, agent.profileId, introduced ? this.roomThrough(room, message) : this.unseenBy(room, agent.profileId, message), message, introduced);
@@ -1184,6 +1320,7 @@ export class RoomService implements RoomRules, TurnListener {
       byName: name,
       byRole: role,
       fromBringer: !writtenByAgent(message.author) && message.author.personId === brought.personId,
+      letThrough,
       sentAt: Date.now(),
     };
     this.store.insertRoomBroughtTask(task);
@@ -1231,10 +1368,13 @@ export class RoomService implements RoomRules, TurnListener {
     if (this.store.listRoomTasksWaiting(roomId).length > 0) this.waitingChanged(roomId);
   }
 
-  /** An agent new to the room, or on a new conversation there, is introduced to it with the room's messages so far. */
-  private ask(room: Room, profileId: string, message: RoomMessage, personId: string | undefined) {
+  /**
+   * An agent new to the room, or on a new conversation there, is introduced to it with the room's messages so far.
+   * `letThrough` says the owner or an approver wrote or allowed the message; no agent's tag is.
+   */
+  private ask(room: Room, profileId: string, message: RoomMessage, personId: string | undefined, letThrough = false) {
     const agent = room.agents.find((each) => each.profileId === profileId)!;
-    if (agent.brought) return this.askBrought(room, agent, agent.brought, message);
+    if (agent.brought) return this.askBrought(room, agent, agent.brought, message, letThrough);
     const conversationId = agent.conversationId ?? this.startSession(room, profileId);
     const introduced = agent.conversationId === null || this.store.roomSeenThrough(room.id, profileId) === 0;
     const prompt = this.catchUp(room, profileId, introduced ? this.roomThrough(room, message) : this.unseenBy(room, profileId, message), message, introduced);

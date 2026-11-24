@@ -156,7 +156,7 @@ function machineWithRooms(dataDir = mkdtempSync(join(tmpdir(), "room-data-")), h
   };
   const clock = { now: Date.UTC(2026, 10, 20, 9) };
   const notifications = { notify: (conversationId: string, reason: NotificationReason) => void notified.push({ conversationId, reason }), roomTaskHeld: () => {} };
-  const roomsOn = (on: Store) => new RoomService(on, hub, sessions, notifications, dataDir, new SenderLimit(() => clock.now, MOST_ROOM_MESSAGES_A_MINUTE), home);
+  const roomsOn = (on: Store) => new RoomService(on, hub, sessions, notifications, dataDir, () => ({}), new SenderLimit(() => clock.now, MOST_ROOM_MESSAGES_A_MINUTE), home);
   const rooms = roomsOn(store);
   const room = rooms.create(" Launch ", "w1", ["p1", "p2"], DEFAULT_PERMISSION_PRESET);
   page.data.roomSubscriptions.add(room.id);
@@ -1006,6 +1006,7 @@ describe("a page that shows a room", () => {
       threads: [{ id: "t1", roomId: "r1", messageId: "m1", profileId: "p1" }],
       canvas: [],
       votes: [],
+      workspaceCalls: [],
     });
 
   test("puts the pages and questions of the room's agents on its canvas, and leaves out plugins' items and other conversations' pages", () => {
@@ -1114,9 +1115,9 @@ describe("a page that shows a room", () => {
       approvers: [OWNER],
     });
     const waiting = [
-      { type: "room.approvals", roomId: "r1", approvals: [approval("q1", "r1"), approval("q2", "r1")], tasks: [] },
-      { type: "room.approvals", roomId: "r2", approvals: [approval("q3", "r2")], tasks: [] },
-      { type: "room.approvals", roomId: "r1", approvals: [approval("q2", "r1")], tasks: [] },
+      { type: "room.approvals", roomId: "r1", approvals: [approval("q1", "r1"), approval("q2", "r1")], tasks: [], workspace: [] },
+      { type: "room.approvals", roomId: "r2", approvals: [approval("q3", "r2")], tasks: [], workspace: [] },
+      { type: "room.approvals", roomId: "r1", approvals: [approval("q2", "r1")], tasks: [], workspace: [] },
     ] satisfies ServerMessage[];
     const state = waiting.reduce(serverSent, initialState);
     expect(state.roomApprovals.map(({ request }) => request.permissionId)).toEqual(["q3", "q2"]);
@@ -1317,7 +1318,7 @@ describe("a room's agents' requests", () => {
       { conversationId: reviewer, profileId: "p2", file: "/tmp/project/login.ts", threadId: threadOf("p2"), task, approvers: [ownerId], permissionId: "q2" },
       { conversationId: builder, profileId: "p1", file: null, threadId: threadOf("p1"), task, approvers: [ownerId], permissionId: "q1" },
     ]);
-    expect(received.findLast((message) => message.type === "room.approvals")).toEqual({ type: "room.approvals", roomId: room.id, approvals, tasks: [] });
+    expect(received.findLast((message) => message.type === "room.approvals")).toEqual({ type: "room.approvals", roomId: room.id, approvals, tasks: [], workspace: [] });
     expect(rooms.allApprovals()).toEqual(approvals);
   });
 
@@ -1844,7 +1845,7 @@ describe("a task a person other than the owner asks of a room's agents", () => {
 
     expect(rooms.tasksWaiting(room.id)).toEqual([waiting]);
     expect(rooms.allTasksWaiting()).toEqual([waiting]);
-    expect(lastApprovals()).toEqual({ type: "room.approvals", roomId: room.id, approvals: [], tasks: [waiting] });
+    expect(lastApprovals()).toEqual({ type: "room.approvals", roomId: room.id, approvals: [], tasks: [waiting], workspace: [] });
     expect(notified).toEqual([{ conversationId: builder, reason: { kind: "permission", tool: "a task of Mia, member" } }]);
     expect(problemOf(() => rooms.answerTask(room.id, task.id, "allow", "m1"))).toBe("room-approval-not-yours");
 
@@ -1855,7 +1856,7 @@ describe("a task a person other than the owner asks of a room's agents", () => {
     expect(sent[0]!.options.roomMessageId).toBe(task.id);
     expect(store.findRoomMessage(task.id)!.taskHeld).toBeUndefined();
     expect(rooms.tasksWaiting(room.id)).toEqual([]);
-    expect(lastApprovals()).toEqual({ type: "room.approvals", roomId: room.id, approvals: [], tasks: [] });
+    expect(lastApprovals()).toEqual({ type: "room.approvals", roomId: room.id, approvals: [], tasks: [], workspace: [] });
     expect(problemOf(() => rooms.answerTask(room.id, task.id, "allow", ownerId))).toBe("room-task-not-waiting");
   });
 

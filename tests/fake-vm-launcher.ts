@@ -14,6 +14,8 @@ export class FakeVmLauncher implements VmLauncher {
   ranAsAgentGives: ((command: string[]) => { exitCode: number; stdout: string } | null) | null = null;
   prepareFails: string | null = null;
   startFails: string | null = null;
+  /** A start waits for this before it has started its VM. */
+  starting: Promise<void> = Promise.resolve();
   available: SandboxAvailability = { available: true, kind: "apple-container" };
 
   availability() {
@@ -30,6 +32,7 @@ export class FakeVmLauncher implements VmLauncher {
   }
 
   async start(plan: VmPlan) {
+    await this.starting;
     if (this.startFails) throw new SandboxNotReady({ kind: "could-not-start", cause: this.startFails });
     this.started.push(plan);
   }
@@ -45,8 +48,18 @@ export class FakeVmLauncher implements VmLauncher {
     return this.ranAsAgentGives?.(command) ?? (await runHere(command, input));
   }
 
+  /** The VMs started and not stopped since, as a runtime would list them. */
+  running() {
+    const last = (names: string[], name: string) => names.filter((each) => each === name).length;
+    const started = this.started.map(({ name }) => name);
+    return [...new Set(started)].filter((name) => last(started, name) > last(this.stoppedOnceStarted, name));
+  }
+
+  private readonly stoppedOnceStarted: string[] = [];
+
   async stop(vm: string) {
     this.stopped.push(vm);
+    if (this.running().includes(vm)) this.stoppedOnceStarted.push(vm);
   }
 
   async listMiradors() {

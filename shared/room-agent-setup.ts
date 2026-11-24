@@ -104,6 +104,9 @@ const readByItsKind = (harness: HarnessId, name: string, environment: Record<str
 
 const basicOfThisComputer = (name: string) => BASICS_OF_THIS_COMPUTER.some((by) => named(name.toUpperCase(), by));
 
+/** Of a computer's environment, only what every program on it expects to find. */
+export const basicEnvironment = (environment: Record<string, string>) => Object.fromEntries(Object.entries(environment).filter(([name]) => basicOfThisComputer(name)));
+
 export const alwaysGiven = (name: string) => LOCATIONS.includes(name);
 
 /** Whether a room's agent gets one of its profile's values unless the owner chooses otherwise: the basics, and what its kind reads to run. */

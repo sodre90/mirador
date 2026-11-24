@@ -11,6 +11,7 @@ export const problems: Messages["problems"] = {
     "workspace-sandbox-turned-off": "Die Sandbox dieses Arbeitsbereichs wurde ausgeschaltet, während sein Agent startete: Sende deine Nachricht erneut, um ihn auf diesem Computer zu starten.",
     "sandboxed-agent-here": "Die eigenen Panels und die Anmeldung von Claude Code öffnen sich nicht in einer Unterhaltung mit Sandbox: Sie würden Claude Code auf diesem Computer ausführen, im Ordner, den seine Agenten ändern.",
     "brought-agent-in-sandboxed-workspace": "Ein Agent, den du in einen Raum mitbringst, kann nicht in einem Arbeitsbereich arbeiten, dessen Agenten in einer Sandbox laufen: Er würde die Sandbox mit ihnen teilen. Wähle einen anderen Arbeitsbereich für ihn, oder schalte die Sandbox dieses Arbeitsbereichs aus.",
+    "agent-cannot-work-in-rooms-workspace": "Bisher können nur Claude-Code-Agenten im Arbeitsbereich eines Raums arbeiten: Wähle ein Claude-Profil oder einen deiner Arbeitsbereiche.",
     "usage-limit-reached": "Claudes Nutzungslimit ist erreicht.",
     "conversation-has-no-profile": "Diese Unterhaltung hat kein Profil, oder ihr Profil wurde gelöscht. Wähle oben in der Unterhaltung ein Profil.",
     "workspace-gone": "Der Arbeitsbereich existiert nicht mehr.",

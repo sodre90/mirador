@@ -111,6 +111,7 @@ function roomWithMia({ peoplesTasksWait = false } = {}) {
     sessions,
     { notify: (_conversationId, reason) => void notified.push({ by: "conversation", tool: toolOf(reason) }), roomTaskHeld: (_room, reason) => void notified.push({ by: "room", tool: toolOf(reason) }) },
     mkdtempSync(join(tmpdir(), "room-data-")),
+    () => ({}),
     new SenderLimit(() => clock.now, MOST_ROOM_MESSAGES_A_MINUTE),
     undefined,
     new SenderLimit(() => clock.now, 6),
@@ -466,10 +467,10 @@ describe("what a person's Mirador may send about the agents they brought", () =>
   const admitted = (sent: Record<string, unknown>) => refusal(() => admittedFromPerson(sent, mia));
 
   test("ids of the room's form and texts of bounded length, in a room they are in", () => {
-    expect(admitted({ type: "room.bring-agent", requestId: "q1", roomId: "r1", name: "Coder", harness: "claude" })).toBeNull();
-    expect(admitted({ type: "room.bring-agent", requestId: "q1", roomId: "r2", name: "Coder", harness: "claude" })).not.toBeNull();
-    expect(admitted({ type: "room.bring-agent", requestId: "q1", roomId: "r1", name: "C".repeat(1_000), harness: "claude" })).not.toBeNull();
-    expect(admitted({ type: "room.bring-agent", requestId: "q1", roomId: "r1", name: "Coder", harness: "nope" })).not.toBeNull();
+    expect(admitted({ type: "room.bring-agent", requestId: "q1", roomId: "r1", name: "Coder", harness: "claude", worksInRoom: false })).toBeNull();
+    expect(admitted({ type: "room.bring-agent", requestId: "q1", roomId: "r2", name: "Coder", harness: "claude", worksInRoom: false })).not.toBeNull();
+    expect(admitted({ type: "room.bring-agent", requestId: "q1", roomId: "r1", name: "C".repeat(1_000), harness: "claude", worksInRoom: false })).not.toBeNull();
+    expect(admitted({ type: "room.bring-agent", requestId: "q1", roomId: "r1", name: "Coder", harness: "nope", worksInRoom: false })).not.toBeNull();
     expect(admitted({ type: "room.take-agent-out", roomId: "r1", agentId: "../x" })).not.toBeNull();
     expect(admitted({ type: "room.brought-agents-here" })).toBeNull();
     expect(admitted({ type: "room.brought-agents-here", personId: "someone" })).not.toBeNull();

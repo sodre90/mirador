@@ -42,6 +42,7 @@ import { claudeSetupIn, isVariableName, type ClaudeSetup, type VariablesChosen }
 import { NO_SANDBOX, roomSandbox, sandboxSettingIn, workspaceSandbox, type SandboxFolder, type SandboxOwner, type SandboxSetting } from "../shared/sandbox.ts";
 import { writtenByAgent, type BroughtAgent, type BroughtAnswerEnd, type Room, type RoomAgent, type RoomAgentModel, type RoomAnswerEnd, type RoomAuthorRole, type RoomInvite, type RoomJoiner, type RoomMessage, type RoomPerson, type RoomRole, type RoomThread, type TaskHeld } from "../shared/rooms.ts";
 import type { BroughtAgentHere } from "../shared/brought-agents.ts";
+import { MOST_WORKSPACE_CALLS_KEPT, type RoomWorkspaceAccess, type RoomWorkspaceCall } from "../shared/room-workspace.ts";
 import type { RoomMention } from "../shared/room-mentions.ts";
 import type { RoomBallot } from "../shared/room-votes.ts";
 import type { TerminalLayout } from "../shared/terminal-layout.ts";
@@ -187,6 +188,10 @@ const schema = `
     id TEXT PRIMARY KEY, machine_id TEXT NOT NULL, task_id TEXT NOT NULL, brought_id TEXT NOT NULL REFERENCES brought_agents(id) ON DELETE CASCADE,
     state TEXT NOT NULL, by_name TEXT NOT NULL, by_role TEXT NOT NULL, text TEXT NOT NULL, at INTEGER NOT NULL, answer TEXT, ended TEXT,
     answered_at INTEGER, UNIQUE (machine_id, task_id));
+  CREATE TABLE IF NOT EXISTS room_workspace_calls (
+    id TEXT PRIMARY KEY, room_id TEXT NOT NULL REFERENCES rooms(id) ON DELETE CASCADE, agent_id TEXT NOT NULL, thread_id TEXT NOT NULL,
+    at INTEGER NOT NULL, kind TEXT NOT NULL, about TEXT NOT NULL, state TEXT NOT NULL, diff TEXT, result TEXT, answered_by TEXT);
+  CREATE INDEX IF NOT EXISTS room_workspace_calls_by_agent ON room_workspace_calls (room_id, agent_id, at);
   CREATE TABLE IF NOT EXISTS sandbox_left_folders (path TEXT PRIMARY KEY, left_at INTEGER NOT NULL);
   CREATE TABLE IF NOT EXISTS sandbox_folders (
     owner_kind TEXT NOT NULL, owner_id TEXT NOT NULL, path TEXT NOT NULL, writable INTEGER NOT NULL DEFAULT 0, added_at INTEGER NOT NULL,
@@ -330,18 +335,22 @@ const addedColumns = [
   { table: "room_agents", column: "whole_host_environment", definition: "INTEGER NOT NULL DEFAULT 0" },
   { table: "conversations", column: "room_setup", definition: "TEXT" },
   { table: "conversations", column: "brought_into_room", definition: "INTEGER NOT NULL DEFAULT 0" },
+  { table: "conversations", column: "works_in_rooms_workspace", definition: "INTEGER NOT NULL DEFAULT 0" },
   { table: "rooms", column: "members_bring_agents", definition: "INTEGER NOT NULL DEFAULT 1" },
   { table: "room_agents", column: "brought_by", definition: "TEXT" },
   { table: "room_agents", column: "brought_name", definition: "TEXT" },
   { table: "room_agents", column: "brought_harness", definition: "TEXT" },
   { table: "room_agents", column: "brought_here", definition: "INTEGER NOT NULL DEFAULT 0" },
   { table: "room_messages", column: "brought_by", definition: "TEXT" },
+  { table: "room_agents", column: "brought_workspace", definition: "TEXT" },
+  { table: "room_brought_tasks", column: "let_through", definition: "INTEGER NOT NULL DEFAULT 0" },
   { table: "workspaces", column: "sandbox", definition: "TEXT NOT NULL DEFAULT '{}'" },
   { table: "room_invites", column: "seats", definition: "INTEGER NOT NULL DEFAULT 1" },
   { table: "room_invites", column: "lets_in", definition: "TEXT NOT NULL DEFAULT 'at-once'" },
   { table: "machines", column: "owner_name", definition: "TEXT" },
   { table: "machines", column: "knocks", definition: "TEXT" },
   { table: "workspaces", column: "side_chat_access", definition: "TEXT" },
+  { table: "workspaces", column: "for_brought_agents", definition: "INTEGER NOT NULL DEFAULT 0" },
   { table: "conversations", column: "side_chat_may_change_files", definition: "INTEGER NOT NULL DEFAULT 0" },
   { table: "conversations", column: "side_chat_access", definition: "TEXT" },
 ];
@@ -377,6 +386,7 @@ type WorkspaceRow = {
   worktree_setup: string;
   sandbox: string;
   side_chat_access: string | null;
+  for_brought_agents: number;
   created_at: number;
 };
 
@@ -421,6 +431,7 @@ type ConversationRow = {
   side_chat_access: string | null;
   room_id: string | null;
   brought_into_room: number;
+  works_in_rooms_workspace: number;
   plugin_settings: string | null;
   reminder: string | null;
   favourite: number;
@@ -445,6 +456,7 @@ const toWorkspace = (row: WorkspaceRow): Workspace => ({
   worktreeSetup: row.worktree_setup,
   sandbox: sandboxSettingIn(JSON.parse(row.sandbox)),
   sideChatAccess: isSideChatAccess(row.side_chat_access) ? row.side_chat_access : null,
+  ...(row.for_brought_agents === 1 && { forBroughtAgents: true as const }),
   createdAt: row.created_at,
 });
 
@@ -556,6 +568,7 @@ const toConversation = (row: ConversationRow): Conversation => ({
   ...(isSideChatAccess(row.side_chat_access) && { sideChatAccess: row.side_chat_access }),
   ...(row.room_id && { roomId: row.room_id }),
   ...(row.brought_into_room === 1 && { broughtIntoRoom: true as const }),
+  ...(row.works_in_rooms_workspace === 1 && { worksInRoomsWorkspace: true as const }),
   ...(row.plugin_settings && { pluginSettings: JSON.parse(row.plugin_settings) as Record<string, Record<string, string>> }),
   ...(row.reminder && { reminder: JSON.parse(row.reminder) as Reminder }),
   ...(row.favourite === 1 && { favourite: true }),
@@ -590,10 +603,13 @@ interface RoomAgentRow {
   brought_name: string | null;
   brought_harness: HarnessId | null;
   brought_here: number;
+  brought_workspace: RoomWorkspaceAccess | null;
 }
 
-const broughtOf = ({ brought_by, brought_name, brought_harness, brought_here }: RoomAgentRow): Pick<RoomAgent, "brought"> =>
-  brought_by !== null && brought_name !== null && brought_harness !== null ? { brought: { personId: brought_by, name: brought_name, harness: brought_harness, here: brought_here === 1 } } : {};
+const broughtOf = ({ brought_by, brought_name, brought_harness, brought_here, brought_workspace }: RoomAgentRow): Pick<RoomAgent, "brought"> =>
+  brought_by !== null && brought_name !== null && brought_harness !== null
+    ? { brought: { personId: brought_by, name: brought_name, harness: brought_harness, here: brought_here === 1, ...(brought_workspace !== null && { workspace: brought_workspace }) } }
+    : {};
 
 /** A task this machine sent an agent a person brought, which its bringer's Mirador has not answered yet. */
 export interface RoomBroughtTask {
@@ -605,12 +621,14 @@ export interface RoomBroughtTask {
   byName: string;
   byRole: RoomAuthorRole;
   fromBringer: boolean;
+  /** Whether the owner or an approver wrote it, or allowed it, so that the agent may work on it in the room's workspace. */
+  letThrough: boolean;
   sentAt: number;
 }
 
-const roomBroughtTaskColumns = "id, room_id AS roomId, agent_id AS agentId, message_id AS messageId, prompt, by_name AS byName, by_role AS byRole, from_bringer = 1 AS fromBringer, sent_at AS sentAt";
+const roomBroughtTaskColumns = "id, room_id AS roomId, agent_id AS agentId, message_id AS messageId, prompt, by_name AS byName, by_role AS byRole, from_bringer AS fromBringer, let_through AS letThrough, sent_at AS sentAt";
 
-const toRoomBroughtTask = (row: Omit<RoomBroughtTask, "fromBringer"> & { fromBringer: number }): RoomBroughtTask => ({ ...row, fromBringer: row.fromBringer === 1 });
+const toRoomBroughtTask = (row: Omit<RoomBroughtTask, "fromBringer" | "letThrough"> & { fromBringer: number; letThrough: number }): RoomBroughtTask => ({ ...row, fromBringer: row.fromBringer === 1, letThrough: row.letThrough === 1 });
 
 /** Where a task stands on the Mirador of the person who brought the agent it is for. */
 export type BroughtTaskState = "waiting" | "sent" | "answered";
@@ -634,7 +652,7 @@ export interface BroughtTask {
 const broughtTaskColumns = "id, machine_id AS machineId, task_id AS taskId, brought_id AS broughtId, state, by_name AS byName, by_role AS byRole, text, at, answer, ended";
 
 const broughtAgentColumns =
-  "id, machine_id AS machineId, room_id AS roomId, agent_id AS agentId, profile_id AS profileId, workspace_id AS workspaceId, others_tasks AS othersTasks, conversation_id AS conversationId";
+  "id, machine_id AS machineId, room_id AS roomId, agent_id AS agentId, profile_id AS profileId, NULLIF(workspace_id, '') AS workspaceId, others_tasks AS othersTasks, conversation_id AS conversationId";
 
 interface RoomMessageRow {
   id: string;
@@ -871,8 +889,8 @@ export class Store {
   insertWorkspace(workspace: Omit<Workspace, "position" | "color" | "groupId" | "newConversationsIn" | "worktreeSetup" | "sandbox" | "sideChatAccess">): Workspace {
     const position = this.firstSidebarPosition();
     this.db
-      .query("INSERT INTO workspaces (id, name, path, default_harness, default_profile_id, position, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
-      .run(workspace.id, workspace.name, workspace.path, workspace.defaultLaunch.harness, workspace.defaultLaunch.profileId, position, workspace.createdAt);
+      .query("INSERT INTO workspaces (id, name, path, default_harness, default_profile_id, position, for_brought_agents, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+      .run(workspace.id, workspace.name, workspace.path, workspace.defaultLaunch.harness, workspace.defaultLaunch.profileId, position, workspace.forBroughtAgents ? 1 : 0, workspace.createdAt);
     return { ...workspace, color: null, position, groupId: null, newConversationsIn: "folder", worktreeSetup: "", sandbox: NO_SANDBOX, sideChatAccess: null };
   }
 
@@ -1164,8 +1182,8 @@ export class Store {
       .get(conversation.workspaceId) as { first: number };
     this.db
       .query(
-        `INSERT INTO conversations (id, workspace_id, harness, profile_id, title, title_set_by_user, acp_session_id, ask_mode, bypass_permissions, config_options, position, worktree, side_chat_of, side_chat_may_change_files, room_id, brought_into_room, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO conversations (id, workspace_id, harness, profile_id, title, title_set_by_user, acp_session_id, ask_mode, bypass_permissions, config_options, position, worktree, side_chat_of, side_chat_may_change_files, room_id, brought_into_room, works_in_rooms_workspace, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         conversation.id,
@@ -1184,6 +1202,7 @@ export class Store {
         conversation.sideChatMayChangeFiles ? 1 : 0,
         conversation.roomId ?? null,
         conversation.broughtIntoRoom ? 1 : 0,
+        conversation.worksInRoomsWorkspace ? 1 : 0,
         conversation.createdAt,
         conversation.updatedAt,
       );
@@ -1362,7 +1381,7 @@ export class Store {
 
   private toRoom({ id, name, workspace_id, permissions, peoples_tasks_wait, claude_setup, agents_read_guests, members_bring_agents, sandbox, created_at }: RoomRow): Room {
     const agents = this.db
-      .query("SELECT profile_id, conversation_id, answering, model, effort, variables, whole_host_environment, brought_by, brought_name, brought_harness, brought_here FROM room_agents WHERE room_id = ? ORDER BY rowid")
+      .query("SELECT profile_id, conversation_id, answering, model, effort, variables, whole_host_environment, brought_by, brought_name, brought_harness, brought_here, brought_workspace FROM room_agents WHERE room_id = ? ORDER BY rowid")
       .all(id) as RoomAgentRow[];
     const people = this.db.query("SELECT person_id, role, name_clash FROM room_people WHERE room_id = ? ORDER BY rowid").all(id) as RoomPersonRow[];
     return {
@@ -1591,10 +1610,57 @@ export class Store {
     this.db.query("UPDATE rooms SET members_bring_agents = ? WHERE id = ?").run(allowed ? 1 : 0, id);
   }
 
-  addBroughtAgent(roomId: string, agentId: string, { personId, name, harness }: Omit<BroughtAgent, "here">, here: boolean) {
+  addBroughtAgent(roomId: string, agentId: string, { personId, name, harness, workspace }: Omit<BroughtAgent, "here">, here: boolean) {
     this.db
-      .query("INSERT INTO room_agents (room_id, profile_id, brought_by, brought_name, brought_harness, brought_here) VALUES (?, ?, ?, ?, ?, ?)")
-      .run(roomId, agentId, personId, name, harness, here ? 1 : 0);
+      .query("INSERT INTO room_agents (room_id, profile_id, brought_by, brought_name, brought_harness, brought_here, brought_workspace) VALUES (?, ?, ?, ?, ?, ?, ?)")
+      .run(roomId, agentId, personId, name, harness, here ? 1 : 0, workspace ?? null);
+  }
+
+  /** Of a brought agent that was brought to work in the room's workspace. */
+  setBroughtAgentWorkspace(roomId: string, agentId: string, access: RoomWorkspaceAccess) {
+    this.db.query("UPDATE room_agents SET brought_workspace = ? WHERE room_id = ? AND profile_id = ? AND brought_workspace IS NOT NULL").run(access, roomId, agentId);
+  }
+
+  /** The agents let into the room's workspace have to be let in again. */
+  askForWorkspaceAgain(roomId: string) {
+    this.db.query("UPDATE room_agents SET brought_workspace = 'asked' WHERE room_id = ? AND brought_workspace = 'allowed'").run(roomId);
+  }
+
+  /** The person's agents let into the room's workspace have to be let in again, and no task they were sent opens it any more. */
+  askForWorkspaceAgainOf(roomId: string, personId: string) {
+    this.db.transaction(() => {
+      this.db.query("UPDATE room_agents SET brought_workspace = 'asked' WHERE room_id = ? AND brought_by = ? AND brought_workspace = 'allowed'").run(roomId, personId);
+      this.db.query("UPDATE room_brought_tasks SET let_through = 0 WHERE room_id = ?1 AND agent_id IN (SELECT profile_id FROM room_agents WHERE room_id = ?1 AND brought_by = ?2)").run(roomId, personId);
+    })();
+  }
+
+  insertWorkspaceCall(call: RoomWorkspaceCall) {
+    this.db.transaction(() => {
+      this.db
+        .query("INSERT INTO room_workspace_calls (id, room_id, agent_id, thread_id, at, kind, about, state, diff, result, answered_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+        .run(call.id, call.roomId, call.agentId, call.threadId, call.at, call.kind, call.about, call.state, call.diff, call.result, call.answeredBy);
+      this.db
+        .query(
+          `DELETE FROM room_workspace_calls WHERE room_id = ?1 AND agent_id = ?2 AND (kind = 'read') = ?3
+           AND id NOT IN (SELECT id FROM room_workspace_calls WHERE room_id = ?1 AND agent_id = ?2 AND (kind = 'read') = ?3 ORDER BY at DESC, rowid DESC LIMIT ?4)`,
+        )
+        .run(call.roomId, call.agentId, call.kind === "read" ? 1 : 0, MOST_WORKSPACE_CALLS_KEPT);
+    })();
+  }
+
+  updateWorkspaceCall({ id, state, result, answeredBy }: Pick<RoomWorkspaceCall, "id" | "state" | "result" | "answeredBy">) {
+    this.db.query("UPDATE room_workspace_calls SET state = ?, result = ?, answered_by = ? WHERE id = ?").run(state, result, answeredBy, id);
+  }
+
+  listWorkspaceCalls(roomId: string): RoomWorkspaceCall[] {
+    return this.db
+      .query("SELECT id, room_id AS roomId, agent_id AS agentId, thread_id AS threadId, at, kind, about, state, diff, result, answered_by AS answeredBy FROM room_workspace_calls WHERE room_id = ? ORDER BY at, rowid")
+      .all(roomId) as RoomWorkspaceCall[];
+  }
+
+  /** The calls the host stopped on: none waits or runs any more. */
+  stopWorkspaceCallsUnderWay() {
+    this.db.query("UPDATE room_workspace_calls SET state = 'stopped' WHERE state IN ('waiting', 'running')").run();
   }
 
   /** Takes the brought agent out of the room with the tasks it was sent and has not answered. */
@@ -1607,7 +1673,7 @@ export class Store {
 
   /** The brought agent with the id, in whichever room it is. */
   findBroughtAgent(agentId: string): (BroughtAgent & { roomId: string }) | undefined {
-    const row = this.db.query("SELECT room_id, profile_id, conversation_id, answering, model, effort, variables, whole_host_environment, brought_by, brought_name, brought_harness, brought_here FROM room_agents WHERE profile_id = ? AND brought_by IS NOT NULL").get(agentId) as
+    const row = this.db.query("SELECT room_id, profile_id, conversation_id, answering, model, effort, variables, whole_host_environment, brought_by, brought_name, brought_harness, brought_here, brought_workspace FROM room_agents WHERE profile_id = ? AND brought_by IS NOT NULL").get(agentId) as
       | (RoomAgentRow & { room_id: string })
       | null;
     const brought = row ? broughtOf(row).brought : undefined;
@@ -1624,8 +1690,8 @@ export class Store {
 
   insertRoomBroughtTask(task: RoomBroughtTask) {
     this.db
-      .query("INSERT INTO room_brought_tasks (id, room_id, agent_id, message_id, prompt, by_name, by_role, from_bringer, sent_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
-      .run(task.id, task.roomId, task.agentId, task.messageId, task.prompt, task.byName, task.byRole, task.fromBringer ? 1 : 0, task.sentAt);
+      .query("INSERT INTO room_brought_tasks (id, room_id, agent_id, message_id, prompt, by_name, by_role, from_bringer, let_through, sent_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+      .run(task.id, task.roomId, task.agentId, task.messageId, task.prompt, task.byName, task.byRole, task.fromBringer ? 1 : 0, task.letThrough ? 1 : 0, task.sentAt);
   }
 
   /** The task sent to the agent in the room, now answered, which can be answered only once; undefined for any other. */
@@ -1663,7 +1729,7 @@ export class Store {
   insertBroughtAgentHere(agent: BroughtAgentHere) {
     this.db
       .query("INSERT INTO brought_agents (id, machine_id, room_id, agent_id, profile_id, workspace_id, others_tasks, conversation_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
-      .run(agent.id, agent.machineId, agent.roomId, agent.agentId, agent.profileId, agent.workspaceId, agent.othersTasks, agent.conversationId, Date.now());
+      .run(agent.id, agent.machineId, agent.roomId, agent.agentId, agent.profileId, agent.workspaceId ?? "", agent.othersTasks, agent.conversationId, Date.now());
   }
 
   /** The room's machine let the agent in under this id. */

@@ -3,6 +3,7 @@ import { DEFAULT_CONVERSATIONS_SHOWN, DEFAULT_OLDER_AFTER, DEFAULT_SIDE_CHAT_ACC
 import type { ServerMessage } from "../shared/protocol.ts";
 import { ALL_OF_CLAUDE_SETUP } from "../shared/room-agent-setup.ts";
 import { NO_SANDBOX, SETUP_NOT_STARTED } from "../shared/sandbox.ts";
+import type { RoomWorkspaceApproval } from "../shared/room-workspace.ts";
 import type { RoomApproval, RoomPresence, RoomTaskApproval } from "../shared/rooms.ts";
 import { agentStandIn, broughtAgentName, PROFILES_MODEL, seesAgentsWorkIn, shownOnRoomCanvas, type Room } from "../shared/rooms.ts";
 import { PERSON_WITHOUT_A_NAME, personGoesBy } from "../shared/people.ts";
@@ -34,8 +35,8 @@ export function conversationBehindStandIn(store: Pick<Store, "roomsOf">, personI
 /**
  * A room as a person in it sees it: its people by id and role alone, whom they tag and see vote, nothing of the
  * workspace its agents work in, the models the owner chose for them, what they are given or whether they run in a sandbox, and in place of each
- * agent's conversation there a stand-in that names none; of an agent someone brought, who did, its name and kind, and
- * whether it is here.
+ * agent's conversation there a stand-in that names none; of an agent someone brought, who did, its name and kind,
+ * whether it is here, and whether it works in the room's workspace.
  */
 const roomSeenBy = ({ id, name, agents, permissions, people, peoplesTasksWait, membersBringAgents, createdAt }: Room): Room => ({
   id,
@@ -48,7 +49,7 @@ const roomSeenBy = ({ id, name, agents, permissions, people, peoplesTasksWait, m
     ...PROFILES_MODEL,
     variables: {},
     wholeHostEnvironment: false,
-    ...(brought && { brought: { personId: brought.personId, name: brought.name, harness: brought.harness, here: brought.here } }),
+    ...(brought && { brought: { personId: brought.personId, name: brought.name, harness: brought.harness, here: brought.here, ...(brought.workspace !== undefined && { workspace: brought.workspace }) } }),
   })),
   permissions,
   people: people.map(({ personId, role }) => ({ personId, role })),
@@ -195,7 +196,11 @@ export function namesShownIn(store: PeopleSeen & Pick<Store, "listProfiles" | "w
 export function personView(store: PeopleSeen & Pick<Store, "findRoom" | "listProfiles" | "findConversation" | "findRoomThread">): ShownToPerson {
   const isIn = (socket: SocketData, roomId: string) => store.findRoom(roomId)?.people.some(({ personId }) => personId === socket.personId) === true;
   const shownIf = (shown: boolean, message: ServerMessage) => (shown ? [message] : []);
-  const waitsFor = (socket: SocketData) => (waiting: RoomApproval | RoomTaskApproval) => isIn(socket, waiting.roomId) && waiting.approvers.includes(socket.personId);
+  const readsAgentsWorkIn = (socket: SocketData, roomId: string) => {
+    const room = store.findRoom(roomId);
+    return room !== undefined && seesAgentsWorkIn(room, socket.personId);
+  };
+  const waitsFor = (socket: SocketData) => (waiting: RoomApproval | RoomTaskApproval | RoomWorkspaceApproval) => isIn(socket, waiting.roomId) && waiting.approvers.includes(socket.personId);
 
   const agentsOf = (rooms: Room[]) => agentsOfRooms(store, rooms);
 
@@ -278,7 +283,7 @@ export function personView(store: PeopleSeen & Pick<Store, "findRoom" | "listPro
     return { here: here.filter((personId) => seen.has(personId)), writing: writing.filter(({ personId, threadId }) => seen.has(personId) && inTheRoom(threadId)) };
   };
 
-  const snapshotFor = ({ hostRunId, roomApprovals, roomTasksWaiting, conversations }: Snapshot, socket: SocketData): Snapshot => {
+  const snapshotFor = ({ hostRunId, roomApprovals, roomTasksWaiting, roomWorkspaceWaiting, conversations }: Snapshot, socket: SocketData): Snapshot => {
     const rooms = store.roomsOf(socket.personId);
     rooms.forEach(({ id }) => socket.roomsShown.add(id));
     socket.agentConversationsShown.clear();
@@ -291,6 +296,7 @@ export function personView(store: PeopleSeen & Pick<Store, "findRoom" | "listPro
       rooms: rooms.map(roomSeenBy),
       roomApprovals: roomApprovals.filter(waitsFor(socket)).map(approvalSeen),
       roomTasksWaiting: roomTasksWaiting.filter(waitsFor(socket)),
+      roomWorkspaceWaiting: roomWorkspaceWaiting.filter(waitsFor(socket)),
       sandboxSetup: SETUP_NOT_STARTED,
       heldChanges: [],
       sandboxesHoldingTooMany: [],
@@ -392,15 +398,17 @@ export function personView(store: PeopleSeen & Pick<Store, "findRoom" | "listPro
     "room-invites.listed": HIDDEN,
     "room-joiners.listed": HIDDEN,
     "rooms.waiting-to-join": (message, socket) => shownIf(message.personId === socket.personId, message),
-    "room.timeline": (message, socket) => shownIf(isIn(socket, message.roomId), { ...message, canvas: timelineCanvasSeen(message.roomId, message.canvas) }),
+    "room.timeline": (message, socket) => shownIf(isIn(socket, message.roomId), { ...message, canvas: timelineCanvasSeen(message.roomId, message.canvas), workspaceCalls: readsAgentsWorkIn(socket, message.roomId) ? message.workspaceCalls : [] }),
     "room.message": (message, socket) => shownIf(isIn(socket, message.message.roomId), message),
     "room.votes": (message, socket) => shownIf(isIn(socket, message.roomId), message),
     "rooms.reading": ({ personId, readings }, socket) =>
       shownIf(personId === socket.personId, { type: "rooms.reading", personId, readings: readings.filter(({ roomId }) => isIn(socket, roomId)) }),
     "room.alert": (message, socket) => shownIf(message.personId === socket.personId && isIn(socket, message.roomId), message),
     /** Everyone in the room hears of it, so that a person no longer an approver drops what waited for them. */
-    "room.approvals": ({ roomId, approvals, tasks }, socket) =>
-      shownIf(isIn(socket, roomId), { type: "room.approvals", roomId, approvals: approvals.filter(waitsFor(socket)).map(approvalSeen), tasks: tasks.filter(waitsFor(socket)) }),
+    "room.approvals": ({ roomId, approvals, tasks, workspace }, socket) =>
+      shownIf(isIn(socket, roomId), { type: "room.approvals", roomId, approvals: approvals.filter(waitsFor(socket)).map(approvalSeen), tasks: tasks.filter(waitsFor(socket)), workspace: workspace.filter(waitsFor(socket)) }),
+    "room.workspace-call-shown": (message, socket) => shownIf(readsAgentsWorkIn(socket, message.call.roomId), message),
+    "room.workspace-answered": (message, socket) => shownIf(message.personId === socket.personId && socket.carriesAgents, message),
     "room.sandbox-checked": HIDDEN,
     "workspace.sandbox-checked": HIDDEN,
     "sandbox.setup": HIDDEN,

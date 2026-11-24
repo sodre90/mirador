@@ -1,3 +1,4 @@
+import { asDisksCompare } from "./disk-names.ts";
 import type { HarnessId } from "./model.ts";
 import { parseEnvironment } from "./profile-environment.ts";
 import { switchedOn } from "./room-agent-setup.ts";
@@ -281,10 +282,11 @@ export const isNeverHeldFolder = (name: string) => NEVER_HELD_FOLDERS.includes(n
  * and installed packages are not looked at.
  */
 export function isHeldConfigPath(path: string): boolean {
-  const parts = path.toLowerCase().split("/").filter(Boolean);
-  if (parts.length === 0 || parts.some((part) => NEVER_HELD_FOLDERS.includes(part))) return false;
-  const joined = `/${parts.join("/")}/`;
-  return HELD_FOLDERS.some((folder) => joined.includes(`/${folder}/`)) || HELD_FILES.includes(parts.at(-1)!);
+  const parts = path.split("/").filter(Boolean);
+  if (parts.length === 0 || parts.some(isNeverHeldFolder)) return false;
+  const compared = parts.map(asDisksCompare);
+  const joined = `/${compared.join("/")}/`;
+  return HELD_FOLDERS.some((folder) => joined.includes(`/${folder}/`)) || HELD_FILES.includes(compared.at(-1)!);
 }
 
 /** Whether everything in a folder of the workspace is held, as in a held folder, each file of it on its own. */

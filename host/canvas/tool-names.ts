@@ -1,5 +1,6 @@
 export { canvasToolName, USE_TOOL_TOOL } from "../../shared/tool-title.ts";
 import { ROOM_HISTORY_TOOL, ROOM_TAG_TOOL } from "../../shared/rooms.ts";
+import { ROOM_EDIT_TOOL, ROOM_READ_TOOL, ROOM_RUN_TOOL } from "../../shared/room-workspace.ts";
 import { USE_TOOL_TOOL } from "../../shared/tool-title.ts";
 
 export const USAGE_STATS_TOOL = "usage_stats";
@@ -15,7 +16,10 @@ export const PRE_ALLOWED_CANVAS_TOOLS = ["show", "ask", "when_done", USAGE_STATS
 /** All of the canvas server a room's agent gets: what its pages, questions and room need, and nothing that reaches past the room. */
 export const ROOM_CANVAS_TOOLS = ["show", "ask", ROOM_HISTORY_TOOL, ROOM_TAG_TOOL];
 
+/** All an agent you brought to work in a room's workspace has: the canvas here, and that workspace, where the room's machine decides what it may do. */
+export const ROOMS_WORKSPACE_CANVAS_TOOLS = ["show", "ask", ROOM_READ_TOOL, ROOM_EDIT_TOOL, ROOM_RUN_TOOL];
+
 export const APP_TOOLS = ["app_open", "apply", "app_state", "app_run"];
 
 /** The canvas server's own tools, whose names a plugin's tools can't take. */
-export const BUILT_IN_CANVAS_TOOLS = [...PRE_ALLOWED_CANVAS_TOOLS, ...APP_TOOLS, LAND_TOOL, PLUGIN_LOAD_TOOL];
+export const BUILT_IN_CANVAS_TOOLS = [...new Set([...PRE_ALLOWED_CANVAS_TOOLS, ...ROOMS_WORKSPACE_CANVAS_TOOLS, ...APP_TOOLS, LAND_TOOL, PLUGIN_LOAD_TOOL])];

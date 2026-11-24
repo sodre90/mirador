@@ -363,6 +363,8 @@ export interface Workspace {
   sandbox: SandboxSetting;
   /** What its new side chats may do; null for what Settings says. */
   sideChatAccess: SideChatAccess | null;
+  /** Its folder is an empty one that agents you brought start in to work in a room's workspace: whatever runs there is held to what they are. */
+  forBroughtAgents?: true;
   createdAt: number;
 }
 
@@ -401,7 +403,8 @@ export interface ConversationWorktree {
 export const workingCopyIdOf = ({ workspaceId, worktree }: Pick<Conversation, "workspaceId" | "worktree">) => worktree?.id ?? workspaceId;
 
 /** A conversation a room's tasks come into, of a room here or of one elsewhere an agent of yours was brought into: room text drives it, so it gets no more of Mirador than a room's agent does. */
-export const worksForARoom = ({ roomId, broughtIntoRoom }: Pick<Conversation, "roomId" | "broughtIntoRoom">) => roomId !== undefined || broughtIntoRoom === true;
+export const worksForARoom = ({ roomId, broughtIntoRoom, worksInRoomsWorkspace }: Pick<Conversation, "roomId" | "broughtIntoRoom" | "worksInRoomsWorkspace">) =>
+  roomId !== undefined || broughtIntoRoom === true || worksInRoomsWorkspace === true;
 
 /** A folding heading in the sidebar for some of the workspaces and other groups, e.g. a client's, with a group per project in it. */
 export interface WorkspaceGroup {
@@ -738,6 +741,8 @@ export interface Conversation {
   roomId?: string;
   /** Only on the conversation of an agent you brought into a room of someone else's machine, which the room's tasks come into. */
   broughtIntoRoom?: true;
+  /** Only on that of an agent you brought to work in the room's workspace, on the room's machine, and on what is forked or asked beside it: its agent has nothing of this computer but its canvas. */
+  worksInRoomsWorkspace?: true;
   /** What the user chose in its top bar for plugins' profile settings, by plugin and setting id; a setting not here follows the profile. */
   pluginSettings?: Record<string, Record<string, string>>;
   /** When the user wants to come back to it, put away or kept in the list until then. */

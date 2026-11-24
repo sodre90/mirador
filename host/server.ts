@@ -75,7 +75,7 @@ import type { ConversationSearch } from "./search.ts";
 import type { RoomService } from "./rooms.ts";
 import type { RoomQuestions } from "./room-questions.ts";
 import type { RoomReadingService } from "./room-reading.ts";
-import type { BroughtAgents } from "./brought-agents.ts";
+import { isForBroughtAgents, type BroughtAgents } from "./brought-agents.ts";
 import { reachedAt, RoomInvites, type ReachedAt } from "./room-invites.ts";
 import type { OwnerKey } from "./person-keys.ts";
 import { DEVICE_ROUTES, OPEN_TO_PEOPLE, SOCKETS_OPEN_TO_PEOPLE, THIS_MACHINE_ROUTES, type RouteHandlers } from "./routes.ts";
@@ -1500,6 +1500,7 @@ export function startServer(services: HostServices) {
       path: directory,
       defaultLaunch: launchForNewWorkspace(store, profileId),
       createdAt: Date.now(),
+      ...((await isForBroughtAgents(config.dataDir, directory)) && { forBroughtAgents: true as const }),
     });
   }
 
@@ -2243,7 +2244,7 @@ export function startServer(services: HostServices) {
       case "room.subscribe": {
         const timeline = rooms.timeline(message.roomId);
         socket.data.roomSubscriptions.add(message.roomId);
-        reply({ type: "room.timeline", roomId: message.roomId, ...timeline, canvas: rooms.canvas(message.roomId), votes: roomQuestions.votesIn(message.roomId) });
+        reply({ type: "room.timeline", roomId: message.roomId, ...timeline, canvas: rooms.canvas(message.roomId), votes: roomQuestions.votesIn(message.roomId), workspaceCalls: rooms.workspaceCallsIn(message.roomId) });
         return reply({ type: "room.presence", roomId: message.roomId, ...roomPresence.presenceIn(message.roomId) });
       }
       case "room.unsubscribe":
@@ -2268,7 +2269,7 @@ export function startServer(services: HostServices) {
       case "room.set-members-bring-agents":
         return rooms.setMembersBringAgents(message.roomId, message.allowed);
       case "room.bring-agent": {
-        const brought = letAgentIn(message.roomId, socket.data.personId, message.name, message.harness);
+        const brought = letAgentIn(message.roomId, socket.data.personId, message.name, message.harness, message.worksInRoom);
         return reply({ type: "room.agent-brought", requestId: message.requestId, personId: socket.data.personId, roomId: message.roomId, ...brought });
       }
       case "room.take-agent-out":
@@ -2279,6 +2280,19 @@ export function startServer(services: HostServices) {
         return rooms.broughtTaskStarted(socket.data.personId, message.roomId, message.agentId, message.taskId);
       case "room.brought-task-answered":
         return rooms.broughtTaskAnswered(socket.data.personId, message.roomId, message.agentId, message.taskId, message.text, message.ended);
+      case "room.workspace-call": {
+        const { roomId, agentId, taskId, callId, call } = message;
+        if (socket.data.carriesAgents) return void rooms.workspaceCalled({ personId: socket.data.personId, roomId, agentId, taskId, callId, call });
+        throw new HostProblemError({ code: "room-agent-not-yours" });
+      }
+      case "room.workspace-call-stopped":
+        return rooms.workspaceCallStopped({ personId: socket.data.personId, roomId: message.roomId, agentId: message.agentId, callId: message.callId });
+      case "room.answer-workspace":
+        rooms.answerWorkspace(message.roomId, message.agentId, message.answer, socket.data.personId);
+        return notifications.roomRead(message.roomId);
+      case "room.answer-workspace-call":
+        rooms.answerWorkspaceCall(message.roomId, message.callId, message.answer, socket.data.personId);
+        return notifications.roomRead(message.roomId);
       case "machine.bring-agent":
         return void Promise.resolve()
           .then(() => broughtAgents.bring(message.machineId, message.roomId, message.profileId, message.workspaceId, message.othersTasks))
@@ -2296,9 +2310,9 @@ export function startServer(services: HostServices) {
   }
 
   /** The id the room gives the agent a person brings, or why it keeps it out, which goes back to their Mirador. */
-  function letAgentIn(roomId: string, personId: string, name: string, harness: HarnessId): { agentId: string | null; problem: HostProblem | null } {
+  function letAgentIn(roomId: string, personId: string, name: string, harness: HarnessId, worksInRoom: boolean): { agentId: string | null; problem: HostProblem | null } {
     try {
-      return { agentId: rooms.bringAgent(roomId, personId, name, harness), problem: null };
+      return { agentId: rooms.bringAgent(roomId, personId, name, harness, worksInRoom), problem: null };
     } catch (error) {
       return { agentId: null, problem: error instanceof HostProblemError ? error.problem : { code: "room-agent-not-let-in" } };
     }
@@ -2356,6 +2370,7 @@ export function startServer(services: HostServices) {
       rooms: rooms.list(),
       roomApprovals: rooms.allApprovals(),
       roomTasksWaiting: rooms.allTasksWaiting(),
+      roomWorkspaceWaiting: rooms.allWorkspaceWaiting(),
       sandboxSetup: sandboxes.setup(),
       heldChanges: sandboxes.heldChanges(),
       sandboxesHoldingTooMany: sandboxes.holdingTooMany(),

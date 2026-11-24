@@ -1,13 +1,20 @@
-import { describe, expect, test } from "bun:test";
+import { afterAll, describe, expect, test } from "bun:test";
+import { mkdirSync, mkdtempSync, readdirSync, rmSync, symlinkSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { SessionUpdate } from "@agentclientprotocol/sdk/unstable";
-import { ANSWERS_KEPT_MS, BroughtAgents, refusalIn, taskAuthorIn, type BroughtSessions } from "../host/brought-agents.ts";
+import { ANSWERS_KEPT_MS, BroughtAgents, broughtAgentsFolder, isForBroughtAgents, refusalIn, taskAuthorIn, type BroughtSessions } from "../host/brought-agents.ts";
 import { Store } from "../host/store.ts";
 import { BROUGHT_TASK_MOST_CHARACTERS, MOST_BROUGHT_TASKS_A_MINUTE, MOST_BROUGHT_TASKS_QUEUED, type OthersTasks } from "../shared/brought-agents.ts";
 import { HostProblemError } from "../shared/host-problems.ts";
 import { MOST_ROOMS_READ } from "../shared/machines.ts";
 import type { Conversation, Launch, Profile } from "../shared/model.ts";
 import type { ClientMessage, ServerMessage } from "../shared/protocol.ts";
+import { MOST_WORKSPACE_CALLS_A_MINUTE, MOST_WORKSPACE_CALLS_AT_ONCE, WORKSPACE_RESULT_MOST_CHARACTERS, WORKSPACE_TASK_MS, type WorkspaceCall, type WorkspaceCallResult } from "../shared/room-workspace.ts";
 import type { NotificationReason } from "../shared/system-notifications.ts";
+
+const scratch = mkdtempSync(join(tmpdir(), "brought-agents-"));
+afterAll(() => rmSync(scratch, { recursive: true, force: true }));
 
 const profile = (id: string, name: string): Profile => ({
   id,
@@ -66,6 +73,8 @@ function miasMirador({ lettingInMs = 1_000 } = {}) {
   store.setMachineJoinedAs("ann", { asPerson: true, relayKey: null });
   store.setMachineRooms("ann", [{ id: "r1", name: "Launch", unread: 0, mentions: 0, toConfirm: 0, toApprove: 0, muted: false }]);
   store.saveProfile(profile("p1", "Coder"));
+  store.saveProfile({ ...profile("p2", "Opener"), harness: "opencode" });
+  const emptyFolders = join(scratch, crypto.randomUUID());
   store.insertWorkspace({ id: "w1", name: "mine", path: "/tmp/mine", defaultLaunch: { harness: "claude", profileId: "p1" }, createdAt: 1 });
   const toAnn: ClientMessage[] = [];
   const link = { open: true };
@@ -75,7 +84,8 @@ function miasMirador({ lettingInMs = 1_000 } = {}) {
   const pages: ServerMessage[] = [];
   const dropped: { conversationId: string; taskIds: string[] }[] = [];
   const sessions: BroughtSessions = {
-    createBroughtIntoRoom: (workspaceId, launch, title) => store.insertConversation({ ...conversationOf(workspaceId, launch, title), broughtIntoRoom: true }),
+    createBroughtIntoRoom: (workspaceId, launch, title, inRoomsWorkspace) =>
+      store.insertConversation({ ...conversationOf(workspaceId, launch, title), broughtIntoRoom: true, ...(inRoomsWorkspace && { worksInRoomsWorkspace: true }) }),
     send: async (conversationId, text, _images, { broughtTaskId }) => void prompts.push({ conversationId, text, broughtTaskId }),
     heldTasksChanged: (conversationId) => void held.push(conversationId),
     dropQueuedBroughtTasks: (conversationId, taskIds) => void dropped.push({ conversationId, taskIds }),
@@ -88,6 +98,7 @@ function miasMirador({ lettingInMs = 1_000 } = {}) {
       { send: (_machineId, message) => link.open && toAnn.push(message) > 0 },
       sessions,
       { notify: (conversationId, reason) => void notified.push({ conversationId, reason }) },
+      emptyFolders,
       () => clock.now,
       lettingInMs,
     );
@@ -97,9 +108,9 @@ function miasMirador({ lettingInMs = 1_000 } = {}) {
     const { requestId } = sentToAnn("room.bring-agent").at(-1)!;
     brought.heard("ann", { type: "room.agent-brought", requestId, personId: "mia", roomId: "r1", agentId, problem } as ServerMessage);
   };
-  const bringCoder = async (othersTasks: OthersTasks = "after-ok") => {
-    const bringing = brought.bring("ann", "r1", "p1", "w1", othersTasks);
-    letIn("a1");
+  const bringCoder = async (othersTasks: OthersTasks = "after-ok", { workspaceId = "w1" as string | null, agentId = "a1" } = {}) => {
+    const bringing = brought.bring("ann", "r1", "p1", workspaceId, othersTasks);
+    letIn(agentId);
     await bringing;
     return store.listBroughtAgents().at(-1)!;
   };
@@ -112,8 +123,35 @@ function miasMirador({ lettingInMs = 1_000 } = {}) {
     store.appendEvent(conversationId, { type: "turn-end", stopReason });
     brought.turnEnded(conversationId, seq);
   };
-  return { store, brought, toAnn, link, prompts, held, notified, pages, clock, dropped, startHost, sentToAnn, letIn, bringCoder, task, runTurn };
+  /** Its turn on the task's prompt begins and goes on, until it is ended. */
+  const startTurn = (conversationId: string, broughtTaskId: string) => {
+    const { seq } = store.appendEvent(conversationId, { type: "user-message", text: "task", broughtTaskId });
+    brought.turnStarted(conversationId, seq);
+    return () => {
+      store.appendEvent(conversationId, { type: "turn-end", stopReason: "end_turn" });
+      brought.turnEnded(conversationId, seq);
+    };
+  };
+  return { store, brought, toAnn, link, prompts, held, notified, pages, clock, dropped, emptyFolders, startHost, sentToAnn, letIn, bringCoder, task, runTurn, startTurn };
 }
+
+/** Mia's Coder works in the workspace of Ann's room, on a task of its that is under way. */
+async function coderInAnnsWorkspace() {
+  const mirador = miasMirador();
+  const agent = await mirador.bringCoder("any-time", { workspaceId: null });
+  mirador.task("t1");
+  const endTurn = mirador.startTurn(agent.conversationId!, mirador.prompts[0]!.broughtTaskId);
+  const asked = (call: WorkspaceCall = READ, signal = new AbortController().signal) => {
+    const answered: { result?: WorkspaceCallResult } = {};
+    const settled = mirador.brought.callInWorkspace(agent.conversationId!, call, signal).then((result) => (answered.result = result));
+    return { answered, settled, sent: mirador.sentToAnn("room.workspace-call").at(-1) };
+  };
+  const annAnswers = (callId: string, said: Record<string, unknown> = {}, from = "ann") =>
+    mirador.brought.heard(from, { type: "room.workspace-answered", personId: "mia", roomId: "r1", agentId: "a1", callId, result: { done: true, text: "Lines 1 to 1 of 1:\none" }, ...said } as ServerMessage);
+  return { ...mirador, agent, conversationId: agent.conversationId!, endTurn, asked, annAnswers };
+}
+
+const READ: WorkspaceCall = { kind: "read", path: "a.txt", fromLine: 1 };
 
 describe("bringing an agent of your own into a room of someone else's machine", () => {
   test("asks the room's machine to let it in under its profile's name and kind, and makes its conversation, titled with the room", async () => {
@@ -397,5 +435,207 @@ describe("following the rooms of a machine you joined as a person", () => {
     const { brought, sentToAnn } = miasMirador();
     brought.connected("ann");
     expect(sentToAnn("room.brought-agents-here")).toEqual([{ type: "room.brought-agents-here" }]);
+  });
+});
+
+describe("bringing an agent to work in the room's own workspace", () => {
+  test("the room's machine hears that it would, and its conversation is held to that workspace, in an empty folder shown under the room's name", async () => {
+    const { store, sentToAnn, bringCoder, emptyFolders, pages } = miasMirador();
+    const agent = await bringCoder("after-ok", { workspaceId: null });
+    expect(sentToAnn("room.bring-agent")[0]).toMatchObject({ worksInRoom: true });
+    expect(agent.workspaceId).toBeNull();
+    const conversation = store.findConversation(agent.conversationId!)!;
+    expect(conversation).toMatchObject({ title: "Launch · Ann's Mac", broughtIntoRoom: true, worksInRoomsWorkspace: true });
+    const workspace = store.findWorkspace(conversation.workspaceId)!;
+    expect(workspace).toMatchObject({ name: "Launch · Ann's Mac", path: join(emptyFolders, "ann-r1"), forBroughtAgents: true });
+    expect(readdirSync(workspace.path)).toEqual([]);
+    expect(pages.some((message) => message.type === "workspace.upserted" && message.workspace.id === workspace.id)).toBe(true);
+  });
+
+  test("one brought to work in a workspace of yours is said to, and not held to any other", async () => {
+    const { store, sentToAnn, bringCoder } = miasMirador();
+    const agent = await bringCoder();
+    expect(sentToAnn("room.bring-agent")[0]).toMatchObject({ worksInRoom: false });
+    expect(store.findConversation(agent.conversationId!)!.worksInRoomsWorkspace).toBeUndefined();
+  });
+
+  test("a second one in the room, or a new conversation of the same one, is shown in the same place", async () => {
+    const { store, bringCoder, brought, task } = miasMirador();
+    const first = await bringCoder("any-time", { workspaceId: null });
+    const second = await bringCoder("any-time", { workspaceId: null, agentId: "a2" });
+    const workspaceOf = (conversationId: string | null) => store.findConversation(conversationId!)!.workspaceId;
+    expect(workspaceOf(second.conversationId)).toBe(workspaceOf(first.conversationId));
+    store.deleteConversation(first.conversationId!);
+    task("t1");
+    const again = brought.list().agents.find(({ id }) => id === first.id)!;
+    expect(workspaceOf(again.conversationId)).toBe(workspaceOf(second.conversationId));
+    expect(store.findConversation(again.conversationId!)!.worksInRoomsWorkspace).toBe(true);
+  });
+
+  test("that folder is no workspace of yours to bring an agent to work in: the room's machine is never asked", async () => {
+    const { brought, store, sentToAnn, bringCoder } = miasMirador();
+    const agent = await bringCoder("after-ok", { workspaceId: null });
+    const { workspaceId } = store.findConversation(agent.conversationId!)!;
+    expect(() => brought.bring("ann", "r1", "p1", workspaceId, "after-ok")).toThrow();
+    expect(sentToAnn("room.bring-agent")).toHaveLength(1);
+  });
+
+  test("that folder added by hand as a workspace is known for what it is, by a link to it too; one beside it is not", async () => {
+    const dataDir = join(scratch, crypto.randomUUID());
+    const folder = join(broughtAgentsFolder(dataDir), "ann-r1");
+    const beside = join(dataDir, "brought-agents-not");
+    const link = join(scratch, crypto.randomUUID());
+    [folder, beside].forEach((each) => mkdirSync(each, { recursive: true }));
+    symlinkSync(folder, link);
+    expect(await Promise.all([folder, link, beside, dataDir].map((each) => isForBroughtAgents(dataDir, each)))).toEqual([true, true, false, false]);
+  });
+
+  test("only of an agent that can be held to it: for any other the room's machine is never asked", () => {
+    const { brought, store, sentToAnn } = miasMirador();
+    expect(() => brought.bring("ann", "r1", "p2", null, "after-ok")).toThrow(expect.objectContaining({ problem: { code: "agent-cannot-work-in-rooms-workspace" } }));
+    expect(sentToAnn("room.bring-agent")).toEqual([]);
+    expect(store.listBroughtAgents()).toEqual([]);
+  });
+
+  test("its task's prompt says where it works and by what; one that works in a workspace of yours hears nothing of it", async () => {
+    const there = await coderInAnnsWorkspace();
+    expect(there.prompts[0]!.text).toContain("room_read, room_edit and room_run");
+    const here = miasMirador();
+    await here.bringCoder("any-time");
+    here.task("t1");
+    expect(here.prompts[0]!.text).not.toContain("room_read");
+  });
+});
+
+describe("a call in the room's workspace", () => {
+  test("goes to the room's machine for the task under way, and its answer to the agent", async () => {
+    const { asked, annAnswers } = await coderInAnnsWorkspace();
+    const { settled, sent } = asked();
+    expect(sent).toEqual({ type: "room.workspace-call", roomId: "r1", agentId: "a1", taskId: "t1", callId: expect.any(String), call: READ });
+    annAnswers(sent!.callId);
+    expect(await settled).toEqual({ done: true, text: "Lines 1 to 1 of 1:\none" });
+  });
+
+  test("several go at once, each with an id of its own, and each hears its own answer", async () => {
+    const { asked, annAnswers } = await coderInAnnsWorkspace();
+    const first = asked();
+    const second = asked({ kind: "run", command: "ls" });
+    expect(first.sent!.callId).not.toBe(second.sent!.callId);
+    annAnswers(second.sent!.callId, { result: { done: true, text: "second" } });
+    annAnswers(first.sent!.callId, { result: { done: false, text: "first" } });
+    expect(await first.settled).toEqual({ done: false, text: "first" });
+    expect(await second.settled).toEqual({ done: true, text: "second" });
+  });
+
+  test("is taken only in a turn on a task: not before one, nor once it ended, nor in a turn of your own", async () => {
+    const { brought, bringCoder, sentToAnn, store } = miasMirador();
+    const agent = await bringCoder("any-time", { workspaceId: null });
+    const call = () => brought.callInWorkspace(agent.conversationId!, READ, new AbortController().signal);
+    expect((await call()).done).toBe(false);
+    const { seq } = store.appendEvent(agent.conversationId!, { type: "user-message", text: "hi" });
+    brought.turnStarted(agent.conversationId!, seq);
+    expect((await call()).text).toContain("only during a turn on a task");
+    expect(sentToAnn("room.workspace-call")).toEqual([]);
+
+    const there = await coderInAnnsWorkspace();
+    there.endTurn();
+    expect((await there.asked().settled).done).toBe(false);
+    expect(there.sentToAnn("room.workspace-call")).toEqual([]);
+  });
+
+  test("is taken from no agent that works in a workspace of yours, nor from another conversation", async () => {
+    const { brought, bringCoder, task, prompts, startTurn, sentToAnn } = miasMirador();
+    const agent = await bringCoder("any-time");
+    task("t1");
+    startTurn(agent.conversationId!, prompts[0]!.broughtTaskId);
+    expect((await brought.callInWorkspace(agent.conversationId!, READ, new AbortController().signal)).done).toBe(false);
+    expect((await brought.callInWorkspace("another", READ, new AbortController().signal)).done).toBe(false);
+    expect(sentToAnn("room.workspace-call")).toEqual([]);
+  });
+
+  test("only its own room's machine answers it, and only once", async () => {
+    const { asked, annAnswers } = await coderInAnnsWorkspace();
+    const { settled, answered, sent } = asked();
+    annAnswers(sent!.callId, {}, "bo");
+    annAnswers(sent!.callId, { roomId: "r2" });
+    annAnswers(sent!.callId, { agentId: "a2" });
+    annAnswers("another");
+    annAnswers(undefined as never);
+    await Bun.sleep(5);
+    expect(answered.result).toBeUndefined();
+    annAnswers(sent!.callId, { result: { done: true, text: "the answer" } });
+    annAnswers(sent!.callId, { result: { done: true, text: "another answer" } });
+    expect(await settled).toEqual({ done: true, text: "the answer" });
+  });
+
+  test("an answer that can't be read counts as none, and a longer one than a room's machine sends is cut", async () => {
+    const { asked, annAnswers } = await coderInAnnsWorkspace();
+    for (const result of [null, "done", { done: "yes", text: "a" }, { done: true, text: 1 }, { done: true }]) {
+      const { settled, sent } = asked();
+      annAnswers(sent!.callId, { result });
+      expect(await settled).toEqual({ done: false, text: "The room's machine answered with nothing that can be read." });
+    }
+    const { settled, sent } = asked();
+    annAnswers(sent!.callId, { result: { done: true, text: "x".repeat(1_000_000), more: "y" } });
+    const result = await settled;
+    expect(Object.keys(result)).toEqual(["done", "text"]);
+    expect(result.text.length).toBeLessThan(WORKSPACE_RESULT_MOST_CHARACTERS + 2_000);
+  });
+
+  test("ends with its turn, or when it is stopped, and the room's machine hears it is no longer wanted", async () => {
+    const { asked, endTurn, sentToAnn } = await coderInAnnsWorkspace();
+    const stopping = new AbortController();
+    const stopped = asked(READ, stopping.signal);
+    const goesOn = asked({ kind: "run", command: "ls" });
+    stopping.abort();
+    expect((await stopped.settled).done).toBe(false);
+    expect(goesOn.answered.result).toBeUndefined();
+    const stopsSent = () => sentToAnn("room.workspace-call-stopped").map(({ callId }) => callId);
+    expect(stopsSent()).toEqual([stopped.sent!.callId]);
+    endTurn();
+    expect((await goesOn.settled).text).toContain("Your turn ended");
+    expect(stopsSent()).toEqual([stopped.sent!.callId, goesOn.sent!.callId]);
+  });
+
+  test("fails at once while the room's machine is out of reach, and when the connection is lost it may or may not be done", async () => {
+    const { asked, link, brought } = await coderInAnnsWorkspace();
+    const { settled } = asked();
+    brought.disconnected("bo");
+    brought.disconnected("ann");
+    expect((await settled).text).toContain("may or may not have been done");
+    link.open = false;
+    expect(await asked().settled).toEqual({ done: false, text: "The room's machine isn't answering, so nothing was done." });
+  });
+
+  test("is one of so many a minute, and of so many that wait at a time, however fast the room's machine answers", async () => {
+    const { asked, annAnswers, sentToAnn, clock } = await coderInAnnsWorkspace();
+    const waiting = Array.from({ length: MOST_WORKSPACE_CALLS_AT_ONCE }, () => asked());
+    expect((await asked().settled).text).toContain(`Only ${MOST_WORKSPACE_CALLS_AT_ONCE} calls`);
+    expect(sentToAnn("room.workspace-call")).toHaveLength(MOST_WORKSPACE_CALLS_AT_ONCE);
+    waiting.forEach(({ sent }) => annAnswers(sent!.callId));
+
+    for (let made = MOST_WORKSPACE_CALLS_AT_ONCE; made < MOST_WORKSPACE_CALLS_A_MINUTE; made += 1) annAnswers(asked().sent!.callId);
+    expect((await asked().settled).text).toContain("too many calls");
+    expect(sentToAnn("room.workspace-call")).toHaveLength(MOST_WORKSPACE_CALLS_A_MINUTE);
+    clock.now += 61_000;
+    asked();
+    expect(sentToAnn("room.workspace-call")).toHaveLength(MOST_WORKSPACE_CALLS_A_MINUTE + 1);
+  });
+
+  test("is taken for an hour of its turn, whatever the room's machine allows", async () => {
+    const { asked, sentToAnn, clock } = await coderInAnnsWorkspace();
+    clock.now += WORKSPACE_TASK_MS - 1;
+    asked();
+    expect(sentToAnn("room.workspace-call")).toHaveLength(1);
+    clock.now += 2;
+    expect((await asked().settled).text).toContain("time in the room's workspace is over");
+    expect(sentToAnn("room.workspace-call")).toHaveLength(1);
+  });
+
+  test("ends once the agent is out of the room", async () => {
+    const { asked, brought, agent } = await coderInAnnsWorkspace();
+    const { settled } = asked();
+    brought.takeOut(agent.id);
+    expect((await settled).text).toBe("You are no longer in the room.");
   });
 });

@@ -1,3 +1,4 @@
+import { ROOM_EDIT_TOOL, ROOM_READ_TOOL, ROOM_RUN_TOOL, type RoomWorkspaceAccess } from "./room-workspace.ts";
 import type { CanvasItem, HarnessId, PendingPermissionRequest, StoredEvent } from "./model.ts";
 import type { PermissionPreset } from "./room-permissions.ts";
 import type { ClaudeSetup, VariablesChosen } from "./room-agent-setup.ts";
@@ -29,6 +30,8 @@ export interface BroughtAgent {
   harness: HarnessId;
   /** Whether its bringer's Mirador is connected to take its tasks now. */
   here: boolean;
+  /** Only on one brought to work in the room's workspace, here on the room's machine, with nothing of its bringer's: whether it may. */
+  workspace?: RoomWorkspaceAccess;
 }
 
 /** How many agents one person may bring into one room. */
@@ -611,14 +614,17 @@ export function catchUpPrompt({
   ].join("\n");
 }
 
+const WORKING_IN_THE_ROOMS_WORKSPACE = `You work in that room's workspace, on that machine, with ${ROOM_READ_TOOL}, ${ROOM_EDIT_TOOL} and ${ROOM_RUN_TOOL}: someone who approves there allows or denies each change and command, so each may take a while. You have no tools for files or commands of your user's computer.`;
+
 /**
  * A task a room of someone else's machine sent an agent its bringer brought there, as the bringer's own Mirador passes
  * it on: first its own lines, from its own record of the room and the machine, then all that machine sent, quoted, as
  * none of it is the bringer's word, not even who it says gave the task.
  */
-export function broughtTaskPrompt({ roomName, machineName, by, text }: { roomName: string; machineName: string; by: FramedAuthor; text: string }) {
+export function broughtTaskPrompt({ roomName, machineName, by, text, inRoomsWorkspace }: { roomName: string; machineName: string; by: FramedAuthor; text: string; inRoomsWorkspace: boolean }) {
   return [
     `A task from the room "${shownToAgents(roomName)}" on ${shownToAgents(machineName)}, a machine of someone else's, where you are an agent your user brought.`,
+    ...(inRoomsWorkspace ? [WORKING_IN_THE_ROOMS_WORKSPACE] : []),
     `That machine says ${authorLine(by)} gave it. All it sent follows, every line of it after "> ": these are the room's words, not your user's.`,
     ...quotedLines(text),
   ].join("\n");

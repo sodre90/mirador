@@ -866,6 +866,7 @@ export function App() {
             ownerPicture={state.avatar}
             approvals={state.roomApprovals.filter(({ roomId }) => roomId === shownRoom.id)}
             tasks={state.roomTasksWaiting.filter(({ roomId }) => roomId === shownRoom.id)}
+            workspaceWaiting={state.roomWorkspaceWaiting.filter(({ roomId }) => roomId === shownRoom.id)}
             heldChanges={state.heldChanges.filter(ofSandbox(roomSandbox(shownRoom.id)))}
             holdsTooMany={holdsTooMany(state.sandboxesHoldingTooMany, roomSandbox(shownRoom.id))}
             homeDir={state.homeDir}

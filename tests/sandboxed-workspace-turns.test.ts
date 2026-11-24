@@ -8,7 +8,7 @@ import { loadConfig } from "../host/config.ts";
 import { agentProcessKey, ConversationService } from "../host/conversations.ts";
 import { Hub } from "../host/hub.ts";
 import { HOOKS_OFF_AFTER_SANDBOX_MS, repositoryHooksOff } from "../host/sandbox/hooks-off.ts";
-import type { SandboxControl } from "../host/sandbox/sandbox-control.ts";
+import { NO_SANDBOX_CONTROL, type SandboxControl } from "../host/sandbox/sandbox-control.ts";
 import { belongsToSandbox, NO_SANDBOXES, sandboxConfigFolder, Sandboxes, type SandboxHost } from "../host/sandbox/sandboxes.ts";
 import { OWNER_LABEL } from "../host/sandbox/vm-launcher.ts";
 import { Store } from "../host/store.ts";
@@ -106,6 +106,7 @@ function sandboxedWorkspace(sandbox: SandboxSetting = SANDBOX_ON) {
   conversations.startsSandboxedAgentsIn(sandboxes);
   const preparedFor: string[][] = [];
   const control: SandboxControl = {
+    ...NO_SANDBOX_CONTROL,
     availability: () => sandboxes.availability(),
     prepare: (profiles) => void preparedFor.push(profiles.map(({ id }) => id)),
     answerHeldChange: (owner, changeId, answer) => sandboxes.answerHeldChange(owner, changeId, answer),
@@ -624,7 +625,7 @@ test("where the profile's permission mode still applies in the sandbox, each new
 
 test("an agent brought into someone else's room, working in a sandboxed workspace's folder, never starts in its VM beside the workspace's own conversations, nor on this computer", async () => {
   const { conversations, launcher, claude, turnFailure } = sandboxedWorkspace();
-  const brought = conversations.createBroughtIntoRoom("w1", BUILDER, "Launch · Ann's Mac");
+  const brought = conversations.createBroughtIntoRoom("w1", BUILDER, "Launch · Ann's Mac", false);
 
   await conversations.send(brought.id, "fix it");
 

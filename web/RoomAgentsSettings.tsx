@@ -11,6 +11,7 @@ import { t } from "./i18n/index.ts";
 import { AgentSearch, ModelChoice } from "./RoomAgents.tsx";
 import { AgentValues, ClaudeSetupSection, environmentInWords, nameOf, UnconfinedLine } from "./RoomAgentSetup.tsx";
 import { MeaningMark, RoomSection, SwitchRow } from "./RoomSection.tsx";
+import { WorkspaceAccessLine } from "./RoomWorkspace.tsx";
 import { useSentChoice } from "./sent-choice.ts";
 
 const words = t.rooms;
@@ -199,7 +200,7 @@ function BroughtAgents({ room, people }: { room: Room; people: Person[] }) {
       </ul>
       {brought.length > 0 && (
         <ul className="settings-rows room-settings-rows" aria-label={words.broughtAgents}>
-          {brought.map(({ agentId, name, harness, here, bringer }) => {
+          {brought.map(({ agentId, name, harness, here, bringer, workspace }) => {
             const shownName = broughtAgentName(bringer, name);
             return (
               <li key={agentId}>
@@ -217,6 +218,7 @@ function BroughtAgents({ room, people }: { room: Room; people: Person[] }) {
                 >
                   {words.takeOut}
                 </ConfirmButton>
+                {workspace && <WorkspaceAccessLine roomId={room.id} agentId={agentId} agentName={shownName} access={workspace} answers />}
               </li>
             );
           })}
