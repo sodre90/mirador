@@ -877,11 +877,26 @@ function pageDrawing(assetsOrigin: string) {
     const [red, green, blue] = pixelPaintedOverWith(backgroundColor);
     return "rgb(" + [red, green, blue].join() + ")";
   };
-  // No margin collapses through a page's root, but in the picture the root is an element like any other: the body's top
-  // margin would push its background down.
-  const displayKeepingMarginsInside = (root) => {
-    const { display } = getComputedStyle(root);
-    return display === "block" ? "flow-root" : display;
+  // In the picture the root is an element like any other, so what a browser does for a page's root only is written out:
+  // no margin collapses through it, and its background, as high as its own box, repeats over the rest of the page. There
+  // the copy has a see-through border, a little too wide as browsers round borders down: it ends outside the picture. Its
+  // content keeps its size whatever the border's, which the library's border-box would take the border from.
+  const rootStyleInPicture = (root) => {
+    const computed = getComputedStyle(root);
+    const zoom = rootZoom();
+    const rootHeight = root.getBoundingClientRect().height;
+    const pageBelowRoot = root.scrollHeight - rootHeight;
+    const contentLength = (length, ...edges) => edges.reduce((rest, edge) => rest - parseFloat(computed[edge]), length / zoom) + "px";
+    return {
+      display: computed.display === "block" ? "flow-root" : computed.display,
+      boxSizing: "content-box",
+      minWidth: "0",
+      maxWidth: "none",
+      minHeight: "0",
+      width: contentLength(root.scrollWidth, "paddingLeft", "paddingRight", "borderLeftWidth", "borderRightWidth"),
+      height: contentLength(rootHeight, "paddingTop", "paddingBottom", "borderTopWidth", "borderBottomWidth"),
+      ...(pageBelowRoot >= 1 && { borderBottom: Math.ceil(pageBelowRoot / zoom) + 1 + "px solid transparent" }),
+    };
   };
   const drawnPage = async () => {
     const { domToCanvas } = await import(${JSON.stringify(assetsOrigin + CAPTURE_LIBRARY_PATH)});
@@ -894,7 +909,7 @@ function pageDrawing(assetsOrigin: string) {
         height: root.scrollHeight,
         scale: screenPixelRatio(),
         backgroundColor: opaqueRootColour(),
-        style: { display: displayKeepingMarginsInside(root) },
+        style: rootStyleInPicture(root),
         font: false,
         filter: (node) => !isMiradorMarks(node),
         // The library works out the browser's default styles in a frame of its own, which a sandboxed page cannot reach;

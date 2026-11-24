@@ -45,7 +45,7 @@ async function saveToProject(page: Page) {
   await saveForm(page).getByRole("button", { name: "Save" }).click();
 }
 
-/** Copies the shown page as an image, and counts the pixels in it that are clearly red, green or blue, and those that aren't opaque. */
+/** Copies the shown page as an image, counts the pixels in it that are clearly red, green or blue and those that aren't opaque, and tells at which rows its left edge turns red. */
 async function copyAsImage(page: Page) {
   await exportBy(page, "Copy as image");
   await expect(exportStatus(page)).toHaveText("Copied as an image", { timeout: 30_000 });
@@ -58,6 +58,10 @@ async function copyAsImage(page: Page) {
     const pixels = context.getImageData(0, 0, bitmap.width, bitmap.height).data;
     const pixelsWhereOnly = (channel: number) =>
       pixels.filter((value, index) => index % 4 === channel && value > 150 && [0, 1, 2].every((other) => other === channel || pixels[index - channel + other]! < 60)).length;
+    const redAtLeftEdge = Array.from({ length: bitmap.height }, (_, row) => {
+      const [red, green, blue] = pixels.subarray(row * bitmap.width * 4);
+      return red! > 150 && green! < 60 && blue! < 60;
+    });
     return {
       types: item!.types,
       width: bitmap.width,
@@ -67,6 +71,7 @@ async function copyAsImage(page: Page) {
       bluePixels: pixelsWhereOnly(2),
       seeThroughPixels: pixels.filter((value, index) => index % 4 === 3 && value < 255).length,
       topLeftPixel: [...pixels.slice(0, 4)],
+      rowsTurningRed: [...redAtLeftEdge.keys()].filter((row) => redAtLeftEdge[row] && !redAtLeftEdge[row - 1]),
     };
   });
 }
@@ -312,6 +317,57 @@ test("Copy as image draws the page's background as the panel shows it, up to the
     await chooseInSettings(page, "Theme", "Dark");
     await expect.poll(() => canvasPage(page).locator("html").evaluate((root) => getComputedStyle(root).colorScheme)).toBe("dark");
     expect(await copyAsImage(page)).toMatchObject({ seeThroughPixels: 0, topLeftPixel: [17, 17, 17, 255] });
+  });
+});
+
+test("Copy as image sizes a background on the page's root as the panel does, on a short page and at any text size", async ({ page, context }) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  const conversationId = await startConversationInProject(page);
+  const showOnBackground = (title: string, rootStyle: string, drawnHeight: number) =>
+    showInPanel(page, conversationId, title, `<style>html { ${rootStyle} } body { margin: 40px 0; }</style><div id="drawn" style="height: ${drawnHeight}px"></div>`);
+  const rowsEvery = (tileHeight: number, panelHeight: number) => [...Array(panelHeight).keys()].filter((row) => row % tileHeight === 0);
+  const stripe = "background: linear-gradient(rgb(200, 0, 0) 20px, rgb(0, 0, 200) 20px);";
+
+  await test.step("a gradient on a page shorter than its panel repeats below the page", async () => {
+    const panel = await showOnBackground("A short page", stripe, 100);
+    const rowsTurningRed = rowsEvery(40 + 100 + 40, panel.height);
+    expect(rowsTurningRed.length).toBeGreaterThan(2);
+    expect(await copyAsImage(page)).toMatchObject({ ...panel, rowsTurningRed });
+  });
+
+  await test.step("a gradient that doesn't repeat leaves the page's own colour below it", async () => {
+    const panel = await showOnBackground("A band", "background: linear-gradient(rgb(200, 0, 0), rgb(200, 0, 0)) no-repeat rgb(0, 160, 0);", 100);
+    expect(await copyAsImage(page)).toMatchObject({ ...panel, redPixels: panel.width * 180, greenPixels: panel.width * (panel.height - 180) });
+  });
+
+  await test.step("a gradient on a page wider than its panel covers the whole width", async () => {
+    await showInPanel(page, conversationId, "A wide page", `<style>html { min-height: 100%; ${stripe} } body { margin: 0; }</style><div id="drawn" style="width: 1500px; height: 10px"></div>`);
+    const image = await copyAsImage(page);
+    expect(image).toMatchObject({ width: 1500, redPixels: 1500 * 20, bluePixels: 1500 * (image.height - 20) });
+  });
+
+  await test.step("a gradient on a root narrower than its panel covers the whole width", async () => {
+    const panel = await showOnBackground("A narrow root", `max-width: 300px; min-height: 100%; ${stripe}`, 100);
+    expect(await copyAsImage(page)).toMatchObject({ ...panel, seeThroughPixels: 0, redPixels: panel.width * 20, bluePixels: panel.width * (panel.height - 20) });
+  });
+
+  await chooseInSettings(page, "Text size", "140%");
+
+  await test.step("at a larger text size, a short page's gradient repeats where it does in the panel", async () => {
+    const tileHeight = 164;
+    const panel = await showOnBackground("A short page, larger", stripe, tileHeight / 1.4 - 80);
+    expect(await copyAsImage(page)).toMatchObject({ ...panel, rowsTurningRed: rowsEvery(tileHeight, panel.height) });
+  });
+
+  await test.step("at a larger text size, gradients down and across the page still end at its edges", async () => {
+    const halves = "linear-gradient(rgb(200, 0, 0) 50%, transparent 50%), linear-gradient(90deg, rgb(0, 160, 0) 50%, rgb(0, 0, 200) 50%)";
+    const panel = await showOnBackground("Halves", `min-height: 100%; background: ${halves};`, 100);
+    const image = await copyAsImage(page);
+    expect(image).toMatchObject(panel);
+    const share = (pixels: number) => pixels / (image.width * image.height);
+    expect(share(image.redPixels)).toBeCloseTo(0.5, 2);
+    expect(share(image.greenPixels)).toBeCloseTo(0.25, 2);
+    expect(share(image.bluePixels)).toBeCloseTo(0.25, 2);
   });
 });
 
