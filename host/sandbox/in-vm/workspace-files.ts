@@ -53,6 +53,9 @@ const isWithinInAnyCase = (folder: string, place: string) => isWithin(folder.toL
 /** A line break in a name could pass for lines of the change its approver reads. */
 const holdsControlCharacters = (path: string) => /\p{Cc}/u.test(path);
 
+/** On Windows, a colon in a file or folder name names an NTFS alternate data stream, bypassing checks on the name before it. */
+const holdsColon = (path: string) => path.replace(/^[A-Za-z]:(?=[\\/])/, "").includes(":");
+
 /** An HFS+ disk takes a name for the same without the characters that show nothing. */
 const asDisksCompare = (name: string) => name.replace(/\p{Default_Ignorable_Code_Point}/gu, "").toLowerCase();
 
@@ -86,8 +89,9 @@ function realPlace(path: string): string {
 }
 
 /** The place in the workspace the path names, by its real path; refused where it leads out of it, or to what no call reaches. */
-export function placeInWorkspace(path: string, { workspace, miradorsData }: WorkspaceFolders): { place: string; within: string } {
+export function placeInWorkspace(path: string, { workspace, miradorsData }: WorkspaceFolders, onWindows = process.platform === "win32"): { place: string; within: string } {
   if (holdsControlCharacters(path)) throw refused("A path holds no control characters.");
+  if (onWindows && holdsColon(path)) throw refused("A path on Windows holds no colons.");
   const root = realPathOrNull(workspace);
   if (root === null) throw refused("The room's workspace is not there.");
   const place = realPlace(resolve(root, path));
@@ -95,6 +99,7 @@ export function placeInWorkspace(path: string, { workspace, miradorsData }: Work
   if (miradorsData !== null && isWithinInAnyCase(realPlace(resolve(miradorsData)), place)) throw refused(`${path} is Mirador's own data.`);
   const within = relative(root, place).replaceAll(sep, "/");
   if (holdsControlCharacters(within)) throw refused(`${path} leads to a name with control characters.`);
+  if (onWindows && within.includes(":")) throw refused(`${path} leads to a name with a colon.`);
   if (namesGitsOwn(within)) throw refused("What git keeps in .git is reached by git's own commands alone.");
   return { place, within: within || "." };
 }

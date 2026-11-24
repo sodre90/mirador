@@ -142,6 +142,24 @@ describe("reading in a room's workspace", () => {
     await expect(read("src/a.ts")).rejects.toThrow("The room's workspace is not there.");
   });
 
+  test("on Windows, a path naming a data stream or holding a colon in any name is refused before anything is made", async () => {
+    const folders = { workspace, miradorsData, fileMostBytes: WORKSPACE_FILE_MOST_BYTES };
+    const streams = ["CLAUDE.md::$DATA", ".mcp.json::$DATA", ".mcp.json::$data", "src/a.ts:hidden", ".claude::$INDEX_ALLOCATION/settings.json", "C:CLAUDE.md", "C:/ws/CLAUDE.md::$DATA"];
+    for (const path of streams) expect(() => placeInWorkspace(path, folders, true)).toThrow("A path on Windows holds no colons.");
+    if (!onWindows) {
+      writeFileSync(inWorkspace("note:1.txt"), "ok\n");
+      expect((await read("note:1.txt")).text).toContain("ok");
+      symlinkSync(inWorkspace("note:1.txt"), inWorkspace("to-colon.txt"));
+      expect(() => placeInWorkspace("to-colon.txt", folders, true)).toThrow("leads to a name with a colon");
+    } else {
+      expect(placeInWorkspace(inWorkspace("src", "a.ts"), folders, true).within).toBe("src/a.ts");
+      for (const path of streams) await expect(write(path, "x")).rejects.toThrow("A path on Windows holds no colons.");
+      expect(existsSync(inWorkspace("CLAUDE.md"))).toBe(false);
+      expect(existsSync(inWorkspace(".mcp.json"))).toBe(false);
+      expect(existsSync(inWorkspace(".claude"))).toBe(false);
+    }
+  });
+
   test("a workspace reached through a link is the one it leads to", () => {
     symlinkSync(workspace, join(root, "by-link"));
     expect(placeInWorkspace("src/a.ts", { workspace: join(root, "by-link"), miradorsData, fileMostBytes: WORKSPACE_FILE_MOST_BYTES }).place).toBe(inWorkspace("src", "a.ts"));
