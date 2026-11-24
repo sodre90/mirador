@@ -31,6 +31,7 @@ test("choosing Magyar in Settings shows Mirador in Hungarian after the page relo
     "Elrendezés",
     "Készülékek",
     "Értesítések",
+    "Exportálás és importálás",
     "Névjegy",
   ]);
   await expect(beallitasok.getByRole("radiogroup", { name: "Téma" }).getByRole("radio")).toHaveText(["Világos", "Sötét", "Rendszer szerint"]);
@@ -129,6 +130,7 @@ test("Español in Settings shows Mirador in Spanish", async ({ page }) => {
     "Diseño",
     "Dispositivos",
     "Notificaciones",
+    "Exportar e importar",
     "Acerca de",
   ]);
   await expect(configuracion.getByRole("radiogroup", { name: "Tema" }).getByRole("radio")).toHaveText(["Claro", "Oscuro", "Igual que el sistema"]);
@@ -166,7 +168,7 @@ test("简体中文 in Settings shows Mirador in Simplified Chinese, and a Tradit
   await expect(sidebar.getByRole("heading", { name: "工作区" })).toBeVisible();
   await sidebar.getByRole("button", { name: "设置…" }).click();
   const settings = page.getByRole("dialog", { name: "设置" });
-  await expect(settings.getByRole("tab")).toHaveText(["外观", "对话", "Agent", "语音", "终端", "画布", "布局", "设备", "通知", "关于"]);
+  await expect(settings.getByRole("tab")).toHaveText(["外观", "对话", "Agent", "语音", "终端", "画布", "布局", "设备", "通知", "导出和导入", "关于"]);
   await expect(settings.getByRole("radiogroup", { name: "主题" }).getByRole("radio")).toHaveText(["浅色", "深色", "跟随系统"]);
 
   await Promise.all([page.waitForEvent("load"), settings.getByLabel("语言").selectOption("en")]);
@@ -183,7 +185,7 @@ test.describe("with a Swiss German browser", () => {
     await expect(sidebar.getByRole("heading", { name: "Arbeitsbereiche" })).toBeVisible();
     await sidebar.getByRole("button", { name: "Einstellungen…" }).click();
     const einstellungen = page.getByRole("dialog", { name: "Einstellungen" });
-    await expect(einstellungen.getByRole("tab")).toHaveText(["Darstellung", "Unterhaltungen", "Agenten", "Stimme", "Terminal", "Canvas", "Layout", "Geräte", "Benachrichtigungen", "Über"]);
+    await expect(einstellungen.getByRole("tab")).toHaveText(["Darstellung", "Unterhaltungen", "Agenten", "Stimme", "Terminal", "Canvas", "Layout", "Geräte", "Benachrichtigungen", "Export und Import", "Über"]);
     await expect(einstellungen.getByRole("radiogroup", { name: "Design" }).getByRole("radio")).toHaveText(["Hell", "Dunkel", "Wie das System"]);
 
     await Promise.all([page.waitForEvent("load"), einstellungen.getByLabel("Sprache").selectOption("en")]);
