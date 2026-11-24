@@ -12,7 +12,7 @@ const ownEnvironment = () => ({ ...process.env }) as Record<string, string>;
 const profileWith = (environment: string): Profile => ({
   id: crypto.randomUUID(),
   name: "gateway",
-  harness: "opencode",
+  harness: "pi",
   environment,
   prelaunch: "",
   model: null,
@@ -24,6 +24,9 @@ const profileWith = (environment: string): Profile => ({
   pluginsOff: [],
   createdAt: 0,
 });
+
+/** Names its program, so the agent starts on a machine that has none installed. */
+const startableProfileWith = (environment: string) => profileWith(`${environment}\nPI_ACP_PI_COMMAND=pi`);
 
 const tokenFile = (token: string) => {
   const file = join(mkdtempSync(join(tmpdir(), "mirador-environment-commands-")), "token");
@@ -45,7 +48,7 @@ describe("a profile's environment commands", () => {
 
   test("run again as the agent starts, and only once for what reads its environment in between", async () => {
     const file = tokenFile("first");
-    const profile = profileWith(`TOKEN=$(cat '${file}')`);
+    const profile = startableProfileWith(`TOKEN=$(cat '${file}')`);
     expect(await profileEnvironmentOnceRead(profile)).toMatchObject({ TOKEN: "first" });
 
     writeFileSync(file, "second");
@@ -77,7 +80,7 @@ describe("a profile's environment commands", () => {
   });
 
   test("are not run for a profile that has none", () => {
-    expect(harnessSpec(profileWith("PLAIN=written"), "").readEnvironment).toBeUndefined();
+    expect(harnessSpec(startableProfileWith("PLAIN=written"), "").readEnvironment).toBeUndefined();
   });
 });
 
