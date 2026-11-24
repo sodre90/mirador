@@ -351,8 +351,8 @@ export const hints: Messages["hints"] = {
   promptCache: (lifetime: string) =>
     `提示缓存的剩余时间：每次请求后，模型提供方会把到目前为止的对话保留 ${lifetime}，并以约十分之一的价格从缓存读取。缓存过期后，下一条消息会重新完整读取。`,
   promptCacheCold: "提示缓存已过期：下一条消息会让模型以全价重新读取整个对话，并开始新的缓存。",
-  quota: (limit: string, percent: string, resetsIn: string) =>
-    `你的套餐的${limit}用量上限：已用 ${percent}，${resetsIn}后重新开始。\n\nAgent 在每次响应后报告它，对应这个对话所用配置的账号。`,
+  quota: (limit: string, percent: string, resetsIn: string | null) =>
+    `你的套餐的${limit}用量上限：已用 ${percent}${resetsIn ? `，${resetsIn}后重新开始` : ""}。\n\nAgent 在每次响应后报告它，对应这个对话所用配置的账号。`,
   statuslineCommand: (command: string) =>
     `你的状态栏，由 ${command} 输出。\n\nhost 像 Claude Code 一样运行它：在 stdin 上提供 Claude Code 的状态栏 JSON（模型、cwd、会话、记录、上下文窗口、花费）以及这个对话所用配置的环境。在这里可切换到内置状态栏。`,
   statuslineBuiltIn: (command: string) =>

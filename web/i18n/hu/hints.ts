@@ -377,7 +377,7 @@ export const hints: Messages["hints"] = {
     `A prompt gyorsítótárából hátralévő idő: a modell szolgáltatója minden kérés után ${lifetime} ideig megőrzi a beszélgetés eddigi részét, és onnan nagyjából tizedáron olvassa. Ha lejár, a következő üzenetnél újra az egészet olvassa.`,
   promptCacheCold: "A prompt gyorsítótára lejárt: a következő üzenetnél a modell teljes áron újraolvassa az egész beszélgetést, és új gyorsítótárat kezd.",
   quota: (limit, percent, resetsIn) =>
-    `Az előfizetésed használati korlátja (${limit}): ${percent} felhasználva, újraindul: ${resetsIn}.\n\nAz ágens minden válasz után jelenti, a beszélgetés profiljához tartozó fiókra.`,
+    `Az előfizetésed használati korlátja (${limit}): ${percent} felhasználva${resetsIn ? `, újraindul: ${resetsIn}` : ""}.\n\nAz ágens minden válasz után jelenti, a beszélgetés profiljához tartozó fiókra.`,
   statuslineCommand: (command) =>
     `Az állapotsorod, amelyet ez ír ki: ${command}.\n\nA host úgy futtatja, mint a Claude Code: a Claude Code állapotsor-JSON-jével a stdin-en (modell, cwd, munkamenet, átirat, kontextusablak, költség) és a beszélgetés profiljának környezetével. Itt válthatsz a beépített állapotsorra.`,
   statuslineBuiltIn: (command) => `A beépített állapotsor.\n\nA Claude Code beállításai egy állapotsor-parancsot neveznek meg (${command}); itt válthatsz rá.`,

@@ -505,13 +505,13 @@ export interface TurnSpend {
   costSoFar?: { amount: number; currency: string };
 }
 
-/** How much of a plan usage limit's window is used, 0 to 100, and when the window starts over, in epoch milliseconds. */
+/** How much of a plan usage limit's window is used, 0 to 100, and when the window starts over, in epoch milliseconds (null before the window starts counting). */
 export interface QuotaWindow {
   usedPercent: number;
-  resetsAt: number;
+  resetsAt: number | null;
 }
 
-/** The usage limits of a Claude or ChatGPT subscription: the rolling five-hour window and the weekly one. */
+/** The usage limits of a Claude, ChatGPT or Antigravity subscription: the rolling five-hour window and the weekly one. */
 export interface PlanQuotas {
   fiveHour: QuotaWindow | null;
   sevenDay: QuotaWindow | null;

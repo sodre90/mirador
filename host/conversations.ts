@@ -76,6 +76,7 @@ import { newestWaitingAsk } from "../shared/ask.ts";
 import { launchEditor } from "./editor.ts";
 import { openAsText, openWithSystemDefault } from "./system-open.ts";
 import { mentionSuggestions } from "./mentions.ts";
+import { AntigravityQuotaReader, readAntigravityQuotas, type ModelIdentity } from "./antigravity-quotas.ts";
 import { PlanQuotasByProfile, reportedQuotas } from "./plan-quotas.ts";
 import { turnEndReason, type TurnOutcome } from "../shared/system-notifications.ts";
 import { hasBegun, sessionHasRecord, updatesTheAgentRecords } from "../shared/conversation-begun.ts";
@@ -520,6 +521,11 @@ export class ConversationService {
   private readonly contextUsage: Map<string, ContextUsage>;
   private readonly creditReads = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly planQuotas = new PlanQuotasByProfile();
+  private readonly antigravityQuotas = new AntigravityQuotaReader((profileId, groups, conversationIds) => {
+    if (this.planQuotas.recordGroups(profileId, groups, Date.now())) {
+      conversationIds.forEach((conversationId) => this.republish(conversationId));
+    }
+  });
   private readonly unseenTurnEnds: Map<string, UnseenTurnEnd>;
   private readonly lastWords = new Map<string, string>();
   private readonly asksWaitedOn: Map<string, PendingAsk>;
@@ -620,11 +626,13 @@ export class ConversationService {
   }
 
   planQuotasOf(conversationId: string, now: number) {
-    return this.planQuotasOfProfile(this.get(conversationId).profileId, now);
+    const conversation = this.get(conversationId);
+    if (conversation.harness === "antigravity") this.refreshAntigravityQuotas(conversationId, false, now);
+    return this.planQuotasOfProfile(conversation.profileId, now, chosenModel(conversation.configOptions));
   }
 
-  planQuotasOfProfile(profileId: string | null, now: number) {
-    return this.planQuotas.of(profileId, now);
+  planQuotasOfProfile(profileId: string | null, now: number, model?: ModelIdentity | null) {
+    return this.planQuotas.of(profileId, now, model);
   }
 
   slashCommands(conversationId: string) {
@@ -2221,6 +2229,7 @@ export class ConversationService {
       this.hearActivity(conversationId, { kind: "turn-ended", ended: turnEndedAs(endedOnItsOwn?.stopReason, runtime.killedOnPurpose === true) });
       runtime.killedOnPurpose = false;
       this.store.turnEnded(conversationId);
+      if (turn.promptSent !== undefined) this.refreshAntigravityQuotas(conversationId, true);
       if (sessionOpened) this.setStatus(conversationId, "idle");
       endTurn();
     }
@@ -2983,6 +2992,8 @@ export class ConversationService {
   restartProfile(profileId: string) {
     this.profileChoicesCache.delete(profileId);
     this.profileChoiceProbes.delete(profileId);
+    this.planQuotas.forget(profileId);
+    this.antigravityQuotas.forget(profileId);
     void this.activeProbeHarnesses.get(profileId)?.stop();
     this.activeProbeHarnesses.delete(profileId);
     const keys = [...this.agentProcesses.keys()].filter((key) => key === profileId || key.startsWith(`${profileId}/`));
@@ -3041,6 +3052,7 @@ export class ConversationService {
     this.stopping = true;
     clearTimeout(this.reminderTimer);
     this.jobWaits.stopAll();
+    this.antigravityQuotas.stopAll();
     return Promise.all([this.commands.shutdown(), ...[...this.agentProcesses.values()].map((harness) => harness.stop())]);
   }
 
@@ -3858,6 +3870,34 @@ export class ConversationService {
       this.publish(this.get(conversationId));
     }
     return credits;
+  }
+
+  /** Antigravity's ACP server does not report plan quotas in usage_update, so Mirador reads them with `agy -p /usage --output-format json`. */
+  private refreshAntigravityQuotas(conversationId: string, force: boolean, now = Date.now()) {
+    if (this.stopping || !this.store.hasConversation(conversationId)) return;
+    const conversation = this.get(conversationId);
+    if (conversation.harness !== "antigravity") return;
+    const profile = this.profileOf(conversation);
+    const given = this.environmentGivenTo(conversation, profile);
+    const claudeProgram = this.store.claudeProgramSetting();
+    const hasExpiredWindow = this.planQuotas.hasExpiredWindow(conversation.profileId, now);
+    this.antigravityQuotas.refresh(
+      conversation.profileId,
+      conversationId,
+      async (signal) => {
+        let environment: Record<string, string>;
+        try {
+          if (profile) await profileEnvironmentOnceRead(profile);
+          environment = launchEnvironment("antigravity", profile, claudeProgram, given);
+        } catch {
+          return null;
+        }
+        const program = environment.AGY_PATH;
+        if (!program) return null;
+        return readAntigravityQuotas(program, environment, { signal });
+      },
+      { force, hasExpiredWindow },
+    );
   }
 
   /** The mode picker's name for the mode, which the notice shows in place of the agent's id for it. */

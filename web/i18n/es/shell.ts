@@ -422,7 +422,7 @@ export const shell: Messages["shell"] = {
     hours: (count) => `${count}h`,
     minutes: (count) => `${count}min`,
     quotaLimitNames: { fiveHour: "de cinco horas", sevenDay: "semanal" },
-    quota: (limit, percent, resetsIn) => `Límite ${limit}: ${percent} usado, se reinicia en ${resetsIn}`,
+    quota: (limit, percent, resetsIn) => (resetsIn ? `Límite ${limit}: ${percent} usado, se reinicia en ${resetsIn}` : `Límite ${limit}: ${percent} usado`),
   },
   newerVersion: {
     releaseOut: (version) => `Ya salió Mirador ${version}`,

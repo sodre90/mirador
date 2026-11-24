@@ -61,4 +61,25 @@ describe("plan quotas", () => {
     expect(quotas.of("p1", fiveHour.resetsAt + HOUR_MS)).toEqual({ fiveHour: null, sevenDay: { ...sevenDay, reportedAt: 1 } });
     expect(quotas.of("p1", sevenDay.resetsAt)).toBeNull();
   });
+
+  test("Antigravity groups resolve by model, keep windows with no reset time yet, and report when values change", () => {
+    const quotas = new PlanQuotasByProfile();
+    const groups = [
+      { name: "Gemini Models", models: ["Gemini 4 Neon"], quotas: { fiveHour, sevenDay } },
+      { name: "Claude and GPT models", models: ["Claude Opus 5.5"], quotas: { fiveHour: { usedPercent: 0, resetsAt: null }, sevenDay: { usedPercent: 0, resetsAt: null } } },
+    ];
+    expect(quotas.recordGroups("agy1", groups, 10)).toBe(true);
+    expect(quotas.recordGroups("agy1", groups, 20)).toBe(false);
+    expect(quotas.of("agy1", 0, { id: "gemini-4-neon-high", name: "Gemini 4 Neon (High)" })).toEqual({
+      fiveHour: { ...fiveHour, reportedAt: 20 },
+      sevenDay: { ...sevenDay, reportedAt: 20 },
+    });
+    expect(quotas.of("agy1", 0, { id: "claude-opus-5-5-high", name: "Claude Opus 5.5 (High)" })).toEqual({
+      fiveHour: { usedPercent: 0, resetsAt: null, reportedAt: 20 },
+      sevenDay: { usedPercent: 0, resetsAt: null, reportedAt: 20 },
+    });
+    expect(quotas.hasExpiredWindow("agy1", fiveHour.resetsAt)).toBe(true);
+    quotas.forget("agy1");
+    expect(quotas.of("agy1", 0)).toBeNull();
+  });
 });

@@ -383,7 +383,7 @@ export const shell: Messages["shell"] = {
     hours: (count) => `${count}小时`,
     minutes: (count) => `${count}分`,
     quotaLimitNames: { fiveHour: "5 小时", sevenDay: "每周" },
-    quota: (limit, percent, resetsIn) => `${limit}限额已用 ${percent}，将在 ${resetsIn}后重置`,
+    quota: (limit, percent, resetsIn) => (resetsIn ? `${limit}限额已用 ${percent}，将在 ${resetsIn}后重置` : `${limit}限额已用 ${percent}`),
   },
   newerVersion: {
     releaseOut: (version) => `Mirador ${version} 已发布`,

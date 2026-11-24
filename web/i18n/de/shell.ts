@@ -427,7 +427,7 @@ export const shell: Messages["shell"] = {
     hours: (count) => `${count} h`,
     minutes: (count) => `${count} min`,
     quotaLimitNames: { fiveHour: "Fünf-Stunden", sevenDay: "Wochen" },
-    quota: (limit, percent, resetsIn) => `${limit}-Limit: ${percent} verbraucht, beginnt neu in ${resetsIn}`,
+    quota: (limit, percent, resetsIn) => (resetsIn ? `${limit}-Limit: ${percent} verbraucht, beginnt neu in ${resetsIn}` : `${limit}-Limit: ${percent} verbraucht`),
   },
   newerVersion: {
     releaseOut: (version) => `Mirador ${version} ist erschienen`,

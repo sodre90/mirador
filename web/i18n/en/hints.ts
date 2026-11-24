@@ -353,8 +353,8 @@ export const hints = {
   promptCache: (lifetime: string) =>
     `Time left on the prompt cache: the model provider keeps this conversation so far for ${lifetime} after each request, and reads it from there at about a tenth of the price. Once it runs out, the next message is read in full again.`,
   promptCacheCold: "The prompt cache ran out: with the next message the model reads the whole conversation again at full price, and starts a new cache.",
-  quota: (limit: string, percent: string, resetsIn: string) =>
-    `${limit} usage limit of your plan: ${percent} used, starts over in ${resetsIn}.\n\nThe agent reports it after each response, for the account of this conversation's profile.`,
+  quota: (limit: string, percent: string, resetsIn: string | null) =>
+    `${limit} usage limit of your plan: ${percent} used${resetsIn ? `, starts over in ${resetsIn}` : ""}.\n\nThe agent reports it after each response, for the account of this conversation's profile.`,
   statuslineCommand: (command: string) =>
     `Your statusline, printed by ${command}.\n\nThe host runs it like Claude Code does: Claude Code's statusline JSON on stdin (model, cwd, session, transcript, context window, cost) and the conversation's profile environment. Switch to the built-in statusline here.`,
   statuslineBuiltIn: (command: string) =>

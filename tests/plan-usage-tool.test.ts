@@ -14,7 +14,7 @@ function canvasServer() {
   const store = storeWithConversation();
   store.saveProfile({ id: "codex1", name: "ChatGPT plan", harness: "codex", environment: "", prelaunch: "", model: null, mode: null, effort: null, bypassPermissions: false, askMode: "wait", color: null, pluginsOff: [], createdAt: 1 });
   const quotas = new PlanQuotasByProfile();
-  const conversations = { planQuotasOfProfile: (profileId: string | null, now: number) => quotas.of(profileId, now) } as unknown as ConversationService;
+  const conversations = { planQuotasOfProfile: (profileId: string | null, now: number, model?: { id: string; name: string } | null) => quotas.of(profileId, now, model) } as unknown as ConversationService;
   const endpoints = new CanvasMcpEndpoints({ canvas: {} as CanvasService, conversations, assetsOrigin: "http://127.0.0.1:4601", store });
   const callPlanUsage = async (args: Record<string, unknown>) => {
     const response = await endpoints.handle(
@@ -59,4 +59,15 @@ test("an agent reads another profile's limits by its name in any case, null whil
 
 test("a profile name that matches none hears which profiles there are", async () => {
   expect(await canvasServer().callPlanUsage({ profile: "work" })).toEqual({ text: 'No profile is called "work". The profiles: ChatGPT plan.', isError: true });
+});
+
+test("a window with no reset time yet reports null for resetsAt and resetsAtEpochSeconds", async () => {
+  const { quotas, callPlanUsage } = canvasServer();
+  quotas.recordGroups("codex1", [{ name: "Gemini Models", models: [], quotas: { fiveHour: { usedPercent: 0, resetsAt: null }, sevenDay: { usedPercent: 12, resetsAt: RESETS_AT } } }], REPORTED_AT);
+  const { text, isError } = await callPlanUsage({ profile: "ChatGPT plan" });
+  expect(isError).toBe(false);
+  expect(JSON.parse(text)).toMatchObject({
+    fiveHour: { usedPercent: 0, resetsAt: null, resetsAtEpochSeconds: null, reportedAt: "2026-11-14T12:00:00.000Z" },
+    sevenDay: { usedPercent: 12, resetsAt: new Date(RESETS_AT).toISOString(), resetsAtEpochSeconds: RESETS_AT / 1000 },
+  });
 });

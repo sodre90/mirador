@@ -1,4 +1,5 @@
 import type { PlanQuotas, QuotaWindow } from "../shared/model.ts";
+import { quotasForAntigravityModel, type AntigravityQuotaGroup, type ModelIdentity } from "./antigravity-quotas.ts";
 
 type ReportedWindow = { utilization?: unknown; resetsAt?: unknown };
 
@@ -54,9 +55,37 @@ export interface ReportedPlanQuotas {
   sevenDay: ReportedQuotaWindow | null;
 }
 
+interface ReportedAntigravityGroup {
+  name: string;
+  models: string[];
+  quotas: ReportedPlanQuotas;
+}
+
+const sameWindow = (a: QuotaWindow | null, b: QuotaWindow | null) =>
+  a === b || (a !== null && b !== null && a.usedPercent === b.usedPercent && a.resetsAt === b.resetsAt);
+
+const sameGroups = (before: ReportedAntigravityGroup[] | undefined, after: ReportedAntigravityGroup[]): boolean =>
+  before !== undefined &&
+  before.length === after.length &&
+  before.every(
+    (group, index) =>
+      group.name === after[index]!.name &&
+      group.models.length === after[index]!.models.length &&
+      group.models.every((model, i) => model === after[index]!.models[i]) &&
+      sameWindow(group.quotas.fiveHour, after[index]!.quotas.fiveHour) &&
+      sameWindow(group.quotas.sevenDay, after[index]!.quotas.sevenDay),
+  );
+
+const isCurrent = (window: ReportedQuotaWindow | null | undefined, now: number) =>
+  window && (window.resetsAt === null || window.resetsAt > now) ? window : null;
+
+const isExpired = (window: ReportedQuotaWindow | null | undefined, now: number) =>
+  window !== null && window !== undefined && window.resetsAt !== null && window.resetsAt <= now;
+
 /** The latest usage limits each profile's agent reported, as each profile signs in to its own account. */
 export class PlanQuotasByProfile {
   private readonly latest = new Map<string | null, ReportedPlanQuotas>();
+  private readonly groupsByProfile = new Map<string | null, ReportedAntigravityGroup[]>();
 
   record(profileId: string | null, reported: PlanQuotas, reportedAt: number) {
     const before = this.latest.get(profileId);
@@ -64,12 +93,40 @@ export class PlanQuotasByProfile {
     this.latest.set(profileId, { fiveHour: latestOf(reported.fiveHour, before?.fiveHour), sevenDay: latestOf(reported.sevenDay, before?.sevenDay) });
   }
 
-  /** Like Claude Code's own statusline, a window that started over since is no longer known. */
-  of(profileId: string | null, now: number): ReportedPlanQuotas | null {
+  /** Antigravity reports all of an account's model-group quotas together; returns true when any shown value changed. */
+  recordGroups(profileId: string | null, groups: AntigravityQuotaGroup[], reportedAt: number): boolean {
+    if (groups.length === 0) return this.groupsByProfile.delete(profileId);
+    const next: ReportedAntigravityGroup[] = groups.map(({ name, models, quotas }) => ({
+      name,
+      models,
+      quotas: {
+        fiveHour: quotas.fiveHour ? { ...quotas.fiveHour, reportedAt } : null,
+        sevenDay: quotas.sevenDay ? { ...quotas.sevenDay, reportedAt } : null,
+      },
+    }));
+    const changed = !sameGroups(this.groupsByProfile.get(profileId), next);
+    this.groupsByProfile.set(profileId, next);
+    return changed;
+  }
+
+  forget(profileId: string | null) {
+    this.latest.delete(profileId);
+    this.groupsByProfile.delete(profileId);
+  }
+
+  hasExpiredWindow(profileId: string | null, now: number): boolean {
+    const groups = this.groupsByProfile.get(profileId);
+    if (groups) return groups.some(({ quotas }) => isExpired(quotas.fiveHour, now) || isExpired(quotas.sevenDay, now));
     const quotas = this.latest.get(profileId);
-    const current = (window: ReportedQuotaWindow | null | undefined) => (window && window.resetsAt > now ? window : null);
-    const fiveHour = current(quotas?.fiveHour);
-    const sevenDay = current(quotas?.sevenDay);
+    return Boolean(quotas && (isExpired(quotas.fiveHour, now) || isExpired(quotas.sevenDay, now)));
+  }
+
+  /** Like Claude Code's own statusline, a window that started over since is no longer known. */
+  of(profileId: string | null, now: number, model?: ModelIdentity | null): ReportedPlanQuotas | null {
+    const groups = this.groupsByProfile.get(profileId);
+    const quotas = groups ? quotasForAntigravityModel(groups, model) : this.latest.get(profileId);
+    const fiveHour = isCurrent(quotas?.fiveHour, now);
+    const sevenDay = isCurrent(quotas?.sevenDay, now);
     return fiveHour || sevenDay ? { fiveHour, sevenDay } : null;
   }
 }

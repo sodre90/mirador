@@ -107,7 +107,7 @@ export function ContextMeter({ conversationId, usage, advice }: { conversationId
 function QuotaMeter({ name, window }: { name: QuotaName; window: QuotaWindow }) {
   const share = quotaShare(window);
   const percent = quotaPercentLabel(window);
-  const resetsIn = timeUntil(window.resetsAt, Date.now());
+  const resetsIn = window.resetsAt === null ? null : timeUntil(window.resetsAt, Date.now());
   return (
     <span
       className={`usage-meter quota-meter level-${contextLevel(share)}`}
@@ -117,7 +117,8 @@ function QuotaMeter({ name, window }: { name: QuotaName; window: QuotaWindow }) 
       <span className="usage-bar" aria-hidden="true">
         <span style={{ width: `${share * 100}%` }} />
       </span>
-      {quotaLabels[name]} {percent} · {resetsIn}
+      {quotaLabels[name]} {percent}
+      {resetsIn !== null && ` · ${resetsIn}`}
     </span>
   );
 }

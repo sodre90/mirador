@@ -388,7 +388,7 @@ export const hints: Messages["hints"] = {
     `Verbleibende Zeit des Prompt-Caches: Der Modellanbieter behält die bisherige Unterhaltung nach jeder Anfrage ${lifetime} lang und liest sie von dort für etwa ein Zehntel des Preises. Läuft er ab, wird mit der nächsten Nachricht wieder alles gelesen.`,
   promptCacheCold: "Der Prompt-Cache ist abgelaufen: Mit der nächsten Nachricht liest das Modell die ganze Unterhaltung zum vollen Preis neu und beginnt einen neuen Cache.",
   quota: (limit, percent, resetsIn) =>
-    `${limit}-Nutzungslimit deines Plans: ${percent} verbraucht, beginnt von vorn in ${resetsIn}.\n\nDer Agent meldet es nach jeder Antwort, für das Konto des Profils dieser Unterhaltung.`,
+    `${limit}-Nutzungslimit deines Plans: ${percent} verbraucht${resetsIn ? `, beginnt von vorn in ${resetsIn}` : ""}.\n\nDer Agent meldet es nach jeder Antwort, für das Konto des Profils dieser Unterhaltung.`,
   statuslineCommand: (command) =>
     `Deine Statuszeile, ausgegeben von: ${command}.\n\nDer Host führt sie aus wie Claude Code: das Statuszeilen-JSON von Claude Code auf stdin (Modell, cwd, Sitzung, Transkript, Kontextfenster, Kosten) und die Profilumgebung der Unterhaltung. Wechsle hier zur eingebauten Statuszeile.`,
   statuslineBuiltIn: (command) =>

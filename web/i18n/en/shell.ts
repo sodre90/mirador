@@ -411,7 +411,7 @@ export const shell = {
     hours: (count: number) => `${count}h`,
     minutes: (count: number) => `${count}m`,
     quotaLimitNames: { fiveHour: "Five-hour", sevenDay: "Weekly" } satisfies Record<QuotaName, string>,
-    quota: (limit: string, percent: string, resetsIn: string) => `${limit} limit ${percent} used, starts over in ${resetsIn}`,
+    quota: (limit: string, percent: string, resetsIn: string | null) => (resetsIn ? `${limit} limit ${percent} used, starts over in ${resetsIn}` : `${limit} limit ${percent} used`),
   },
   newerVersion: {
     releaseOut: (version: string) => `Mirador ${version} is out`,

@@ -386,7 +386,7 @@ export const hints: Messages["hints"] = {
     `Tiempo que le queda a la caché del prompt: el proveedor del modelo guarda la conversación hasta aquí durante ${lifetime} tras cada solicitud, y la lee desde ahí a cerca de una décima parte del precio. Cuando se agota, el siguiente mensaje vuelve a leerse entero.`,
   promptCacheCold: "La caché del prompt caducó: con el siguiente mensaje el modelo vuelve a leer toda la conversación a precio completo, y empieza una caché nueva.",
   quota: (limit, percent, resetsIn) =>
-    `Límite de uso ${limit} de tu plan: ${percent} usado, se reinicia en ${resetsIn}.\n\nEl agente lo informa después de cada respuesta, para la cuenta del perfil de esta conversación.`,
+    `Límite de uso ${limit} de tu plan: ${percent} usado${resetsIn ? `, se reinicia en ${resetsIn}` : ""}.\n\nEl agente lo informa después de cada respuesta, para la cuenta del perfil de esta conversación.`,
   statuslineCommand: (command) =>
     `Tu línea de estado, impresa por: ${command}.\n\nEl host la ejecuta como lo hace Claude Code: el JSON de línea de estado de Claude Code por stdin (modelo, cwd, sesión, transcripción, ventana de contexto, costo) y el entorno del perfil de la conversación. Cambia aquí a la línea de estado integrada.`,
   statuslineBuiltIn: (command) =>

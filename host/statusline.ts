@@ -45,7 +45,10 @@ export const claudeTranscriptPath = (configDir: string, directory: string, sessi
   return join(configDir, "projects", canonical.replace(/[^a-zA-Z0-9]/g, "-"), `${sessionId}.jsonl`);
 };
 
-const rateLimitWindow = ({ usedPercent, resetsAt }: QuotaWindow) => ({ used_percentage: usedPercent, resets_at: Math.floor(resetsAt / 1000) });
+const rateLimitWindow = ({ usedPercent, resetsAt }: QuotaWindow) => ({
+  used_percentage: usedPercent,
+  ...(resetsAt !== null && { resets_at: Math.floor(resetsAt / 1000) }),
+});
 
 /** Claude Code's `rate_limits`, with only the windows it knows. */
 const rateLimits = ({ fiveHour, sevenDay }: PlanQuotas) => ({

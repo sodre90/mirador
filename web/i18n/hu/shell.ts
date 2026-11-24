@@ -390,7 +390,7 @@ export const shell: Messages["shell"] = {
     hours: (count) => `${count}ó`,
     minutes: (count) => `${count}p`,
     quotaLimitNames: { fiveHour: "ötórás", sevenDay: "heti" },
-    quota: (limit, percent, resetsIn) => `Korlát (${limit}): ${percent} felhasználva, újraindul: ${resetsIn}`,
+    quota: (limit, percent, resetsIn) => (resetsIn ? `Korlát (${limit}): ${percent} felhasználva, újraindul: ${resetsIn}` : `Korlát (${limit}): ${percent} felhasználva`),
   },
   newerVersion: {
     releaseOut: (version) => `Megjelent: Mirador ${version}`,
