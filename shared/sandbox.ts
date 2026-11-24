@@ -1,6 +1,5 @@
 import { asDisksCompare } from "./disk-names.ts";
 import type { HarnessId } from "./model.ts";
-import { parseEnvironment } from "./profile-environment.ts";
 import { switchedOn } from "./room-agent-setup.ts";
 
 /**
@@ -235,8 +234,6 @@ export function signInElsewhere(environment: Record<string, string>): SignInElse
 
 /** The key variable a profile's environment text sets, as the model proxy reads it. */
 export const modelKeyVariableOf = (environment: Record<string, string>): ModelKeyVariable | null => MODEL_KEY_VARIABLES.find((name) => environment[name]?.trim()) ?? null;
-
-export const profileEnvironmentSet = (environmentText: string) => parseEnvironment(environmentText).set;
 
 /** Where first use of the sandbox stands: the service, where its kind has one, then the image, built on this computer. */
 export type SandboxSetupStage = "not-started" | "starting-service" | "building-image" | "ready" | "failed";
