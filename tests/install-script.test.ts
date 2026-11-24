@@ -416,6 +416,9 @@ describe.skipIf(process.platform !== "win32")("install.ps1", () => {
     rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 500 });
   });
 
+  /** PowerShell 7's PSModulePath, under which CI runs the tests, has Windows PowerShell load PowerShell 7's Expand-Archive, which fails there. */
+  const NOT_OF_THE_MACHINE = ["PROCESSOR_ARCHITEW6432", "PSMODULEPATH"];
+
   function windowsMachine({ agent = true, failingInstaller = false, architecture = "AMD64" } = {}) {
     const folder = join(windowsRoot, `machine-${++machines}`);
     const [localAppData, temp, profile] = ["local", "temp", "profile"].map((name) => join(folder, name));
@@ -424,7 +427,7 @@ describe.skipIf(process.platform !== "win32")("install.ps1", () => {
       mkdirSync(join(profile, ".local", "bin"), { recursive: true });
       writeFileSync(join(profile, ".local", "bin", "claude.exe"), "");
     }
-    const { PROCESSOR_ARCHITEW6432: _, ...inherited } = process.env;
+    const inherited = Object.fromEntries(Object.entries(process.env).filter(([name]) => !NOT_OF_THE_MACHINE.includes(name.toUpperCase())));
     const environment = {
       ...inherited,
       PROCESSOR_ARCHITECTURE: architecture,
