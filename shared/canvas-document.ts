@@ -888,6 +888,44 @@ function pageDrawing(assetsOrigin: string) {
 }
 
 /**
+ * What an exported picture keeps of a drawn page, as plain JS for the frame. `areaWithoutBlankSides(pixels, width,
+ * wholeBoxes, margin)` takes the picture's pixels, one number each and `width` to a row, and gives the area around what is
+ * drawn and around the boxes to keep whole, with at most `margin` pixels of blank beside them. Blank is the colour of all
+ * four corners: where they differ, as under a full-width header or on a gradient, the area is the whole picture.
+ */
+export const BLANK_SIDES_SCRIPT = `
+  const boxOfDrawnPixels = (pixels, width) => {
+    const isDrawn = (pixel) => pixel !== pixels[0];
+    const firstDrawn = pixels.findIndex(isDrawn);
+    if (firstDrawn < 0) return null;
+    const top = Math.floor(firstDrawn / width);
+    const bottom = Math.floor(pixels.findLastIndex(isDrawn) / width) + 1;
+    let left = width;
+    let right = 0;
+    for (let y = top; y < bottom; y++) {
+      const row = pixels.subarray(y * width, (y + 1) * width);
+      const drawnLeftOfBox = row.subarray(0, left).findIndex(isDrawn);
+      if (drawnLeftOfBox >= 0) left = drawnLeftOfBox;
+      const drawnRightOfBox = row.subarray(right).findLastIndex(isDrawn);
+      if (drawnRightOfBox >= 0) right += drawnRightOfBox + 1;
+    }
+    return { left, top, right, bottom };
+  };
+  const areaWithoutBlankSides = (pixels, width, wholeBoxes, margin) => {
+    const height = pixels.length / width;
+    const corners = [0, width - 1, pixels.length - width, pixels.length - 1].map((corner) => pixels[corner]);
+    const drawnBox = corners.every((corner) => corner === corners[0]) ? boxOfDrawnPixels(pixels, width) : null;
+    if (!drawnBox) return { left: 0, top: 0, width, height };
+    const boxes = [drawnBox, ...wholeBoxes];
+    const left = Math.max(0, Math.floor(Math.min(...boxes.map((box) => box.left)) - margin));
+    const top = Math.max(0, Math.floor(Math.min(...boxes.map((box) => box.top)) - margin));
+    const right = Math.min(width, Math.ceil(Math.max(...boxes.map((box) => box.right)) + margin));
+    const bottom = Math.min(height, Math.ceil(Math.max(...boxes.map((box) => box.bottom)) + margin));
+    return { left, top, width: right - left, height: bottom - top };
+  };
+`;
+
+/**
  * What lets the user mark part of a page to ask the agent about: selected text gets an "Ask about this" pill, and in point
  * mode the element under the pointer is outlined and a click picks it, or a drag draws a box whose area goes as a picture,
  * before the page's own handlers see the click or the drag. The marks of comments waiting to be sent stay outlined,
@@ -1427,9 +1465,27 @@ ${pageDrawing(assetsOrigin)}
   // ratio times the zoom, it draws at the screen's resolution rather than being stretched blurry.
   Object.defineProperty(window, "devicePixelRatio", { get: () => screenPixelRatio() * zoom, configurable: true });
 ${followsTextSize ? WINDOW_SIZED_CANVAS_MARKING : ""}
+${BLANK_SIDES_SCRIPT}
+  const MOST_BLANK_KEPT = 24;
+  // A scene's or a picture's own empty space is part of how it is framed, though it may be the page's colour.
+  const boxesToKeepWhole = (scale) =>
+    [...document.querySelectorAll("canvas, img, video")]
+      .map((element) => element.getBoundingClientRect())
+      .filter((rect) => rect.width && rect.height)
+      .map((rect) => ({ left: (rect.left + scrollX) * scale, top: (rect.top + scrollY) * scale, right: (rect.right + scrollX) * scale, bottom: (rect.bottom + scrollY) * scale }));
+  const withoutBlankSides = (page) => {
+    const pixels = new Uint32Array(page.getContext("2d").getImageData(0, 0, page.width, page.height).data.buffer);
+    const scale = page.width / document.documentElement.scrollWidth;
+    const area = areaWithoutBlankSides(pixels, page.width, boxesToKeepWhole(scale), MOST_BLANK_KEPT * scale);
+    const picture = document.createElement("canvas");
+    picture.width = area.width;
+    picture.height = area.height;
+    picture.getContext("2d").drawImage(page, -area.left, -area.top);
+    return picture;
+  };
   const capture = async (requestId) => {
     try {
-      const drawn = await drawnPage();
+      const drawn = withoutBlankSides(await drawnPage());
       const image = await new Promise((resolve, reject) => drawn.toBlob((blob) => (blob ? resolve(blob) : reject(new Error("the browser made no PNG of it"))), "image/png"));
       post({ kind: "captured", requestId, image });
     } catch (error) {

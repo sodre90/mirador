@@ -231,6 +231,52 @@ test("Copy as image draws a three.js scene as it shows, though WebGL keeps a fra
   expect(image.greenPixels, "the scene's green, not a blank canvas").toBeGreaterThan(30_000);
 });
 
+test("Copy as image leaves out the blank around a page's column, but keeps a scene whole and a page whose colour reaches its sides", async ({ page, context }) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  const conversationId = await startConversationInProject(page);
+  const show = async (title: string, html: string) => {
+    await callCanvasTool(host, conversationId, "show", { title, html });
+    await expect(canvasPage(page).locator("#drawn")).toBeVisible();
+    return page.locator(".canvas-panel:visible .canvas-frame.show iframe").evaluate((frame: HTMLIFrameElement) => ({ width: frame.clientWidth, height: frame.clientHeight }));
+  };
+  const columnWithBlock = "main { width: 200px; margin: 60px auto; } #drawn { height: 100px; background: rgb(0, 160, 0); }";
+
+  await test.step("a centred column is cut to itself and an even margin, however wide and tall its panel is", async () => {
+    const panel = await show("A column", `<style>${columnWithBlock}</style><main><div id="drawn"></div></main>`);
+    expect(panel.width).toBeGreaterThan(400);
+    expect(panel.height).toBeGreaterThan(400);
+    const image = await copyAsImage(page);
+    expect(image).toMatchObject({ width: 200 + 2 * 24, height: 100 + 2 * 24, greenPixels: 200 * 100 });
+  });
+
+  await test.step("a column on the page's own background is cut the same", async () => {
+    await show("A column on grey", `<style>html { background: rgb(240, 240, 240); } ${columnWithBlock}</style><main><div id="drawn"></div></main>`);
+    expect(await copyAsImage(page)).toMatchObject({ width: 200 + 2 * 24, height: 100 + 2 * 24, greenPixels: 200 * 100 });
+  });
+
+  await test.step("a scene keeps the empty space around what it draws", async () => {
+    const panel = await show(
+      "A scene of its own size",
+      `<style>body { margin: 0; overflow: hidden; } #drawn { display: block; }</style><canvas id="drawn"></canvas>
+<script>
+  const canvas = document.getElementById("drawn");
+  canvas.width = innerWidth;
+  canvas.height = innerHeight;
+  const context = canvas.getContext("2d");
+  context.fillRect(0, 0, innerWidth, innerHeight);
+  context.fillStyle = "rgb(0, 160, 0)";
+  context.fillRect(innerWidth / 2, innerHeight / 2, 50, 50);
+</script>`,
+    );
+    expect(await copyAsImage(page)).toMatchObject(panel);
+  });
+
+  await test.step("a header across the page keeps its width", async () => {
+    const panel = await show("A header", `<style>body { margin: 0; } header { height: 80px; background: rgb(0, 0, 200); } ${columnWithBlock}</style><header></header><main><div id="drawn"></div></main>`);
+    expect(await copyAsImage(page)).toMatchObject(panel);
+  });
+});
+
 test("Export asks the agent for the page as Markdown, in the chat or also as a file in the project, with the page's HTML in the request", async ({ page }) => {
   const conversationId = await startConversationInProject(page);
   await callCanvasTool(host, conversationId, "show", {

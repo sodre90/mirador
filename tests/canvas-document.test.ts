@@ -12,6 +12,7 @@ import {
   appFileMessage,
   appStateMessage,
   appViewPage,
+  BLANK_SIDES_SCRIPT,
   buildCanvasDocument,
   CANVAS_MESSAGE_SOURCE,
   CANVAS_SHELL_PAGE,
@@ -157,6 +158,53 @@ describe("hiddenErrorMessage", () => {
       pageScript("{ not js", { type: "application/json" }),
     ];
     expect(hiddenErrorMessage(scripts, scripts)).toBe(HIDDEN_THROW);
+  });
+});
+
+type Box = Record<"left" | "top" | "right" | "bottom", number>;
+type AreaWithoutBlankSides = (pixels: Uint32Array, width: number, wholeBoxes: Box[], margin: number) => Record<"left" | "top" | "width" | "height", number>;
+const areaWithoutBlankSides = new Function(`${BLANK_SIDES_SCRIPT}; return areaWithoutBlankSides;`)() as AreaWithoutBlankSides;
+
+describe("areaWithoutBlankSides", () => {
+  const pixelsOf = (rows: string[]) => Uint32Array.from(rows.join(""), (pixel) => pixel.charCodeAt(0));
+  const areaOf = (rows: string[], { whole = [] as Box[], margin = 0 } = {}) => areaWithoutBlankSides(pixelsOf(rows), rows[0]!.length, whole, margin);
+
+  const column = [
+    "........", //
+    "...##...",
+    "..#.....",
+    "........",
+    "........",
+  ];
+
+  test("cuts the blank on all four sides of what is drawn", () => {
+    expect(areaOf(column)).toEqual({ left: 2, top: 1, width: 3, height: 2 });
+  });
+
+  test("keeps a margin of blank, as much as each side has", () => {
+    expect(areaOf(column, { margin: 1 })).toEqual({ left: 1, top: 0, width: 5, height: 4 });
+    expect(areaOf(column, { margin: 2 })).toEqual({ left: 0, top: 0, width: 7, height: 5 });
+  });
+
+  test("a margin that ends between two pixels keeps the pixel it ends in", () => {
+    expect(areaOf(["........", "....#...", "........"], { margin: 1.5 })).toEqual({ left: 2, top: 0, width: 5, height: 3 });
+  });
+
+  test("keeps the boxes to keep whole, up to the picture's edges", () => {
+    expect(areaOf(column, { whole: [{ left: 1.5, top: 1, right: 20, bottom: 3.5 }] })).toEqual({ left: 1, top: 1, width: 7, height: 3 });
+  });
+
+  test("what reaches a side keeps that side", () => {
+    expect(areaOf(["......", "##....", "......"])).toEqual({ left: 0, top: 1, width: 2, height: 1 });
+    expect(areaOf(["......", "....##", "......"])).toEqual({ left: 4, top: 1, width: 2, height: 1 });
+  });
+
+  test("a picture whose corners differ, as under a full-width header, stays whole", () => {
+    expect(areaOf(["######", "..#...", "......"])).toEqual({ left: 0, top: 0, width: 6, height: 3 });
+  });
+
+  test("a picture all of one colour stays whole", () => {
+    expect(areaOf(["....", "...."])).toEqual({ left: 0, top: 0, width: 4, height: 2 });
   });
 });
 
