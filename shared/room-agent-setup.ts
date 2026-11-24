@@ -124,10 +124,10 @@ export interface ProfileVariable {
   fixed: boolean;
 }
 
-/** The values the profile's environment sets, by name in its order, each with whether the room's agent gets it. */
+/** The values the profile's environment sets, and after them those a command prints, by name in its order, each with whether the room's agent gets it. */
 export function profileVariablesInRoom(harness: HarnessId, environmentText: string, chosen: VariablesChosen): ProfileVariable[] {
   const environment = parseEnvironment(environmentText);
-  return Object.keys(environment.set).map((name) => ({ name, given: givenInRoom(harness, name, environment, chosen), fixed: alwaysGiven(name) }));
+  return Object.keys({ ...environment.set, ...environment.commands }).map((name) => ({ name, given: givenInRoom(harness, name, environment, chosen), fixed: alwaysGiven(name) }));
 }
 
 /** Windows reads a name in any case, so a name withheld in one case is withheld in all of them, wherever the host runs. */
@@ -143,7 +143,7 @@ const without = (environment: Record<string, string>, withheld: string[]) => {
  */
 export function environmentInRoom(harness: HarnessId, host: Record<string, string>, profile: ProfileEnvironment, { variables, wholeHostEnvironment }: EnvironmentChoices): Record<string, string> {
   const given = Object.fromEntries(Object.entries(profile.set).filter(([name]) => givenInRoom(harness, name, profile, variables)));
-  const withheld = [...profile.unset, ...Object.keys(profile.set).filter((name) => !Object.hasOwn(given, name))];
+  const withheld = [...profile.unset, ...Object.keys({ ...profile.set, ...profile.commands }).filter((name) => !Object.hasOwn(given, name))];
   const hostLeft = without(host, withheld);
   const reaching = { ...hostLeft, ...given };
   const fromHost = wholeHostEnvironment ? hostLeft : Object.fromEntries(Object.entries(hostLeft).filter(([name]) => basicOfThisComputer(name) || readByItsKind(harness, name, reaching)));

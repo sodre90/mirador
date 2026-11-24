@@ -69,6 +69,7 @@ export const labels = {
     layout: "Layout",
     devices: "Devices",
     notifications: "Notifications",
+    transfer: "Export and import",
     about: "About",
   } satisfies Record<SettingsPage, string>,
 };

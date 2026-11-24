@@ -10,6 +10,7 @@ import type { MountedFolder } from "../sandbox/added-folders.ts";
 import { sandboxFoldersGuidance } from "../sandbox/folders-guidance.ts";
 import { applyEnvironment, parseEnvironment, type ProfileEnvironment } from "../../shared/profile-environment.ts";
 import { ALL_OF_CLAUDE_SETUP, NONE_OF_CLAUDE_SETUP, type ClaudeSetup } from "../../shared/room-agent-setup.ts";
+import { commandValues, readCommandValues, readMissingCommandValues } from "./environment-commands.ts";
 import { claudeProgramMissing, findClaudeProgram } from "./claude-program.ts";
 import { NO_PROTECTIONS, SETTING_SOURCES, type ClaudeProtections, type SettingSource } from "./claude-protections.ts";
 import { findAntigravity } from "./antigravity-program.ts";
@@ -139,9 +140,27 @@ export function harnessSpec(profile: Profile, claudeProgramSetting: string, give
     label: `${harnessLabels[harness]} (${profile.name})`,
     logName: `${harness}-${slug(profile.name) || "profile"}-${profile.id.slice(0, 8)}`,
     environment,
+    ...(hasCommandValues(profile) && {
+      readEnvironment: async (signal) => {
+        await readCommandValues(profile, profileEnvironment(profile), signal);
+        return launchEnvironment(harness, profile, claudeProgramSetting, given);
+      },
+    }),
     prelaunch: profile.prelaunch,
   };
 }
+
+/** The agent started with its environment changed, also as read again when it starts. */
+export const withEnvironment = (spec: HarnessSpec, changed: (environment: Record<string, string>) => Record<string, string>): HarnessSpec => {
+  const { readEnvironment } = spec;
+  return {
+    ...spec,
+    environment: changed(spec.environment),
+    ...(readEnvironment && { readEnvironment: async (signal) => changed(await readEnvironment(signal)) }),
+  };
+};
+
+const hasCommandValues = ({ environment }: Profile) => Object.keys(parseEnvironment(environment).commands).length > 0;
 
 export const CANVAS_SERVER_NAME = "canvas";
 
@@ -225,13 +244,25 @@ export type EnvironmentGiven = (host: Record<string, string>, profile: ProfileEn
 
 const allOfIt: EnvironmentGiven = applyEnvironment;
 
+/** The profile's environment, once each command that gives a value of it has run since Mirador started. */
+export async function profileEnvironmentOnceRead(profile: Profile | null): Promise<Record<string, string>> {
+  if (profile) await readMissingCommandValues(profile, () => profileEnvironment(profile));
+  return profileEnvironment(profile);
+}
+
+/** The profile's environment, with what its commands last printed; a command that has not run since Mirador started gives nothing yet. */
 export function profileEnvironment(profile: Profile | null, given = allOfIt): Record<string, string> {
   if (!profile) return agentEnvironment(hostEnvironment());
   const environment = parseEnvironment(profile.environment);
   if (environment.errors.length > 0) {
     throw new HostProblemError({ code: "profile-environment-invalid", profile: profile.name, errors: environment.errors.join("; ") });
   }
-  return given(agentEnvironment(hostEnvironment()), environment);
+  return given(agentEnvironment(hostEnvironment()), { ...environment, set: { ...environment.set, ...commandValues(profile) } });
+}
+
+/** The names the profile's agent will have once it starts: a command that has not run since Mirador started stands in for what it will print. */
+export function profileEnvironmentToCome(profile: Profile, given = allOfIt): Record<string, string> {
+  return profileEnvironment(profile, (host, environment) => given(host, { ...environment, set: { ...environment.commands, ...environment.set } }));
 }
 
 /**

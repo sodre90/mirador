@@ -1,5 +1,7 @@
 import type { Messages } from "../en/index.ts";
 
+const plural = (count: number, one: string, many: string) => (count === 1 ? one : many);
+
 export const settings: Messages["settings"] = {
   title: "Einstellungen",
   close: "Schließen",
@@ -187,5 +189,52 @@ export const settings: Messages["settings"] = {
     hint: "Was macOS in der Desktop-App mit deinen Wörtern tun darf: sie korrigieren, wenn du ein Leerzeichen tippst, und den Rest eines Wortes in Grau vorschlagen. Tippfehler bleiben in jedem Fall unterstrichen; klicke mit rechts auf einen, um ihn zu korrigieren.",
     autocorrect: "Rechtschreibung automatisch korrigieren",
     predictions: "Inline-Vorschläge",
+  },
+  transfer: {
+    needsNewerHost: "Das hier laufende Mirador ist älter als diese Seite. Starte es neu, um Einstellungen zu exportieren und zu importieren.",
+    exportTitle: "Exportieren",
+    exportHint:
+      "Eine Datei mit deinen Profilen, Prompt-Vorlagen, Arbeitsbereichen, Plugins und Präferenzen, um sie in Mirador auf einem anderen Rechner zu übernehmen. Unterhaltungen, Räume, Geräte und was sich dieser Browser merkt, bleiben hier.",
+    includeSecrets: "Mit Geheimnissen",
+    secretsLeftOut: "Werte der Umgebung, geheime Plugin-Einstellungen und API-Schlüssel für Sprache bleiben draußen: Trage sie nach dem Import ein. Befehle vor dem Start kommen hinein, wie sie geschrieben sind.",
+    secretsIncluded: "Die Datei enthält dann Werte der Umgebung, geheime Plugin-Einstellungen und API-Schlüssel für Sprache. Bewahre sie sicher auf.",
+    export: "Einstellungen exportieren",
+    importTitle: "Importieren",
+    importHint: "Übernimmt eine exportierte Datei. Du wählst, was übernommen wird, bevor sich etwas ändert. Profile und Arbeitsbereiche führen Befehle aus, importiere also nur eine Datei, der du vertraust.",
+    file: "Einstellungsdatei",
+    reading: "Datei wird gelesen…",
+    nothingInFile: "Die Datei enthält nichts zum Übernehmen.",
+    allHereAlready: "Alles davon ist schon hier.",
+    sameHere: (count) => plural(count, "1 ist hier schon wie in der Datei.", `${count} sind hier schon wie in der Datei.`),
+    kinds: {
+      profile: "Profile",
+      "prompt-template": "Prompt-Vorlagen",
+      group: "Gruppen",
+      workspace: "Arbeitsbereiche",
+      "sidebar-order": "Seitenleiste",
+      preference: "Präferenzen",
+      "plugin-settings": "Plugin-Einstellungen",
+    },
+    sidebarOrder: "Reihenfolge der Arbeitsbereiche und Gruppen",
+    group: "Gruppe",
+    overwrites: "Überschreibt, was hier ist",
+    overwritesFields: (fields) => `Überschreibt, was hier ist: ${fields}`,
+    needsValue: (names) => `Nach dem Import eintragen: ${names}`,
+    import: "Importieren",
+    dontImport: "Nicht importieren",
+    importing: "Wird importiert…",
+    added: (count) => `${count} hinzugefügt`,
+    overwritten: (count) => `${count} überschrieben`,
+    nothingImported: "Es wurde nichts übernommen.",
+    pluginsTitle: "Plugins, die hier nicht installiert sind",
+    otherCommit: (commit) => `Das exportierte war bei Commit ${commit}, dies ist also nicht derselbe Code.`,
+    pluginInstalled: "Installiert, ab dem nächsten Start verwendet",
+    configTitle: "Konfigurationsdatei",
+    configHint:
+      "Mirador liest diese Datei beim Start und fügt die darin genannten Profile, Prompt-Vorlagen und Arbeitsbereiche hinzu oder überschreibt sie. Sie ist wie eine exportierte Datei geschrieben; Plugins und Präferenzen darin werden ignoriert.",
+    configOff: "Mit MIRADOR_CONFIG_FILE ausgeschaltet.",
+    configNotFound: "Beim Start von Mirador war dort keine Datei.",
+    configRead: (added, overwritten, same) => `Beim Start von Mirador gelesen: ${added} hinzugefügt, ${overwritten} überschrieben, ${same} schon wie in der Datei.`,
+    inConfigFile: "Von der Konfigurationsdatei gesetzt: Was du hier änderst, gilt bis zum nächsten Start von Mirador.",
   },
 };

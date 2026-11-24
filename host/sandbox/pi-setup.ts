@@ -4,7 +4,7 @@ import { join } from "node:path";
 import type { Profile } from "../../shared/model.ts";
 import type { EnvironmentChoices } from "../../shared/room-agent-setup.ts";
 import type { PiModelElsewhere } from "../../shared/sandbox.ts";
-import { profileEnvironment } from "../acp/harnesses.ts";
+import { profileEnvironmentToCome } from "../acp/harnesses.ts";
 import { holdsASecret } from "./agent-environment.ts";
 import { secretsOf, type ModelApi, type ModelRoute } from "./model-proxy.ts";
 
@@ -181,7 +181,7 @@ export const piAgentFilesIn = (folder: string): PiAgentFiles => ({
  */
 function keyEnvironmentOf(profile: Profile, { variables }: EnvironmentChoices) {
   try {
-    return Object.fromEntries(Object.entries(profileEnvironment(profile)).filter(([name]) => variables[name] !== false));
+    return Object.fromEntries(Object.entries(profileEnvironmentToCome(profile)).filter(([name]) => variables[name] !== false));
   } catch {
     return {};
   }

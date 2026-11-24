@@ -50,7 +50,7 @@ test("a message from a script, from Mirador or from a plugin has no author", asy
 test("a command a person runs from the message box carries them as its author", async () => {
   const { store, conversations, id } = conversationOnAFailingAgent();
 
-  conversations.runCommand(id, "true", "ada");
+  await conversations.runCommand(id, "true", "ada");
 
   expect(store.listEvents(id).map(({ event }) => event)).toContainEqual(expect.objectContaining({ type: "user-command", command: "true", authorId: "ada" }));
   await conversations.shutdown();

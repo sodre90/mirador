@@ -186,6 +186,37 @@ test("a sandboxed workspace's conversation starts its agent in the workspace's V
   await conversations.shutdown();
 });
 
+test("a key a command of the profile gives is read as its agent starts in the VM, stays out of the VM, and keeps no sandbox off before it ran", async () => {
+  const { store, conversations, launcher, workspaceSandboxes, claude, turnFailure } = sandboxedWorkspace();
+  store.saveProfile(profileOf("vault", "Vault", "claude", `ANTHROPIC_API_KEY=$(printf sk-ant-from-the-vault)\nCLAUDE_CODE_EXECUTABLE=${claude.program}`));
+  expect((await workspaceSandboxes.sandboxCheck("w1")).profilesThatRun).toEqual(["builder", "vault"]);
+  const conversation = conversations.create("w1", { harness: "claude", profileId: "vault" });
+
+  await conversations.send(conversation.id, "go");
+
+  expect(turnFailure(conversation.id)?.problem?.code).not.toBe("workspace-sandbox-not-ready");
+  expect(launcher.agents.length).toBeGreaterThan(0);
+  expect(JSON.stringify(launcher.agents)).not.toContain("sk-ant-from-the-vault");
+  expect(claude.ranHere()).toBe(false);
+  await conversations.shutdown();
+});
+
+test("a sandbox turned on while a command gives a profile its key still keeps the agent's own sign-in, and ! commands, off this computer", async () => {
+  const { store, conversations, claude } = sandboxedWorkspace(NO_SANDBOX);
+  store.saveProfile(profileOf("vault", "Vault", "claude", `ANTHROPIC_API_KEY=$(sleep 0.5; printf sk-ant-from-the-vault)\nCLAUDE_CODE_EXECUTABLE=${claude.program}`));
+  const conversation = conversations.create("w2", { harness: "claude", profileId: "vault" });
+  await conversations.shutdown();
+  store.saveProfile(profileOf("vault", "Vault", "claude", `ANTHROPIC_API_KEY=$(sleep 0.6; printf sk-ant-from-the-vault)\nCLAUDE_CODE_EXECUTABLE=${claude.program}`));
+
+  const signIn = conversations.loginProgram(conversation.id, false).catch((error) => error);
+  const command = conversations.runCommand(conversation.id, "true").catch((error) => error);
+  store.setWorkspaceSandbox("w2", SANDBOX_ON);
+
+  expect(await signIn).toMatchObject({ problem: { code: "sandboxed-agent-here" } });
+  expect(await command).toMatchObject({ problem: { code: "sandboxed-workspace-command" } });
+  expect(store.listEventsOfTypes(conversation.id, ["user-command"])).toEqual([]);
+});
+
 test("a sandboxed workspace's conversation with no sandbox to start in fails its turn saying so, and never runs on this computer, after a restart of the host too", async () => {
   const { conversations, conversationsOnThisHost, claude, turnFailure } = sandboxedWorkspace();
   const conversation = conversations.create("w1", BUILDER);
@@ -349,7 +380,7 @@ test("a sandboxed workspace takes in no session from this computer, runs no ! co
   await expect(conversations.searchSessionsInWorkspace("w1", BUILDER, "deploy")).rejects.toMatchObject({ problem: outside });
   expect(() => conversations.adopt("w1", BUILDER, { sessionId: "from-a-terminal", title: "Terminal" }, "continue")).toThrow(expect.objectContaining({ problem: outside }));
   const conversation = conversations.create("w1", BUILDER);
-  expect(() => conversations.runCommand(conversation.id, "touch ran")).toThrow(expect.objectContaining({ problem: { code: "sandboxed-workspace-command" } }));
+  await expect(conversations.runCommand(conversation.id, "touch ran")).rejects.toMatchObject({ problem: { code: "sandboxed-workspace-command" } });
 
   store.setWorktreeSettings("w1", "worktree", "");
   const started = await conversations.start("w1", BUILDER, undefined, "worktree");
@@ -369,8 +400,8 @@ test("in a sandboxed workspace a plugin's conversation starts in the folder with
   const caller = conversations.create("w1", BUILDER);
   await expect(conversations.startInOwnWorktree(caller.id, "Reviews", "Builder", "review")).rejects.toThrow("no worktree");
   const agentHere = { problem: { code: "sandboxed-agent-here" } };
-  expect(() => conversations.loginProgram(caller.id, false)).toThrow(expect.objectContaining(agentHere));
-  expect(() => conversations.panelCommandProgram(caller.id, "/mcp")).toThrow(expect.objectContaining(agentHere));
+  await expect(conversations.loginProgram(caller.id, false)).rejects.toMatchObject(agentHere);
+  await expect(conversations.panelCommandProgram(caller.id, "/mcp")).rejects.toMatchObject(agentHere);
   expect(claude.ranHere()).toBe(false);
   await conversations.shutdown();
 });
@@ -668,8 +699,8 @@ test("turning a workspace's sandbox on stops a turn on the process its profile s
   const elsewhere = conversations.create("w2", BUILDER);
   await until(() => store.findConversation(sandboxed.id)?.acpSessionId !== null && store.findConversation(elsewhere.id)?.acpSessionId !== null);
   const sandboxedSession = store.findConversation(sandboxed.id)!.acpSessionId!;
-  expect(conversations.loginProgram(sandboxed.id, false).runsTheAgent).toBe(true);
-  expect(conversations.panelCommandProgram(sandboxed.id, "/mcp").runsTheAgent).toBe(true);
+  expect((await conversations.loginProgram(sandboxed.id, false)).runsTheAgent).toBe(true);
+  expect((await conversations.panelCommandProgram(sandboxed.id, "/mcp")).runsTheAgent).toBe(true);
   const turn = conversations.send(sandboxed.id, "go");
   await until(() => conversations.get(sandboxed.id).status === "running");
 

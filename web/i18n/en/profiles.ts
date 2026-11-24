@@ -34,6 +34,7 @@ export const profiles = {
   environmentFormat: {
     onePerLine: "One per line: ",
     afterKeyValue: ", ",
+    toRun: " for what a command prints as the agent starts, ",
     toUnset: " to unset, ",
     comment: "# comment",
     afterComment: ". The lines of a ",

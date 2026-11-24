@@ -1,6 +1,6 @@
 import type { SocketData } from "./hub.ts";
 
-type Method = "GET" | "POST";
+type Method = "GET" | "POST" | "DELETE";
 
 /** The methods a route answers, or any, for a route Bun hands every method to one handler of. */
 export type RouteMethods = readonly Method[] | "any";
@@ -47,6 +47,10 @@ export const THIS_MACHINE_ROUTES = {
   "/sessions/:sessionId/messages": ["POST"],
   "/sessions/:sessionId/job-waits": ["POST"],
   "/devices": ["GET"],
+  "/settings-import/plan": ["POST"],
+  "/settings-import": ["POST"],
+  "/settings-import/plugins": ["POST"],
+  "/settings-import/plugins/:offerId": ["POST", "DELETE"],
 } as const satisfies Record<string, RouteMethods>;
 
 type Route = keyof typeof DEVICE_ROUTES | keyof typeof THIS_MACHINE_ROUTES;

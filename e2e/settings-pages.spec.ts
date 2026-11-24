@@ -17,7 +17,7 @@ test("Settings shows one page at a time, chosen from the list on the left by cli
   const pages = settings.getByRole("tablist", { name: "Settings pages" });
   const tab = (name: string) => pages.getByRole("tab", { name });
 
-  await expect(pages.getByRole("tab")).toHaveText(["Appearance", "Conversations", "Agents", "Voice", "Terminal", "Canvas", "Layout", "Devices", "Notifications", "About"]);
+  await expect(pages.getByRole("tab")).toHaveText(["Appearance", "Conversations", "Agents", "Voice", "Terminal", "Canvas", "Layout", "Devices", "Notifications", "Export and import", "About"]);
   await expect(tab("Appearance")).toHaveAttribute("aria-selected", "true");
   await expect(settings.getByRole("radiogroup", { name: "Theme" })).toBeVisible();
 
@@ -30,10 +30,13 @@ test("Settings shows one page at a time, chosen from the list on the left by cli
   await expect(tab("Notifications")).toHaveAttribute("aria-selected", "true");
   await expect(settings.getByRole("heading", { name: "Notifications" })).toBeVisible();
   await page.keyboard.press("ArrowDown");
+  await expect(tab("Export and import")).toBeFocused();
+  await page.keyboard.press("ArrowDown");
   await expect(tab("About")).toBeFocused();
   await expect(settings.getByText(`Mirador ${MIRADOR_VERSION}`)).toBeVisible();
   await page.keyboard.press("ArrowDown");
   await expect(tab("Appearance")).toBeFocused();
+  await page.keyboard.press("ArrowUp");
   await page.keyboard.press("ArrowUp");
   await page.keyboard.press("ArrowUp");
   await page.keyboard.press("ArrowUp");

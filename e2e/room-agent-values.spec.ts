@@ -11,6 +11,7 @@ const promptsFile = () => join(host.root, "builder-prompts");
 const heldUntil = () => join(host.root, "held-until");
 const MODEL_KEY = "sk-room-model-key";
 const DEPLOY_TOKEN = "room-deploy-token";
+const VAULT_TOKEN = "room-vault-token";
 
 test.beforeAll(async ({ browser }) => {
   writeBunProgram(host.fakeProgramsDir, "opencode", join(import.meta.dirname, "fake-acp-agent.ts"), { FAKE_ACP_PROMPTS: promptsFile() });
@@ -23,6 +24,7 @@ test.beforeAll(async ({ browser }) => {
     ["Builder", `OPENAI_API_KEY=${MODEL_KEY}\nDEPLOY_TOKEN=${DEPLOY_TOKEN}`],
     ["Plain", ""],
     ["Located", `XDG_CACHE_HOME=${join(host.root, "located-cache")}`],
+    ["Vaulted", `VAULT_TOKEN=$(printf %s ${VAULT_TOKEN})`],
   ]) {
     const profiles = await createProfile(page, name!, environment!, "", "opencode");
     await profiles.getByRole("button", { name: "Close" }).click();
@@ -38,12 +40,14 @@ const roomComposer = (page: Page, room: string) => page.getByRole("textbox", { n
 const answerSaying = (page: Page, text: string) => page.locator(".room-timeline .room-entry .message.agent", { hasText: text });
 const introductions = () => readFileSync(promptsFile(), "utf8").split('You are an attendee of the room "Values"').length - 1;
 
-async function tagBuilder(page: Page, room: string, rest: string) {
-  await roomComposer(page, room).fill("@Bu");
-  await page.getByRole("listbox", { name: "Agents and people of the room" }).getByRole("option", { name: "@Builder" }).click();
-  await roomComposer(page, room).fill(`@Builder ${rest}`);
+async function tagAgent(page: Page, room: string, agent: string, rest: string) {
+  await roomComposer(page, room).fill(`@${agent.slice(0, 2)}`);
+  await page.getByRole("listbox", { name: "Agents and people of the room" }).getByRole("option", { name: `@${agent}` }).click();
+  await roomComposer(page, room).fill(`@${agent} ${rest}`);
   await roomComposer(page, room).press("Enter");
 }
+
+const tagBuilder = (page: Page, room: string, rest: string) => tagAgent(page, room, "Builder", rest);
 
 const agentRow = (settings: Locator, agent: string) => settings.getByRole("list", { name: "Agents", exact: true }).getByRole("listitem").filter({ hasText: agent });
 
@@ -181,6 +185,28 @@ test("a value that says where an agent's files are is always given, and an agent
   const located = valueSwitch(givenTo(settings, "Located"), "XDG_CACHE_HOME");
   await expect(located).toBeChecked();
   await expect(located).toBeDisabled();
+});
+
+test("a value that a command prints is held back by its name like one the profile sets, and given once the owner turns it on", async ({ page }) => {
+  await signIn(page, host);
+  await createRoom(page, "Vault", ["Vaulted"]);
+  await tagAgent(page, "Vault", "Vaulted", "ENV VAULT_TOKEN");
+  await expect(answerSaying(page, "VAULT_TOKEN is not set")).toBeVisible();
+
+  const settings = await openRoomSettings(page, "Vault", "Agents");
+  await expect(agentRow(settings, "Vaulted")).toContainText("0 of 1 profile values");
+  await openRoomAgent(settings, "Vaulted");
+  const vaultToken = valueSwitch(heldBackFrom(settings, "Vaulted"), "VAULT_TOKEN");
+  await expect(vaultToken).not.toBeChecked();
+  expect(await settings.innerHTML()).not.toContain(VAULT_TOKEN);
+  await vaultToken.check();
+  await settings.locator(".room-starts-afresh").getByRole("button", { name: "Change" }).click();
+  await settings.getByRole("button", { name: "Agents", exact: true }).click();
+  await expect(agentRow(settings, "Vaulted")).toContainText("1 of 1 profile values");
+  await settings.getByRole("button", { name: "Close" }).click();
+
+  await tagAgent(page, "Vault", "Vaulted", "ENV VAULT_TOKEN");
+  await expect(answerSaying(page, `VAULT_TOKEN is ${VAULT_TOKEN}`)).toBeVisible();
 });
 
 test("whether a room's agents read what guests write stays as the owner set it", async ({ page }) => {

@@ -174,7 +174,7 @@ test("a room's agent whose room is gone fails its turn, and never runs on this c
 test("a sandboxed room's conversation has no side chat and runs no ! command, as both would run on this computer", async () => {
   const { store, conversations, conversation, claude } = sandboxedRoom(SANDBOX_ON);
   expect(() => conversations.startSideChat(conversation.id, "why?")).toThrow(expect.objectContaining({ problem: { code: "sandboxed-room-side-chat" } }));
-  expect(() => conversations.runCommand(conversation.id, "touch ran")).toThrow(expect.objectContaining({ problem: { code: "sandboxed-room-command" } }));
+  await expect(conversations.runCommand(conversation.id, "touch ran")).rejects.toMatchObject({ problem: { code: "sandboxed-room-command" } });
   expect(store.listConversations().filter(({ sideChatOf }) => sideChatOf)).toEqual([]);
   expect(claude.ranHere()).toBe(false);
   await conversations.shutdown();

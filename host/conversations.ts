@@ -97,9 +97,11 @@ import {
   launchEnvironment,
   loginCommand,
   profileEnvironment,
+  profileEnvironmentOnceRead,
   sessionMeta,
   sessionSystemPrompt,
   settingSourcesLeftOut,
+  withEnvironment,
   type EnvironmentGiven,
 } from "./acp/harnesses.ts";
 import { NO_PROTECTIONS, protectionsKept, settingsFiles, type SettingSource } from "./acp/claude-protections.ts";
@@ -2097,7 +2099,7 @@ export class ConversationService {
     try {
       const spec = harnessSpec(profile, this.store.claudeProgramSetting());
       harness = new HarnessProcess(
-        { ...spec, logName: logApart ? `${spec.logName}.check` : spec.logName, environment: { ...spec.environment, ...this.scriptEnvironment(spec.environment.PATH) } },
+        { ...withEnvironment(spec, (environment) => ({ ...environment, ...this.scriptEnvironment(environment.PATH) })), logName: logApart ? `${spec.logName}.check` : spec.logName },
         {
           onSessionUpdate: () => {},
           onPermissionRequest: async () => ({ outcome: { outcome: "cancelled" as const } }),
@@ -2711,13 +2713,18 @@ export class ConversationService {
    * Runs a `!` command from the message box where the conversation works, with the environment its agent gets. A
    * sandboxed conversation's would run on this computer, so it is not run.
    */
-  runCommand(conversationId: string, command: string, authorId?: string) {
+  async runCommand(conversationId: string, command: string, authorId?: string) {
+    this.refuseCommandsInSandbox(this.get(conversationId));
+    const environment = await profileEnvironmentOnceRead(this.profileOf(this.get(conversationId)));
     const conversation = this.get(conversationId);
-    if (this.sandboxOf(conversation)) throw new HostProblemError({ code: conversation.roomId ? "sandboxed-room-command" : "sandboxed-workspace-command" });
+    this.refuseCommandsInSandbox(conversation);
     const workspace = this.store.findWorkspace(conversation.workspaceId);
     if (!workspace) throw new HostProblemError({ code: "conversation-workspace-gone" });
-    const environment = profileEnvironment(this.profileOf(conversation));
     void this.commands.run(command, workingCopyOf(workspace, conversation).path, environment, (event) => this.append(conversationId, event), authorId);
+  }
+
+  private refuseCommandsInSandbox(conversation: Conversation) {
+    if (this.sandboxOf(conversation)) throw new HostProblemError({ code: conversation.roomId ? "sandboxed-room-command" : "sandboxed-workspace-command" });
   }
 
   /** Claude Code's own panels and sign-in would run the agent on this computer, in the folder a sandboxed conversation's agents change. */
@@ -2743,22 +2750,30 @@ export class ConversationService {
   }
 
   /** The agent's own sign-in, with the environment of the conversation's profile, so a profile with its own account signs that one in. */
-  loginProgram(conversationId: string, pageOnHost: boolean): TerminalProgram {
+  async loginProgram(conversationId: string, pageOnHost: boolean): Promise<TerminalProgram> {
     const conversation = this.get(conversationId);
     this.refuseAgentHereFor(conversation);
-    const environment = launchEnvironment(conversation.harness, this.profileOf(conversation), this.store.claudeProgramSetting());
+    const environment = await this.programEnvironment(conversation);
     return { tabName: `${harnessLabels[conversation.harness]} sign-in`, command: loginCommand(conversation.harness, environment, undefined, pageOnHost), environment, runsTheAgent: true };
   }
 
   /** A command Claude Code shows a panel for only in its own terminal, run in a tab of the conversation's terminals. */
-  panelCommandProgram(conversationId: string, line: string): TerminalProgram {
+  async panelCommandProgram(conversationId: string, line: string): Promise<TerminalProgram> {
     const command = panelCommandRun(line);
     if (command === null) throw new HostProblemError({ code: "not-a-slash-command", line });
     const conversation = this.get(conversationId);
     this.refuseAgentHereFor(conversation);
     if (conversation.harness !== "claude") throw new HostProblemError({ code: "agent-has-no-such-command", agent: harnessLabels[conversation.harness], line });
-    const environment = launchEnvironment(conversation.harness, this.profileOf(conversation), this.store.claudeProgramSetting());
+    const environment = await this.programEnvironment(conversation);
     return { tabName: command, command: [environment.CLAUDE_CODE_EXECUTABLE!, command], environment, key: `panel ${command}`, runsTheAgent: true };
+  }
+
+  /** Reading it may take a while, in which the conversation may have become a sandboxed one. */
+  private async programEnvironment(conversation: Conversation) {
+    const profile = this.profileOf(conversation);
+    await profileEnvironmentOnceRead(profile);
+    this.refuseAgentHereFor(this.get(conversation.id));
+    return launchEnvironment(conversation.harness, profile, this.store.claudeProgramSetting());
   }
 
   loginEnded(conversationId: string, signedIn: boolean) {
@@ -3077,7 +3092,7 @@ export class ConversationService {
     }
     if (!workspace.worktreeSetup) return;
     this.setBusy(conversation.id, "setting-up-worktree");
-    const environment = { ...profileEnvironment(this.profileOf(conversation)), MIRADOR_WORKSPACE: workspace.path };
+    const environment = { ...(await profileEnvironmentOnceRead(this.profileOf(conversation))), MIRADOR_WORKSPACE: workspace.path };
     let setupCommandId: string | undefined;
     let succeeded = false;
     const runtime = this.runtimes.get(conversation.id);
@@ -3618,10 +3633,12 @@ export class ConversationService {
     const existing = this.agentProcesses.get(key);
     if (existing) return existing;
     const spec = harnessSpec(profile, this.store.claudeProgramSetting(), this.environmentGivenTo(launch, profile));
-    const onThisComputer = { ...spec, environment: { ...spec.environment, ...this.scriptEnvironmentFor(launch, spec.environment.PATH), ...this.testModelEnvironment(launch) } };
+    const onThisComputer = withEnvironment(spec, (environment) => ({ ...environment, ...this.scriptEnvironmentFor(launch, environment.PATH), ...this.testModelEnvironment(launch) }));
     const mayBeSandboxed = launch.roomId !== undefined || this.inSandboxedWorkspace(launch);
     const harness: HarnessProcess = new HarnessProcess(
-      mayBeSandboxed ? { ...onThisComputer, launching: () => this.sandboxedAgentLaunch(harness, launch, profile, onThisComputer) } : onThisComputer,
+      mayBeSandboxed
+        ? { ...onThisComputer, launching: (environment) => this.sandboxedAgentLaunch(harness, launch, profile, { command: onThisComputer.command, environment }) }
+        : onThisComputer,
       {
         onSessionUpdate: (notification) => this.handleSessionUpdate(notification),
         onPermissionRequest: (request, signal) => this.handlePermissionRequest(request, signal),

@@ -490,12 +490,34 @@ export function problemText(problem: HostProblem, words: ProblemWords): string {
       return problem.mixedIn
         ? words.prelaunchFailedBesideAnother(problem.agent, prelaunchText(problem.failure, words), problem.mixedIn)
         : words.prelaunchFailed(problem.agent, prelaunchText(problem.failure, words), problem.output);
+    case "environment-command-failed":
+      return words.environmentCommandFailed(problem.profile, problem.variable, prelaunchText(problem.failure, words), problem.output);
+    case "environment-command-printed-nothing":
+      return words.environmentCommandPrintedNothing(problem.profile, problem.variable);
     case "profile-test-unanswered":
       return words.profileTestUnanswered(problem.seconds);
     case "sandbox-not-ready":
       return words.sandboxNotReady(sandboxNotReadyText(problem.why, words));
     case "workspace-sandbox-not-ready":
       return workspaceSandboxNotReadyText(problem.why, words);
+    case "settings-file-newer":
+      return words.settingsFileNewer(problem.version, problem.newest);
+    case "settings-entry-invalid":
+      return problem.name === null ? words.settingsPartInvalid(problem.field) : words.settingsFieldInvalid(words.settingsEntry[problem.kind](problem.name), problem.field);
+    case "settings-entry-twice":
+      return words.settingsEntryTwice(words.settingsEntry[problem.kind](problem.name));
+    case "settings-profile-other-agent":
+      return words.settingsProfileOtherAgent(problem.profile, problem.agent, problem.fileAgent);
+    case "settings-value-not-writable":
+      return words.settingsValueNotWritable(problem.profile, problem.variable);
+    case "settings-profile-missing":
+      return words.settingsProfileMissing(problem.neededBy, problem.profile);
+    case "settings-folder-missing":
+      return words.settingsFolderMissing(problem.path);
+    case "settings-plugin-not-portable":
+      return words.settingsPluginNotPortable(problem.plugin);
+    case "settings-item-failed":
+      return words.settingsItemFailed(problem.name, causeText(problem, words));
     default:
       return words.fixed[problem.code];
   }

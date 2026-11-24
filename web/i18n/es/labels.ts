@@ -48,6 +48,7 @@ export const labels: Messages["labels"] = {
     layout: "Diseño",
     devices: "Dispositivos",
     notifications: "Notificaciones",
+    transfer: "Exportar e importar",
     about: "Acerca de",
   },
 };

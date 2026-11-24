@@ -232,6 +232,17 @@ describe("a room's agent's process environment", () => {
     expect(inRoom("claude", profile)).toEqual({ ...Object.fromEntries(BASICS.map((name) => [name, HOST[name as keyof typeof HOST]])), CLAUDE_CONFIG_DIR: HOST.CLAUDE_CONFIG_DIR, ANTHROPIC_API_KEY: "sk-narrow", LANG: "fr_FR.UTF-8" });
   });
 
+  test("never gets this computer's value of a name a command of its profile gives, whether that is given or not", () => {
+    const profile = "ANTHROPIC_API_KEY=$(pass show anthropic)\nDEPLOY_TOKEN=$(pass show deploy)";
+    const environment = inRoom("claude", profile, { variables: {}, wholeHostEnvironment: true });
+    expect(environment).not.toHaveProperty("ANTHROPIC_API_KEY");
+    expect(environment).not.toHaveProperty("DEPLOY_TOKEN");
+    expect(profileVariablesInRoom("claude", profile, {})).toEqual([
+      { name: "ANTHROPIC_API_KEY", given: true, fixed: false },
+      { name: "DEPLOY_TOKEN", given: false, fixed: false },
+    ]);
+  });
+
   test("never gets this computer's value of a name it is kept from in another case, which Windows reads as the same name", () => {
     const hostInOtherCases = { ...HOST, Deploy_Token: "host-deploy", https_proxy: "http://host-proxy" };
     const environment = inRoom("codex", "DEPLOY_TOKEN=deploy\n-u HTTPS_PROXY", { variables: {}, wholeHostEnvironment: true }, hostInOtherCases);

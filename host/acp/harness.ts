@@ -102,6 +102,8 @@ export interface HarnessSpec {
   logName: string;
   command: string[];
   environment: Record<string, string>;
+  /** The environment with what the profile's commands print now, read as the agent starts; unset for a profile with none. */
+  readEnvironment?: (signal: AbortSignal) => Promise<Record<string, string>>;
   /** Shell command run before the agent starts, e.g. to bring up a local proxy. */
   prelaunch: string;
   /**
@@ -112,9 +114,10 @@ export interface HarnessSpec {
   startsOneAtATime: boolean;
   /**
    * Where the agent starts is only known as it starts, as for a room's agent, which starts in its room's sandbox while
-   * the room has one: in place of `command` and `environment`. A launch that throws is a start that failed.
+   * the room has one: in place of `command` and the environment, which it is told. A launch that throws is a start that
+   * failed.
    */
-  launching?: () => Promise<AgentLaunch>;
+  launching?: (environment: Record<string, string>) => Promise<AgentLaunch>;
 }
 
 /** What starts an agent process, and what is told once that process has gone, or never started after all. */
@@ -141,6 +144,8 @@ export class HarnessProcess {
   /** Counts the starts, so the process of an earlier one that goes away late leaves a later one be. */
   private startsSoFar = 0;
   private prelaunchProcess?: ChildProcess;
+  private readingEnvironment?: AbortController;
+  private environment: Record<string, string> = {};
 
   constructor(
     readonly spec: HarnessSpec,
@@ -256,6 +261,7 @@ export class HarnessProcess {
   async stop(reason: AgentGone = { kind: "stopped" }): Promise<AgentGone> {
     this.stopReason = reason;
     this.prelaunchProcess?.kill();
+    this.readingEnvironment?.abort();
     const child = this.child;
     this.connection?.close();
     if (process.platform === "win32" && child?.pid !== undefined) void killProcessTree(child.pid);
@@ -291,6 +297,8 @@ export class HarnessProcess {
 
   private async launchInTurn() {
     const ownStart = this.startsSoFar;
+    await this.readEnvironment();
+    this.endIfStoppedBeforeSpawning(ownStart);
     await this.runPrelaunch();
     this.endIfStoppedBeforeSpawning(ownStart);
     if (!this.spec.startsOneAtATime) return this.launch(ownStart);
@@ -302,7 +310,7 @@ export class HarnessProcess {
 
   private async launch(ownStart: number) {
     this.endIfStoppedBeforeSpawning(ownStart);
-    const launched: AgentLaunch = this.spec.launching ? await this.spec.launching() : this.spec;
+    const launched: AgentLaunch = this.spec.launching ? await this.spec.launching(this.environment) : { command: this.spec.command, environment: this.environment };
     try {
       this.endIfStoppedBeforeSpawning(ownStart);
     } catch (error) {
@@ -417,6 +425,18 @@ export class HarnessProcess {
     }
   }
 
+  private async readEnvironment() {
+    const reading = new AbortController();
+    this.readingEnvironment = reading;
+    try {
+      this.environment = (await this.spec.readEnvironment?.(reading.signal)) ?? this.spec.environment;
+    } catch (error) {
+      if (this.stopReason === undefined) throw error;
+    } finally {
+      this.readingEnvironment = undefined;
+    }
+  }
+
   /**
    * The command's output goes straight to the log file rather than through a pipe: a proxy it
    * starts in the background inherits the output and would otherwise hold the pipe open. Git Bash,
@@ -428,7 +448,7 @@ export class HarnessProcess {
     const logPath = this.logPath();
     appendFileSync(logPath, "");
     const logSizeBefore = statSync(logPath).size;
-    const shell = commandShell(() => process.env.SHELL || "/bin/sh", this.spec.environment);
+    const shell = commandShell(() => process.env.SHELL || "/bin/sh", this.environment);
     const isGitBash = process.platform === "win32" && shell.kind === "posix";
     const log = isGitBash ? "ignore" : openSync(logPath, "a");
     const command = isGitBash ? withOutputAppendedTo(logPath, this.spec.prelaunch) : this.spec.prelaunch;
@@ -436,7 +456,7 @@ export class HarnessProcess {
     const failure = await new Promise<PrelaunchFailure | null>((resolve) => {
       const [program, ...args] = commandLine(shell, command);
       const prelaunch = spawn(program!, args, {
-        env: this.spec.environment,
+        env: this.environment,
         stdio: ["ignore", log, log],
       });
       this.prelaunchProcess = prelaunch;

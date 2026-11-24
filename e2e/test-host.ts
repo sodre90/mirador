@@ -324,6 +324,7 @@ export class TestHost {
       MIRADOR_PLUGIN_CATALOG: "off",
       MIRADOR_PI_RELEASE_URL: "off",
       MIRADOR_DEFAULT_PLUGINS: "off",
+      MIRADOR_CONFIG_FILE: "off",
       MIRADOR_PUSH_RELAY: "off",
       MIRADOR_SANDBOX: "off",
       SHELL: this.options.shell ?? defaultShell,

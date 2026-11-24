@@ -107,8 +107,9 @@ export interface LaunchVariable {
 export function launchVariableOf(setting: PluginTextProfileSetting, value: string, environment: string): LaunchVariable | null {
   const name = variableReadBy(setting, value);
   if (name === undefined) return null;
-  const { set, unset } = parseEnvironment(environment);
+  const { set, commands, unset } = parseEnvironment(environment);
   if (name in set) return { name, state: "set", value: set[name]! };
+  if (name in commands) return { name, state: "set", value: `$(${commands[name]})` };
   return { name, state: unset.includes(name) ? "unset" : "missing", value: "" };
 }
 

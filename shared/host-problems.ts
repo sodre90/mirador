@@ -1,6 +1,7 @@
 import { problems as englishWords } from "../web/i18n/en/problems.ts";
 import { goneText, problemText, type ProblemWords } from "../web/problem-text.ts";
 import type { SandboxNotReadyWhy } from "./sandbox.ts";
+import type { SettingsEntryKind } from "./settings-file.ts";
 
 /** Why an agent process went away, as the host saw it. */
 export type AgentGone =
@@ -31,6 +32,8 @@ export type HostProblem =
   | { code: "claude-program-missing"; program: string }
   | { code: "claude-not-installed"; installFolders: string; installCommand: string }
   | { code: "profile-environment-invalid"; profile: string; errors: string }
+  | { code: "environment-command-failed"; profile: string; variable: string; failure: PrelaunchFailure; output: string }
+  | { code: "environment-command-printed-nothing"; profile: string; variable: string }
   | { code: "agent-not-running"; agent: string }
   | { code: "no-such-conversation"; id: string }
   | { code: "agent-cannot-search-sessions"; agent: string }
@@ -221,7 +224,17 @@ export type HostProblem =
   | { code: "prelaunch-failed"; agent: string; failure: PrelaunchFailure; output: string; mixedIn: string | null }
   | { code: "profile-test-unanswered"; seconds: number }
   | { code: "sandbox-not-ready"; why: SandboxNotReadyWhy }
-  | { code: "workspace-sandbox-not-ready"; why: SandboxNotReadyWhy };
+  | { code: "workspace-sandbox-not-ready"; why: SandboxNotReadyWhy }
+  | { code: "settings-file-newer"; version: number; newest: number }
+  /** Without a name, it is the file's whole part of that kind, as the field names it. */
+  | { code: "settings-entry-invalid"; kind: SettingsEntryKind; name: string | null; field: string }
+  | { code: "settings-entry-twice"; kind: SettingsEntryKind; name: string }
+  | { code: "settings-profile-other-agent"; profile: string; agent: string; fileAgent: string }
+  | { code: "settings-value-not-writable"; profile: string; variable: string }
+  | { code: "settings-profile-missing"; neededBy: string; profile: string }
+  | { code: "settings-folder-missing"; path: string }
+  | { code: "settings-plugin-not-portable"; plugin: string }
+  | { code: "settings-item-failed"; name: string; cause: string; causeProblem?: HostProblem };
 
 /** Why the agent process went away, in English. */
 export const englishAgentGone = (gone: AgentGone) => goneText(gone, englishWords);

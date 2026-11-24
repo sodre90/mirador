@@ -13,7 +13,7 @@ import {
   type SandboxSetting,
 } from "../../shared/sandbox.ts";
 import type { AgentLaunch } from "../acp/harness.ts";
-import { profileEnvironment } from "../acp/harnesses.ts";
+import { profileEnvironmentToCome } from "../acp/harnesses.ts";
 import type { SandboxedKind } from "./agent-environment.ts";
 import { modelRouteOf, type ModelRoute } from "./model-proxy.ts";
 import { piSandboxSetupFor } from "./pi-setup.ts";
@@ -95,7 +95,7 @@ export function modelInSandbox(profile: Profile, choices: EnvironmentChoices, en
 export function profileSandboxBlocker(profile: Profile, choices: EnvironmentChoices): SandboxBlocker | null {
   const environment = (() => {
     try {
-      return profileEnvironment(profile, (host, set) => environmentInRoom(profile.harness, host, set, choices));
+      return profileEnvironmentToCome(profile, (host, set) => environmentInRoom(profile.harness, host, set, choices));
     } catch {
       return {};
     }

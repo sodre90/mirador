@@ -6,6 +6,7 @@ import { RELEASES_REPOSITORY } from "../shared/newer-version.ts";
 import { relayPorts } from "../shared/relay-ports.ts";
 import { englishProblem, HostProblemError } from "../shared/host-problems.ts";
 import { DEFAULT_PUSH_RELAY, pushRelayAddressProblem } from "../shared/push.ts";
+import { userConfigFilePath } from "./settings-file/user-config-file-path.ts";
 
 const PLUGIN_CATALOG_URL = "https://raw.githubusercontent.com/sodre90/mirador-plugins/main/index.json";
 /** What `pi update` asks for the latest pi. */
@@ -55,6 +56,8 @@ export interface HostConfig {
   notifierDir: string | null;
   /** Test runs pin a cheap model for Claude Code on the user's own setup; a profile with an environment of its own chooses its model itself. */
   testModelOverride: { model?: string; effort?: string };
+  /** A settings file the user keeps, read as Mirador starts; null when there is to be none. */
+  userConfigFile: string | null;
   /** Test hosts' own Claude Code sessions skip the user's settings and CLAUDE.md, which can steer or refuse test prompts. */
   testSkipsUserSettings: boolean;
   /** How long a canvas question waits in an Antigravity tool call; e2e shortens it with MIRADOR_ANTIGRAVITY_ASK_WAIT_MS. */
@@ -250,6 +253,7 @@ export function loadConfig(env = process.env): HostConfig {
     reachability: reachedAs,
     notifierDir: env.MIRADOR_NOTIFIER_DIR ?? notifierDirIfInstalled(),
     testModelOverride: { model: env.MIRADOR_TEST_MODEL, effort: env.MIRADOR_TEST_EFFORT },
+    userConfigFile: userConfigFilePath(env),
     testSkipsUserSettings: env.MIRADOR_TEST_SKIP_USER_SETTINGS === "1",
     antigravityAskWaitMs: Number(env.MIRADOR_ANTIGRAVITY_ASK_WAIT_MS) || ANTIGRAVITY_ASK_WAIT_MS,
     roomAgentIdleMs: Number(env.MIRADOR_ROOM_AGENT_IDLE_MS) || ROOM_AGENT_IDLE_MS,
