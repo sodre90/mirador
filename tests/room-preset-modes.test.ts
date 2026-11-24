@@ -21,8 +21,8 @@ const modesOn = (mode: string): SessionConfigOption[] => [
   { id: "mode", name: "Mode", category: "mode", type: "select", currentValue: mode, options: CODEX_MODES.map((value) => ({ value, name: value })) },
 ];
 
-/** Codex, which starts each session in its agent mode, and writes down the mode each message went out in. */
-function codexAgent() {
+/** Codex, which starts each session in its agent mode unless its user's settings start it in another, and writes down the mode each message went out in. */
+function codexAgent(opensIn = "agent") {
   const promptedIn: string[] = [];
   const modes = new Map<string, string>();
   let sessions = 0;
@@ -31,8 +31,8 @@ function codexAgent() {
     start: async () => ({}),
     newSession: async () => {
       const sessionId = `session-${++sessions}`;
-      modes.set(sessionId, "agent");
-      return { sessionId, configOptions: modesOn("agent") };
+      modes.set(sessionId, opensIn);
+      return { sessionId, configOptions: modesOn(opensIn) };
     },
     setConfigOption: async (sessionId: string, _configId: string, value: string) => {
       modes.set(sessionId, value);
@@ -142,14 +142,19 @@ test("a room's agent opens its session on the model and effort chosen for it in 
   expect(store.listEvents(inRoom.id).filter(({ event }) => event.type === "error")).toEqual([]);
 });
 
-test("an agent brought into someone else's room asks as usual: never YOLO, and its profile's mode only where that mode still asks", async () => {
+test.each([
+  { profile: "never asks", mode: "agent-full-access", opensIn: "agent", asksIn: "read-only" },
+  { profile: "names no mode, while its user's settings start it in one that never asks", mode: null, opensIn: "agent-full-access", asksIn: "read-only" },
+  { profile: "names no mode, while the agent's own default leaves the asking to itself", mode: null, opensIn: "agent", asksIn: "read-only" },
+  { profile: "names a mode that still asks", mode: "workspace-write", opensIn: "agent-full-access", asksIn: "workspace-write" },
+])("an agent brought into someone else's room, whose profile $profile, goes out in $asksIn and never on YOLO", async ({ mode, opensIn, asksIn }) => {
   const store = new Store(":memory:");
   const project = join(scratch, `project-${crypto.randomUUID()}`);
   mkdirSync(project);
-  store.saveProfile({ id: "p1", name: "p", harness: "codex", environment: "", prelaunch: "", model: null, mode: "agent-full-access", effort: null, bypassPermissions: true, askMode: "wait", color: null, pluginsOff: [], createdAt: 1 });
+  store.saveProfile({ id: "p1", name: "p", harness: "codex", environment: "", prelaunch: "", model: null, mode, effort: null, bypassPermissions: true, askMode: "wait", color: null, pluginsOff: [], createdAt: 1 });
   store.insertWorkspace({ id: "w1", name: "p", path: project, defaultLaunch: { harness: "codex", profileId: "p1" }, createdAt: 1 });
   const conversations = new ConversationService(store, new Hub(), loadConfig({ MIRADOR_DATA_DIR: join(scratch, `data-${crypto.randomUUID()}`) }), { mute() {}, unmute() {} } as never, {} as never, {} as never, new SystemNotifications(store, new Hub()));
-  const { agent, promptedIn } = codexAgent();
+  const { agent, promptedIn } = codexAgent(opensIn);
   const withSessions = conversations as unknown as { ensureSession: (id: string) => Promise<string> };
   const ensureSession = withSessions.ensureSession;
   withSessions.ensureSession = async () => "not-started";
@@ -162,15 +167,16 @@ test("an agent brought into someone else's room asks as usual: never YOLO, and i
   await conversations.send(brought.id, "first", []);
   await until(() => promptedIn.length === 1);
 
-  expect(promptedIn).toEqual(["agent"]);
+  expect(promptedIn).toEqual([asksIn]);
 });
 
-test("a profile's mode that still asks is kept for a brought agent; one that never asks gives way to the agent's default", () => {
+test("a profile's mode that still asks is kept for a brought agent; one that never asks, or none, gives way to the mode that asks", () => {
   expect(askingModeOf("claude", "acceptEdits")).toBe("acceptEdits");
   expect(askingModeOf("claude", "default")).toBe("default");
-  expect(askingModeOf("claude", "bypassPermissions")).toBeUndefined();
+  expect(askingModeOf("claude", "bypassPermissions")).toBe("default");
+  expect(askingModeOf("claude", null)).toBe("default");
   expect(askingModeOf("codex", "workspace-write")).toBe("workspace-write");
-  expect(askingModeOf("codex", "agent-full-access")).toBeUndefined();
-  expect(askingModeOf("claude", null)).toBeUndefined();
+  expect(askingModeOf("codex", "agent-full-access")).toBe("read-only");
   expect(askingModeOf("opencode", "build")).toBe("build");
+  expect(askingModeOf("opencode", null)).toBeUndefined();
 });

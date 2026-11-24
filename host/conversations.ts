@@ -1187,8 +1187,9 @@ export class ConversationService {
   }
 
   /**
-   * An agent brought into someone else's room asks as usual, so its profile's mode holds only where that mode still asks;
-   * one that works in the room's workspace runs in the mode that asks, whatever its profile or the user's own settings say.
+   * An agent brought into someone else's room asks as usual, so its profile's mode holds only where that mode still asks,
+   * and the one that asks holds otherwise; one that works in the room's workspace runs in the mode that asks, whatever its
+   * profile or the user's own settings say.
    */
   private profileModeFor(conversation: Conversation, profile: Profile | undefined) {
     if (conversation.worksInRoomsWorkspace) return askingDefaultModeOf(conversation.harness) ?? undefined;

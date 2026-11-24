@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 
 import { basename, join } from "node:path";
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { FakeClaudeApi, fakeClaudeEnvironment } from "./fake-claude-api.ts";
-import { addWorkspace, createProfile, createRoom, inviteIntoRoom, joinRoom, nameMachine, nameOwnProfile, openRoomSettings, reachedAtOwnPort, roomCard, signIn, whatItMeans } from "./helpers.ts";
+import { addWorkspace, conversationSettings, createProfile, createRoom, inviteIntoRoom, joinRoom, nameMachine, nameOwnProfile, openRoomSettings, reachedAtOwnPort, roomCard, signIn, whatItMeans } from "./helpers.ts";
 import { TestHost, writeBunProgram } from "./test-host.ts";
 
 test.describe.configure({ mode: "serial" });
@@ -314,4 +314,29 @@ test("nothing of Mia's computer went to the model, and once she takes it out it 
   await bringCoder();
   await expect(accessCard(ann)).toContainText("Mia's Coder asks to work in this room's workspace");
   expect(coderFolders()).toHaveLength(1);
+});
+
+test("brought to work in a workspace of hers, it runs in the mode that asks, though her settings start Claude in one that never does", async () => {
+  writeFileSync(join(mias.claudeConfigDir, "settings.json"), JSON.stringify({ permissions: { defaultMode: "bypassPermissions" }, skipDangerousModePermissionPrompt: true }));
+  await chooseInMenuOfJoinedRoom("Take out Coder");
+  await expect(agentChip(ann)).toHaveCount(0);
+  const dialog = await bringDialog("Coder");
+  await dialog.getByRole("combobox", { name: /^Workspace/ }).selectOption({ label: basename(mias.projectDir) });
+  await dialog.getByRole("button", { name: "Bring", exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(agentChip(ann)).toBeVisible();
+
+  const hers = mia.getByRole("region", { name: basename(mias.projectDir), exact: true });
+  const modeOfOpenConversation = async () => (await conversationSettings(mia)).getByLabel("Mode", { exact: true });
+  await test.step("as a conversation of her own does not", async () => {
+    await hers.getByLabel("Agent", { exact: true }).selectOption({ label: "Coder · Claude Code" });
+    await hers.getByRole("button", { name: "+ New conversation" }).click();
+    await expect(mia.locator(".chat-header:visible h2")).toHaveText("New conversation");
+    await expect(await modeOfOpenConversation()).toHaveValue("bypassPermissions", { timeout: 60_000 });
+    await mia.keyboard.press("Escape");
+  });
+
+  await hers.locator(".conversation-title", { hasText: "Garden · Ann's machine" }).click();
+  await expect(mia.locator(".chat-header:visible h2")).toHaveText("Garden · Ann's machine");
+  await expect(await modeOfOpenConversation()).toHaveValue("default", { timeout: 60_000 });
 });

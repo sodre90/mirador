@@ -39,12 +39,15 @@ const presetModes: Record<HarnessId, Record<PermissionPreset, string> | null> = 
 export const presetModeOf = (harness: HarnessId, preset: PermissionPreset) => presetModes[harness]?.[preset] ?? null;
 
 /**
- * The profile's mode for an agent brought into someone else's room, which asks as usual: kept where it is one of the modes
- * a room's preset runs that agent in, so one that never asks gives way to the agent's own default.
+ * The mode of an agent brought into someone else's room, whose text it works on and which it asks as usual: its profile's
+ * where that is one of the modes a room's preset runs that agent in, otherwise the one that asks before edits and commands
+ * alike, as the agent's own default, or what the user's own settings start it in, may not ask. An agent with no modes for
+ * a room's presets keeps its profile's.
  */
 export const askingModeOf = (harness: HarnessId, mode: string | undefined | null) => {
   const asking = presetModes[harness];
-  return !mode || !asking || Object.values(asking).includes(mode) ? (mode ?? undefined) : undefined;
+  if (!asking) return mode ?? undefined;
+  return mode && Object.values(asking).includes(mode) ? mode : asking["ask-everything"];
 };
 
 /** The agent's own mode that asks before edits and commands alike; null for an agent with no modes for a room's presets. */
