@@ -5,6 +5,7 @@ import { loadConfig } from "./config.ts";
 import { DeviceService } from "./devices.ts";
 import { JoinRequestService } from "./join-requests.ts";
 import { SIGN_IN_CODE_LIFETIME_MINUTES, SignInCodes, signInLink } from "./sign-in-codes.ts";
+import { exportSettings, SettingsImportCommand } from "./settings-file/command-line.ts";
 import { Store } from "./store.ts";
 import { connectedFrom, deviceStatus, joinedOn } from "../shared/devices.ts";
 import type { JoinRequest, ListedDevice } from "../shared/model.ts";
@@ -15,13 +16,31 @@ import { toolReport, usageReport, UsageQueryError, type Finding, type ToolReport
 
 const usage = `usage: mirador <command>
 
-  sign-in    Make a one-time link a browser on this machine signs in to Mirador with
-  invite     Make a one-time code another browser or app joins this Mirador with
-  approve    Let in the devices that ask to join this Mirador, by typing the number each shows
-  devices    List the devices that joined this Mirador, and which are connected now
-  when-done  Have Mirador wait for a job an agent left running, then send the agent a message (run it from the agent)
-  message    Send the agent's conversation a message as your next one (run it from the agent, or a script it started)
-  usage      Show how you work with Mirador's agents: their tools and how often each succeeds, permissions, turns, tokens`;
+  sign-in          Make a one-time link a browser on this machine signs in to Mirador with
+  invite           Make a one-time code another browser or app joins this Mirador with
+  approve          Let in the devices that ask to join this Mirador, by typing the number each shows
+  devices          List the devices that joined this Mirador, and which are connected now
+  when-done        Have Mirador wait for a job an agent left running, then send the agent a message (run it from the agent)
+  message          Send the agent's conversation a message as your next one (run it from the agent, or a script it started)
+  usage            Show how you work with Mirador's agents: their tools and how often each succeeds, permissions, turns, tokens
+  export-settings  Write profiles, prompt templates, workspaces, plugins and preferences to a file, to bring into another Mirador
+  import-settings  Bring the settings of such a file into the running Mirador, asking before it overwrites any`;
+
+const exportSettingsUsage = `usage: mirador export-settings [--out <file>] [--include-secrets]
+
+  Writes this Mirador's settings as JSON, to the file or else to the terminal: profiles, prompt templates, workspaces
+  and their groups, which plugins are installed and their settings, and the preferences Mirador keeps for every browser.
+  Conversations, devices, sign-ins and plugins' data are no part of it.
+  Without --include-secrets, the values of the profiles' environments, plugins' secret settings and voice API keys are
+  left out, each marked as needing a value. It works with Mirador stopped too.`;
+
+const importSettingsUsage = `usage: mirador import-settings <file> [--dry-run] [--overwrite]
+
+  Brings a file of mirador export-settings into the running Mirador. Profiles and prompt templates are matched by name
+  and workspaces by folder: what is not here is added, and you are asked before anything that differs is overwritten,
+  or, with --overwrite, nothing is asked and the file's counts. A workspace whose folder is not here is left out, and
+  so is a plugin you don't agree to install. --dry-run only shows what would happen.
+  Profiles run commands on this machine, so import only files you trust.`;
 
 const usageUsage = `usage: mirador usage [--since <12h|7d|2w|date>] [--until <date>] [--workspace <name or folder>] [--profile <name>] [--tool <name>] [--compare] [--json]
 
@@ -45,6 +64,35 @@ const messageUsage = `usage: mirador message [--session <agent session id>] ["<m
   A job the agent left running can end with it, so the agent picks up where the job leaves off.
   Run it from an agent in Mirador, or a script it started: it needs MIRADOR_URL, MIRADOR_SCRIPT_TOKEN and CLAUDE_CODE_SESSION_ID, PI_SESSION_ID or CODEX_SESSION_ID (or --session).
   opencode gives its commands no session id, so its conversations can only be reached with --session.`;
+
+async function exportSettingsCommand(args: string[]) {
+  const options = { out: { type: "string" }, "include-secrets": { type: "boolean" } } as const;
+  const parsed = parsedOrUsage("export-settings", exportSettingsUsage, () => parseArgs({ args, options }).values);
+  if (parsed) await endingOnProblem("export-settings", () => exportSettings(loadConfig(), { out: parsed.out, includeSecrets: parsed["include-secrets"] ?? false }));
+}
+
+async function importSettingsCommand(args: string[]) {
+  const options = { "dry-run": { type: "boolean" }, overwrite: { type: "boolean" } } as const;
+  const parsed = parsedOrUsage("import-settings", importSettingsUsage, () => {
+    const { values, positionals } = parseArgs({ args, options, allowPositionals: true });
+    if (positionals.length !== 1) throw new Error("name one file");
+    return { ...values, file: positionals[0]! };
+  });
+  if (!parsed) return;
+  const { file, overwrite = false, "dry-run": dryRun = false } = parsed;
+  await endingOnProblem("import-settings", () => new SettingsImportCommand(loadConfig(), prompt).run(file, { overwrite, dryRun }));
+}
+
+function parsedOrUsage<Parsed>(command: string, usage: string, parse: () => Parsed): Parsed | null {
+  try {
+    return parse();
+  } catch (error) {
+    fail(command, `${(error as Error).message}\n\n${usage}`, 2);
+    return null;
+  }
+}
+
+const endingOnProblem = (command: string, work: () => Promise<void>) => work().catch((error: Error) => fail(command, error.message, 1));
 
 /** The host prints a sign-in link only to a terminal, and each link works once, so a new browser needs a new link. */
 function signIn() {
@@ -368,6 +416,8 @@ const commands = new Map<string, (args: string[]) => void | Promise<void>>([
   ["when-done", whenDone],
   ["message", message],
   ["usage", showUsage],
+  ["export-settings", exportSettingsCommand],
+  ["import-settings", importSettingsCommand],
 ]);
 const asksForHelp = (command: string | undefined) => command === undefined || ["help", "--help", "-h"].includes(command);
 

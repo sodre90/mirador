@@ -36,6 +36,7 @@ export const profiles: Messages["profiles"] = {
   environmentFormat: {
     onePerLine: "每行一个：",
     afterKeyValue: "，",
+    toRun: " 表示 Agent 启动时某条命令的输出，",
     toUnset: " 表示取消设置，",
     comment: "# 注释",
     afterComment: "。数组 ",

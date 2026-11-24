@@ -305,6 +305,7 @@ export class TestHost {
       MIRADOR_SOURCE_WATCH: this.options.copiesSource ? "on" : "off",
       MIRADOR_PLUGIN_CATALOG: "off",
       MIRADOR_DEFAULT_PLUGINS: "off",
+      MIRADOR_CONFIG_FILE: "off",
       MIRADOR_PUSH_RELAY: "off",
       SHELL: this.options.shell ?? defaultShell,
       ...(process.platform === "win32" && { [HOST_RELAUNCH.restartExitCode]: String(HOST_RESTART_EXIT_CODE) }),

@@ -7,6 +7,7 @@ import { canvasInstructions, canvasPluginInstructions, canvasUseGuidance, NO_CAN
 import { PRE_ALLOWED_CANVAS_TOOLS } from "../canvas/tool-names.ts";
 import { jobWaitGuidance } from "../job-waits.ts";
 import { applyEnvironment, parseEnvironment } from "../../shared/profile-environment.ts";
+import { commandValues, readCommandValues, readMissingCommandValues } from "./environment-commands.ts";
 import { claudeProgramMissing, findClaudeProgram } from "./claude-program.ts";
 import { findAntigravity } from "./antigravity-program.ts";
 import { findCopilot } from "./copilot-program.ts";
@@ -135,9 +136,27 @@ export function harnessSpec(profile: Profile, claudeProgramSetting: string): Har
     label: `${harnessLabels[harness]} (${profile.name})`,
     logName: `${harness}-${slug(profile.name) || "profile"}-${profile.id.slice(0, 8)}`,
     environment,
+    ...(hasCommandValues(profile) && {
+      readEnvironment: async (signal) => {
+        await readCommandValues(profile, profileEnvironment(profile), signal);
+        return launchEnvironment(harness, profile, claudeProgramSetting);
+      },
+    }),
     prelaunch: profile.prelaunch,
   };
 }
+
+/** The agent started with its environment changed, also as read again when it starts. */
+export const withEnvironment = (spec: HarnessSpec, changed: (environment: Record<string, string>) => Record<string, string>): HarnessSpec => {
+  const { readEnvironment } = spec;
+  return {
+    ...spec,
+    environment: changed(spec.environment),
+    ...(readEnvironment && { readEnvironment: async (signal) => changed(await readEnvironment(signal)) }),
+  };
+};
+
+const hasCommandValues = ({ environment }: Profile) => Object.keys(parseEnvironment(environment).commands).length > 0;
 
 export const CANVAS_SERVER_NAME = "canvas";
 
@@ -215,13 +234,20 @@ function antigravityEnvironment(environment: Record<string, string>): Record<str
   return { ...environment, AGY_PATH: program };
 }
 
+/** The profile's environment, once each command that gives a value of it has run since Mirador started. */
+export async function profileEnvironmentOnceRead(profile: Profile | null): Promise<Record<string, string>> {
+  if (profile) await readMissingCommandValues(profile, () => profileEnvironment(profile));
+  return profileEnvironment(profile);
+}
+
+/** The profile's environment, with what its commands last printed; a command that has not run since Mirador started gives nothing yet. */
 export function profileEnvironment(profile: Profile | null): Record<string, string> {
   if (!profile) return agentEnvironment(hostEnvironment());
   const environment = parseEnvironment(profile.environment);
   if (environment.errors.length > 0) {
     throw new HostProblemError({ code: "profile-environment-invalid", profile: profile.name, errors: environment.errors.join("; ") });
   }
-  return applyEnvironment(agentEnvironment(hostEnvironment()), environment);
+  return { ...applyEnvironment(agentEnvironment(hostEnvironment()), environment), ...commandValues(profile) };
 }
 
 /**

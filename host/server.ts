@@ -29,7 +29,6 @@ import {
 } from "../shared/model.ts";
 import { readJobWaitRequest } from "../shared/job-waits.ts";
 import { avatarProblem } from "../shared/avatar.ts";
-import { promptTemplateProblem } from "../shared/prompt-templates.ts";
 import { joinRequestNotification } from "../shared/system-notifications.ts";
 import { NOTIFICATION_KINDS, type PushNotifications } from "./push-notifications.ts";
 import { pushRelayAddressProblem } from "../shared/push.ts";
@@ -78,6 +77,10 @@ import { localImage } from "./local-images.ts";
 import { completeDirectories, createsDirectory, directoryToAdd, onSameFolder } from "./paths.ts";
 import { launchForNewWorkspace, profileFor, type ProfileService } from "./profiles.ts";
 import { errorResponse, problemResponse } from "./problem-response.ts";
+import { savePromptTemplate } from "./prompt-templates.ts";
+import { exportedSettings, pluginsOnDisk, settingsFileText } from "./settings-file/export-settings.ts";
+import type { SettingsImport } from "./settings-file/import-settings.ts";
+import type { ConfigFileStatus } from "../shared/settings-file.ts";
 import type { DesktopAppCheck } from "./desktop-app-check.ts";
 import type { Lookout } from "./lookout.ts";
 import type { NewerVersionWatcher } from "./newer-version.ts";
@@ -134,6 +137,9 @@ export interface HostServices {
   /** Null unless the environment turns peer to peer on. */
   p2p: PeerToPeer | null;
   pushes: PushNotifications;
+  settingsImport: SettingsImport;
+  /** As it was read at this start; null when there is to be none. */
+  configFile: ConfigFileStatus | null;
 }
 
 const MAX_SCRIPT_MESSAGE_BYTES = 64 * 1024;
@@ -220,6 +226,8 @@ export function startServer(services: HostServices) {
     keepAwake,
     p2p,
     pushes,
+    settingsImport,
+    configFile,
   } = services;
   const appStorage = new AppStorage(store, (name) => apps.installed().some((app) => app.name === name));
   conversations.deletesWithAllItHoldsBy(deleteConversation);
@@ -446,13 +454,16 @@ export function startServer(services: HostServices) {
   const sendDevicesToEveryPage = () => hub.sendEach(devicesListed);
   const pluginsListed = () => listedPlugins(plugins, catalog);
 
+  async function showChangedPlugins() {
+    hub.broadcast(await pluginsListed());
+    pluginUpdates.recount();
+  }
+
   /** Answers whoever asked for the change, then shows the plugins as they are now on every page. */
   async function changePlugins(socket: BrowserSocket, requestId: string, change: () => Promise<unknown>) {
     const problem = await change().then(() => null, shownProblemOf);
     hub.send(socket, { type: "plugins.changed", requestId, ...(problem ?? { problem: null }) });
-    if (problem !== null) return;
-    hub.broadcast(await pluginsListed());
-    pluginUpdates.recount();
+    if (problem === null) await showChangedPlugins();
   }
 
   /** Saves a setting from Settings for the next start, or says what is wrong with it. */
@@ -662,20 +673,24 @@ export function startServer(services: HostServices) {
   };
 
   /** Says what is wrong instead of saving, as a problem for Settings to show; settings of another shape, as from an older page, get an answer too. */
-  function saveVoiceSettings(socket: BrowserSocket, settings: VoiceSettings): DescribedProblem | { problem: null } {
+  function saveVoiceSettingsFrom(socket: BrowserSocket, settings: VoiceSettings): DescribedProblem | { problem: null } {
     if (!socket.data.readsProfileLaunch) return described({ code: "only-own-pages-change-voice-settings" });
     try {
-      const problem = voiceSettingsProblem(settings);
-      if (problem) return described(problem);
+      saveVoiceSettings(settings);
+      return { problem: null };
     } catch (error) {
-      return { problem: errorMessage(error) };
+      return problemFieldsOf(error, errorMessage(error));
     }
+  }
+
+  function saveVoiceSettings(settings: VoiceSettings) {
+    const problem = voiceSettingsProblem(settings);
+    if (problem) throw new HostProblemError(problem);
     const idleMinutesBefore = store.voiceSettings().engineIdleMinutes;
     store.setVoiceSettings(settings);
     if (settings.engineIdleMinutes !== idleMinutesBefore) voiceEngine.idleTimeChanged();
     void voiceEngine.unloadAllBut(thisMacModelsInUse(settings));
     hub.sendEach(voiceSettingsFor);
-    return { problem: null };
   }
 
   /** The browser gives a dropped file's contents but not its path; the host keeps a copy and answers where it is. */
@@ -1025,14 +1040,6 @@ export function startServer(services: HostServices) {
     hub.broadcast({ type: "workspace-group.deleted", groupId });
   }
 
-  function savePromptTemplate(draft: Pick<PromptTemplate, "id" | "name" | "text">) {
-    const problem = promptTemplateProblem(draft);
-    if (problem) throw new Error(problem);
-    const { id, name, text } = draft;
-    store.savePromptTemplate({ id, name: name.trim(), text, createdAt: Date.now() });
-    hub.broadcast({ type: "prompt-template.upserted", template: store.findPromptTemplate(id)! });
-  }
-
   let claudeProgram = claudeProgramReport(store.claudeProgramSetting(), null, null);
   const lookUpClaudeProgram = claudeProgramLookUps((program) => {
     claudeProgram = program;
@@ -1139,6 +1146,30 @@ export function startServer(services: HostServices) {
     if (updatesByItself) void readyPluginUpdates.prepare(pluginUpdates.current ?? []);
   }
 
+  settingsImport.savesSettingsWith({
+    canvasUse: setCanvasUse,
+    keepDeletedCanvas: setKeepDeletedCanvas,
+    keepAwake: setKeepAwake,
+    reminderMorning: setReminderMorning,
+    olderAfter: setOlderAfter,
+    conversationOrder: setConversationOrder,
+    pluginUpdateMode: setPluginUpdateMode,
+    voice: saveVoiceSettings,
+    updatesByItself: setUpdatesByItself,
+  });
+
+  /** Settings hold what profiles launch their agents with, so only the pages that may read that move them. */
+  async function answerAboutSettings<Answer>(socket: BrowserSocket, work: () => Promise<Answer>): Promise<{ answer: Answer | null } & (DescribedProblem | { problem: null })> {
+    if (!socket.data.readsProfileLaunch) return { answer: null, ...described({ code: "only-own-pages-move-settings" }) };
+    try {
+      return { answer: await work(), problem: null };
+    } catch (error) {
+      return { answer: null, ...problemFieldsOf(error, errorMessage(error)) };
+    }
+  }
+
+  const settingsAsText = async (includeSecrets: boolean) => settingsFileText(exportedSettings(store, await pluginsOnDisk(plugins.folder), { includeSecrets }));
+
   function deletePromptTemplate(templateId: string) {
     store.deletePromptTemplate(templateId);
     hub.broadcast({ type: "prompt-template.deleted", templateId });
@@ -1216,7 +1247,7 @@ export function startServer(services: HostServices) {
           (error) => reply({ type: "plugin.profile-checked", requestId: message.requestId, answer: null, problem: messageOf(error) }),
         );
       case "prompt-template.save":
-        return savePromptTemplate(message.template);
+        return savePromptTemplate(store, hub, message.template);
       case "prompt-template.delete":
         return deletePromptTemplate(message.templateId);
       case "settings.set-canvas-use":
@@ -1229,6 +1260,18 @@ export function startServer(services: HostServices) {
         return setConversationOrder(message.order);
       case "settings.set-older-after":
         return setOlderAfter(message.olderAfter);
+      case "settings.export": {
+        const { answer: text, ...problem } = await answerAboutSettings(socket, () => settingsAsText(message.includeSecrets));
+        return reply({ type: "settings.exported", requestId: message.requestId, text, ...problem });
+      }
+      case "settings.plan-import": {
+        const { answer: plan, ...problem } = await answerAboutSettings(socket, () => settingsImport.plan(message.text));
+        return reply({ type: "settings.import-planned", requestId: message.requestId, plan, ...problem });
+      }
+      case "settings.import": {
+        const { answer: report, ...problem } = await answerAboutSettings(socket, () => settingsImport.bringInChosen(message.text, message.items));
+        return reply({ type: "settings.imported", requestId: message.requestId, report, ...problem });
+      }
       case "settings.set-keep-deleted-canvas":
         return setKeepDeletedCanvas(message.keep);
       case "settings.set-claude-program":
@@ -1624,7 +1667,7 @@ export function startServer(services: HostServices) {
       case "terminal.open":
         return reply({ type: "terminal.opened", requestId: message.requestId, ...terminals.open(message.conversationId, message.columns, message.rows, message.split) });
       case "terminal.open-login": {
-        const program = conversations.loginProgram(message.conversationId, pageOnHost(socket.data));
+        const program = await conversations.loginProgram(message.conversationId, pageOnHost(socket.data));
         const { exited, ...opened } = terminals.openProgram(message.conversationId, message.columns, message.rows, program);
         void exited.then((exitCode) => conversations.loginEnded(message.conversationId, exitCode === 0));
         return reply({ type: "terminal.opened", requestId: message.requestId, ...opened });
@@ -1635,7 +1678,7 @@ export function startServer(services: HostServices) {
         return reply({ type: "terminal.opened", requestId: message.requestId, ...opened });
       }
       case "terminal.open-panel-command": {
-        const program = conversations.panelCommandProgram(message.conversationId, message.line);
+        const program = await conversations.panelCommandProgram(message.conversationId, message.line);
         const { exited: _, ...opened } = terminals.openProgram(message.conversationId, message.columns, message.rows, program);
         return reply({ type: "terminal.opened", requestId: message.requestId, ...opened });
       }
@@ -1730,7 +1773,7 @@ export function startServer(services: HostServices) {
       case "settings.set-network":
         return reply({ type: "settings.saved", requestId: message.requestId, ...problemSaving(() => saveNetworkFromSettings(message.on)) });
       case "voice.set-settings":
-        return reply({ type: "settings.saved", requestId: message.requestId, ...saveVoiceSettings(socket, message.settings) });
+        return reply({ type: "settings.saved", requestId: message.requestId, ...saveVoiceSettingsFrom(socket, message.settings) });
       case "voice.engine.set-up":
         if (!socket.data.readsProfileLaunch) return reply(ONLY_OWN_PAGES_SET_UP_VOICE);
         return voiceEngine.setUp(message.models);
@@ -1787,6 +1830,39 @@ export function startServer(services: HostServices) {
     }
   }
 
+  /** For `mirador import-settings`, which leaves the saving to the running host, as Settings does. */
+  async function answerCommandLine(request: Request, work: () => Promise<unknown>) {
+    const refused = refusedAgentRequest(request, config.browserToken);
+    if (refused) return refused;
+    try {
+      return Response.json((await work()) ?? null);
+    } catch (error) {
+      return new Response(shownProblemOf(error).problem, { status: 400 });
+    }
+  }
+
+  const planImportForCommandLine = (request: Request) => answerCommandLine(request, async () => settingsImport.plan(await request.text()));
+
+  const importForCommandLine = (request: Request) =>
+    answerCommandLine(request, async () => {
+      const { text, items } = (await request.json()) as { text: string; items: string[] };
+      return settingsImport.bringInChosen(text, items);
+    });
+
+  const offerPluginForCommandLine = (request: Request) =>
+    answerCommandLine(request, async () => {
+      const { repository, branch } = (await request.json()) as { repository: string; branch: string | null };
+      return plugins.offer(repository, branch);
+    });
+
+  const installPluginForCommandLine = (request: Bun.BunRequest<"/settings-import/plugins/:offerId">) =>
+    answerCommandLine(request, async () => {
+      await plugins.install(request.params.offerId);
+      await showChangedPlugins();
+    });
+
+  const discardPluginForCommandLine = (request: Bun.BunRequest<"/settings-import/plugins/:offerId">) => answerCommandLine(request, async () => plugins.discard(request.params.offerId));
+
   /** All the network listener serves: what pages of other devices use. */
   const routesForDevices = {
     "/": index,
@@ -1822,6 +1898,10 @@ export function startServer(services: HostServices) {
     "/sessions/:sessionId/messages": { POST: receiveScriptMessage },
     "/sessions/:sessionId/job-waits": { POST: receiveJobWait },
     "/devices": { GET: listDevicesForCommandLine },
+    "/settings-import/plan": { POST: planImportForCommandLine },
+    "/settings-import": { POST: importForCommandLine },
+    "/settings-import/plugins": { POST: offerPluginForCommandLine },
+    "/settings-import/plugins/:offerId": { POST: installPluginForCommandLine, DELETE: discardPluginForCommandLine },
   };
 
   function sendSnapshot(socket: BrowserSocket) {
@@ -1838,6 +1918,7 @@ export function startServer(services: HostServices) {
       keepDeletedCanvas: store.keepDeletedCanvas(),
       reminderMorning: store.reminderMorning(),
       conversationOrder: store.chosenConversationOrder(),
+      ...(socket.data.readsProfileLaunch && { configFile }),
       olderAfter: store.olderAfter(),
       pushKinds: [...NOTIFICATION_KINDS],
       claudeProgram,

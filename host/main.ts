@@ -37,9 +37,13 @@ import { VoiceEngine } from "./voice/engine/engine.ts";
 import { MUTED_LIST_FILE, NotifierMute } from "./notifier.ts";
 import { installedHarnesses } from "./acp/harnesses.ts";
 import { giveEveryWorkspaceAProfile, moveProfilelessOntoProfiles, ProfileService } from "./profiles.ts";
+import { applyConfigFile } from "./settings-file/config-file.ts";
+import { SettingsImport } from "./settings-file/import-settings.ts";
 import { HostRestart, relaunch, stoppedWithinTimeout, takeRelaunchEnvironment, takeTurnsStoppedForRestart } from "./restart.ts";
 import { DesktopAppCheck } from "./desktop-app-check.ts";
 import { switchOf, type PluginUpdate } from "../shared/apps.ts";
+import { englishProblem } from "../shared/host-problems.ts";
+import type { ConfigFileStatus } from "../shared/settings-file.ts";
 import { Lookout } from "./lookout.ts";
 import { NewerVersionWatcher, newerVersionLookup, pullCheckout } from "./newer-version.ts";
 import { desktopAppCode } from "../shared/desktop-app-code.ts";
@@ -245,7 +249,10 @@ voiceEngineInstaller.load().catch((error) => console.error(`reading how voice is
 const voice = new Voice(() => store.voiceSettings(), (profileId) => store.findProfile(profileId), voiceEngine.use);
 const keepAwake = new KeepAwakeHold(store.keepAwake());
 hub.whenRunningTurnsCounted((count) => keepAwake.setRunningTurns(count));
-const server = startServer({ config, store, hub, conversations, canvas, mcp, apps, plugins, canvasPlugins, pluginSettings, pluginLooks, catalog, profiles, statusline, terminals, images, droppedFiles, voice, voiceEngine, restart, desktopApp, newerVersion, pullNewerVersion: () => pullCheckout(sourceDir), pluginUpdates, readyPluginUpdates, devices, joinRequests, signInCodes, search, relays, watch, certificate, keepAwake, p2p, pushes });
+const settingsImport = new SettingsImport({ store, hub, profiles, conversations, plugins, pluginSettings });
+const configFile = config.userConfigFile === null ? null : await applyConfigFile(config.userConfigFile, settingsImport, store);
+if (configFile) reportConfigFile(configFile);
+const server = startServer({ config, store, hub, conversations, canvas, mcp, apps, plugins, canvasPlugins, pluginSettings, pluginLooks, catalog, profiles, statusline, terminals, images, droppedFiles, voice, voiceEngine, restart, desktopApp, newerVersion, pullNewerVersion: () => pullCheckout(sourceDir), pluginUpdates, readyPluginUpdates, devices, joinRequests, signInCodes, search, relays, watch, certificate, keepAwake, p2p, pushes, settingsImport, configFile });
 const sourceWatcher = new SourceWatcher(sourceDir, {
   uiEdited: (edited) => {
     console.log(`${edited} changed, so the page is built again`);
@@ -274,6 +281,12 @@ if (process.stdout.isTTY) console.log(`Mirador is running. Open:\n\n  ${signInLi
 else console.log(`Mirador is running at ${config.appOrigin}. To sign a browser in, open the link mirador sign-in prints.`);
 console.log(`data: ${config.dataDir}  agent logs: ${agentLogsDirectory(config.dataDir)}`);
 if (network) console.log(`other devices: ${config.publicOrigin} (HTTPS on port ${network.port} of every network this machine is on)`);
+
+function reportConfigFile({ path, found, added, overwritten, problems }: ConfigFileStatus) {
+  if (!found) return;
+  if (added.length + overwritten.length > 0) console.log(`The config file ${path} added ${added.length} and changed ${overwritten.length} of Mirador's settings.`);
+  problems.forEach((problem) => console.warn(`The config file ${path}: ${englishProblem(problem)}`));
+}
 
 function machineSignedOut(machineId: string) {
   store.forgetMachineDeviceToken(machineId);

@@ -42,7 +42,7 @@ async function changePlugins(send: (requestId: string) => ClientMessage): Promis
 type Offered = { offer: PluginOffer; problem: null } | { offer: null; problem: string };
 
 /** Has the host clone a plugin, or what updating one brings, without building it, for the user to agree to. */
-async function offerPlugin(send: (requestId: string) => ClientMessage): Promise<Offered> {
+export async function offerPlugin(send: (requestId: string) => ClientMessage): Promise<Offered> {
   try {
     return await connection.sendAndAwait(send, (message, requestId) =>
       message.type === "plugins.offered" && message.requestId === requestId ? (message.offer ? { offer: message.offer, problem: null } : { offer: null, problem: replyProblemText(message) ?? "" }) : undefined,
@@ -88,13 +88,13 @@ function OfferDetails({ offer }: { offer: PluginOffer }) {
   );
 }
 
-type Settled = { agreed: boolean; problem: string | null };
+export type Settled = { agreed: boolean; problem: string | null };
 
 /**
  * What the cloned plugins bring, for the user to agree to before any of their code runs. Agreeing builds and installs
  * them one after the other, stopping at the first that fails; declining, or closing Settings first, discards the clones.
  */
-function PluginConsent({ question, offers, agree, decline, onSettled }: { question: string; offers: PluginOffer[]; agree: string; decline: string; onSettled: (settled: Settled) => void }) {
+export function PluginConsent({ question, offers, agree, decline, onSettled }: { question: string; offers: PluginOffer[]; agree: string; decline: string; onSettled: (settled: Settled) => void }) {
   const [installing, setInstalling] = useState<string | null>(null);
   const notSentToInstall = useRef(offers);
   useEffect(() => () => discard(notSentToInstall.current), []);

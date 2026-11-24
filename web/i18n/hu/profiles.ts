@@ -36,6 +36,7 @@ export const profiles: Messages["profiles"] = {
   environmentFormat: {
     onePerLine: "Soronként egy: ",
     afterKeyValue: ", ",
+    toRun: " ahhoz, amit egy parancs az ágens indulásakor kiír, ",
     toUnset: " a törléshez, ",
     comment: "# megjegyzés",
     afterComment: ". Egy ",

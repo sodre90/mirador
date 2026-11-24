@@ -158,6 +158,7 @@ describe("a typed setting's Launch variable", () => {
   test("an empty setting reads its fallback, which the Launch environment sets, unsets or leaves out", () => {
     expect(launchVariableOf(gatewayUrl, "", "GATEWAY_URL=https://gateway.test")).toEqual({ name: "GATEWAY_URL", state: "set", value: "https://gateway.test" });
     expect(launchVariableOf(gatewayUrl, "", "-u GATEWAY_URL")).toEqual({ name: "GATEWAY_URL", state: "unset", value: "" });
+    expect(launchVariableOf(gatewayUrl, "", "GATEWAY_URL=$(print-url)")).toEqual({ name: "GATEWAY_URL", state: "set", value: "$(print-url)" });
     expect(launchVariableOf(gatewayUrl, " ", "")).toEqual({ name: "GATEWAY_URL", state: "missing", value: "" });
   });
 

@@ -1,3 +1,7 @@
+import type { SettingsItemKind } from "../../../shared/settings-file.ts";
+
+const plural = (count: number, one: string, many: string) => (count === 1 ? one : many);
+
 export const settings = {
   title: "Settings",
   close: "Close",
@@ -155,5 +159,52 @@ export const settings = {
     hint: "What macOS may do to your words in the desktop app: fix them as you type a space, and offer the rest of a word in grey. Misspellings stay underlined either way; right-click one to fix it.",
     autocorrect: "Correct spelling automatically",
     predictions: "Inline predictions",
+  },
+  transfer: {
+    needsNewerHost: "The Mirador running here is older than this page. Restart it to export and import settings.",
+    exportTitle: "Export",
+    exportHint:
+      "One file with your profiles, prompt templates, workspaces, plugins and preferences, to bring into Mirador on another machine. Conversations, devices and what this browser remembers stay here.",
+    includeSecrets: "Include secrets",
+    secretsLeftOut: "Environment values, secret plugin settings and voice API keys are left out, to fill in after an import. Pre-launch commands go in as written.",
+    secretsIncluded: "The file will hold your environment values, secret plugin settings and voice API keys. Keep it safe.",
+    export: "Export settings",
+    importTitle: "Import",
+    importHint: "Brings in an exported file. You choose what comes in before anything changes. Profiles and workspaces run commands, so import only a file you trust.",
+    file: "Settings file",
+    reading: "Reading the file…",
+    nothingInFile: "The file has nothing to bring in.",
+    allHereAlready: "All of it is here already.",
+    sameHere: (count: number) => plural(count, "1 is here already as in the file.", `${count} are here already as in the file.`),
+    kinds: {
+      profile: "Profiles",
+      "prompt-template": "Prompt templates",
+      group: "Groups",
+      workspace: "Workspaces",
+      "sidebar-order": "Sidebar",
+      preference: "Preferences",
+      "plugin-settings": "Plugin settings",
+    } satisfies Record<SettingsItemKind, string>,
+    sidebarOrder: "Order of workspaces and groups",
+    group: "Group",
+    overwrites: "Overwrites what is here",
+    overwritesFields: (fields: string) => `Overwrites what is here: ${fields}`,
+    needsValue: (names: string) => `Fill in after the import: ${names}`,
+    import: "Import",
+    dontImport: "Don't import",
+    importing: "Importing…",
+    added: (count: number) => `${count} added`,
+    overwritten: (count: number) => `${count} overwritten`,
+    nothingImported: "Nothing was brought in.",
+    pluginsTitle: "Plugins that aren't installed here",
+    otherCommit: (commit: string) => `The exported one was at commit ${commit}, so this is not the same code.`,
+    pluginInstalled: "Installed, used from the next start",
+    configTitle: "Config file",
+    configHint:
+      "Mirador reads this file as it starts, and adds or overwrites the profiles, prompt templates and workspaces it names. It is written like an exported file; plugins and preferences in it are ignored.",
+    configOff: "Turned off with MIRADOR_CONFIG_FILE.",
+    configNotFound: "No file there when Mirador started.",
+    configRead: (added: number, overwritten: number, same: number) => `Read when Mirador started: ${added} added, ${overwritten} overwritten, ${same} already as in the file.`,
+    inConfigFile: "Set by the config file: what you change here lasts until Mirador's next start.",
   },
 };

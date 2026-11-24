@@ -47,6 +47,7 @@ export const labels: Messages["labels"] = {
     layout: "Elrendezés",
     devices: "Készülékek",
     notifications: "Értesítések",
+    transfer: "Exportálás és importálás",
     about: "Névjegy",
   },
 };

@@ -56,6 +56,7 @@ export const labels: Messages["labels"] = {
     layout: "布局",
     devices: "设备",
     notifications: "通知",
+    transfer: "导出和导入",
     about: "关于",
   },
 };

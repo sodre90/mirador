@@ -38,6 +38,7 @@ export const profiles: Messages["profiles"] = {
   environmentFormat: {
     onePerLine: "Una por línea: ",
     afterKeyValue: ", ",
+    toRun: " para lo que imprime un comando al iniciarse el agente, ",
     toUnset: " para quitar una variable, ",
     comment: "# comentario",
     afterComment: ". Las líneas de un array ",

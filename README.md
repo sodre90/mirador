@@ -172,6 +172,7 @@ Windows support is new and experimental: expect rough edges, and please report w
 - [The desktop app](#the-desktop-app-1)
 - [Working on Mirador in Mirador](#working-on-mirador-in-mirador)
 - [Security](#security)
+- [Moving your settings](#moving-your-settings)
 - [Command line and environment](#command-line-and-environment)
 
 ### The canvas
@@ -250,7 +251,7 @@ Windows support is new and experimental: expect rough edges, and please report w
   - Edits you haven't saved stay while the dialog is open, with a dot on their tab and on their profile in the list, and closing the dialog asks before dropping them.
   - The last profile stays until you create another; the workspaces of a deleted profile move to another one.
   - A profile can take a colour. A dot in it goes before the profile's name on a workspace's chip, in a conversation's header and in the statusline, and its conversations get an edge of it in the sidebar, so a workspace or conversation on the wrong profile stands out.
-  - Environment lines are `KEY=value`, `-u KEY` and `# comment`, so the lines of a `claude_env=( … )` alias paste as they are.
+  - Environment lines are `KEY=value`, `-u KEY` and `# comment`, so the lines of a `claude_env=( … )` alias paste as they are. `KEY=$(command)` runs the command as the agent starts and sets what it prints, so a token can come from a keychain (`$(security find-generic-password -s gateway -w)`) or a vault instead of being stored; when the command fails, the agent doesn't start and you see its output.
   - An optional pre-launch command can start a proxy first; if it fails, you see its output.
   - Each profile has defaults for model, mode, effort, YOLO and questions, and for Claude Code whether idle conversations compact; model, mode and effort show when the agent offers a choice. A conversation takes them when it starts with the profile or moves to it; its own header changes them after that. It has its own agent process and its own log (`logs/<agent>-<name>-<id>.log`). Saving a profile with a changed environment or pre-launch command restarts its agent, and the dialog says so once one of them changed.
   - Profiles, including their tokens, are stored in the SQLite database with owner-only permissions. Secrets are masked on screen.
@@ -394,6 +395,7 @@ Windows support is new and experimental: expect rough edges, and please report w
 - **Voice**: speech recognition, the voice model and the reply voice, each on this Mac, on a server of your own, or off (the voice model can also go through a profile); the language you speak, *Translate into English*, *Send right away* and *Keep talking*; the models on this Mac. See [Voice](#voice).
 - **Layout**: the default arrangement for new conversations, and whether the canvas and terminals start hidden.
 - **Devices** and **Notifications**, as above.
+- **Export and import**: your settings as a file for another machine, an exported file brought in here, and what the config file did when Mirador started. See [Moving your settings](#moving-your-settings).
 - **About**: the Mirador version, and the Claude Code it runs.
 - **Newer versions**: the downloaded app checks GitHub's latest published release when the host starts and every 6 hours; a host running from a checkout fetches the branch it follows and counts the commits it lacks. A banner says so until you dismiss it, and *Settings › About* and the tray menu show it too. *Check for updates* in *Settings › About* looks now, and says whether Mirador is up to date or why it couldn't tell. A release build of the desktop app then downloads the release itself, shows *Downloading…* and offers *Restart to update*. Elsewhere, or where the app cannot replace itself (it says why), they link to the download.
 
@@ -446,10 +448,48 @@ A native window around Mirador, for macOS, Linux and Windows ([full details](des
 - **The network port** exposes no sign-in link, no MCP endpoint and no script-message route.
 - **Secrets stay local**: profile environments are stored owner-only and masked on screen.
 
+### Moving your settings
+
+A file takes your profiles, prompt templates, workspaces and their groups, plugins with their settings, and preferences to Mirador on another machine. *Settings → Export and import* does both halves, and so do two commands:
+
+```bash
+mirador export-settings --out settings.json     # without --out, it prints them
+mirador import-settings --dry-run settings.json # what would change
+mirador import-settings settings.json
+```
+
+- **Secrets stay out** unless you tick *Include secrets* (`--include-secrets`): environment values, secret plugin settings and voice API keys are left out by name, and the import lists them for you to fill in. Commands of an environment (`KEY=$(…)`) and pre-launch commands go in as written. The export command makes the file readable by you alone.
+- **An import adds what is new and asks before it overwrites anything.** Profiles and prompt templates are matched by name, workspaces by folder; importing the same file twice changes nothing. Folders in your home folder are written as `~/…`; a workspace whose folder isn't there is left out, and no folder is made. A profile stays out when one of its name runs another agent here.
+- **Plugins** that aren't installed are offered one by one, with what they run, as in *Plugins…*; one linked from a folder of yours is only named.
+- **Not in the file**: conversations, devices and sign-in codes, push registrations, the network address, plugins' stored data, the paths of programs, and what a browser remembers (theme, language, layout).
+- `export-settings` also works while Mirador is stopped; `import-settings` needs it running. Profiles and workspaces run commands, so import only a file you trust.
+
+A **config file** at `~/.config/mirador/config.json` (`$XDG_CONFIG_HOME`, or the path in `MIRADOR_CONFIG_FILE`; `off` turns it off) has the same format, for dotfiles. Mirador reads it as it starts, and adds or overwrites the profiles, prompt templates and workspaces it names; it never removes any, and ignores plugins and preferences in it. A field left out stays as it is in Mirador. What you change in Mirador in a profile or template the file names lasts until the next start, and their editors say so.
+
+```json
+{
+  "schemaVersion": 1,
+  "profiles": [
+    {
+      "name": "gateway",
+      "harness": "claude",
+      "model": "opus",
+      "environment": {
+        "ANTHROPIC_BASE_URL": "https://gateway.example.com",
+        "ANTHROPIC_AUTH_TOKEN": { "command": "security find-generic-password -s gateway -w" },
+        "ANTHROPIC_API_KEY": { "unset": true }
+      }
+    }
+  ],
+  "promptTemplates": [{ "name": "Standup", "text": "Summarise what changed since {{day}}." }],
+  "workspaces": [{ "path": "~/code/notes" }, { "group": "Work", "workspaces": [{ "path": "~/code/shop-api", "profile": "gateway" }] }]
+}
+```
+
 ### Command line and environment
 
-- `mirador sign-in` prints a one-time sign-in link for a browser on this machine. `mirador invite` prints a one-time invite code (and a link once the machine has an address). `mirador approve` lets in a device that asked to join. `mirador devices` lists devices, even while Mirador is stopped. `mirador when-done` waits for a job, and `mirador message` sends the agent's conversation a message. Put `bin/mirador` on your `PATH` with a link: `ln -s "$PWD/bin/mirador" ~/.local/bin/mirador`.
-- **Environment**: `MIRADOR_PORT` (default 4600; canvas assets use the next port), `MIRADOR_CANVAS_PORT`, `MIRADOR_DATA_DIR` (default `~/.mirador`), `MIRADOR_NETWORK` and `MIRADOR_NETWORK_PORT`, `MIRADOR_PUBLIC_ORIGIN` and `MIRADOR_PUBLIC_CANVAS_ORIGIN`, `MIRADOR_TLS_CERTIFICATE` and `MIRADOR_TLS_KEY`, `MIRADOR_BUN`.
+- `mirador sign-in` prints a one-time sign-in link for a browser on this machine. `mirador invite` prints a one-time invite code (and a link once the machine has an address). `mirador approve` lets in a device that asked to join. `mirador devices` lists devices, even while Mirador is stopped. `mirador when-done` waits for a job, and `mirador message` sends the agent's conversation a message. `mirador export-settings` and `mirador import-settings` [move your settings](#moving-your-settings). Put `bin/mirador` on your `PATH` with a link: `ln -s "$PWD/bin/mirador" ~/.local/bin/mirador`.
+- **Environment**: `MIRADOR_PORT` (default 4600; canvas assets use the next port), `MIRADOR_CANVAS_PORT`, `MIRADOR_DATA_DIR` (default `~/.mirador`), `MIRADOR_CONFIG_FILE` (default `~/.config/mirador/config.json`, or `off`), `MIRADOR_NETWORK` and `MIRADOR_NETWORK_PORT`, `MIRADOR_PUBLIC_ORIGIN` and `MIRADOR_PUBLIC_CANVAS_ORIGIN`, `MIRADOR_TLS_CERTIFICATE` and `MIRADOR_TLS_KEY`, `MIRADOR_BUN`.
 - **State** lives in the data directory: the SQLite database, browser and script tokens, `config.json` (address and network), and agent logs under `logs/`.
 
 ## Develop

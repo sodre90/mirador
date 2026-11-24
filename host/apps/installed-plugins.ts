@@ -110,7 +110,7 @@ async function fetchReleases(folder: string) {
   if (!fetched.ok) throw new HostProblemError({ code: "git-fetch-failed", output: fetched.output });
 }
 
-async function sourceOf(folder: string): Promise<PluginSource> {
+export async function sourceOf(folder: string): Promise<PluginSource> {
   if (lstatSync(folder).isSymbolicLink()) return { kind: "linked", target: resolve(dirname(folder), readlinkSync(folder)) };
   if (!existsSync(join(folder, ".git"))) return { kind: "folder" };
   const [remote, branch, commit, subject] = await Promise.all([

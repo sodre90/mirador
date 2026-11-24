@@ -816,7 +816,14 @@ export function App() {
         <SearchDialog workspaces={state.workspaces} conversations={state.conversations} onOpen={(conversationId) => select(conversationId)} onClose={closeOverlay} />
       )}
       {overlay?.kind === "profiles" && (
-        <ProfilesDialog profiles={state.profiles} conversations={state.conversations} installedAgents={state.installedAgents} pluginRow={overlay.pluginRow} onClose={closeOverlay} />
+        <ProfilesDialog
+          profiles={state.profiles}
+          conversations={state.conversations}
+          installedAgents={state.installedAgents}
+          configFileProfileIds={state.configFile?.profileIds ?? []}
+          pluginRow={overlay.pluginRow}
+          onClose={closeOverlay}
+        />
       )}
       {overlay?.kind === "machines" && (
         <MachinesDialog
@@ -860,6 +867,7 @@ export function App() {
           profiles={state.profiles}
           version={state.version}
           newerVersion={state.newerVersion}
+          configFile={state.configFile}
           layoutDefault={conversationLayouts.layoutDefault}
           onChange={conversationLayouts.setLayoutDefault}
           onClose={closeOverlay}

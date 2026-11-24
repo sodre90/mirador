@@ -191,7 +191,7 @@ export function TemplateFinder({
   );
 }
 
-function TemplateEditor({ template, onCreated }: { template: PromptTemplate | undefined; onCreated: (templateId: string) => void }) {
+function TemplateEditor({ template, inConfigFile, onCreated }: { template: PromptTemplate | undefined; inConfigFile: boolean; onCreated: (templateId: string) => void }) {
   const [name, setName] = useState(template?.name ?? "");
   const [text, setText] = useState(template?.text ?? "");
   const typingAidAttributes = useTypingAidAttributes();
@@ -224,6 +224,7 @@ function TemplateEditor({ template, onCreated }: { template: PromptTemplate | un
       <div className="hint">
         {parameters.length > 0 ? t.chat.templates.asksFor(parameters.join(", ")) : t.chat.templates.howToAsk}
       </div>
+      {inConfigFile && <div className="hint">{t.settings.transfer.inConfigFile}</div>}
       {problem && <div className="form-errors">{problem}</div>}
       <div className="form-actions">
         <button type="submit" disabled={!name.trim() || !text.trim() || problem !== null || unchanged}>
@@ -240,7 +241,7 @@ function TemplateEditor({ template, onCreated }: { template: PromptTemplate | un
 }
 
 /** Settings' list of prompt templates, with an editor for the one picked or a new one. */
-export function PromptTemplateSettings({ templates }: { templates: PromptTemplate[] }) {
+export function PromptTemplateSettings({ templates, configFileTemplateIds }: { templates: PromptTemplate[]; configFileTemplateIds: string[] }) {
   const [selectedId, setSelectedId] = useState(templates[0]?.id ?? NEW_TEMPLATE);
   const selected = templates.find(({ id }) => id === selectedId);
   const [createdId, setCreatedId] = useState<string | null>(null);
@@ -269,7 +270,7 @@ export function PromptTemplateSettings({ templates }: { templates: PromptTemplat
             {t.chat.templates.addNew}
           </li>
         </ul>
-        <TemplateEditor key={selected?.id ?? NEW_TEMPLATE} template={selected} onCreated={setCreatedId} />
+        <TemplateEditor key={selected?.id ?? NEW_TEMPLATE} template={selected} inConfigFile={configFileTemplateIds.includes(selectedId)} onCreated={setCreatedId} />
       </div>
     </>
   );

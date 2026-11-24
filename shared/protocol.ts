@@ -41,6 +41,7 @@ import type {
 } from "./model.ts";
 import type { ChangeList, ChangeScope, Committable, FileChanges, Landable, Landed, MadeCommit, ProjectFiles } from "./changes.ts";
 import type { ConversationOrder } from "./conversation-order.ts";
+import type { ConfigFileStatus, SettingsImportReport, SettingsPlan } from "./settings-file.ts";
 import type { HostProblem } from "./host-problems.ts";
 import type { PageLibraries } from "./canvas-export.ts";
 import type { InviteTunnel } from "./tunnel.ts";
@@ -134,6 +135,12 @@ export type ClientMessage =
   | { type: "settings.set-conversation-order"; order: ConversationOrder }
   | { type: "settings.set-keep-deleted-canvas"; keep: KeepDeletedCanvas }
   | { type: "settings.set-older-after"; olderAfter: OlderAfter }
+  /** The settings as a file's text; answered with "settings.exported". */
+  | { type: "settings.export"; requestId: string; includeSecrets: boolean }
+  /** What importing a settings file's text would do; answered with "settings.import-planned". */
+  | { type: "settings.plan-import"; requestId: string; text: string }
+  /** Brings in the plan's chosen items, by id; answered with "settings.imported". */
+  | { type: "settings.import"; requestId: string; text: string; items: string[] }
   | { type: "settings.set-claude-program"; path: string }
   /** Looks for a newer Mirador now; what it finds comes as newer-version.found, before the answer. */
   | { type: "newer-version.check"; requestId: string }
@@ -465,6 +472,8 @@ export type ServerMessage =
       reminderMorning?: number;
       /** Missing from a host older than ordering conversations. */
       conversationOrder?: ConversationOrder;
+      /** Only for Mirador's own pages; null when there is to be none. Missing from a host older than exporting and importing settings. */
+      configFile?: ConfigFileStatus | null;
       olderAfter: OlderAfter;
       /** The kinds of notification a phone may register for pushes of. Missing from a host older than reminders, which refuses a registration with a kind it doesn't know. */
       pushKinds?: NotificationKind[];
@@ -658,6 +667,9 @@ export type ServerMessage =
   /** problem says why it was not approved, e.g. a wrong number, which denies it. */
   | { type: "join-request.answered"; requestId: string; problem: string | null; problemAbout?: HostProblem }
   | { type: "settings.saved"; requestId: string; problem: string | null; problemAbout?: HostProblem }
+  | { type: "settings.exported"; requestId: string; text: string | null; problem: string | null; problemAbout?: HostProblem }
+  | { type: "settings.import-planned"; requestId: string; plan: SettingsPlan | null; problem: string | null; problemAbout?: HostProblem }
+  | { type: "settings.imported"; requestId: string; report: SettingsImportReport | null; problem: string | null; problemAbout?: HostProblem }
   /** The conversation with the newest hit first. */
   | { type: "search.results"; requestId: string; conversations: ConversationMatches[] };
 

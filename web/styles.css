@@ -7123,6 +7123,95 @@ input.script-program {
   max-width: 100%;
 }
 
+.transfer-file {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.transfer-plan {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.transfer-plan p {
+  margin: 0;
+}
+
+.transfer-plan fieldset {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.transfer-plan legend {
+  padding: 0;
+  margin-bottom: 4px;
+  color: var(--muted);
+  font-size: calc(12px * var(--font-scale));
+}
+
+.transfer-plan label {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.transfer-item {
+  overflow-wrap: anywhere;
+}
+
+.transfer-overwrites,
+.transfer-needs,
+.transfer-repository {
+  display: block;
+  overflow-wrap: anywhere;
+  color: var(--muted);
+  font-size: calc(12px * var(--font-scale));
+}
+
+.transfer-overwrites,
+.hint.transfer-warning {
+  color: var(--warn-on-soft);
+}
+
+.transfer-problem {
+  margin: 6px 0 0;
+  color: var(--danger);
+  font-size: calc(12px * var(--font-scale));
+  white-space: pre-wrap;
+}
+
+.modal.settings h4 {
+  margin: 12px 0 4px;
+  font-size: calc(12px * var(--font-scale));
+  font-weight: 600;
+}
+
+.transfer-plugins {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.transfer-plugins li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 10px;
+}
+
 .picture-choice {
   margin-top: 14px;
 }

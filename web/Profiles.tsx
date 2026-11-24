@@ -248,6 +248,7 @@ function ProfileEditor({
   conversations,
   installedAgents,
   isOnlyProfile = false,
+  inConfigFile = false,
   openPlugin,
   onMoreOptions,
   onSaved,
@@ -263,6 +264,7 @@ function ProfileEditor({
   conversations: Conversation[];
   installedAgents: HarnessId[];
   isOnlyProfile?: boolean;
+  inConfigFile?: boolean;
   /** The plugin whose row the Plugins tab opens with. */
   openPlugin?: string;
   /** Given while the editor shows only what a first profile needs. */
@@ -460,6 +462,8 @@ function ProfileEditor({
               {environmentFormat.onePerLine}
               <code>KEY=value</code>
               {environmentFormat.afterKeyValue}
+              <code>KEY=$(command)</code>
+              {environmentFormat.toRun}
               <code>-u KEY</code>
               {environmentFormat.toUnset}
               <code>{environmentFormat.comment}</code>
@@ -573,6 +577,7 @@ function ProfileEditor({
         )}
         {actions}
         {restartsAgent && <div className="hint">{words.restartHint}</div>}
+        {inConfigFile && <div className="hint">{t.settings.transfer.inConfigFile}</div>}
       </footer>
     </form>
   );
@@ -624,12 +629,14 @@ export function ProfilesDialog({
   profiles,
   conversations,
   installedAgents,
+  configFileProfileIds,
   pluginRow: openedAt,
   onClose,
 }: {
   profiles: Profile[];
   conversations: Conversation[];
   installedAgents: HarnessId[];
+  configFileProfileIds: string[];
   /** The plugin row to open on the profile's Plugins tab, until another profile is picked. */
   pluginRow?: { profileId: string; plugin: string };
   onClose: () => void;
@@ -730,6 +737,7 @@ export function ProfilesDialog({
             conversations={conversations}
             installedAgents={installedAgents}
             isOnlyProfile={profiles.length === 1 && selected !== undefined}
+            inConfigFile={configFileProfileIds.includes(selectedKey)}
             openPlugin={pluginRow?.profileId === selectedKey ? pluginRow.plugin : undefined}
             onSaved={forgetDraftOnceSaved}
           />
