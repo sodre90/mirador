@@ -1,5 +1,5 @@
 import { expect, test, type Locator } from "@playwright/test";
-import { addWorkspace, signIn, startConversation } from "./helpers.ts";
+import { addWorkspace, createRoom, signIn, startConversation } from "./helpers.ts";
 import { TestHost } from "./test-host.ts";
 
 const host = new TestHost();
@@ -14,11 +14,7 @@ test.afterAll(async () => {
 const selectionOf = (composer: Locator) => composer.evaluate((box: HTMLTextAreaElement) => [box.selectionStart, box.selectionEnd]);
 const putCaret = (composer: Locator, at: number) => composer.evaluate((box: HTMLTextAreaElement, offset) => box.setSelectionRange(offset, offset), at);
 
-test("on macOS, Home and End (fn+← and fn+→) move to the start and end of the line in the message box, and Shift selects", async ({ page }) => {
-  await signIn(page, host);
-  await addWorkspace(page, host.projectDir);
-  await startConversation(page);
-  const composer = page.locator(".composer textarea");
+async function expectHomeAndEndToMoveAlongTheLine(composer: Locator) {
   const first = "first line";
   const long = Array.from({ length: 40 }, (_, index) => `word${index}`).join(" ");
   await composer.fill(`${first}\nsecond line\n${long}`);
@@ -49,4 +45,17 @@ test("on macOS, Home and End (fn+← and fn+→) move to the start and end of th
     expect(lineEnd).toBeGreaterThan(longStart);
     expect(lineEnd).toBeLessThan(end);
   });
+}
+
+test("on macOS, Home and End (fn+← and fn+→) move to the start and end of the line in the message box, and Shift selects", async ({ page }) => {
+  await signIn(page, host);
+  await addWorkspace(page, host.projectDir);
+  await startConversation(page);
+  await expectHomeAndEndToMoveAlongTheLine(page.locator(".composer textarea"));
+});
+
+test("so they do in a room's message box", async ({ page }) => {
+  await signIn(page, host);
+  await createRoom(page, "Keys", []);
+  await expectHomeAndEndToMoveAlongTheLine(page.locator(".room-composer textarea"));
 });

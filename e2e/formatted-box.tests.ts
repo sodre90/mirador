@@ -498,6 +498,17 @@ export function formattedBoxTests() {
       await expect(roomBox).toHaveText("");
     });
 
+    await test.step("Home and End move to the start and end of the line", async () => {
+      await page.keyboard.type("middle");
+      await page.keyboard.press("Home");
+      await page.keyboard.type("start ");
+      await page.keyboard.press("End");
+      await page.keyboard.type(" end");
+      await expect.poll(() => boxValue(roomBox)).toBe("start middle end");
+      await page.keyboard.press("ControlOrMeta+a");
+      await page.keyboard.press("Backspace");
+    });
+
     await test.step("Aa shows the formatting buttons over the box", async () => {
       await expect(bar).toHaveCount(0);
       await page.getByRole("button", { name: "Formatting" }).click();

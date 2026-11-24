@@ -153,7 +153,6 @@ interface Props {
   text: string;
   facade: RefObject<HTMLTextAreaElement | null>;
   placeholder: string;
-  label?: string;
   attributes: Record<string, unknown>;
   style?: CSSProperties | undefined;
   onText: (text: string, caret: number) => void;
@@ -397,7 +396,7 @@ export function FormattedBox(props: Props) {
               ref={setElement}
               className="formatted-box"
               style={grownTo(props.style)}
-              aria-label={props.label ?? "Message"}
+              aria-label={props.placeholder}
               aria-placeholder={props.placeholder}
               placeholder={<div className="formatted-box-placeholder">{props.placeholder}</div>}
             />

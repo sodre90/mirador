@@ -54,6 +54,7 @@ import { hints } from "./hints.ts";
 import type { RoomSettingsTab } from "./i18n/en/rooms.ts";
 import { formatNumber, t } from "./i18n/index.ts";
 import { LayoutToggles } from "./LayoutToggles.tsx";
+import { movedCaretToLineEdge } from "./line-edge-keys.ts";
 import { LineIcon } from "./LineIcon.tsx";
 import { MarkdownText, MentionsOfMessage, SlackMessageText } from "./Markdown.tsx";
 import { useMessageBox } from "./message-box.ts";
@@ -279,7 +280,7 @@ function RoomComposer({
     setTagged([]);
   };
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (tagMenu.onKeyDown(event)) return;
+    if (tagMenu.onKeyDown(event) || movedCaretToLineEdge(event.nativeEvent)) return;
     if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing || !enterSends(event)) return;
     event.preventDefault();
     // The formatted box tells its text as it changes, but this handler may be the last render's, from before.
@@ -290,7 +291,7 @@ function RoomComposer({
       <div className="composer">
         {tagMenu.menu}
         {messageBox === "formatted" ? (
-          <FormattedBox text={text} facade={textarea} placeholder={placeholder} label={placeholder} attributes={boxAttributes} onText={typed} onCaret={setCaret} onKeyDown={onKeyDown} />
+          <FormattedBox text={text} facade={textarea} placeholder={placeholder} attributes={boxAttributes} onText={typed} onCaret={setCaret} onKeyDown={onKeyDown} />
         ) : (
           <textarea
             ref={textarea}
