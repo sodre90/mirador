@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { expect, test, type Locator, type Page } from "@playwright/test";
-import { addWorkspace, createProfile, createRoom, inviteIntoRoom, joinRoom, nameMachine, nameOwnProfile, openRoomMenu, openSettings, reachedAtOwnPort, reloadFromRestartedHost, roomCard, signIn } from "./helpers.ts";
+import { addWorkspace, createProfile, createRoom, inviteIntoRoom, joinRoom, nameMachine, nameOwnProfile, openRoomMenu, openRoomSettings, openSettings, reachedAtOwnPort, reloadFromRestartedHost, roomCard, signIn } from "./helpers.ts";
 import { TestHost, writeBunProgram } from "./test-host.ts";
 
 /** Ann's machine, with the rooms Dora is invited to. */
@@ -55,7 +55,7 @@ async function leaves(visitor: Page, room: string, menu: Locator) {
 
 const listedMachines = (dialog: ReturnType<Page["getByRole"]>) => dialog.locator(".machine-list .machine-name");
 
-test("a person leaves a room they were invited to from their list, and the last one on its machine while that is off, which then goes from their computer", async ({ page, browser }) => {
+test("a person leaves a room they were invited to from their list, and the last one on its machine while that is off, which then goes from their computer, as one whose owner signed them out does by its own menu", async ({ page, browser }) => {
   await signIn(page, owners);
   await nameOwnProfile(page, "Ann");
   await nameMachine(page, "Ann's machine");
@@ -134,6 +134,25 @@ test("a person leaves a room they were invited to from their list, and the last 
   await test.step("a new invite brings the machine back with its room", async () => {
     await joinsAndSees(visitor, "Garden", await inviteIntoRoom(page, "Garden"));
     await expect(invitedRooms(visitor)).toHaveText(["Garden"]);
+  });
+
+  await test.step("signed out by its owner, the machine is listed in the rooms' place, and goes from their computer by its own menu once confirmed", async () => {
+    const settings = await openRoomSettings(page, "Garden");
+    await settings.getByRole("button", { name: "Remove Dora" }).click();
+    await settings.getByRole("button", { name: "Confirm: Remove Dora" }).click();
+    await settings.getByRole("button", { name: "Close" }).click();
+    await expect(subline(visitor, "Ann's machine")).toHaveText("signed out by its owner");
+    await expect(visitor.getByRole("region", { name: "Join Ann's machine" })).toBeVisible();
+    const menu = await openRoomMenu(visitor, "Ann's machine");
+    await menu.getByRole("menuitem", { name: "Remove Ann's machine", exact: true }).click();
+    const asked = menu.getByRole("menuitem", { name: "Confirm: Remove Ann's machine" });
+    await expect(asked).toHaveText("Remove?");
+    await expect(roomCard(visitor, "Ann's machine")).toBeVisible();
+    await asked.click();
+    await expect(visitor.getByRole("heading", { name: "Invited" })).toHaveCount(0);
+    await expect(visitor.getByRole("region", { name: "Join Ann's machine" })).toHaveCount(0);
+    await visitor.locator(".sidebar").getByRole("button", { name: "Machines…" }).click();
+    await expect(listedMachines(visitor.getByRole("dialog", { name: "Machines" }))).toHaveCount(0);
   });
   await visitor.close();
 });
