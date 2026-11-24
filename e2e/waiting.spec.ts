@@ -1,7 +1,8 @@
+import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test } from "@playwright/test";
 import { FakeClaudeApi, fakeClaudeEnvironment } from "./fake-claude-api.ts";
-import { addWorkspace, answerCanvasQuestion, callCanvasTool, openCanvasHistory, openSettings, sendMessage, signIn, startConversation, waitForTurnToEnd, conversationSettings } from "./helpers.ts";
+import { addWorkspace, addWorkspaceFromSidebar, answerCanvasQuestion, callCanvasTool, openCanvasHistory, openSettings, sendMessage, signIn, startConversation, waitForTurnToEnd, conversationSettings, workspaceCard } from "./helpers.ts";
 import { TestHost } from "./test-host.ts";
 
 const api = new FakeClaudeApi();
@@ -106,4 +107,33 @@ test("the sidebar marks the conversations waiting for you, in the look chosen in
     await expect(history.locator(".history-entry", { hasText: "Which layout now?" })).toContainText("withdrawn");
     await expect(waitingList.locator("li")).toHaveCount(1);
   });
+});
+
+test("the workspace heading keeps + on its row at the default sidebar width, with the waiting count and the hover icons", async ({ page }) => {
+  const directory = join(host.root, "heading-row");
+  mkdirSync(directory, { recursive: true });
+  await signIn(page, host);
+  await addWorkspaceFromSidebar(page, directory);
+  const heading = workspaceCard(page, directory).locator(":scope > header");
+  const previousUrl = page.url();
+  await heading.getByRole("button", { name: "+ New conversation" }).click();
+  await expect(page).not.toHaveURL(previousUrl);
+  await expect(page.locator(".chat-header:visible .settings-model")).toBeAttached();
+  askInBackground(page.url().match(/#\/c\/(.+)$/)![1]!, "Which layout?");
+  await expect(heading.locator(".waiting-count")).toHaveText("1");
+  const plus = heading.getByRole("button", { name: "+ New conversation" });
+  const viewport = page.viewportSize()!;
+  await page.mouse.click(viewport.width - 5, viewport.height - 5);
+  const plusAtRest = await plus.boundingBox();
+
+  await heading.hover();
+  const actions = heading.locator("button.workspace-action");
+  await expect(actions).toHaveCount(4);
+  for (const icon of await actions.locator("svg").all()) await expect(icon).toBeVisible();
+  expect(await plus.boundingBox()).toEqual(plusAtRest);
+  const foldRow = (await heading.locator("button.workspace-fold").boundingBox())!;
+  const centers = await heading
+    .locator("button.workspace-action, button.workspace-new")
+    .evaluateAll((buttons) => buttons.map((button) => { const { top, height } = button.getBoundingClientRect(); return top + height / 2; }));
+  expect(centers.every((center) => center > foldRow.y && center < foldRow.y + foldRow.height)).toBe(true);
 });

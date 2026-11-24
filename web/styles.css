@@ -1005,6 +1005,8 @@ body.resizing iframe {
 
 :is(.workspace, .rooms) > header {
   flex-wrap: wrap;
+  /* Tight enough that the waiting count and the hover icons still fit beside the name at the default sidebar width. */
+  column-gap: 4px;
   row-gap: 3px;
   padding: 0 2px 6px;
 }
