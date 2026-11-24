@@ -30,6 +30,8 @@ const lastTypedText = ({ messages }: MessagesRequest) =>
     .at(-1)!
     .trim();
 
+const asksAfterCutOff = ({ messages }: MessagesRequest) => textOf(messages.findLast(({ role }) => role === "user")?.content ?? "").includes(CUT_OFF_NOTICE);
+
 /** A tool's result as the tool gave it: Claude Code may add its system reminders, such as how many tokens are left, after it. */
 const withoutSystemReminders = (text: string) => text.replace(/\s*<system-reminder>[\s\S]*?<\/system-reminder>/g, "").trim();
 
@@ -51,7 +53,7 @@ const RUN = "RUN ";
 const SUBAGENT = "SUBAGENT ";
 const ADVISOR_AFTER_BASH = "ADVISOR AFTER BASH ";
 const ADVISOR_CUT_OFF = "ADVISOR CUT OFF ";
-/** How Claude Code's own message begins when it asks again after a reply stopped streaming. */
+/** How Claude Code's own message, a system reminder since 2.1.331, begins when it asks again after a reply stopped streaming. */
 const CUT_OFF_NOTICE = "Your response above was cut off mid-stream";
 const WRITE = "WRITE ";
 const KEEP_WRITING = "KEEP WRITING ";
@@ -253,7 +255,7 @@ export class FakeClaudeApi {
       this.runAfterCutOff = typed.slice(ADVISOR_CUT_OFF.length);
       return this.send(body, response, [this.advisorCall()], { pingsAfterBlocks: true });
     }
-    if (this.runAfterCutOff !== null && typed.startsWith(CUT_OFF_NOTICE)) {
+    if (this.runAfterCutOff !== null && asksAfterCutOff(body)) {
       const command = this.runAfterCutOff;
       this.runAfterCutOff = null;
       return this.send(body, response, [this.bashCall(command, false)]);
