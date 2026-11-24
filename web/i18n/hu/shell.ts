@@ -111,7 +111,7 @@ export const shell: Messages["shell"] = {
     sideChatsAsInSettingsDetail: (access) => `A Beállítások szerint: ${access}.`,
     sideChatsReadOnlyDetail: "Olvasnak és keresnek, de semmit nem módosítanak.",
     sideChatsCanChangeDetail: "A beszélgetésük módjában dolgoznak, miközben annak ágense ugyanezeket a fájlokat szerkesztheti.",
-    sideChatsOnlySome: "Ez a Claude Code, a Codex és az Antigravity mellékszálaira vonatkozik. Más ágensek mellékszálai mindig módosíthatnak fájlokat, egy szoba beszélgetéseinek mellékszálai pedig mindig csak olvashatnak.",
+    sideChatsOnlySome: "Ez a Claude Code, a Codex és az Antigravity mellékszálaira vonatkozik, ahol egy mellékszálat sem állítottál át a beszélgetésben. Más ágensek mellékszálai mindig módosíthatnak fájlokat, egy szoba beszélgetéseinek mellékszálai pedig mindig csak olvashatnak.",
   },
   workspaceSandbox: {
     open: "Sandbox",

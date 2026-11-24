@@ -4,6 +4,7 @@ export const problems: Messages["problems"] = {
   fixed: {
     "sandbox-held-files-unsettled": "一个沙箱中的 Agent 改动了此文件夹中的一个 Agent 配置文件，Mirador 无法将其恢复，因此这个 Agent 没有在这里启动。",
     "sandboxed-room-side-chat": "沙箱房间中不能使用旁聊：它会在这台电脑上运行。",
+    "side-chat-access-no-choice": "无法切换这个旁聊可以做什么：它的 Agent 无法限制为只读，或者它的对话在为房间工作。",
     "sandboxed-room-command": "沙箱房间中不能运行 ! 命令：它会在这台电脑上、在其 Agent 改动的文件夹中运行。",
     "sandboxed-workspace-command": "沙箱工作区中不能运行 ! 命令：它会在这台电脑上、在其 Agent 改动的文件夹中运行。",
     "sandboxed-workspace-outside-session": "这个工作区在沙箱中运行它的 Agent，沙箱无法继续这台电脑上的会话：请开始一个新对话。",

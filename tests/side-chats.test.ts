@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { DEFAULT_SIDE_CHAT_ACCESS, type Conversation, type StoredEvent } from "../shared/model.ts";
+import { DEFAULT_SIDE_CHAT_ACCESS, type Conversation, type SideChatAccess, type StoredEvent } from "../shared/model.ts";
 import {
   answerForMainChat,
   askedOutsideQuotes,
@@ -7,6 +7,8 @@ import {
   conversationAsText,
   isSideChatBrief,
   quoted,
+  sideChatAccessIsAChoice,
+  sideChatAccessNote,
   sideChatBrief,
   sideChatIsReadOnly,
   sideChatMayChangeFiles,
@@ -69,6 +71,12 @@ describe("what a side chat's agent hears first", () => {
     expect(isSideChatBrief(changingFiles)).toBe(true);
   });
 
+  test("a switch of what the side chat may do is told in the brief's own words, apart from the message", () => {
+    expect(sideChatAccessNote("can-change-files")).toContain("change files or run commands where the user asks you to");
+    expect(sideChatAccessNote("read-only")).toContain("do not change files");
+    expect(isSideChatBrief(sideChatAccessNote("read-only"))).toBe(true);
+  });
+
   test("the conversation as text keeps the newest messages when it is too long", () => {
     const events = [userSaid(1, "first question"), agentSaid(2, "first answer"), userSaid(3, "second question"), agentSaid(4, "second answer")];
     expect(conversationAsText(events)).toBe("User: first question\n\nAssistant: first answer\n\nUser: second question\n\nAssistant: second answer");
@@ -106,6 +114,22 @@ describe("whether a new side chat may change files", () => {
     expect(sideChatMayChangeFiles({ ...lettingChanges, workspaceChoice: "read-only" })).toBe(false);
     expect(sideChatMayChangeFiles({ ...lettingChanges, setting: "read-only", workspaceChoice: "can-change-files" })).toBe(true);
     expect(sideChatMayChangeFiles({ ...lettingChanges, setting: DEFAULT_SIDE_CHAT_ACCESS })).toBe(false);
+  });
+
+  test("follows what the conversation's side chats were switched to ahead of the workspace and Settings, within the same bounds", () => {
+    const switchedTo = (sideChatAccess: SideChatAccess) => ({ ...ownConversation, sideChatAccess });
+    expect(sideChatMayChangeFiles({ ...lettingChanges, setting: "read-only", workspaceChoice: "read-only", parent: switchedTo("can-change-files") })).toBe(true);
+    expect(sideChatMayChangeFiles({ ...lettingChanges, workspaceChoice: "can-change-files", parent: switchedTo("read-only") })).toBe(false);
+    expect(sideChatMayChangeFiles({ ...lettingChanges, openedByOwner: false, parent: switchedTo("can-change-files") })).toBe(false);
+    expect(sideChatMayChangeFiles({ ...lettingChanges, parent: { ...switchedTo("can-change-files"), roomId: "room" } })).toBe(false);
+    expect(sideChatMayChangeFiles({ ...lettingChanges, parent: { ...switchedTo("can-change-files"), harness: "opencode" } })).toBe(false);
+  });
+
+  test("can be switched only where an agent can be held to reading, outside rooms", () => {
+    expect(sideChatAccessIsAChoice(ownConversation)).toBe(true);
+    expect(sideChatAccessIsAChoice({ ...ownConversation, harness: "opencode" })).toBe(false);
+    expect(sideChatAccessIsAChoice({ ...ownConversation, roomId: "room" })).toBe(false);
+    expect(sideChatAccessIsAChoice({ ...ownConversation, broughtIntoRoom: true })).toBe(false);
   });
 
   test("is only for the owner's side chats of their own conversations", () => {

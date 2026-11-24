@@ -1660,6 +1660,8 @@ export function startServer(services: HostServices) {
         return reply({ type: "conversation.fork-checked", requestId: message.requestId, forkable: conversations.canFork(message.conversationId) });
       case "conversation.side-chat.start":
         return reply({ type: "conversation.side-chat.started", requestId: message.requestId, sideChatId: conversations.startSideChat(message.conversationId, message.text, socket.data.personId).id });
+      case "conversation.set-side-chat-access":
+        return conversations.switchSideChatAccess(message.conversationId, message.sideChatAccess);
       case "conversation.side-chat.promote":
         return conversations.promoteSideChat(message.conversationId);
       case "conversation.delete":

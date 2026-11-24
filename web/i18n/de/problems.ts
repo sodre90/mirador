@@ -4,6 +4,7 @@ export const problems: Messages["problems"] = {
   fixed: {
     "sandbox-held-files-unsettled": "Ein Agent in einer Sandbox hat in diesem Ordner eine Agenten-Konfigurationsdatei geändert, die Mirador nicht zurücksetzen konnte, daher ist dieser Agent hier nicht gestartet.",
     "sandboxed-room-side-chat": "Nebenchats laufen nicht in einem Raum mit Sandbox: Sie liefen auf diesem Computer.",
+    "side-chat-access-no-choice": "Was dieser Nebenchat darf, lässt sich nicht umstellen: Sein Agent lässt sich nicht aufs Lesen beschränken, oder seine Unterhaltung arbeitet für einen Raum.",
     "sandboxed-room-command": "!-Befehle laufen nicht in einem Raum mit Sandbox: Sie liefen auf diesem Computer, im Ordner, den seine Agenten ändern.",
     "sandboxed-workspace-command": "!-Befehle laufen nicht in einem Arbeitsbereich mit Sandbox: Sie liefen auf diesem Computer, im Ordner, den seine Agenten ändern.",
     "sandboxed-workspace-outside-session": "Dieser Arbeitsbereich lässt seine Agenten in einer Sandbox laufen, die keine Sitzung von diesem Computer fortsetzen kann: Beginne stattdessen eine neue Unterhaltung.",

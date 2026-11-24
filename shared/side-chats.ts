@@ -21,6 +21,18 @@ const holdsSideChatsToReading: Record<HarnessId, boolean> = { claude: true, code
 
 export const sideChatModeOf = (harness: HarnessId) => readOnlyModes[harness];
 
+/** Each agent's mode that asks the most and still lets it change files: Claude Code and Antigravity ask before edits there, Codex before it leaves the folder. */
+const fileChangingModes: Record<HarnessId, string | null> = { claude: "default", codex: "workspace-write", antigravity: "default", opencode: null, pi: null, copilot: null };
+
+export const fileChangingModeOf = (harness: HarnessId) => fileChangingModes[harness];
+
+/**
+ * Whether a turn goes on in the mode it started in, whatever mode its session is switched to meanwhile. Codex's does: its
+ * adapter passes the mode along with a message only. Claude Code and Antigravity, as tried on each in November 2026, ask
+ * about the next edit of a turn switched to plan mode.
+ */
+export const keepsModeThroughTurn = (harness: HarnessId) => harness === "codex";
+
 /** Whether the agent itself can stop a side chat from changing files and running commands, rather than only ask it not to. */
 export const canHoldSideChatsToReading = (harness: HarnessId) => holdsSideChatsToReading[harness];
 
@@ -28,11 +40,13 @@ export const canHoldSideChatsToReading = (harness: HarnessId) => holdsSideChatsT
 export const sideChatIsReadOnly = ({ harness, sideChatMayChangeFiles }: Pick<Conversation, "harness" | "sideChatMayChangeFiles">) =>
   canHoldSideChatsToReading(harness) && !sideChatMayChangeFiles;
 
+export const sideChatAccessOf = ({ sideChatMayChangeFiles }: Pick<Conversation, "sideChatMayChangeFiles">): SideChatAccess => (sideChatMayChangeFiles ? "can-change-files" : "read-only");
+
 export const isSideChat = (conversation: Pick<Conversation, "sideChatOf">) => conversation.sideChatOf !== undefined;
 
 /** Who opens a new side chat, beside which conversation, and what its workspace and Settings say side chats may do. */
 export interface SideChatOpening {
-  parent: Pick<Conversation, "harness" | "roomId" | "broughtIntoRoom">;
+  parent: Pick<Conversation, "harness" | "roomId" | "broughtIntoRoom" | "sideChatAccess">;
   openedByOwner: boolean;
   /** Null for what Settings say. */
   workspaceChoice: SideChatAccess | null;
@@ -40,13 +54,19 @@ export interface SideChatOpening {
 }
 
 /**
- * Whether a new side chat may change files, in the mode of the conversation it is beside: only one the owner opens, of a
- * conversation that works for no room, where its workspace, else Settings, lets side chats change files. The choice is
- * only for an agent that can hold a side chat to reading: another can't be stopped, and is only asked to read.
+ * Whether there is a choice of what the conversation's side chats may do: only where its agent can hold one to reading, as
+ * another can't be stopped and is only asked to read, and where it works for no room, as a room's only read.
+ */
+export const sideChatAccessIsAChoice = (parent: Pick<Conversation, "harness" | "roomId" | "broughtIntoRoom">) =>
+  canHoldSideChatsToReading(parent.harness) && !worksForARoom(parent);
+
+/**
+ * Whether a new side chat may change files, in the mode of the conversation it is beside: only one the owner opens, where
+ * there is a choice and the conversation, else its workspace, else Settings, lets its side chats change files.
  */
 export function sideChatMayChangeFiles({ parent, openedByOwner, workspaceChoice, setting }: SideChatOpening): boolean {
-  if (!canHoldSideChatsToReading(parent.harness) || worksForARoom(parent) || !openedByOwner) return false;
-  return (workspaceChoice ?? setting) === "can-change-files";
+  if (!sideChatAccessIsAChoice(parent) || !openedByOwner) return false;
+  return (parent.sideChatAccess ?? workspaceChoice ?? setting) === "can-change-files";
 }
 
 /** The text as a Markdown quote, each of its lines quoted. */
@@ -112,6 +132,10 @@ export function sideChatBrief(handover: string | null, mayChangeFiles: boolean):
     `</${SIDE_CHAT_BRIEF_TAG}>`,
   ].join("\n");
 }
+
+/** What the agent of a side chat hears with the next message once the user switched what the side chat may do. */
+export const sideChatAccessNote = (access: SideChatAccess) =>
+  [`<${SIDE_CHAT_BRIEF_TAG}>`, "The user switched what this side chat may do.", access === "can-change-files" ? CHANGING_FILES : READING_ONLY, `</${SIDE_CHAT_BRIEF_TAG}>`].join("\n");
 
 export const isSideChatBrief = (text: string) => text.startsWith(`<${SIDE_CHAT_BRIEF_TAG}>`);
 

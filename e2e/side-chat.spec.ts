@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { addWorkspace, clickWorkspaceButton, createProfile, openSettings, sendMessage, signIn, startConversation, waitForTurnToEnd, workspaceCard } from "./helpers.ts";
 import { TestHost, writeBunProgram } from "./test-host.ts";
+import type { ClientMessage } from "../shared/protocol.ts";
 
 const host = new TestHost({ fakePrograms: true });
 const promptsFile = join(host.root, "prompts");
@@ -52,19 +53,19 @@ async function startOn(profile: string, agent = "opencode") {
   return startConversation(page, { withModels: false });
 }
 
-/** What the host answers a person's own socket that asks to open a side chat beside the conversation. */
-async function personAsksForSideChat(personPage: Page, conversationId: string) {
+/** What the host answers a person's own socket that sends the message. */
+async function personSends(personPage: Page, message: ClientMessage) {
   return personPage.evaluate(
-    (beside) =>
+    (sent) =>
       new Promise<string>((answered) => {
         const socket = new WebSocket(new URL("ws", location.href.replace(/^http/, "ws")));
         socket.onmessage = ({ data }) => {
           const message = JSON.parse(String(data));
-          if (message.type === "snapshot") socket.send(JSON.stringify({ type: "conversation.side-chat.start", requestId: "asked", conversationId: beside, text: "CHOICES" }));
+          if (message.type === "snapshot") socket.send(JSON.stringify(sent));
           if (message.type === "error" || message.type === "conversation.side-chat.started") answered(message.problem?.code ?? message.type);
         };
       }),
-    conversationId,
+    message,
   );
 }
 
@@ -317,14 +318,93 @@ test("Antigravity's side chats only read, unless Settings or their workspace let
     await expect(sideChat().locator(".side-chat-access")).toHaveText("Read-only");
   });
 
-  await test.step("a person signed in on their own browser is refused a side chat beside the owner's conversation", async () => {
+  await test.step("a person signed in on their own browser is refused a side chat beside the owner's conversation, and what its side chats may do", async () => {
     const mia = host.admitPerson("Mia");
     const miaContext = await browser.newContext();
     await miaContext.addCookies([mia.cookie]);
     const miaPage = await miaContext.newPage();
     await miaPage.goto(host.origin);
-    expect(await personAsksForSideChat(miaPage, mainId)).toBe("only-the-owner");
+    expect(await personSends(miaPage, { type: "conversation.side-chat.start", requestId: "asked", conversationId: mainId, text: "CHOICES" })).toBe("only-the-owner");
+    expect(await personSends(miaPage, { type: "conversation.set-side-chat-access", conversationId: mainId, sideChatAccess: "can-change-files" })).toBe("only-the-owner");
     await miaContext.close();
     await expect(sidebarRow(mainId).locator(".delegated-toggle")).toHaveAccessibleName("3 side chats");
   });
+});
+
+test("a side chat is switched to change files and back while it is open, and its conversation's next side chats start as it was left", async () => {
+  const switched = () => sideChat().getByLabel("What this side chat may do");
+  const label = () => sideChat().locator(".side-chat-access");
+  const askInSideChat = async (text: string) => {
+    const composer = sideChat().locator(".composer textarea");
+    await composer.fill(text);
+    await composer.press("Enter");
+  };
+  const mainId = await startOn("Agy", "Antigravity");
+  await sendMessage(page, "SAY the build retries twice");
+  await waitForTurnToEnd(page);
+
+  await test.step("switched to change files, though its workspace holds side chats to reading, it works in the conversation's mode and asks the user", async () => {
+    await askWithBtw("CHOICES before the switch");
+    await expect(sideAnswers().last()).toContainText("mode plan");
+    await expect(switched()).toHaveValue("read-only");
+    await switched().selectOption({ label: "Can change files" });
+    await expect(label()).toHaveText("Can change files");
+    await askInSideChat("CHOICES after the switch");
+    await expect(sideAnswers().last()).toContainText("mode default");
+    expect(agentSaw()).toContain("The user switched what this side chat may do.");
+    await askInSideChat('TOOLS [{"kind":"edit","title":"Fix the typo"}]');
+    const permission = page.locator(".permission.pending:visible");
+    await expect(permission).toHaveCount(1);
+    await permission.getByRole("button", { name: "Reject", exact: true }).click();
+    await expect(sideAnswers().last()).toHaveText("Fix the typo: reject");
+  });
+
+  await test.step("it and its conversation keep the choice after a reload, and the next side chat starts with it", async () => {
+    await page.reload();
+    await expect(label()).toHaveText("Can change files");
+    await sideChat().getByRole("button", { name: "New question" }).click();
+    await expect(sideChat().locator(".side-chat-heading h2")).toHaveText("New question");
+    await expect(label()).toHaveText("Can change files");
+    await page.keyboard.press("Alt+KeyB");
+    await askWithBtw("CHOICES of the next one");
+    await expect(sideAnswers().last()).toContainText("mode default");
+    await expect(label()).toHaveText("Can change files");
+  });
+
+  await test.step("switched back to read-only while it works, what its agent waits for is turned down, and it is in plan mode again", async () => {
+    await askInSideChat('TOOLS [{"kind":"execute","title":"Run rm -rf build"}]');
+    await expect(page.locator(".permission.pending:visible")).toHaveCount(1);
+    await switched().selectOption({ label: "Read-only" });
+    await expect(sideAnswers().last()).toHaveText("Run rm -rf build: reject");
+    await expect(page.locator(".permission.pending:visible")).toHaveCount(0);
+    await expect(label()).toHaveText("Read-only");
+    await askInSideChat("CHOICES back again");
+    await expect(sideAnswers().last()).toContainText("mode plan");
+  });
+
+  await test.step("the conversation's other side chat stays as it was left", async () => {
+    await sidebarRow(mainId).locator(".delegated-toggle").click();
+    await page.locator(".workspace li.side-chat-row").filter({ hasText: "CHOICES before the switch" }).click();
+    await expect(sideChat().locator(".side-chat-heading h2")).toHaveText("CHOICES before the switch");
+    await expect(label()).toHaveText("Can change files");
+  });
+
+  await test.step("chosen for the next question before it is asked", async () => {
+    await sideChat().getByRole("button", { name: "New question" }).click();
+    await expect(label()).toHaveText("Read-only");
+    await switched().selectOption({ label: "Can change files" });
+    await expect(label()).toHaveText("Can change files");
+    await page.keyboard.press("Alt+KeyB");
+    await askWithBtw("CHOICES as chosen beforehand");
+    await expect(sideAnswers().last()).toContainText("mode default");
+  });
+});
+
+test("there is nothing to switch beside an agent that can't be held to reading", async () => {
+  await startOn("Fresh");
+  await sendMessage(page, "SAY deploys go out on Tuesdays");
+  await waitForTurnToEnd(page);
+  await askWithBtw("SAY noted");
+  await expect(sideChat().locator(".side-chat-access")).toHaveText("Can change files");
+  await expect(sideChat().getByLabel("What this side chat may do")).toHaveCount(0);
 });

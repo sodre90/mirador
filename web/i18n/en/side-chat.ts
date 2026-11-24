@@ -9,6 +9,7 @@ export const sideChat = {
   removeQuote: "Remove quote",
   readOnly: "Read-only",
   canChange: "Can change files",
+  access: "What this side chat may do",
   close: "Close side chat",
   openAsConversation: "Open as conversation",
   sendToMainChat: "Send to main chat",

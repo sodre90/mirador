@@ -11,6 +11,7 @@ export const sideChat: Messages["sideChat"] = {
   removeQuote: "移除引用",
   readOnly: "只读",
   canChange: "可以更改文件",
+  access: "这个旁聊可以做什么",
   close: "关闭旁聊",
   openAsConversation: "作为对话打开",
   sendToMainChat: "发送到主对话",

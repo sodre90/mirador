@@ -11,6 +11,7 @@ export const sideChat: Messages["sideChat"] = {
   removeQuote: "Quitar cita",
   readOnly: "Solo lectura",
   canChange: "Puede cambiar archivos",
+  access: "Qué puede hacer este chat lateral",
   close: "Cerrar chat lateral",
   openAsConversation: "Abrir como conversación",
   sendToMainChat: "Enviar a la conversación principal",

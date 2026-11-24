@@ -4,6 +4,7 @@ export const problems: Messages["problems"] = {
   fixed: {
     "sandbox-held-files-unsettled": "Egy sandboxolt ágens módosított ebben a mappában egy ágensbeállítás-fájlt, amelyet a Mirador nem tudott visszaállítani, ezért ez az ágens itt nem indult el.",
     "sandboxed-room-side-chat": "Sandboxolt szobában nem fut mellékszál: ezen a gépen futna.",
+    "side-chat-access-no-choice": "Nem állítható át, mit tehet ez a mellékszál: az ágensét nem lehet olvasásra korlátozni, vagy a beszélgetése egy szobának dolgozik.",
     "sandboxed-room-command": "Sandboxolt szobában nem futnak ! parancsok: ezen a gépen futnának, abban a mappában, amelyet az ágensei módosítanak.",
     "sandboxed-workspace-command": "Sandboxolt munkaterületen nem futnak ! parancsok: ezen a gépen futnának, abban a mappában, amelyet az ágensei módosítanak.",
     "sandboxed-workspace-outside-session": "Ez a munkaterület sandboxban futtatja az ágenseit, amely nem tudja folytatni egy ezen a gépen indult munkamenetet: kezdj inkább új beszélgetést.",

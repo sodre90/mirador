@@ -1,9 +1,10 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode, type RefObject } from "react";
-import type { Conversation, SideChatAccess } from "../shared/model.ts";
+import { SIDE_CHAT_ACCESS_CHOICES, type Conversation, type SideChatAccess } from "../shared/model.ts";
 import { latestReply } from "../shared/replies.ts";
-import { answerForMainChat, quoted, sideChatIsReadOnly } from "../shared/side-chats.ts";
+import { answerForMainChat, keepsModeThroughTurn, quoted, sideChatAccessIsAChoice, sideChatAccessOf, sideChatIsReadOnly } from "../shared/side-chats.ts";
 import type { TimelineBlock } from "../shared/timeline.ts";
 import { focusPane } from "./actions.ts";
+import { connection } from "./connection.ts";
 import { useDraft } from "./drafts.ts";
 import { hints } from "./hints.ts";
 import { t } from "./i18n/index.ts";
@@ -98,13 +99,37 @@ export function SideChatColumn({ parent, children }: { parent: Conversation; chi
 
 export const sideChatAccessLabels: Record<SideChatAccess, string> = { "read-only": words.readOnly, "can-change-files": words.canChange };
 
-/** Read-only where its agent holds it to reading; else it can change files, let to or only asked not to. */
-function AccessChip({ sideChat }: { sideChat: Pick<Conversation, "harness" | "sideChatMayChangeFiles"> }) {
+type SideChatLabelled = Pick<Conversation, "harness" | "sideChatMayChangeFiles">;
+
+/**
+ * Read-only where its agent holds it to reading; else it can change files, let to or only asked not to. Where there is a
+ * choice, the label opens it, for the side chat, or for the conversation a new one is beside: `switchedOn`.
+ */
+function AccessChip({ sideChat, switchedOn, parent }: { sideChat: SideChatLabelled; switchedOn: Pick<Conversation, "id">; parent: Conversation }) {
   const readOnly = sideChatIsReadOnly(sideChat);
   const hint = readOnly ? hints.sideChatReadOnly : sideChat.sideChatMayChangeFiles ? hints.sideChatChangesFiles : hints.sideChatCanChange;
-  return (
+  const label = (
     <span className={`side-chat-access ${readOnly ? "read-only" : "can-change"}`} data-hint={hint}>
       {readOnly ? words.readOnly : words.canChange}
+    </span>
+  );
+  if (!sideChatAccessIsAChoice({ ...parent, harness: sideChat.harness })) return label;
+  const switchTo = (sideChatAccess: SideChatAccess) => connection.send({ type: "conversation.set-side-chat-access", conversationId: switchedOn.id, sideChatAccess });
+  return (
+    <span className={`side-chat-access-switch ${readOnly ? "read-only" : "can-change"}`}>
+      {label}
+      <select
+        aria-label={words.access}
+        data-hint={[hint, hints.sideChatSwitchAccess, keepsModeThroughTurn(sideChat.harness) && hints.sideChatSwitchStopsTurn].filter(Boolean).join("\n\n")}
+        value={sideChatAccessOf(sideChat)}
+        onChange={(event) => switchTo(event.target.value as SideChatAccess)}
+      >
+        {SIDE_CHAT_ACCESS_CHOICES.map((choice) => (
+          <option key={choice} value={choice}>
+            {sideChatAccessLabels[choice]}
+          </option>
+        ))}
+      </select>
     </span>
   );
 }
@@ -124,7 +149,7 @@ export function SideChatHeader({ sideChat, parent, onOpenAsConversation }: { sid
         <span className="side-chat-kind">{words.label}</span>
         <h2 title={shownTitle(sideChat)}>{shownTitle(sideChat)}</h2>
       </div>
-      <AccessChip sideChat={sideChat} />
+      <AccessChip sideChat={sideChat} switchedOn={sideChat} parent={parent} />
       <button type="button" className="icon side-chat-new" aria-label={words.newSideChat} data-hint={hints.sideChatNew} onClick={() => askInSideChat(parent.id)}>
         +
       </button>
@@ -150,7 +175,7 @@ export function SendToMainChat({ parent, timeline, busy }: { parent: Conversatio
   );
 }
 
-/** A side chat still to be asked: the text quoted so far, and the question; `mayChangeFiles` as its workspace, else Settings, would let it. */
+/** A side chat still to be asked: the text quoted so far, and the question; `mayChangeFiles` as its conversation, else its workspace, else Settings, would let it. */
 export function NewSideChat({ parent, quotes, mayChangeFiles }: { parent: Conversation; quotes: string[]; mayChangeFiles: boolean }) {
   const [question, setQuestion] = useDraft(`side-chat-${parent.id}`);
   const [starting, setStarting] = useState(false);
@@ -176,7 +201,7 @@ export function NewSideChat({ parent, quotes, mayChangeFiles }: { parent: Conver
           <span className="side-chat-kind">{words.label}</span>
           <h2>{words.newSideChat}</h2>
         </div>
-        <AccessChip sideChat={{ harness: parent.harness, ...(mayChangeFiles && { sideChatMayChangeFiles: true }) }} />
+        <AccessChip sideChat={{ harness: parent.harness, ...(mayChangeFiles && { sideChatMayChangeFiles: true }) }} switchedOn={parent} parent={parent} />
         <CloseButton parentId={parent.id} />
       </header>
       <div className="side-chat-draft">

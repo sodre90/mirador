@@ -99,7 +99,7 @@ export const settings: Messages["settings"] = {
   },
   sideChats: {
     title: "Chats laterales",
-    hint: "Lo que puede hacer un chat lateral nuevo, salvo que su espacio de trabajo elija otra cosa en Dónde trabajan las conversaciones. Claude Code, Codex y Antigravity pueden limitar un chat lateral a leer; otros agentes no, así que sus chats laterales siempre pueden cambiar archivos. Los chats laterales de las conversaciones de una sala siguen siendo de solo lectura.",
+    hint: "Lo que puede hacer un chat lateral nuevo, salvo que su espacio de trabajo elija otra cosa en Dónde trabajan las conversaciones, o hayas cambiado un chat lateral de su conversación. Claude Code, Codex y Antigravity pueden limitar un chat lateral a leer; otros agentes no, así que sus chats laterales siempre pueden cambiar archivos. Los chats laterales de las conversaciones de una sala siguen siendo de solo lectura.",
     access: "Chats laterales nuevos",
   },
   sleep: {

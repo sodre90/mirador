@@ -129,6 +129,7 @@ const admissions: { [K in ClientMessage["type"]]: K extends PersonMessageType ? 
   "conversation.check-fork": OWNER_ONLY,
   "conversation.side-chat.start": OWNER_ONLY,
   "conversation.side-chat.promote": OWNER_ONLY,
+  "conversation.set-side-chat-access": OWNER_ONLY,
   "conversation.delete": OWNER_ONLY,
   "conversations.delete": OWNER_ONLY,
   "conversation.rename": OWNER_ONLY,

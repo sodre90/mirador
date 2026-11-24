@@ -4,6 +4,7 @@ export const problems = {
   fixed: {
     "sandbox-held-files-unsettled": "A sandboxed agent changed an agent config file in this folder that Mirador could not put back, so this agent did not start here.",
     "sandboxed-room-side-chat": "Side chats don't run in a sandboxed room: they would run on this computer.",
+    "side-chat-access-no-choice": "What this side chat may do can't be switched: its agent can't be held to reading, or its conversation works for a room.",
     "sandboxed-room-command": "! commands don't run in a sandboxed room: they would run on this computer, in the folder its agents change.",
     "sandboxed-workspace-command": "! commands don't run in a sandboxed workspace: they would run on this computer, in the folder its agents change.",
     "sandboxed-workspace-outside-session": "This workspace runs its agents in a sandbox, which can't go on with a session from this computer: start a new conversation instead.",

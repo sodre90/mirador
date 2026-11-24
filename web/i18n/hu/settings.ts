@@ -99,7 +99,7 @@ export const settings: Messages["settings"] = {
   },
   sideChats: {
     title: "Mellékszálak",
-    hint: "Mit tehet egy új mellékszál, hacsak a munkaterülete másként nem dönt a „Hol dolgoznak a beszélgetések” ablakban. A Claude Code, a Codex és az Antigravity csak olvasásra tudja korlátozni a mellékszálat; más ágensek nem, így az ő mellékszálaik mindig módosíthatnak fájlokat. Egy szoba beszélgetéseinek mellékszálai mindig csak olvashatnak.",
+    hint: "Mit tehet egy új mellékszál, hacsak a munkaterülete másként nem dönt a „Hol dolgoznak a beszélgetések” ablakban, vagy át nem állítottad a beszélgetése egyik mellékszálát. A Claude Code, a Codex és az Antigravity csak olvasásra tudja korlátozni a mellékszálat; más ágensek nem, így az ő mellékszálaik mindig módosíthatnak fájlokat. Egy szoba beszélgetéseinek mellékszálai mindig csak olvashatnak.",
     access: "Új mellékszálak",
   },
   sleep: {

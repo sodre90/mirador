@@ -110,7 +110,7 @@ export const shell: Messages["shell"] = {
     sideChatsAsInSettingsDetail: (access) => `设置中为：${access}。`,
     sideChatsReadOnlyDetail: "它们读取和搜索，但不更改任何内容。",
     sideChatsCanChangeDetail: "它们在所属对话的模式下工作，而那个对话的 Agent 可能正在编辑同样的文件。",
-    sideChatsOnlySome: "这适用于 Claude Code、Codex 和 Antigravity。其他 Agent 的旁聊总是可以更改文件，房间里对话的旁聊始终只读。",
+    sideChatsOnlySome: "这适用于 Claude Code、Codex 和 Antigravity 中你没有切换过旁聊的对话。其他 Agent 的旁聊总是可以更改文件，房间里对话的旁聊始终只读。",
   },
   workspaceSandbox: {
     open: "沙箱",

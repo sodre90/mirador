@@ -117,7 +117,7 @@ export const shell: Messages["shell"] = {
     sideChatsAsInSettingsDetail: (access) => `Die Einstellungen sagen: ${access}.`,
     sideChatsReadOnlyDetail: "Sie lesen und suchen, ändern aber nichts.",
     sideChatsCanChangeDetail: "Sie arbeiten im Modus ihrer Unterhaltung, während deren Agent vielleicht dieselben Dateien bearbeitet.",
-    sideChatsOnlySome: "Das gilt für Claude Code, Codex und Antigravity. Nebenchats anderer Agenten können immer Dateien ändern, und die der Unterhaltungen eines Raums dürfen immer nur lesen.",
+    sideChatsOnlySome: "Das gilt für Claude Code, Codex und Antigravity in Unterhaltungen, in denen du keinen Nebenchat umgestellt hast. Nebenchats anderer Agenten können immer Dateien ändern, und die der Unterhaltungen eines Raums dürfen immer nur lesen.",
   },
   workspaceSandbox: {
     open: "Sandbox",

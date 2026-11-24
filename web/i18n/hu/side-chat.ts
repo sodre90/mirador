@@ -11,6 +11,7 @@ export const sideChat: Messages["sideChat"] = {
   removeQuote: "Idézet eltávolítása",
   readOnly: "Csak olvasás",
   canChange: "Fájlokat is módosíthat",
+  access: "Mit tehet ez a mellékszál",
   close: "Mellékszál bezárása",
   openAsConversation: "Megnyitás beszélgetésként",
   sendToMainChat: "Küldés a fő beszélgetésbe",

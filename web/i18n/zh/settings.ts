@@ -99,7 +99,7 @@ export const settings: Messages["settings"] = {
   },
   sideChats: {
     title: "旁聊",
-    hint: "新旁聊可以做什么，除非它的工作区在“对话在哪里工作”中另作选择。Claude Code、Codex 和 Antigravity 能把旁聊限制为只读；其他 Agent 不能，所以它们的旁聊总是可以更改文件。房间里对话的旁聊始终只读。",
+    hint: "新旁聊可以做什么，除非它的工作区在“对话在哪里工作”中另作选择，或者你切换过它所属对话的某个旁聊。Claude Code、Codex 和 Antigravity 能把旁聊限制为只读；其他 Agent 不能，所以它们的旁聊总是可以更改文件。房间里对话的旁聊始终只读。",
     access: "新旁聊",
   },
   sleep: {

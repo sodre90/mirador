@@ -4,6 +4,7 @@ export const problems: Messages["problems"] = {
   fixed: {
     "sandbox-held-files-unsettled": "Un agente con sandbox cambió en esta carpeta un archivo de configuración de agentes que Mirador no pudo restaurar, así que este agente no arrancó aquí.",
     "sandboxed-room-side-chat": "Los chats laterales no funcionan en una sala con sandbox: se ejecutarían en este equipo.",
+    "side-chat-access-no-choice": "No se puede cambiar lo que este chat lateral puede hacer: a su agente no se le puede limitar a leer, o su conversación trabaja para una sala.",
     "sandboxed-room-command": "Los comandos ! no se ejecutan en una sala con sandbox: se ejecutarían en este equipo, en la carpeta que cambian sus agentes.",
     "sandboxed-workspace-command": "Los comandos ! no se ejecutan en un espacio de trabajo con sandbox: se ejecutarían en este equipo, en la carpeta que cambian sus agentes.",
     "sandboxed-workspace-outside-session": "Este espacio de trabajo ejecuta sus agentes en un sandbox, que no puede seguir una sesión de este equipo: empieza una conversación nueva.",

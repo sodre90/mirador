@@ -248,6 +248,11 @@ export type ClientMessage =
   | { type: "conversation.check-fork"; requestId: string; conversationId: string }
   /** A side chat about the conversation, read-only where its agent allows, asking `text` at once; the host answers `conversation.side-chat.started`. */
   | { type: "conversation.side-chat.start"; requestId: string; conversationId: string; text: string }
+  /**
+   * What the conversation's next side chats may do, ahead of its workspace and Settings. Named on a side chat, that one
+   * follows at once and the conversation it is beside remembers it; its other side chats stay as they are.
+   */
+  | { type: "conversation.set-side-chat-access"; conversationId: string; sideChatAccess: SideChatAccess }
   /** Makes the side chat a conversation of its own, in the mode of the conversation it was beside, else its profile's. */
   | { type: "conversation.side-chat.promote"; conversationId: string }
   /** Without `discardsUncommitted`, a conversation whose worktree holds uncommitted files stays, and the host answers `conversation.delete-asks`. */

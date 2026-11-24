@@ -343,6 +343,7 @@ const addedColumns = [
   { table: "machines", column: "knocks", definition: "TEXT" },
   { table: "workspaces", column: "side_chat_access", definition: "TEXT" },
   { table: "conversations", column: "side_chat_may_change_files", definition: "INTEGER NOT NULL DEFAULT 0" },
+  { table: "conversations", column: "side_chat_access", definition: "TEXT" },
 ];
 
 /** A turn that ended while nobody looked at its conversation, or the owner's Unread mark, until someone opens it. */
@@ -417,6 +418,7 @@ type ConversationRow = {
   delegation_dismissed: number;
   side_chat_of: string | null;
   side_chat_may_change_files: number;
+  side_chat_access: string | null;
   room_id: string | null;
   brought_into_room: number;
   plugin_settings: string | null;
@@ -551,6 +553,7 @@ const toConversation = (row: ConversationRow): Conversation => ({
   ...startedByOf(row),
   ...(row.side_chat_of && { sideChatOf: row.side_chat_of }),
   ...(row.side_chat_may_change_files === 1 && { sideChatMayChangeFiles: true as const }),
+  ...(isSideChatAccess(row.side_chat_access) && { sideChatAccess: row.side_chat_access }),
   ...(row.room_id && { roomId: row.room_id }),
   ...(row.brought_into_room === 1 && { broughtIntoRoom: true as const }),
   ...(row.plugin_settings && { pluginSettings: JSON.parse(row.plugin_settings) as Record<string, Record<string, string>> }),
@@ -1203,6 +1206,15 @@ export class Store {
   sideChatsOf(conversationId: string): string[] {
     const rows = this.db.query("SELECT id FROM conversations WHERE side_chat_of = ?").all(conversationId) as { id: string }[];
     return rows.map(({ id }) => id);
+  }
+
+  setSideChatMayChangeFiles(sideChatId: string, mayChangeFiles: boolean) {
+    this.db.query("UPDATE conversations SET side_chat_may_change_files = ? WHERE id = ?").run(mayChangeFiles ? 1 : 0, sideChatId);
+  }
+
+  /** What the conversation's next side chats may do, ahead of its workspace and Settings. */
+  setConversationSideChatAccess(conversationId: string, sideChatAccess: SideChatAccess) {
+    this.db.query("UPDATE conversations SET side_chat_access = ? WHERE id = ?").run(sideChatAccess, conversationId);
   }
 
   /** The side chat becomes a conversation of its own. */

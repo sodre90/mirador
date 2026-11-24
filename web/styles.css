@@ -10074,6 +10074,61 @@ button.link.more-rows {
   color: var(--warn);
 }
 
+.side-chat-access-switch {
+  position: relative;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  margin-right: 2px;
+  border-radius: 10px;
+}
+
+.side-chat-access-switch .side-chat-access {
+  margin-right: 0;
+  padding-right: 20px;
+}
+
+.side-chat-access-switch::after {
+  content: "";
+  position: absolute;
+  right: 8px;
+  width: 9px;
+  height: 6px;
+  -webkit-mask: var(--select-chevron) no-repeat center / contain;
+  mask: var(--select-chevron) no-repeat center / contain;
+  background-color: var(--ok);
+  pointer-events: none;
+}
+
+.side-chat-access-switch.can-change::after {
+  background-color: var(--warn);
+}
+
+.side-chat-access-switch:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.side-chat-access-switch select {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+
+/* High-contrast mode strips drawn arrows, masks included: there the old text arrow serves */
+@media (forced-colors: active) {
+  .side-chat-access-switch::after {
+    content: "▾";
+    width: auto;
+    height: auto;
+    -webkit-mask: none;
+    mask: none;
+    background-color: transparent;
+  }
+}
+
 .side-chat .timeline {
   padding: 12px 12px 8px;
 }

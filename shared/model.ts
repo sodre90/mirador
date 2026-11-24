@@ -730,8 +730,10 @@ export interface Conversation {
   startedBy?: StartedBy;
   /** Only on a side chat: the conversation it asks about, beside which it shows and under which the sidebar lists it. */
   sideChatOf?: string;
-  /** Only on a side chat that Settings or its workspace let change files as its conversation does, as they said when it started. */
+  /** Only on a side chat that may change files as its conversation does: let to when it started, or switched since. */
   sideChatMayChangeFiles?: true;
+  /** Only on a conversation whose side chats' access was switched: what its next side chats may do, ahead of its workspace and Settings. */
+  sideChatAccess?: SideChatAccess;
   /** Only on an agent's conversation in a room, which no list of conversations shows: the room. */
   roomId?: string;
   /** Only on the conversation of an agent you brought into a room of someone else's machine, which the room's tasks come into. */

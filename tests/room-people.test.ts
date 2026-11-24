@@ -101,6 +101,7 @@ const EVERY_CLIENT_MESSAGE: Record<ClientMessage["type"], true> = {
   "conversation.check-fork": true,
   "conversation.side-chat.start": true,
   "conversation.side-chat.promote": true,
+  "conversation.set-side-chat-access": true,
   "conversation.delete": true,
   "conversations.delete": true,
   "conversation.rename": true,

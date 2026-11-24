@@ -120,7 +120,7 @@ export const shell = {
     sideChatsAsInSettingsDetail: (access: string) => `Settings say: ${access}.`,
     sideChatsReadOnlyDetail: "They read and search, but change nothing.",
     sideChatsCanChangeDetail: "They work in their conversation's mode, while its agent may be editing the same files.",
-    sideChatsOnlySome: "This holds for Claude Code, Codex and Antigravity. Side chats of other agents can always change files, and those of a room's conversations stay read-only.",
+    sideChatsOnlySome: "This holds for Claude Code, Codex and Antigravity, in conversations where you haven't switched a side chat. Side chats of other agents can always change files, and those of a room's conversations stay read-only.",
   },
   workspaceSandbox: {
     open: "Sandbox",

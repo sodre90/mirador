@@ -99,7 +99,7 @@ export const settings: Messages["settings"] = {
   },
   sideChats: {
     title: "Nebenchats",
-    hint: "Was ein neuer Nebenchat darf, sofern sein Arbeitsbereich unter „Wo Unterhaltungen arbeiten“ nichts anderes wählt. Claude Code, Codex und Antigravity können einen Nebenchat aufs Lesen beschränken; andere Agenten nicht, daher können deren Nebenchats immer Dateien ändern. Nebenchats der Unterhaltungen eines Raums dürfen immer nur lesen.",
+    hint: "Was ein neuer Nebenchat darf, sofern sein Arbeitsbereich unter „Wo Unterhaltungen arbeiten“ nichts anderes wählt und du keinen Nebenchat seiner Unterhaltung umgestellt hast. Claude Code, Codex und Antigravity können einen Nebenchat aufs Lesen beschränken; andere Agenten nicht, daher können deren Nebenchats immer Dateien ändern. Nebenchats der Unterhaltungen eines Raums dürfen immer nur lesen.",
     access: "Neue Nebenchats",
   },
   sleep: {
