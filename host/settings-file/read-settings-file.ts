@@ -143,7 +143,7 @@ function parsed(text: string): unknown {
   }
 }
 
-const workspacesUnder = (entries: FileSidebarEntry[]): FileWorkspace[] => entries.flatMap((entry) => (isFileGroup(entry) ? workspacesUnder(entry.workspaces) : [entry]));
+export const workspacesUnder = (entries: FileSidebarEntry[]): FileWorkspace[] => entries.flatMap((entry) => (isFileGroup(entry) ? workspacesUnder(entry.workspaces) : [entry]));
 
 /** Stands for the name of an entry that has none. */
 const UNNAMED = "?";

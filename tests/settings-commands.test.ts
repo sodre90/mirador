@@ -4,7 +4,7 @@ import { join } from "node:path";
 import type { HostConfig } from "../host/config.ts";
 import { SettingsImportCommand } from "../host/settings-file/command-line.ts";
 import { Store } from "../host/store.ts";
-import { aFolder, aProfile, aStore, importInto, textOf } from "./settings-move.ts";
+import { addGroup, addWorkspace, aFolder, aProfile, aStore, importInto, textOf } from "./settings-move.ts";
 
 const cli = join(import.meta.dir, "..", "host", "cli.ts");
 
@@ -42,6 +42,19 @@ describe("mirador export-settings", () => {
     expect(stderr).toContain("It holds your secrets");
     expect(readFileSync(out, "utf8")).toContain("sk-secret");
     expect(statSync(out).mode & 0o777).toBe(0o600);
+  });
+
+  test("counts the workspaces it wrote, those of groups in groups too", async () => {
+    const dataDir = aDataDir();
+    const store = new Store(join(dataDir, "state.sqlite"));
+    const inner = addGroup(store, "Old", addGroup(store, "Clients").id);
+    ["/srv/one", "/srv/two"].forEach((path) => store.setWorkspaceGroup(addWorkspace(store, path).id, inner.id));
+    addWorkspace(store, "/srv/three");
+    store.close();
+
+    const { stderr } = await mirador(dataDir, "export-settings", "--out", join(aFolder(), "settings.json"));
+
+    expect(stderr).toContain(" 3 workspaces, ");
   });
 });
 

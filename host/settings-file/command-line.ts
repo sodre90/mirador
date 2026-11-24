@@ -6,6 +6,7 @@ import type { PluginToInstall, SettingsFile, SettingsImportReport, SettingsItem,
 import type { HostConfig } from "../config.ts";
 import { Store } from "../store.ts";
 import { exportedSettings, pluginsOnDisk, settingsFileText } from "./export-settings.ts";
+import { workspacesUnder } from "./read-settings-file.ts";
 
 /** A problem the command ends on, for the user to read. */
 export class SettingsCommandFailed extends Error {}
@@ -29,8 +30,7 @@ function writeForThisUserAlone(path: string, text: string) {
 const counted = (count: number, one: string, many = `${one}s`) => `${count} ${count === 1 ? one : many}`;
 
 function summaryOf({ profiles = [], promptTemplates = [], workspaces = [], plugins = [] }: SettingsFile) {
-  const workspaceCount = workspaces.reduce((sum, entry) => sum + ("group" in entry ? entry.workspaces.length : 1), 0);
-  return [counted(profiles.length, "profile"), counted(promptTemplates.length, "prompt template"), counted(workspaceCount, "workspace"), counted(plugins.length, "plugin")].join(", ");
+  return [counted(profiles.length, "profile"), counted(promptTemplates.length, "prompt template"), counted(workspacesUnder(workspaces).length, "workspace"), counted(plugins.length, "plugin")].join(", ");
 }
 
 const whatItHolds = ({ profiles = [] }: SettingsFile, includeSecrets: boolean) => [
