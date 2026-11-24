@@ -170,15 +170,16 @@ describe("MachineWatch", () => {
     await eventually(() => expect(machineChanges).toEqual(["home-server-id", "reinstalled-id"]));
   });
 
-  test("passes the machine's notifications on as this host's, saying which machine they come from", async () => {
+  test("passes the machine's notifications on as this host's, saying which machine they come from, by the name it goes by here now", async () => {
     const machine = fakeMachine();
     cleanUp.push(() => machine.server.stop(true));
-    const { notifications } = watching(machine.origin);
+    const { store, notifications } = watching(machine.origin);
     await eventually(() => expect(machine.sockets).toHaveLength(2));
+    store.renameMachine("m1", "Studio");
     const notification: SystemNotification = { kind: "question", conversationId: "a", title: "Deploy", workspace: "infra", body: "Asks: Ship it?" };
     machine.send("/notifications", { type: "system-notification", notification });
     machine.send("/ws", { type: "system-notification", notification });
-    await eventually(() => expect(notifications).toEqual([{ ...notification, machineId: "m1", workspace: "Home server · infra" }]));
+    await eventually(() => expect(notifications).toEqual([{ ...notification, machineId: "m1", workspace: "Studio · infra" }]));
   });
 
   test("says when the machine stops answering, and listens again once it is back", async () => {
@@ -262,11 +263,12 @@ describe("MachineWatch", () => {
   test("joined as a person, words a room's call itself, from its own record of the room, and passes on only calls of a room it lists, not muted, cleaned, once until the room is opened here", async () => {
     const machine = fakeMachine();
     cleanUp.push(() => machine.server.stop(true));
-    const { watch, roomCalls, notifications } = watching(machine.origin, { asPerson: true });
+    const { watch, store, roomCalls, notifications } = watching(machine.origin, { asPerson: true });
     await eventually(() => expect(machine.sockets).toHaveLength(1));
     machine.send("/ws", { type: "snapshot", conversations: [], machines: [], rooms: [{ id: "r1", name: "Launch" }, { id: "r2", name: "Quiet" }] } as never);
     machine.send("/ws", { type: "rooms.reading", personId: "ann", readings: [{ roomId: "r2", muted: true }] } as never);
     await Bun.sleep(100);
+    store.renameMachine("m1", "Studio");
 
     const call = (roomId: string, alert: unknown) => machine.send("/ws", { type: "room.alert", roomId, personId: "ann", alert } as never);
     call("r2", { about: "confirm", question: "Muted room" });
@@ -277,7 +279,7 @@ describe("MachineWatch", () => {
     call("r1", { about: "mention", by: "Bob\n\u202E", text: `Look at this\n${"x".repeat(500)}`, conversationId: "c1", html: "<script>" });
     call("r1", { about: "confirm", question: "Which plan?" });
     await eventually(() => expect(roomCalls).toHaveLength(1));
-    expect(roomCalls[0]).toMatchObject({ kind: "question", roomId: "r1", machineId: "m1", title: "Launch", workspace: "Home server", about: { kind: "room", alert: { about: "mention", by: "Bob" } } });
+    expect(roomCalls[0]).toMatchObject({ kind: "question", roomId: "r1", machineId: "m1", title: "Launch", workspace: "Studio", about: { kind: "room", alert: { about: "mention", by: "Bob" } } });
     expect(roomCalls[0]!.conversationId).toBeUndefined();
     expect((roomCalls[0]!.about as { alert: { text: string } }).alert.text).toBe(`Look at this ${"x".repeat(107)}…`);
 

@@ -427,6 +427,9 @@ function JoinMachinePanel({ machine, person, onJoinedRoom }: { machine: Machine;
   );
 }
 
+/** Every frame shares one cell, and moving an iframe in the page reloads what it showed, so they keep one order whatever they are named. */
+const framesInOneOrder = (machines: Machine[]) => machines.toSorted((one, other) => one.id.localeCompare(other.id));
+
 /** Each machine's own Mirador, as its host serves it; shown again within HIDDEN_MACHINE_STAYS_LOADED_MS, it is still loaded and back at once. */
 export function MachineFrames({
   machines,
@@ -449,7 +452,7 @@ export function MachineFrames({
   onJoinedRoom: (machineId: string, roomId: string, waiting: boolean) => void;
 }) {
   const striped = useMachineColorStyle() === "strip";
-  return machines
+  return framesInOneOrder(machines)
     .filter((machine) => visited.has(machine.id) && machine.relayPort !== null)
     .map((machine) =>
       machine.joined ? (

@@ -3177,11 +3177,6 @@ input.picker-search {
   gap: 4px;
 }
 
-.modal.rename-machine .actions {
-  display: flex;
-  gap: 8px;
-}
-
 .modal.worktrees fieldset {
   display: flex;
   flex-direction: column;

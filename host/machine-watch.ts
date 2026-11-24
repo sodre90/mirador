@@ -454,7 +454,7 @@ export class MachineWatch {
     const called = calledRoomKey(machine.id, room.id);
     if (this.calledRooms.has(called) || !this.roomCalls.allows(machine.id)) return;
     this.calledRooms.add(called);
-    this.roomCalled({ ...roomNotification(room.id, room.name, machine.name, alert), id: crypto.randomUUID(), machineId: machine.id });
+    this.roomCalled({ ...roomNotification(room.id, room.name, this.nameShownHere(machine), alert), id: crypto.randomUUID(), machineId: machine.id });
   }
 
   private learnHostId(machineId: string, hostId: string) {
@@ -477,6 +477,12 @@ export class MachineWatch {
   }
 
   private passedOn(machine: Machine, notification: SystemNotification): SystemNotification {
-    return { ...notification, machineId: machine.id, workspace: notification.workspace ? `${machine.name} · ${notification.workspace}` : machine.name };
+    const name = this.nameShownHere(machine);
+    return { ...notification, machineId: machine.id, workspace: notification.workspace ? `${name} · ${notification.workspace}` : name };
+  }
+
+  /** What this computer calls the machine now, which a rename changes while its sockets stay open. */
+  private nameShownHere(machine: Machine) {
+    return this.store.findMachine(machine.id)?.name ?? machine.name;
   }
 }

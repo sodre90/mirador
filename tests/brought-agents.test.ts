@@ -247,6 +247,18 @@ describe("a task a room's machine sends an agent you brought", () => {
     expect(notified).toEqual([{ conversationId: agent.conversationId!, reason: { kind: "permission", tool: "a task from Ann" } }]);
   });
 
+  test("says which machine a waiting task came from by the name this computer gives it now", async () => {
+    const { brought, bringCoder, task, store, pages } = miasMirador();
+    const agent = await bringCoder();
+    task("t1");
+    store.renameMachine("ann", "Studio Mac");
+    brought.relabeled();
+    expect(pages.at(-1)).toMatchObject({
+      type: "brought-agents.listed",
+      tasks: [expect.objectContaining({ broughtId: agent.id, machineName: "Studio Mac" })],
+    });
+  });
+
   test("goes to the agent once you allow it, wrapped first in this host's own words, the room's quoted after them", async () => {
     const { brought, bringCoder, task, prompts } = miasMirador();
     const agent = await bringCoder();

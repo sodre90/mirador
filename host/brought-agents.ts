@@ -148,6 +148,11 @@ export class BroughtAgents {
     return { agents: this.store.listBroughtAgents().filter(({ agentId }) => agentId !== null), tasks: this.tasksWaiting() };
   }
 
+  /** After this computer names a machine again: the tasks waiting say which machine they came from by its new name. */
+  relabeled() {
+    this.publish();
+  }
+
   /** The conversations with a task that waits for the owner's OK, which wait for them as for a permission. */
   conversationsHoldingTasks(): ReadonlySet<string> {
     return this.holding;

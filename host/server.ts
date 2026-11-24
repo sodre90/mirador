@@ -800,10 +800,11 @@ export function startServer(services: HostServices) {
 
   /** What this computer calls the machine in its rail and lists; the machine's own Mirador keeps its own name. */
   function renameMachine(machineId: string, name: string) {
-    const shown = name.trim().slice(0, LONGEST_MACHINE_NAME);
+    const shown = oneLine(name).slice(0, LONGEST_MACHINE_NAME).trim();
     if (!shown || !store.findMachine(machineId)) return;
-    store.setMachineName(machineId, shown);
+    store.renameMachine(machineId, shown);
     broadcastMachines();
+    broughtAgents.relabeled();
   }
 
   /** It stays out of the rail too, where it would come back while another machine has joined it. */

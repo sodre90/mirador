@@ -495,7 +495,7 @@ describe("Store", () => {
   test("keeps the name this computer gives a machine, and lists it by that name", () => {
     const store = new Store(":memory:");
     store.insertMachine({ id: "m1", name: "Home server", origin: "https://home-server.example", createdAt: 1 });
-    store.setMachineName("m1", "Studio");
+    store.renameMachine("m1", "Studio");
     expect(store.findMachine("m1")?.name).toBe("Studio");
     expect(store.listMachines()[0]?.name).toBe("Studio");
   });

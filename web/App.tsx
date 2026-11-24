@@ -368,8 +368,12 @@ function paletteEntries(
   ];
 }
 
+/** A dialog of a component's own, such as the rail's rename, which no overlay state knows of. */
+const aDialogIsOpen = () => document.querySelector(".modal-backdrop") !== null;
+
 /** Dialogs take the keyboard; the sidebar's inline fields for a new workspace or group do not, so shortcuts keep working if one is left open. */
-const isModal = (state: AppState) => state.overlay !== null && state.overlay.kind !== "add-workspace" && state.overlay.kind !== "add-workspace-group";
+const isModal = (state: AppState) =>
+  aDialogIsOpen() || (state.overlay !== null && state.overlay.kind !== "add-workspace" && state.overlay.kind !== "add-workspace-group");
 
 /**
  * Keys forwarded from a canvas page may navigate but never create, restart or reload anything, nor reach a shell: the page is
