@@ -185,11 +185,17 @@ function withCanvasToolsPlugin(environment: Record<string, string>): Record<stri
 }
 
 /**
+ * git status locks the index to save what it learned about the files. pi kills a command with SIGKILL on a timeout or a
+ * cancel, which leaves the lock behind and stops the owner's own git add and commit.
+ */
+const GIT_STATUS_WITHOUT_LOCK = { GIT_OPTIONAL_LOCKS: "0" };
+
+/**
  * The agent's environment, with the profile's on top. claude-agent-acp runs the Claude Code in CLAUDE_CODE_EXECUTABLE
  * rather than the copy its SDK bundles; a profile may name its own.
  */
 export function launchEnvironment(harness: HarnessId, profile: Profile | null, claudeProgramSetting: string, given = allOfIt): Record<string, string> {
-  const environment = profileEnvironment(profile, given);
+  const environment: Record<string, string> = { ...GIT_STATUS_WITHOUT_LOCK, ...profileEnvironment(profile, given) };
   if (harness === "opencode") return withCanvasToolsPlugin(environment);
   if (harness === "pi") return piAcpEnvironment(environment);
   if (harness === "codex") return codexAcpEnvironment(environment);

@@ -1,7 +1,7 @@
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type Locator, type Page } from "@playwright/test";
-import { addWorkspace, createProfile, createRoom, openNewRoom, openRoomAgent, openRoomSettings, signIn, whatItMeans } from "./helpers.ts";
+import { addWorkspace, createProfile, createRoom, openNewRoom, openRoomAgent, openRoomSettings, sendMessage, signIn, startConversation, whatItMeans } from "./helpers.ts";
 import { TestHost, writeBunProgram } from "./test-host.ts";
 
 const HOSTS_SECRET = "hosts-own-secret";
@@ -235,4 +235,17 @@ test("an agent the host can't hold to asking carries a warning when a room is ma
   const settings = await openRoomSettings(page, "Marks", "Agents");
   await expect(settings.getByText("Your Claude Code setup")).toHaveCount(0);
   expect((await whatItMeans(page, settings, "Agents")).join("\n")).toContain("Codex reads any file on this computer unasked");
+});
+
+test("an agent's git status takes no lock that a killed command would leave behind, in its own conversation and in a room", async ({ page }) => {
+  const optionalLocks = join(host.projectDir, "optional-locks");
+  await signIn(page, host);
+  await page.getByLabel("Agent", { exact: true }).selectOption({ label: "Plain · opencode" });
+  await startConversation(page, { withModels: false });
+  await sendMessage(page, `WRITE ${JSON.stringify([{ shell: optionalLocks, content: "{{env:GIT_OPTIONAL_LOCKS}}" }])}`);
+  await expect.poll(() => existsSync(optionalLocks) && readFileSync(optionalLocks, "utf8")).toBe("0");
+
+  await createRoom(page, "Locks", ["Plain"]);
+  await tagAgent(page, "Locks", "Plain", "ENV GIT_OPTIONAL_LOCKS");
+  await expect(answerSaying(page, "GIT_OPTIONAL_LOCKS is 0")).toBeVisible();
 });
