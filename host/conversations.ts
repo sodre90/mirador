@@ -83,7 +83,8 @@ import { AntigravityQuotaReader, readAntigravityQuotas, type ModelIdentity } fro
 import { PlanQuotasByProfile, reportedQuotas } from "./plan-quotas.ts";
 import { turnEndReason, type TurnOutcome } from "../shared/system-notifications.ts";
 import { hasBegun, sessionHasRecord, updatesTheAgentRecords } from "../shared/conversation-begun.ts";
-import { isUsageLimitError, usageLimitMessage, usageLimitReplyIn, usageLimitResetIn, type UsageLimitWords } from "../shared/usage-limit.ts";
+import { antigravityErrorReplyIn, isAntigravityAuthError } from "../shared/antigravity-error.ts";
+import { antigravityQuotaNoticeIn, isUsageLimitError, usageLimitMessage, usageLimitReplyIn, usageLimitResetIn, type UsageLimitWords } from "../shared/usage-limit.ts";
 import { summarizeWaiting, waitingTones, type WaitingConversation, type WaitingSummary } from "../shared/waiting.ts";
 import { awaitingDelivery, USER_COMMAND_EVENT_TYPES, userCommandsIn, withCommandOutputs, type UserCommand } from "../shared/user-commands.ts";
 import { withCanvasNotes, type CanvasNote } from "./canvas/notes.ts";
@@ -331,6 +332,8 @@ interface TurnInProgress {
   reply: string;
   /** The text of the turn's last message on its own, which is, or with Antigravity ends in, the agent program's words when a usage limit ended the turn as if it ended by itself. */
   lastMessage: string;
+  /** The turn's last non-empty text chunk, which with Antigravity holds "\n⚠ …\n" when a model error ended the turn as if it ended by itself. */
+  lastChunk: string;
   /** The turn's own tool calls, to tell whether a page it showed was its last step. */
   toolCalls: TurnToolCall[];
   /** What kept queued messages out of the turn when the host last tried to steer them in, as the host log says it. */
@@ -2175,7 +2178,7 @@ export class ConversationService {
     this.endUsageLimitWait(runtime);
     let endTurn = () => {};
     runtime.turnEnded = new Promise((resolve) => (endTurn = resolve));
-    const turn: TurnInProgress = { steered: [], ended: false, lastReplyMessageId: null, awaitedUser: false, fromScript, reply: "", lastMessage: "", toolCalls: [], ...(broughtTaskId && { broughtTaskId }) };
+    const turn: TurnInProgress = { steered: [], ended: false, lastReplyMessageId: null, awaitedUser: false, fromScript, reply: "", lastMessage: "", lastChunk: "", toolCalls: [], ...(broughtTaskId && { broughtTaskId }) };
     runtime.turn = turn;
     runtime.openToolCalls.clear();
     this.forgetUnseenTurnEnd(conversationId);
@@ -2223,11 +2226,17 @@ export class ConversationService {
       if (turn.stoppedBeforePrompt) this.cancel(conversationId).catch((error) => console.error(`stopping the turn of conversation ${conversationId} failed:`, error));
       response = await answered;
       this.showHeldBackReply(conversationId);
-      const limitReply = usageLimitReplyIn({ stopReason: response.stopReason, lastMessage: turn.lastMessage, messageId: turn.lastReplyMessageId }, this.get(conversationId).harness);
+      const harnessId = this.get(conversationId).harness;
+      const limitReply = usageLimitReplyIn({ stopReason: response.stopReason, lastMessage: turn.lastMessage, messageId: turn.lastReplyMessageId }, harnessId);
+      const errorReply = limitReply === null ? antigravityErrorReplyIn({ stopReason: response.stopReason, lastChunk: turn.lastChunk }, harnessId) : null;
       const model = runtime.reportedModel ?? chosenModel(this.get(conversationId).configOptions)?.id;
       const spent = { ...turnUsageOf(response), ...(model && { model }), ...this.measuredTurn(conversationId, turn), ...this.filesEditedSince(conversationId, turnSeq) };
       if (limitReply !== null) {
         this.notifyTurnEnded(conversationId, this.recordUsageLimit(conversationId, { message: limitReply }, true, spent));
+      } else if (errorReply !== null) {
+        const authRequired = isAntigravityAuthError(errorReply);
+        this.append(conversationId, { type: "error", message: errorReply, continuable: true, ...(authRequired && { authRequired: true as const }), endsTurn: true, ...spent });
+        this.notifyTurnEnded(conversationId, { error: errorReply });
       } else {
         endedOnItsOwn = response;
         this.append(conversationId, { type: "turn-end", stopReason: response.stopReason, ...spent });
@@ -3870,6 +3879,7 @@ export class ConversationService {
       this.save({ ...this.get(conversationId), title: shownSessionTitle(this.get(conversationId).title, update.title) });
     }
     if (this.dropsCancelledReplyChunk(conversationId, update)) return;
+    if (this.handledAntigravityNoticeOutsideTurn(conversationId, update)) return;
     if (isTurnsOwnToolCall(update)) this.showHeldBackReply(conversationId);
     this.trackReplyProgress(conversationId, update);
     this.append(conversationId, { type: "acp", update: this.withModeName(conversationId, update) });
@@ -4021,6 +4031,44 @@ export class ConversationService {
     return drop;
   }
 
+  /**
+   * Antigravity goes on outside a turn when a background task's end, a schedule or a subagent wakes it, and reports
+   * a quota or model error as one agent_message_chunk. Arm the usage limit wait when none is running, and keep late
+   * notices from showing as agent messages under the usage limit line.
+   */
+  private handledAntigravityNoticeOutsideTurn(conversationId: string, update: acp.SessionUpdate) {
+    const runtime = this.runtime(conversationId);
+    if (runtime.running && runtime.turn && !runtime.turn.ended) return false;
+    if (this.get(conversationId).harness !== "antigravity") return false;
+    if (update.sessionUpdate !== "agent_message_chunk" || update.content.type !== "text" || isInformational(update._meta)) return false;
+    const quota = antigravityQuotaNoticeIn(update.content.text);
+    if (quota) {
+      if (quota.before.trim().length > 0) this.append(conversationId, { type: "acp", update: { ...update, content: { type: "text", text: quota.before } } });
+      const resetsAt = usageLimitResetIn(quota.notice);
+      if (runtime.usageLimit) {
+        if (runtime.usageLimit.wait.resetsAt === null && resetsAt !== null) {
+          this.endUsageLimitWait(runtime);
+          this.waitForUsageLimitReset(conversationId, resetsAt);
+          this.republish(conversationId);
+        }
+        return true;
+      }
+      const failure = this.recordUsageLimit(conversationId, { message: quota.notice }, false, {});
+      this.notifyTurnEnded(conversationId, failure);
+      this.republish(conversationId);
+      this.refreshAntigravityQuotas(conversationId, true);
+      return true;
+    }
+    const errorReply = antigravityErrorReplyIn({ stopReason: "end_turn", lastChunk: update.content.text }, "antigravity");
+    if (errorReply === null) return false;
+    if (!runtime.usageLimit) {
+      const authRequired = isAntigravityAuthError(errorReply);
+      this.append(conversationId, { type: "error", message: errorReply, ...(authRequired && { authRequired: true as const }), endsTurn: true });
+      this.notifyTurnEnded(conversationId, { error: errorReply });
+    }
+    return true;
+  }
+
   /** Which reply the running turn has streamed, so its stop can tell a late chunk of it from the next turn's, and how that reply ends since the turn's last tool call. */
   private trackReplyProgress(conversationId: string, update: acp.SessionUpdate) {
     const turn = this.runtime(conversationId).turn;
@@ -4028,6 +4076,7 @@ export class ConversationService {
     if (isTurnsOwnToolCall(update)) {
       turn.reply = "";
       turn.lastMessage = "";
+      turn.lastChunk = "";
       turn.toolCalls.push({ at: Date.now(), canvasTool: canvasToolName(toolNameOf(update)) });
     }
     if (!isAgentReplyChunk(update) || isSubagentReport(update)) return;
@@ -4036,9 +4085,11 @@ export class ConversationService {
       if (update.messageId !== turn.lastReplyMessageId) turn.lastMessage = "";
       turn.lastReplyMessageId = update.messageId;
     }
+    if (update.sessionUpdate === "agent_thought_chunk") turn.lastChunk = "";
     if (update.sessionUpdate === "agent_message_chunk" && update.content.type === "text" && !isInformational(update._meta)) {
       turn.reply += update.content.text;
       turn.lastMessage += update.content.text;
+      if (update.content.text) turn.lastChunk = update.content.text;
     }
   }
 

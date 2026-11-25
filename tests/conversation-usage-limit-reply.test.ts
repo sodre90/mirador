@@ -7,6 +7,7 @@ import { loadConfig } from "../host/config.ts";
 import { agentProcessKey, ConversationService } from "../host/conversations.ts";
 import { Hub } from "../host/hub.ts";
 import type { HarnessId } from "../shared/model.ts";
+import { buildTimeline } from "../shared/timeline.ts";
 import { SystemNotifications } from "../host/system-notifications.ts";
 import { Store } from "../host/store.ts";
 
@@ -52,7 +53,9 @@ function turnThatPlays(updates: Update[], harness: HarnessId = "claude") {
   internals.sessions.bind(conversation.id, sessionId);
   Object.assign(internals.runtime(conversation.id), { sessionId: Promise.resolve(sessionId), harness: agent });
   const eventsOfTurn = () => store.listEvents(conversation.id).map(({ event }) => event);
-  return { conversations, conversation, eventsOfTurn };
+  const storedEvents = () => store.listEvents(conversation.id);
+  const emitOutsideTurn = (update: Update) => internals.handleSessionUpdate({ sessionId, update });
+  return { conversations, conversation, eventsOfTurn, storedEvents, emitOutsideTurn };
 }
 
 test("a usage limit Claude Code says as the end of a turn a background subagent's failure joined records the limit, not a turn end, and holds the queue", async () => {
@@ -127,12 +130,60 @@ describe("Antigravity's quota notice", () => {
     expect(conversations.get(conversation.id).waitingFor).toBe("error");
   });
 
-  test("of another error ends the turn as an ordinary reply, with no wait", async () => {
-    const { conversations, conversation, eventsOfTurn } = turnThatPlays([agySays("\n⚠ bad key\n")], "antigravity");
+  test("of another model error ends the turn as a failed turn with Try again, and a 401 asks to sign in", async () => {
+    const { conversations, conversation, eventsOfTurn } = turnThatPlays([agySays("\n⚠ Something is wrong with the request\n")], "antigravity");
+
+    await conversations.send(conversation.id, "go");
+
+    expect(eventsOfTurn().at(-1)).toMatchObject({ type: "error", message: "⚠ Something is wrong with the request", continuable: true, endsTurn: true });
+    expect(eventsOfTurn().some((event) => event.type === "turn-end")).toBe(false);
+    expect(conversations.get(conversation.id).usageLimit).toBeNull();
+    expect(conversations.get(conversation.id).waitingFor).toBe("error");
+
+    const auth = turnThatPlays([agySays("\n⚠ request failed with empty body (code 401)\n")], "antigravity");
+    await auth.conversations.send(auth.conversation.id, "go");
+    expect(auth.eventsOfTurn().at(-1)).toMatchObject({ type: "error", message: "⚠ request failed with empty body (code 401)", authRequired: true, continuable: true, endsTurn: true });
+    expect(auth.conversations.get(auth.conversation.id).waitingFor).toBe("error");
+  });
+
+  test("if the agent keeps replying after a '⚠ …' chunk, the turn still finishes normally", async () => {
+    const { conversations, conversation, eventsOfTurn } = turnThatPlays([agySays("\n⚠ note\n"), agySays("Done.")], "antigravity");
 
     await conversations.send(conversation.id, "go");
 
     expect(eventsOfTurn().at(-1)).toMatchObject({ type: "turn-end", stopReason: "end_turn" });
-    expect(conversations.get(conversation.id).usageLimit).toBeNull();
+    expect(conversations.get(conversation.id).waitingFor).toBe("finished");
+  });
+
+  test("arriving outside a turn after a normal turn end arms the usage limit wait and keeps the notice out of agent messages", async () => {
+    const { conversations, conversation, eventsOfTurn, storedEvents, emitOutsideTurn } = turnThatPlays([agySays("Working in the background.")], "antigravity");
+
+    await conversations.send(conversation.id, "go");
+    expect(conversations.get(conversation.id).waitingFor).toBe("finished");
+
+    emitOutsideTurn(agySays(`\n${notice}\n`));
+    await conversations.send(conversation.id, "and then this", [], { afterTurn: true });
+
+    expect(eventsOfTurn().at(-1)).toMatchObject({ type: "error", message: notice, usageLimit: { resetsAt: expect.any(Number) }, endsTurn: true });
+    expect(conversations.get(conversation.id).usageLimit?.continuesAt).toEqual(expect.any(Number));
+    expect(conversations.get(conversation.id).waitingFor).toBe("error");
+    expect(conversations.get(conversation.id).queuedMessages.map(({ text }) => text)).toEqual(["and then this"]);
+    const blocks = buildTimeline(storedEvents());
+    expect(blocks.filter((block) => block.kind === "agent")).toHaveLength(1);
+    expect(blocks.at(-1)).toMatchObject({ kind: "error", usageLimit: true, message: notice });
+  });
+
+  test("arriving outside a turn from a subagent or while already waiting is not shown under the usage limit line", async () => {
+    const { conversations, conversation, eventsOfTurn, storedEvents, emitOutsideTurn } = turnThatPlays([agySays(`\n${notice}\n`)], "antigravity");
+
+    await conversations.send(conversation.id, "go");
+    emitOutsideTurn({ sessionUpdate: "agent_message_chunk", content: { type: "text", text: `\n${notice}\n` }, _meta: { claudeCode: { parentToolUseId: "toolu_sub" } } });
+    emitOutsideTurn(agySays(`\n${notice}\n`));
+
+    expect(eventsOfTurn().filter((event) => event.type === "error")).toHaveLength(1);
+    expect(buildTimeline(storedEvents())).toEqual([
+      expect.objectContaining({ kind: "user" }),
+      expect.objectContaining({ kind: "error", usageLimit: true, message: notice }),
+    ]);
   });
 });

@@ -643,13 +643,14 @@ class TimelineBuilder {
     const last = this.blocks.at(-1);
     if (last?.kind !== "agent") return;
     const echo = last.text.trim();
-    if (echo.length >= SHORTEST_ERROR_ECHO && message.includes(echo)) {
+    if ((echo.length >= SHORTEST_ERROR_ECHO || echo.startsWith("⚠ ")) && message.includes(echo)) {
       this.blocks.pop();
       return;
     }
     const banner = message.trim();
     const text = last.text.trimEnd();
-    if (usageLimit && banner.length >= SHORTEST_ERROR_ECHO && text.endsWith(banner)) last.text = text.slice(0, -banner.length);
+    const stripsSuffix = (usageLimit && banner.length >= SHORTEST_ERROR_ECHO) || (banner.startsWith("⚠ ") && (text === banner || text.endsWith(`\n${banner}`)));
+    if (stripsSuffix && text.endsWith(banner)) last.text = text.slice(0, -banner.length);
   }
 
   private appendText(kind: TextBlockKind, origin: Origin, text: string, into: TimelineBlock[]) {

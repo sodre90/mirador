@@ -129,6 +129,12 @@ function claudeCodesLimitReply({ lastMessage, messageId }: TurnsLastWords) {
  */
 const ANTIGRAVITY_QUOTA_NOTICE = /(?:^|\n)(⚠ Individual quota reached\b.*)\n$/;
 
+export function antigravityQuotaNoticeIn(text: string): { before: string; notice: string } | null {
+  const match = ANTIGRAVITY_QUOTA_NOTICE.exec(text);
+  if (!match) return null;
+  return { before: text.slice(0, match.index), notice: match[1]! };
+}
+
 const antigravitysLimitReply = ({ lastMessage }: TurnsLastWords) => ANTIGRAVITY_QUOTA_NOTICE.exec(lastMessage)?.[1] ?? null;
 
 /** What the agent said of the usage limit that ended a turn as if it ended by itself; null for any other end. */

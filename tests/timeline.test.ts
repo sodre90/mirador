@@ -283,6 +283,16 @@ describe("an API error Claude Code also says as the agent's message", () => {
     expect(glued[0]).toMatchObject({ kind: "agent", text: "Waiting for the subagents.\n" });
   });
 
+  test("drops Antigravity's model error echoes too, even short ones like '⚠ bad key' or ones glued after text", () => {
+    const badKey = "⚠ bad key";
+    expect(buildTimeline(stored([agentText(`\n${badKey}\n`), { type: "error", message: badKey, continuable: true, endsTurn: true }]))).toEqual([
+      expect.objectContaining({ kind: "error", message: badKey }),
+    ]);
+    const glued = buildTimeline(stored([agentText("Let me check."), agentText(`\n${badKey}\n`), { type: "error", message: badKey, continuable: true, endsTurn: true }]));
+    expect(glued.map(({ kind }) => kind)).toEqual(["agent", "error"]);
+    expect(glued[0]).toMatchObject({ kind: "agent", text: "Let me check.\n" });
+  });
+
   test("keeps a reply an unrelated error follows, even one the error happens to contain", () => {
     expect(buildTimeline(stored([agentText("All done."), { type: "error", message: "ACP connection closed" }])).map(({ kind }) => kind)).toEqual(["agent", "error"]);
     expect(buildTimeline(stored([agentText("Done."), { type: "error", message: "Done. Then the agent stopped" }])).map(({ kind }) => kind)).toEqual(["agent", "error"]);
