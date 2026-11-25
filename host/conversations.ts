@@ -98,7 +98,7 @@ import type { NotifierMute } from "./notifier.ts";
 import { agentEditsIn, Changes } from "./changes.ts";
 import type { Landable, Landed } from "../shared/changes.ts";
 import { Checkpoints, SNAPSHOTS_KEPT } from "./checkpoints.ts";
-import { profileToLaunch } from "./profiles.ts";
+import { profileNamed, profileToLaunch } from "./profiles.ts";
 import type { ProfileDraft, ProfileTestResult } from "../shared/protocol.ts";
 import type { Store, UnseenTurnEnd } from "./store.ts";
 import type { SystemNotifications } from "./system-notifications.ts";
@@ -562,7 +562,7 @@ export class ConversationService {
    */
   startBeside(callerId: string, plugin: string, profileName: string, prompt: string, title?: string, choices?: ConversationChoices): StartedConversation {
     const caller = this.callerThatMayStart(callerId);
-    const conversation = this.createFor(caller, plugin, this.profileNamed(profileName), title, choices, caller.worktree);
+    const conversation = this.createFor(caller, plugin, profileNamed(this.store, profileName), title, choices, caller.worktree);
     this.prompt(conversation.id, prompt, { startsTurn: true }).catch(() => {});
     return this.startedOf(conversation);
   }
@@ -574,7 +574,7 @@ export class ConversationService {
    */
   async startInOwnWorktree(callerId: string, plugin: string, profileName: string, prompt: string, title?: string, choices?: ConversationChoices, from?: string): Promise<StartedConversation> {
     const caller = this.callerThatMayStart(callerId);
-    const profile = this.profileNamed(profileName);
+    const profile = profileNamed(this.store, profileName);
     const worktree = await this.worktrees.plan(this.existingWorkspace(caller.workspaceId), { from });
     const conversation = this.createFor(caller, plugin, profile, title, choices, worktree);
     this.ensureSession(conversation.id)
@@ -617,13 +617,6 @@ export class ConversationService {
     const profile = this.profileWithId(profileId);
     const worktree = workspace.newConversationsIn === "worktree" ? await this.worktrees.plan(workspace) : undefined;
     return this.startedOf(this.create(workspaceId, { harness: profile.harness, profileId: profile.id }, prompt, title, { model, effort }, worktree, pluginTitle));
-  }
-
-  private profileNamed(profileName: string) {
-    const profiles = this.store.listProfiles();
-    const profile = profiles.find(({ name }) => name.toLowerCase() === profileName.trim().toLowerCase());
-    if (!profile) throw new Error(`There is no profile named ${profileName}; the profiles are ${profiles.map(({ name }) => name).join(", ")}.`);
-    return profile;
   }
 
   private profileWithId(profileId: string) {

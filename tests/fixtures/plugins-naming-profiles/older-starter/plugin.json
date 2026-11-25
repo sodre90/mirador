@@ -1,0 +1,8 @@
+{
+  "name": "older-starter",
+  "title": "Older starter",
+  "version": "1.0.0",
+  "api": 22,
+  "startsConversations": true,
+  "canvas": { "host": "host.ts", "view": "view.js" }
+}

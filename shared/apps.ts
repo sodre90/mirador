@@ -48,6 +48,9 @@ export const CONTEXT_HINT_API = 22;
 /** The first plugin API whose canvas host may work in the background, and whose plugin.json may say it starts conversations. */
 export const STARTS_CONVERSATIONS_PLUGIN_API = 11;
 
+/** The first plugin API that starts conversations on a profile's id, and asks choices of it, where earlier ones took its name. */
+export const PROFILE_ID_PLUGIN_API = 23;
+
 /** The first plugin API whose canvas host may have a workspace tab. */
 export const WORKSPACE_TAB_API = 7;
 

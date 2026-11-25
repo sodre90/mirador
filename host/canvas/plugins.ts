@@ -31,13 +31,14 @@ import type { PluginCommand } from "../../shared/slash-commands.ts";
 import { argumentsHint, commandInput } from "../../shared/command-arguments.ts";
 import type { Conversation, PluginCanvasItem, PluginContextHint, PluginStatuslineChips, Profile, StartedBy } from "../../shared/model.ts";
 import type { ProfileDraft, ServerMessage } from "../../shared/protocol.ts";
-import { conversationSettingValue, type ConversationPlugin, isChoiceSetting, pluginsOffFor, isTextSetting, modelSettingsOf, profileSettingValue, readTextSetting, type PluginProfileSetting } from "../../shared/apps.ts";
+import { conversationSettingValue, type ConversationPlugin, isChoiceSetting, pluginsOffFor, isTextSetting, modelSettingsOf, PROFILE_ID_PLUGIN_API, profileSettingValue, readTextSetting, type PluginProfileSetting } from "../../shared/apps.ts";
 import { profileEnvironment } from "../acp/harnesses.ts";
 import { validContextHint, validStatuslineChips } from "./statusline-chips.ts";
 import { usageHistoryOf } from "../turn-samples.ts";
 import { categoryChoices } from "../../shared/config-options.ts";
 import { canvasViewPath, messageOf, type CanvasPlugin } from "../apps/plugins.ts";
 import type { Hub } from "../hub.ts";
+import { profileNamed } from "../profiles.ts";
 import type { Store } from "../store.ts";
 import type { PluginCatalog } from "../plugin-catalog.ts";
 import { offeredPluginsGuidance, PLUGIN_INSTALL_TOOL, type CanvasPluginGuidance } from "./guidance.ts";
@@ -103,6 +104,11 @@ export type StartInWorkspace = (workspaceId: string, pluginTitle: string, start:
 
 /** What the agent of the profile with that id offers, null when it didn't answer; rejects when no profile has the id. */
 export type AskProfileChoices = (profileId: string) => Promise<Conversation["configOptions"] | null>;
+
+/** What a plugin for an API before profile ids gives to start a conversation. */
+type StartOnNamedProfile = Omit<WorkspaceConversationStart, "profileId"> & { profile: string };
+
+const namesProfiles = ({ manifest }: CanvasPlugin) => manifest.api < PROFILE_ID_PLUGIN_API;
 
 const namedChoices = (options: Conversation["configOptions"], category: "model" | "thought_level") =>
   categoryChoices(options, category).map(({ value, name }) => ({ id: value, name }));
@@ -556,13 +562,18 @@ export class CanvasPlugins {
         if (plugin.manifest.startsConversations !== true) {
           throw new Error(`${plugin.manifest.title} can't start conversations of its own: its plugin.json doesn't set startsConversations.`);
         }
-        return this.startInWorkspace(workspaceId, plugin.manifest.title, start);
+        return this.startInWorkspace(workspaceId, plugin.manifest.title, namesProfiles(plugin) ? this.onProfileNamed(start) : start);
       },
-      profileChoices: async (profileId) => {
-        const options = await this.askProfileChoices(profileId);
+      profileChoices: async (profile) => {
+        const options = await this.askProfileChoices(namesProfiles(plugin) ? profileNamed(this.store, profile).id : profile);
         return options && offeredChoices(options);
       },
     };
+  }
+
+  private onProfileNamed(start: unknown): WorkspaceConversationStart {
+    const { profile, ...rest } = start as StartOnNamedProfile;
+    return { ...rest, profileId: profileNamed(this.store, profile).id };
   }
 
   private readonly tabsSettling = new Set<string>();

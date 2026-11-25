@@ -12,7 +12,9 @@ const profileName = "night runs";
 test.describe.configure({ mode: "serial" });
 
 test.beforeAll(async () => {
-  cpSync(join(import.meta.dirname, "..", "tests", "fixtures", "background-plugins", "starter"), join(host.dataDir, "plugins", "starter"), { recursive: true });
+  const fixtures = join(import.meta.dirname, "..", "tests", "fixtures");
+  cpSync(join(fixtures, "background-plugins", "starter"), join(host.dataDir, "plugins", "starter"), { recursive: true });
+  cpSync(join(fixtures, "plugins-naming-profiles", "older-starter"), join(host.dataDir, "plugins", "older-starter"), { recursive: true });
   writeBunProgram(host.fakeProgramsDir, "opencode", join(import.meta.dirname, "fake-acp-agent.ts"), { FAKE_ACP_PROMPTS: promptsFile });
   writeFileSync(promptsFile, "");
   await host.start();
@@ -24,7 +26,7 @@ test.afterAll(async () => {
 
 const tabFrame = (page: Page) => page.locator(".canvas-panel:visible .canvas-frame.workspace-tab iframe");
 const tabView = (page: Page) => page.frameLocator(".canvas-panel:visible .canvas-frame.workspace-tab iframe");
-const tabToggle = (page: Page) => page.locator(".canvas-panel:visible .workspace-tab-toggle", { hasText: "Starter" });
+const tabToggle = (page: Page, title: string) => page.locator(".canvas-panel:visible .workspace-tab-toggle").filter({ hasText: new RegExp(`^${title}$`) });
 const sidebarRow = (page: Page, title: string) => page.locator(".workspace li", { hasText: title });
 const fromStarter = (page: Page) => page.locator(".timeline-entry:visible", { has: page.locator(".author", { hasText: "From Starter" }) }).locator(".message.user");
 
@@ -52,7 +54,7 @@ test("a plugin's background work starts a conversation of its own in a workspace
   });
 
   await test.step("the plugin's tab lists the profiles and starts a conversation on the one picked", async () => {
-    await tabToggle(page).click();
+    await tabToggle(page, "Starter").click();
     await untilFramePainted(page, tabFrame(page));
     await expect(tabView(page).locator("#profile option", { hasText: profileName })).toBeAttached();
     await tabView(page).locator("#profile").selectOption(profileName);
@@ -60,5 +62,16 @@ test("a plugin's background work starts a conversation of its own in a workspace
     await expect(tabView(page).locator("#started")).toHaveText(`Started on ${profileName}`);
     await expect(sidebarRow(page, "Results")).toBeVisible();
     await expect.poll(agentSaw).toContain("Check the results\n");
+  });
+
+  await test.step("the tab of a plugin for an older plugin API, which names the profile, starts one on it too", async () => {
+    await tabToggle(page, "Older starter").click();
+    await untilFramePainted(page, tabFrame(page));
+    await expect(tabView(page).locator("h1")).toHaveText("Older starter");
+    await tabView(page).locator("#profile").selectOption(profileName);
+    await tabView(page).getByRole("button", { name: "Start on it" }).click();
+    await expect(tabView(page).locator("#started")).toHaveText(`Started on ${profileName}`);
+    await expect(sidebarRow(page, "Older results")).toBeVisible();
+    await expect.poll(agentSaw).toContain("Check the older results\n");
   });
 });
