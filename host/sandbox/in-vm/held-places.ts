@@ -74,18 +74,32 @@ class Finding {
     if (this.full()) return;
     const full = join(this.request.workspace, path);
     const stats = statOf(full);
-    if (stats?.isDirectory() && toldFileByFile) return readdirSync(full).toSorted().forEach((name) => this.tell(`${path}/${name}`, true));
+    if (stats?.isDirectory() && toldFileByFile) {
+      const names = readableEntriesOf(full);
+      if (names === null) return void this.found.push({ path, found: { kind: "unkept" } });
+      return names.toSorted().forEach((name) => this.tell(`${path}/${name}`, true));
+    }
     this.found.push({ path, found: this.entryOf(full, stats) });
   }
 
   private entryOf(full: string, stats: Stats | null): PlaceEntry {
     if (!stats) return { kind: "none" };
-    if (stats.isSymbolicLink()) return { kind: "link", target: readlinkSync(full) };
+    if (stats.isSymbolicLink()) {
+      try {
+        return { kind: "link", target: readlinkSync(full) };
+      } catch {
+        return { kind: "unkept" };
+      }
+    }
     if (!stats.isFile() || stats.size > this.request.mostBytesEach || this.bytes + stats.size > this.request.mostBytes) return { kind: "unkept" };
-    const bytes = bytesAtMost(full, this.request.mostBytesEach);
-    if (!bytes) return { kind: "unkept" };
-    this.bytes += bytes.length;
-    return { kind: "file", base64: bytes.toString("base64") };
+    try {
+      const bytes = bytesAtMost(full, this.request.mostBytesEach);
+      if (!bytes) return { kind: "unkept" };
+      this.bytes += bytes.length;
+      return { kind: "file", base64: bytes.toString("base64") };
+    } catch {
+      return { kind: "unkept" };
+    }
   }
 }
 
@@ -95,9 +109,23 @@ function writableAgain(folder: string) {
   if (stats?.isDirectory()) chmodSync(folder, (stats.mode & 0o777) | 0o700);
 }
 
-function foldersWithin(full: string): string[] {
-  if (!statOf(full)?.isDirectory()) return [];
-  return [full, ...readdirSync(full).flatMap((name) => foldersWithin(join(full, name)))];
+function readableEntriesOf(folder: string): string[] | null {
+  try {
+    return readdirSync(folder);
+  } catch {
+    try {
+      writableAgain(folder);
+      return readdirSync(folder);
+    } catch {
+      return null;
+    }
+  }
+}
+
+function makeWritableWithin(full: string) {
+  if (!statOf(full)?.isDirectory()) return;
+  writableAgain(full);
+  for (const name of readdirSync(full)) makeWritableWithin(join(full, name));
 }
 
 /** What stands at the place taken away, folder and all, even where the agents took away the permission to. */
@@ -105,7 +133,8 @@ function takenAway(full: string) {
   try {
     rmSync(full, { recursive: true, force: true });
   } catch {
-    [dirname(full), ...foldersWithin(full)].forEach(writableAgain);
+    writableAgain(dirname(full));
+    makeWritableWithin(full);
     rmSync(full, { recursive: true, force: true });
   }
 }
@@ -145,7 +174,11 @@ export function putPlacesBack(request: PlacesRequest): PlacesPutBack {
   for (const place of request.places) {
     try {
       clearTheWay(request.workspace, place.path);
-      finding.tell(place.path, place.toldFileByFile);
+      try {
+        finding.tell(place.path, place.toldFileByFile);
+      } catch {
+        if (!finding.full()) finding.found.push({ path: place.path, found: { kind: "unkept" } });
+      }
       putInPlace(request.workspace, place);
     } catch (error) {
       failed.push({ path: place.path, error: error instanceof Error ? error.message : String(error) });

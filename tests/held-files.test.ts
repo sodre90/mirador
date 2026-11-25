@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { HeldFiles, type HeldSandbox } from "../host/sandbox/held-files.ts";
@@ -348,6 +348,34 @@ describe("the held files of a sandboxed room", () => {
     expect(changeAt("CLAUDE.local.md")).toMatchObject({ unshown: true });
     await held.answer(changeAt(".mcp.json").id, "allow");
     expect(existsSync(at(".mcp.json"))).toBe(false);
+    await held.stop();
+  });
+
+  test.skipIf(!RUNS_SANDBOXES)("put back a held folder even when it contains chmod 000 files and subdirectories", async () => {
+    const { held, room, at, changeAt } = await heldWorkspace();
+    room.running = false;
+    mkdirSync(at(".claude/locked"), { recursive: true });
+    writeFileSync(at(".claude/settings.json"), `{"hooks":"evil"}`);
+    writeFileSync(at(".claude/unreadable"), "secret");
+    writeFileSync(at(".claude/locked/nested"), "deep");
+    chmodSync(at(".claude/unreadable"), 0o000);
+    chmodSync(at(".claude/locked"), 0o000);
+
+    expect(await held.check()).toBe(true);
+    expect(existsSync(at(".claude"))).toBe(false);
+    expect(held.textOf(changeAt(".claude/settings.json").id)).toEqual({ before: null, after: `{"hooks":"evil"}` });
+    expect(changeAt(".claude/unreadable")).toMatchObject({ kind: "add", unshown: true });
+    await held.stop();
+  });
+
+  test.skipIf(process.platform !== "darwin")("catch git redirects written with alternate casing on macOS", async () => {
+    const { held, at } = await heldWorkspace();
+    writeFileSync(at(".git/COMMONDIR"), "/elsewhere\n");
+    await eventually(() => {
+      expect(existsSync(at(".git/commondir"))).toBe(false);
+      expect(existsSync(at(".git/COMMONDIR"))).toBe(false);
+    });
+    expect(held.changesFor(ROOM)).toEqual([]);
     await held.stop();
   });
 });

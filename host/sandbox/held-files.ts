@@ -1,6 +1,7 @@
 import { watch, type FSWatcher } from "node:fs";
 import { lstat, readdir, readlink } from "node:fs/promises";
 import { join, sep } from "node:path";
+import { asDisksCompare } from "../../shared/disk-names.ts";
 import { GIT_CONFIG_REDIRECTS, HELD_CHANGES_MOST, HELD_TEXT_SHOWN, holdsAllInside, isHeldConfigPath, isNeverHeldFolder, type HeldChange, type HeldChangeAnswer, type HeldChangeText, ownerKey, type SandboxOwner } from "../../shared/sandbox.ts";
 import { bytesAtMost, putPlacesBack, type FoundEntry, type PlaceEntry, type PlacesPutBack, type PlacesRequest } from "./in-vm/held-places.ts";
 
@@ -52,6 +53,12 @@ const ancestorsOf = (path: string) =>
     .map((_, index, parts) => parts.slice(0, index + 1).join("/"));
 
 const isUnder = (path: string, folder: string) => folder === "" || path === folder || path.startsWith(`${folder}/`);
+
+const sameDiskPath = (a: string, b: string) => {
+  const partsA = a.split("/");
+  const partsB = b.split("/");
+  return partsA.length === partsB.length && partsA.every((part, index) => asDisksCompare(part) === asDisksCompare(partsB[index]!));
+};
 
 /** A path the VM told of, as one of the places asked about or within one, with no step out of them. */
 const isPathUnderAny = (path: string, places: string[]) => !path.split("/").some((part) => part === "" || part === "." || part === "..") && places.some((place) => isUnder(path, place));
@@ -223,7 +230,8 @@ export class HeldFiles {
   }
 
   private async heard(path: string) {
-    if (this.gitRedirects.includes(path)) return this.queue(path);
+    const redirect = this.gitRedirects.find((each) => sameDiskPath(path, each));
+    if (redirect) return this.queue(redirect);
     if (this.untouched(path)) return;
     if (isHeldConfigPath(path) || (await lstat(join(this.workspace, path)).catch(() => null))?.isDirectory()) await this.queue(path);
   }
@@ -270,7 +278,11 @@ export class HeldFiles {
       }
       await this.sandbox.halt();
     }
-    if (await this.sandbox.untilStopped()) await this.keepAside(putPlacesBack(this.requestFor(await this.differingAmong(differing))).found);
+    if (await this.sandbox.untilStopped()) {
+      const result = putPlacesBack(this.requestFor(await this.differingAmong(differing)));
+      if (result.failed.length > 0) console.error(`could not put back held files in ${this.workspace}:`, result.failed);
+      await this.keepAside(result.found);
+    }
   }
 
   private requestFor(paths: string[]): PlacesRequest {
@@ -280,7 +292,7 @@ export class HeldFiles {
 
   private async keepAside(found: FoundEntry[]): Promise<boolean> {
     const byBrought = this.sandbox.broughtAtWork();
-    const proposals = found.filter(({ path, found }) => !this.gitRedirects.includes(path) && !this.isAsLeft(path, found));
+    const proposals = found.filter(({ path, found }) => !this.gitRedirects.some((redirect) => sameDiskPath(path, redirect)) && !this.isAsLeft(path, found));
     const overflowing = proposals.filter(({ path, found }) => !this.hold(path, found, byBrought));
     if (proposals.length > overflowing.length) this.sandbox.changed();
     if (overflowing.length === 0) return false;
