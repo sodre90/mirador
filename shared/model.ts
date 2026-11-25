@@ -895,7 +895,7 @@ export interface AskOption {
   label: string;
   description?: string;
   html?: string;
-  /** The one the agent recommends: marked on the canvas, and read first in a spoken conversation. */
+  /** The agent recommends it: marked on the canvas, and named in a spoken conversation. Several can be where several can be ticked. */
   recommended?: boolean;
 }
 

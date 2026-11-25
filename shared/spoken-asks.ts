@@ -10,12 +10,17 @@ export type HeardChoice = { kind: "pick"; index: number } | { kind: "others" } |
 /** Only where a mark sits, as "(recommended)", "Recommended: …" or "… — recommended", so "Not recommended: …" isn't one. */
 const RECOMMENDED = /\s*[([]recommended[)\]]\s*|^\s*recommended\s*[:–—-]\s*|\s*[:,–—-]\s*recommended\s*$/i;
 
-/** The option the agent recommends: by its flag, or else by a mark in its label, as in "Short sounds (recommended)". */
-export const recommendedIndex = (options: AskOption[]) => {
-  const flagged = options.findIndex(({ recommended }) => recommended);
-  const index = flagged === -1 ? options.findIndex(({ label }) => RECOMMENDED.test(label)) : flagged;
-  return index === -1 ? null : index;
-};
+/** The options the agent recommends: by their flag, or else by a mark in their label, as in "Short sounds (recommended)". */
+function recommendedOptions(options: AskOption[]) {
+  const flagged = options.filter(({ recommended }) => recommended);
+  return flagged.length > 0 ? flagged : options.filter(({ label }) => RECOMMENDED.test(label));
+}
+
+/** Where one option is picked: the first the agent recommends. */
+export function recommendedIndex(options: AskOption[]) {
+  const [first] = recommendedOptions(options);
+  return first ? options.indexOf(first) : null;
+}
 
 /** A label as it is said: without the mark of the recommended one, or the markdown a speech synthesizer would read out. */
 export const spokenLabel = (label: string) =>
@@ -38,6 +43,8 @@ const asSentence = (text: string) => {
   return /[.!?]$/.test(trimmed) ? trimmed : `${trimmed}.`;
 };
 
+const saidTogether = (labels: string[]) => (labels.length < 2 ? labels.join("") : `${labels.slice(0, -1).join(", ")} and ${labels.at(-1)}`);
+
 const numbered = (options: AskOption[], indexes: number[]) => indexes.map((index) => `${spokenNumber(index)}: ${asSentence(options[index]!.label)}`);
 
 /**
@@ -46,12 +53,13 @@ const numbered = (options: AskOption[], indexes: number[]) => indexes.map((index
  */
 export function questionSentences(question: AskQuestion, { position, of }: { position: number; of: number }): { sentences: string[]; offered: OfferedOptions } {
   const counted = of > 1 ? [`Question ${position + 1} of ${of}.`] : [];
-  const recommended = recommendedIndex(question.options);
   const everyOption = [...counted, asSentence(question.question), ...numbered(question.options, question.options.map((_, index) => index))];
   if (question.multiple) {
-    const recommendation = recommended === null ? [] : [`I recommend ${asSentence(question.options[recommended]!.label)}`];
+    const recommended = recommendedOptions(question.options).map(({ label }) => spokenLabel(label));
+    const recommendation = recommended.length === 0 ? [] : [`I recommend ${asSentence(saidTogether(recommended))}`];
     return { sentences: [...everyOption, ...recommendation, "Which ones?"], offered: "all" };
   }
+  const recommended = recommendedIndex(question.options);
   if (recommended === null) return { sentences: [...everyOption, "Which one?"], offered: "all" };
   const { label, description } = question.options[recommended]!;
   const others = question.options.length > 1 ? ["Go with it, or hear the others?"] : ["Go with it?"];

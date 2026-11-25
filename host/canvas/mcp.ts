@@ -56,7 +56,8 @@ const describedOptionSchema = z.object(
     label: "Short name of the option; returned verbatim when chosen.",
     description: "One or two sentences on the trade-off.",
     html: "Optional HTML preview of this option (mockup, diagram drawn in HTML and CSS, inline SVG or Mermaid rather than ASCII art, code sample).",
-    recommended: "True on the one option you recommend, rather than a mark in its label. The user sees it marked, and in a spoken conversation it is read first.",
+    recommended:
+      "True on the option you recommend, rather than a mark in its label; with multiple, on each option you recommend ticking. The user sees it marked, and hears it recommended in a spoken conversation.",
   }),
 );
 
@@ -98,6 +99,11 @@ const ANSWER_COMES_LATER: Record<AnswerWaitGivenUp, string> = {
   "turn-ended":
     "The turn that asked this question ended before the user answered, so their answer comes as a message of theirs instead. Go by that message.",
 };
+
+const ONE_RECOMMENDED_WHERE_ONE_IS_PICKED = "Recommend at most one option of a question the user picks one option of; only a question with multiple can recommend several.";
+
+const recommendsMoreThanCanBePicked = ({ multiple, options }: { multiple?: boolean; options: { recommended?: boolean }[] }) =>
+  !multiple && options.filter(({ recommended }) => recommended).length > 1;
 
 const ONE_OPTION_EACH_IN_A_ROOM =
   "People in a room vote for one option of a question, so multiple doesn't work here. Ask about each option in a question of its own, with questions.";
@@ -257,8 +263,7 @@ function buildCanvasServer(conversationId: string, parts: CanvasServerParts, cut
     },
     async ({ questions, question, options, ...rest }, ctx) => {
       if (!questions && (!question || !options)) return toolError("Give question and options, or questions.");
-      if ((questions ?? [{ options: options! }]).some((asked) => asked.options.filter((option) => option.recommended).length > 1))
-        return toolError("Recommend at most one option of each question.");
+      if ((questions ?? [{ ...rest, options: options! }]).some(recommendsMoreThanCanBePicked)) return toolError(ONE_RECOMMENDED_WHERE_ONE_IS_PICKED);
       if (roomId && (questions ?? [rest]).some(({ multiple }) => multiple)) return toolError(ONE_OPTION_EACH_IN_A_ROOM);
       const caller = await callingConversation(ctx);
       const item = canvas.openAsk(caller, questions ? severalQuestionsRequest(questions, rest.html) : { question: question!, options: options!, ...rest });

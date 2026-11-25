@@ -47,12 +47,16 @@ describe("reading a question aloud", () => {
     });
   });
 
-  test("where several can be picked, every option is read, the recommended one named, and a yes alone takes none", () => {
+  test("where several can be picked, every option is read, the recommended ones named together, and a yes alone takes none", () => {
     const several = { ...sounds, multiple: true };
     expect(questionSentences(several, { position: 0, of: 1 })).toEqual({
       sentences: ["What should signal the microphone's state.", "One: Visual only.", "Two: Short sounds.", "Three: Sounds plus a stronger visual.", "I recommend Short sounds.", "Which ones?"],
       offered: "all",
     });
+    const recommending = (...labels: string[]) =>
+      questionSentences({ question: "Which parts?", multiple: true, options: ["Host", "`Phone`", "Website"].map((label) => ({ label, recommended: labels.includes(label) })) }, { position: 0, of: 1 }).sentences.slice(-2);
+    expect(recommending("Host", "Website")).toEqual(["I recommend Host and Website.", "Which ones?"]);
+    expect(recommending("Host", "`Phone`", "Website")).toEqual(["I recommend Host, Phone and Website.", "Which ones?"]);
     expect(questionSentences({ ...plain, multiple: true }, { position: 1, of: 3 }).sentences).toEqual(["Question 2 of 3.", "Which chart comes next?", "One: By month.", "Two: By product line.", "Which ones?"]);
     expect(heardSeveral("Yes.", several)).toBeNull();
   });

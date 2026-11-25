@@ -145,14 +145,14 @@ test("with Keep talking, a question the agent asks is read aloud, recommended op
     const answered = callCanvasTool(host, conversationId, "ask", {
       question: "Which parts?",
       multiple: true,
-      options: [{ label: "Host", recommended: true }, { label: "Phone" }, { label: "Website" }],
+      options: [{ label: "Host", recommended: true }, { label: "Phone" }, { label: "Website", recommended: true }],
     });
     await expect(page.locator(".dictation-status:visible")).toHaveText(
       "Listening… Say the numbers or names of the ones you want, as in “one and three”, or answer in your own words.",
       { timeout: 30_000 },
     );
     expect(await answered).toContain('The user chose: "Host", "Website"');
-    await expect.poll(() => spoken).toEqual(["Which parts?", "One: Host.", "Two: Phone.", "Three: Website.", "I recommend Host.", "Which ones?", "Going with Host; Website."]);
+    await expect.poll(() => spoken).toEqual(["Which parts?", "One: Host.", "Two: Phone.", "Three: Website.", "I recommend Host and Website.", "Which ones?", "Going with Host; Website."]);
     expect(heard).toBe(9);
   });
 

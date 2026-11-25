@@ -197,7 +197,7 @@ Windows support is new and experimental: expect rough edges, and please report w
 
 ### Questions
 
-- **`ask`**: a question with 2 to 8 options, each with a description and an optional HTML preview, plus an optional page explaining the question. The option the agent recommends is tagged *Recommended*.
+- **`ask`**: a question with 2 to 8 options, each with a description and an optional HTML preview, plus an optional page explaining the question. The option the agent recommends is tagged *Recommended*, or several of them where you can tick several.
 - **Several questions at once**: up to ten in one call, each with its own options. You answer them page by page, can change any answer on a review page, and send them together. Agents are told to ask this way rather than fold several questions into one.
 - **Previews are shown whole**: option columns widen to the widest preview, and a page wider than the canvas is scaled down to fit.
 - **Your own answer**: when the agent allows it, *Something else…* takes a typed answer, over several lines with Shift+Enter, and every answer can carry a note. With several questions, the review page before *Submit* also takes one note on all your answers.

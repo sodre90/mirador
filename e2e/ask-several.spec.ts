@@ -314,12 +314,14 @@ test("an answer the user takes their time over still reaches the agent", async (
   expect(await toolResult).toBe("The user chose: Yes");
 });
 
-test("the option the agent recommends shows a Recommended tag, and recommending two of one question is refused", async ({ page }) => {
+test("the option the agent recommends shows a Recommended tag, and recommending two where one is picked is refused", async ({ page }) => {
   await signIn(page, host);
   await page.goto(host.origin);
   const conversationId = await startConversation(page);
   const twoRecommended = { question: "Which?", options: [{ label: "A", recommended: true }, { label: "B", recommended: true }] };
-  expect(await callCanvasTool(host, conversationId, "ask", twoRecommended)).toBe("Recommend at most one option of each question.");
+  const refusal = "Recommend at most one option of a question the user picks one option of; only a question with multiple can recommend several.";
+  expect(await callCanvasTool(host, conversationId, "ask", twoRecommended)).toBe(refusal);
+  expect(await callCanvasTool(host, conversationId, "ask", { questions: [{ ...twoRecommended, multiple: true }, twoRecommended] }), "each question by its own multiple").toBe(refusal);
 
   const ask = page.locator(".ask");
   const toolResult = callCanvasTool(host, conversationId, "ask", { question: "Which database?", options: [{ label: "SQLite" }, { label: "Postgres", recommended: true }] });
@@ -358,6 +360,37 @@ test("a question that takes several shows checkboxes, and the answer lists every
   await expect(ask.getByRole("checkbox", { name: "Green", exact: true })).toBeChecked();
   await expect(ask.getByRole("checkbox", { name: "Blue", exact: true })).not.toBeChecked();
   await expect(ask.locator(".ask-own-answer")).toHaveCount(0);
+});
+
+test("a question that takes several tags every option the agent recommends, alone or among several questions, and ticks none of them by itself", async ({ page }) => {
+  await signIn(page, host);
+  await page.goto(host.origin);
+  const conversationId = await startConversation(page);
+  const ask = page.locator(".ask");
+  const tagsOfOptions = ask.locator(".ask-option").locator(".ask-option-head");
+  const parts = { question: "Which parts?", multiple: true, options: [{ label: "Host", recommended: true }, { label: "Phone" }, { label: "Website", recommended: true }] };
+
+  await test.step("a question on its own", async () => {
+    const toolResult = callCanvasTool(host, conversationId, "ask", parts);
+    await expect(tagsOfOptions).toHaveText(["HostRecommended", "Phone", "WebsiteRecommended"]);
+    await expect(ask.getByRole("checkbox", { checked: true })).toHaveCount(0);
+    await ask.getByRole("checkbox", { name: "Website", exact: true }).check();
+    await ask.getByRole("button", { name: "Submit" }).click();
+    expect(await toolResult, "the tag isn't part of the answer").toBe('The user chose: "Website"');
+  });
+
+  await test.step("one of several questions", async () => {
+    const toolResult = callCanvasTool(host, conversationId, "ask", { questions: [parts, { question: "When?", options: [{ label: "Today", recommended: true }, { label: "Tomorrow" }] }] });
+    await expect(tagsOfOptions).toHaveText(["HostRecommended", "Phone", "WebsiteRecommended"]);
+    await ask.getByRole("checkbox", { name: "Host", exact: true }).check();
+    await ask.getByRole("checkbox", { name: "Website", exact: true }).check();
+    await ask.getByRole("button", { name: "Next" }).click();
+    await expect(tagsOfOptions).toHaveText(["TodayRecommended", "Tomorrow"]);
+    await ask.getByRole("radio", { name: "Today", exact: true }).check();
+    await ask.getByRole("button", { name: "Next" }).click();
+    await ask.getByRole("button", { name: "Submit" }).click();
+    expect(await toolResult).toContain('1. Which parts?\n   The user chose: "Host", "Website"');
+  });
 });
 
 test("a question that takes several keeps the ticked options and your own words apart, whatever punctuation they hold", async ({ page }) => {
