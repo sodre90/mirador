@@ -63,10 +63,15 @@ test("a profile's fields sit on Launch and Defaults tabs, with their explanation
     await expect(dialog.locator("label", { hasText: "Pre-launch command" })).toHaveAttribute("data-hint", /^Optional\. Runs with your shell/);
   });
 
-  await test.step("the environment's format is behind Format", async () => {
+  await test.step("command values are hinted under Environment, with the full format and examples behind Format", async () => {
+    await expect(dialog.getByText("Use KEY=$(command) to read a token from a keychain or vault instead of storing it.")).toBeVisible();
     await expect(dialog.getByText("One per line")).toBeHidden();
     await dialog.getByText("Format", { exact: true }).click();
     await expect(dialog.getByText("One per line")).toBeVisible();
+    await expect(dialog.locator(".environment-format")).toContainText("$(security find-generic-password -s gateway -w)");
+    await expect(dialog.locator(".environment-format")).toContainText("$(op read op://vault/item/token)");
+    await dialog.getByRole("button", { name: "Edit environment" }).click();
+    await expect(dialog.getByLabel("Environment", { exact: true })).toHaveAttribute("placeholder", /\$\(security find-generic-password -s gateway -w\)/);
   });
 
   await test.step("Defaults holds what a conversation starts with, YOLO by its short name", async () => {

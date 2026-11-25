@@ -25,7 +25,7 @@ const NEW_PROFILE = "new";
 
 const environmentPlaceholders: Record<HarnessId, string> = {
   claude: `ANTHROPIC_BASE_URL=http://localhost:8080
-ANTHROPIC_AUTH_TOKEN=...
+ANTHROPIC_AUTH_TOKEN=$(security find-generic-password -s gateway -w)
 ANTHROPIC_MODEL=qwen3-coder
 -u ANTHROPIC_API_KEY`,
   opencode: `OPENCODE_CONFIG=/Users/you/.config/opencode/work.json
@@ -38,12 +38,12 @@ PI_ACP_PI_COMMAND=/opt/homebrew/bin/pi`,
 # or settings over your Codex config, as JSON:
 CODEX_CONFIG='{"model":"gpt-5.6-luna"}'`,
   copilot: `COPILOT_HOME=/Users/you/.copilot-work
-# or a token instead of copilot login:
-COPILOT_GITHUB_TOKEN=...`,
+# or a token from a keychain or vault instead of copilot login:
+COPILOT_GITHUB_TOKEN=$(op read op://vault/copilot/token)`,
   antigravity: `# an OpenAI-compatible endpoint instead of the Google sign-in:
 AGY_LLM_GATEWAY_URL=http://localhost:8080
 AGY_LLM_GATEWAY_WIRE_PROTOCOL=openai
-AGY_LLM_GATEWAY_API_KEY=...`,
+AGY_LLM_GATEWAY_API_KEY=$(security find-generic-password -s gateway -w)`,
 };
 
 function useSaveProfile(onSaved: (profileId: string) => void) {
@@ -457,6 +457,11 @@ function ProfileEditor({
           {agentField}
           <div className="field-label">{words.environment}</div>
           <EnvironmentField value={environment} harness={harness} onChange={(value) => set({ environment: value })} startRevealed={!profile || environment !== saved.environment} />
+          <div className="hint">
+            {environmentFormat.commandHintBefore}
+            <code>KEY=$(command)</code>
+            {environmentFormat.commandHintAfter}
+          </div>
           <details className="environment-format">
             <summary>{words.format}</summary>
             <div className="hint">
@@ -465,6 +470,10 @@ function ProfileEditor({
               {environmentFormat.afterKeyValue}
               <code>KEY=$(command)</code>
               {environmentFormat.toRun}
+              <code>$(security find-generic-password -s gateway -w)</code>
+              {environmentFormat.orCommand}
+              <code>$(op read op://vault/item/token)</code>
+              {environmentFormat.afterCommandExample}
               <code>-u KEY</code>
               {environmentFormat.toUnset}
               <code>{environmentFormat.comment}</code>

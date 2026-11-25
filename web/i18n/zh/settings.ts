@@ -193,7 +193,10 @@ export const settings: Messages["settings"] = {
     exportTitle: "导出",
     exportHint: "把你的配置、提示词模板、工作区、插件和偏好放进一个文件，带到另一台机器上的 Mirador。对话、房间、设备和这个浏览器记住的内容会留在这里。",
     includeSecrets: "包含机密",
-    secretsLeftOut: "环境变量的值、插件的机密设置和语音 API 密钥不会包含在内，导入后请自行填写。启动前命令会按原样写入。",
+    secretsLeftOut: {
+      before: "环境变量的值、插件的机密设置和语音 API 密钥不会包含在内，导入后请自行填写。环境变量中的命令（",
+      after: "）和启动前命令会按原样写入。",
+    },
     secretsIncluded: "文件会包含环境变量的值、插件的机密设置和语音 API 密钥。请妥善保管。",
     export: "导出设置",
     importTitle: "导入",

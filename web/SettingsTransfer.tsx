@@ -114,7 +114,17 @@ function SettingsExport() {
           {words.export}
         </button>
       </div>
-      <p className={includeSecrets ? "hint transfer-warning" : "hint"}>{includeSecrets ? words.secretsIncluded : words.secretsLeftOut}</p>
+      <p className={includeSecrets ? "hint transfer-warning" : "hint"}>
+        {includeSecrets ? (
+          words.secretsIncluded
+        ) : (
+          <>
+            {words.secretsLeftOut.before}
+            <code>KEY=$(command)</code>
+            {words.secretsLeftOut.after}
+          </>
+        )}
+      </p>
       <Problem text={problem} />
     </section>
   );

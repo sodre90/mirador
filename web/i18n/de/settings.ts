@@ -196,7 +196,10 @@ export const settings: Messages["settings"] = {
     exportHint:
       "Eine Datei mit deinen Profilen, Prompt-Vorlagen, Arbeitsbereichen, Plugins und Präferenzen, um sie in Mirador auf einem anderen Rechner zu übernehmen. Unterhaltungen, Räume, Geräte und was sich dieser Browser merkt, bleiben hier.",
     includeSecrets: "Mit Geheimnissen",
-    secretsLeftOut: "Werte der Umgebung, geheime Plugin-Einstellungen und API-Schlüssel für Sprache bleiben draußen: Trage sie nach dem Import ein. Befehle vor dem Start kommen hinein, wie sie geschrieben sind.",
+    secretsLeftOut: {
+      before: "Werte der Umgebung, geheime Plugin-Einstellungen und API-Schlüssel für Sprache bleiben draußen: Trage sie nach dem Import ein. Befehle in der Umgebung (",
+      after: ") und Befehle vor dem Start kommen hinein, wie sie geschrieben sind.",
+    },
     secretsIncluded: "Die Datei enthält dann Werte der Umgebung, geheime Plugin-Einstellungen und API-Schlüssel für Sprache. Bewahre sie sicher auf.",
     export: "Einstellungen exportieren",
     importTitle: "Importieren",

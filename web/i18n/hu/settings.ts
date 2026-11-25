@@ -194,7 +194,10 @@ export const settings: Messages["settings"] = {
     exportHint:
       "Egyetlen fájlban a profiljaid, promptsablonjaid, munkaterületeid, bővítményeid és egyéb beállításaid, hogy egy másik gép Miradorjába vihesd őket. A beszélgetések, a szobák, a készülékek és amit ez a böngésző jegyez meg, itt maradnak.",
     includeSecrets: "Titkokkal együtt",
-    secretsLeftOut: "A környezeti változók értékei, a bővítmények titkos beállításai és a hang API-kulcsai kimaradnak, importálás után töltsd ki őket. Az indítás előtti parancsok úgy kerülnek bele, ahogy meg vannak írva.",
+    secretsLeftOut: {
+      before: "A környezeti változók értékei, a bővítmények titkos beállításai és a hang API-kulcsai kimaradnak, importálás után töltsd ki őket. A környezet parancsai (",
+      after: ") és az indítás előtti parancsok úgy kerülnek bele, ahogy meg vannak írva.",
+    },
     secretsIncluded: "A fájlban benne lesznek a környezeti változók értékei, a bővítmények titkos beállításai és a hang API-kulcsai. Vigyázz rá.",
     export: "Beállítások exportálása",
     importTitle: "Importálás",

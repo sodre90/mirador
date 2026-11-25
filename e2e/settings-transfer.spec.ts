@@ -58,6 +58,7 @@ test.describe("a running Mirador", () => {
     const created = await createProfile(page, "gateway", "TOKEN=sk-secret\nKEY=$(pass show key)", "", "opencode");
     await created.getByRole("button", { name: "Close" }).click();
     const settings = await transferPage(page);
+    await expect(settings.getByText("Environment commands (KEY=$(command)) and pre-launch commands go in as written.")).toBeVisible();
 
     const withoutSecrets = await exported(page, settings);
     expect(withoutSecrets.profiles!.find(({ name }) => name === "gateway")).toMatchObject({ harness: "opencode", environment: { TOKEN: { needsValue: true }, KEY: { command: "pass show key" } } });

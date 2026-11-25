@@ -196,7 +196,10 @@ export const settings = {
     exportHint:
       "One file with your profiles, prompt templates, workspaces, plugins and preferences, to bring into Mirador on another machine. Conversations, rooms, devices and what this browser remembers stay here.",
     includeSecrets: "Include secrets",
-    secretsLeftOut: "Environment values, secret plugin settings and voice API keys are left out, to fill in after an import. Pre-launch commands go in as written.",
+    secretsLeftOut: {
+      before: "Environment values, secret plugin settings and voice API keys are left out, to fill in after an import. Environment commands (",
+      after: ") and pre-launch commands go in as written.",
+    },
     secretsIncluded: "The file will hold your environment values, secret plugin settings and voice API keys. Keep it safe.",
     export: "Export settings",
     importTitle: "Import",

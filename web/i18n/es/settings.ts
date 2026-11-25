@@ -196,7 +196,10 @@ export const settings: Messages["settings"] = {
     exportHint:
       "Un archivo con tus perfiles, plantillas de prompt, espacios de trabajo, plugins y preferencias, para llevarlos a Mirador en otra máquina. Las conversaciones, las salas, los dispositivos y lo que recuerda este navegador se quedan aquí.",
     includeSecrets: "Incluir secretos",
-    secretsLeftOut: "Los valores del entorno, los ajustes secretos de los plugins y las claves de API de voz no se incluyen: complétalos después de importar. Los comandos previos al inicio se incluyen tal como están escritos.",
+    secretsLeftOut: {
+      before: "Los valores del entorno, los ajustes secretos de los plugins y las claves de API de voz no se incluyen: complétalos después de importar. Los comandos del entorno (",
+      after: ") y los comandos previos al inicio se incluyen tal como están escritos.",
+    },
     secretsIncluded: "El archivo tendrá los valores del entorno, los ajustes secretos de los plugins y las claves de API de voz. Guárdalo en un lugar seguro.",
     export: "Exportar ajustes",
     importTitle: "Importar",
