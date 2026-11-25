@@ -330,3 +330,29 @@ test("the option the agent recommends shows a Recommended tag, and recommending 
   await ask.getByRole("button", { name: "Submit" }).click();
   expect(await toolResult, "the tag isn't part of the answer").toBe("The user chose: Postgres");
 });
+
+test("a question that takes several shows checkboxes, and the answer lists every option ticked", async ({ page }) => {
+  await signIn(page, host);
+  await page.goto(host.origin);
+  const conversationId = await startConversation(page);
+  const ask = page.locator(".ask");
+  const toolResult = callCanvasTool(host, conversationId, "ask", {
+    question: "Which of these apply?",
+    options: [{ label: "Red" }, { label: "Blue" }, { label: "Green" }],
+    multiple: true,
+  });
+
+  await expect(ask.getByRole("radio")).toHaveCount(0);
+  await expect(ask.getByRole("button", { name: "Submit" })).toBeDisabled();
+  await ask.getByRole("checkbox", { name: "Green", exact: true }).check();
+  await ask.getByRole("checkbox", { name: "Red", exact: true }).check();
+  await ask.getByRole("checkbox", { name: "Blue", exact: true }).check();
+  await ask.getByRole("checkbox", { name: "Blue", exact: true }).uncheck();
+  await ask.getByRole("button", { name: "Submit" }).click();
+
+  expect(await toolResult).toBe("The user chose: Red; Green");
+  await openFromCanvasHistory(page, "Which of these apply?");
+  await expect(ask.getByRole("checkbox", { name: "Red", exact: true })).toBeChecked();
+  await expect(ask.getByRole("checkbox", { name: "Green", exact: true })).toBeChecked();
+  await expect(ask.getByRole("checkbox", { name: "Blue", exact: true })).not.toBeChecked();
+});

@@ -4,7 +4,7 @@ import type { AskAnswerEntry, AskItem, AskQuestion, CanvasItem } from "./model.t
 export function questionsOf(item: AskItem): AskQuestion[] {
   if (item.questions) return item.questions;
   if (!item.question || !item.options) return [];
-  return [{ question: item.question, html: item.html, options: item.options, allowOther: item.allowOther, optionWidth: item.optionWidth }];
+  return [{ question: item.question, html: item.html, options: item.options, allowOther: item.allowOther, multiple: item.multiple, optionWidth: item.optionWidth }];
 }
 
 /** What the user answered to the question at `index` of an answered ask: their answer to one of several, or the one answer of a single question. */
@@ -29,3 +29,18 @@ export function newestWaitingAsk(items: CanvasItem[]): AskItem | undefined {
 
 /** All the answers on one line, for a list of past questions and for a note of what was sent. */
 export const answersSummary = (answers: AskAnswerEntry[]) => answers.map(({ label }) => label).join(" · ");
+
+/** Between the options a user ticked, in the one line their answer is. */
+export const TICKED_JOINER = "; ";
+
+/** The options of a question that an answer line names, in the question's order. */
+export const tickedLabelsIn = (question: AskQuestion, answerLabel: string | undefined) => {
+  const named = (answerLabel ?? "").split(TICKED_JOINER);
+  return question.options.map(({ label }) => label).filter((label) => named.includes(label));
+};
+
+/** What an answer line holds beyond the options of a question that takes several: the user's own words. */
+export const ownTextIn = (question: AskQuestion, answerLabel: string) => {
+  const own = answerLabel.split(TICKED_JOINER).filter((part) => !question.options.some(({ label }) => label === part));
+  return own.length > 0 ? own.join(TICKED_JOINER) : undefined;
+};

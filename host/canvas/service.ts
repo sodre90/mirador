@@ -385,12 +385,13 @@ export class CanvasService {
 
 type AskedFields = Pick<CanvasItemBase, "title"> & Partial<Omit<AskItem, keyof CanvasItemBase | "answer" | "shownBefore">>;
 
-const singleQuestionAsked = ({ question, html, options, allowOther, optionWidth }: AskQuestion): AskedFields => ({
+const singleQuestionAsked = ({ question, html, options, allowOther, multiple, optionWidth }: AskQuestion): AskedFields => ({
   title: question,
   question,
   html,
   options,
   allowOther: allowOther ?? false,
+  ...(multiple && { multiple }),
   ...(optionWidth && { optionWidth }),
 });
 

@@ -24,6 +24,7 @@ export const canvas: Messages["canvas"] = {
     change: "Módosítás",
     yourAnswer: "A válaszod:",
     pickAnOption: "Válassz egy lehetőséget a válaszhoz",
+    tickOptions: "Jelölj be egy vagy több lehetőséget a válaszhoz",
     submit: "Beküldés",
     back: "Vissza",
     next: "Tovább",

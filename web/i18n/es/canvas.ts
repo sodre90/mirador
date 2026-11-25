@@ -26,6 +26,7 @@ export const canvas: Messages["canvas"] = {
     change: "Cambiar",
     yourAnswer: "Tu respuesta:",
     pickAnOption: "Elige una opción para responder",
+    tickOptions: "Marca una o más opciones para responder",
     submit: "Enviar",
     back: "Atrás",
     next: "Siguiente",

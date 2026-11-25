@@ -27,6 +27,7 @@ export const canvas = {
     change: "Change",
     yourAnswer: "Your answer:",
     pickAnOption: "Pick an option to answer",
+    tickOptions: "Tick one or more options to answer",
     submit: "Submit",
     back: "Back",
     next: "Next",

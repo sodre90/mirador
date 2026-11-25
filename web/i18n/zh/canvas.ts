@@ -24,6 +24,7 @@ export const canvas: Messages["canvas"] = {
     change: "更改",
     yourAnswer: "你的回答：",
     pickAnOption: "选一个选项来回答",
+    tickOptions: "勾选一个或多个选项来回答",
     submit: "提交",
     back: "返回",
     next: "下一步",
