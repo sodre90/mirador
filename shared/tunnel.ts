@@ -83,7 +83,10 @@ function checkedPlaces(given: Record<string, unknown>): TunnelPlaces | null {
   return { hostKey, hostAddress, port, ...(canvasPort !== undefined && { canvasPort }), broker: { address: broker.address, key: broker.key } };
 }
 
-export const encodedInviteTunnel = (tunnel: InviteTunnel) => base64UrlOf(JSON.stringify(tunnel));
+/** The phone app reads an invite's base64 one character a byte, so nothing past ASCII goes in unescaped. */
+const asciiJson = (value: unknown) => JSON.stringify(value).replace(/[^\x00-\x7f]/g, (codeUnit) => `\\u${codeUnit.charCodeAt(0).toString(16).padStart(4, "0")}`);
+
+export const encodedInviteTunnel = (tunnel: InviteTunnel) => base64UrlOf(asciiJson(tunnel));
 
 /** What an invite link says of the tunnel, every field checked, as the link is pasted from anywhere; null when any is not what the host makes. */
 export function decodedInviteTunnel(encoded: string): InviteTunnel | null {

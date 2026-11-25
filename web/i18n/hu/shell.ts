@@ -308,6 +308,9 @@ export const shell: Messages["shell"] = {
     addAndJoin: "Hozzáadás és csatlakozás",
     add: "Hozzáadás",
     alreadyListed: "Ez a gép már szerepel a listában.",
+    inviteCodeAlone:
+      "Ez csak egy meghívókód. Illeszd be a teljes meghívólinket (a meghívóban válaszd a Másik számítógép lehetőséget), vagy írd ide a gép címét, és a kódot akkor add meg, amikor megnyitod.",
+    noPortGiven: (port, address) => `Nincs megadva port. Hálózaton a Mirador alapból ezen a porton válaszol: ${port}, például ${address}.`,
     colour: "A gép színe",
     colourOf: (machine) => `Szín: ${machine}`,
     open: "Megnyitás",

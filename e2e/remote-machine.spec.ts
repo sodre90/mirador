@@ -306,6 +306,38 @@ test("a machine added by its address alone asks for an invite code in this compu
   await server.close();
 });
 
+test("an invite code typed as a machine's address is refused with what to paste instead, and a local address without a port is shown at the network port", async ({
+  page,
+}) => {
+  await signIn(page, laptop);
+  await page.locator(".sidebar").getByRole("button", { name: "Machines…" }).click();
+  const machines = page.getByRole("dialog", { name: "Machines" });
+  const address = machines.getByLabel("Address or invite link");
+  const add = machines.getByRole("button", { name: "Add", exact: true });
+  const noPort = machines.getByText(/^No port given\./);
+
+  await test.step("an invite code alone adds nothing and says what to paste", async () => {
+    await address.fill("7K4M-2PQX-9WZB");
+    await expect(machines.getByRole("alert")).toHaveText(/^That's only an invite code\. Paste the whole invite link/);
+    await expect(add).toBeDisabled();
+  });
+
+  await test.step("an IP address without a port is shown at Mirador's network port, and can still be added as typed", async () => {
+    await address.fill("192.0.2.10");
+    await expect(noPort).toHaveText("No port given. On a network, Mirador answers at port 4602 unless set otherwise, as in https://192.0.2.10:4602.");
+    await expect(machines.getByRole("alert")).toHaveCount(0);
+    await expect(add).toBeEnabled();
+  });
+
+  await test.step("an address with its port, or a tailnet name, gets no such hint", async () => {
+    await address.fill("https://192.0.2.10:4602");
+    await expect(noPort).toHaveCount(0);
+    await address.fill("home-server.tailnet.ts.net");
+    await expect(noPort).toHaveCount(0);
+    await expect(add).toBeEnabled();
+  });
+});
+
 /** Whether the page of a machine shown in this computer's rail last told its host that someone looks at it. */
 function lookedAtInTheRail(page: Page) {
   let lastSaid: boolean | undefined;

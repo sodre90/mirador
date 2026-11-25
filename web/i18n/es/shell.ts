@@ -340,6 +340,9 @@ export const shell: Messages["shell"] = {
     addAndJoin: "Agregar y unirse",
     add: "Agregar",
     alreadyListed: "Esta máquina ya está en la lista.",
+    inviteCodeAlone:
+      "Eso es solo un código de invitación. Pega el enlace de invitación completo (elige Otro equipo en la invitación), o escribe aquí la dirección de la máquina y da el código al abrirla.",
+    noPortGiven: (port, address) => `No se indicó el puerto. En una red, Mirador responde en el puerto ${port} salvo que se configure otro, como en ${address}.`,
     colour: "Color de la máquina",
     colourOf: (machine) => `Color de ${machine}`,
     open: "Abrir",

@@ -329,6 +329,9 @@ export const shell = {
     addAndJoin: "Add and join",
     add: "Add",
     alreadyListed: "This machine is already in the list.",
+    inviteCodeAlone:
+      "That's only an invite code. Paste the whole invite link (choose Another computer in the invite), or type the machine's address here and give the code when you open it.",
+    noPortGiven: (port: number, address: string) => `No port given. On a network, Mirador answers at port ${port} unless set otherwise, as in ${address}.`,
     colour: "Machine colour",
     colourOf: (machine: string) => `Colour of ${machine}`,
     open: "Open",

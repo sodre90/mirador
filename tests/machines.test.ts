@@ -9,12 +9,14 @@ import {
   inviteIn,
   inviteLink,
   isHidden,
+  isInviteCodeAlone,
   isRoomInviteLink,
   joinCodeIn,
   joinedRoomsIn,
   machineAddress,
   machinesSeen,
   MOST_JOINED_ROOMS,
+  networkAddressFor,
   roomInviteLink,
   roomInviteText,
   tunnelIn,
@@ -228,6 +230,16 @@ test("a device's place a host answered with is taken only with every field as a 
   expect(checkedDeviceTunnel(null)).toBeNull();
 });
 
+const readOneCharacterAByte = (link: string): InviteTunnel => JSON.parse(atob(/tunnel=([\w-]+)$/.exec(link)![1]!.replace(/-/g, "+").replace(/_/g, "/")));
+
+test.each(["Zoë’s Café", "Műhely", "书房", "Studio 🎛️"])("an invite from a machine named %s reads the same in the phone app, which takes its base64 one character a byte, as in Mirador", (name) => {
+  const named = { ...tunnel, name };
+  const phoneLink = inviteLink("http://[fd12:3456:789a:1::1]:4600", "ABCD-EFGH-JKLM", null, named);
+  const computerLink = deviceTunnelInviteLink("ABCD-EFGH-JKLM", named);
+  expect([phoneLink, computerLink].map(readOneCharacterAByte)).toEqual([named, named]);
+  expect([phoneLink, computerLink].map((link) => machineAddress(link)?.tunnel)).toEqual([named, named]);
+});
+
 test("what is not a web address is not a machine", () => {
   expect(machineAddress("")).toBeNull();
   expect(machineAddress("ftp://files.example")).toBeNull();
@@ -364,4 +376,24 @@ test("a room invite connects the way Settings name while it works, else the othe
   expect(inviteConnectFor("address", { "peer-to-peer": true, address: false })).toBe("peer-to-peer");
   expect(inviteConnectFor("peer-to-peer", { "peer-to-peer": false, address: true })).toBe("address");
   expect(inviteConnectFor("peer-to-peer", { "peer-to-peer": false, address: false })).toBeNull();
+});
+
+test("an invite code alone names no machine, whatever its case, and still joins as a code", () => {
+  expect(isInviteCodeAlone(" 7K4M-2PQX-9WZB ")).toBe(true);
+  expect(isInviteCodeAlone("7k4m-2pqx-9wzb")).toBe(true);
+  expect(machineAddress("7K4M-2PQX-9WZB")).toBeNull();
+  expect(inviteIn("7K4M-2PQX-9WZB")).toEqual({ code: "7K4M-2PQX-9WZB", authorityFingerprint: null, tunnel: null });
+  expect(machineAddress("https://7k4m-2pqx-9wzb"), "typed with a scheme, it is an address").toMatchObject({ origin: "https://7k4m-2pqx-9wzb" });
+  expect(isInviteCodeAlone("mac1-mini-home"), "a host name with letters no code has").toBe(false);
+  expect(isInviteCodeAlone("7K4M-2PQX")).toBe(false);
+});
+
+test("an address on the local network given without a port points at Mirador's network port", () => {
+  expect(networkAddressFor("https://192.0.2.10")).toBe("https://192.0.2.10:4602");
+  expect(networkAddressFor("http://box.local")).toBe("https://box.local:4602");
+  expect(networkAddressFor("https://[fd12:3456:789a:1::1]")).toBe("https://[fd12:3456:789a:1::1]:4602");
+  expect(networkAddressFor("https://192.0.2.10:4602")).toBeNull();
+  expect(networkAddressFor("http://[fd12:3456:789a:1::1]:4600")).toBeNull();
+  expect(networkAddressFor("https://home-server.tailnet.ts.net")).toBeNull();
+  expect(networkAddressFor("https://main")).toBeNull();
 });
