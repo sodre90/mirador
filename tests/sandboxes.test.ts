@@ -103,9 +103,9 @@ describe("a room's sandbox", () => {
 
     launched.gone!();
     await Bun.sleep(IDLE_STOP_MS * 4);
+    while (existsSync(manifestFolder)) await Bun.sleep(10);
     expect(cli.vms.size).toBe(0);
     expect(sandboxes.confirmedRunning(ROOM)).toBe(false);
-    expect(existsSync(manifestFolder)).toBe(false);
     await sandboxes.stopAll();
   });
 

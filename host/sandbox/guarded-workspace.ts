@@ -55,7 +55,7 @@ async function submoduleGitFolders(modules: string): Promise<string[]> {
         return [...(isGitFolder ? [folder] : []), ...(await submoduleGitFolders(isGitFolder ? join(folder, "modules") : folder))];
       }),
   );
-  return nested.flat();
+  return nested.flat().toSorted();
 }
 
 /** The repository's git folders, its own and its submodules'. */

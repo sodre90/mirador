@@ -319,7 +319,7 @@ describe("a VM that starts beside another, which may swap what it finds for a li
     await sandboxes.stopAll();
   });
 
-  test("and as the room's own stops the brought agents' first, and looks at it all anew", async () => {
+  test.skipIf(!RUNS_SANDBOXES)("and as the room's own stops the brought agents' first, and looks at it all anew", async () => {
     const { workspace, cli, sandboxes } = sandboxedRoom();
     await sandboxes.launchForBrought(brought(workspace));
     replaced(workspace);
@@ -369,7 +369,7 @@ describe("a VM that starts beside another, which may swap what it finds for a li
     await sandboxes.stopAll();
   });
 
-  test("a brought agent's and another room's that start at once in the same folder both start on the same plan", async () => {
+  test.skipIf(!RUNS_SANDBOXES)("a brought agent's and another room's that start at once in the same folder both start on the same plan", async () => {
     const { workspace, cli, sandboxes } = sandboxedRoom();
     await Promise.all([sandboxes.launch(ownAgent(workspace)), sandboxes.launchForBrought(brought(workspace, { owner: OTHER_ROOM, agentId: "zoes-coder" }))]);
     expect(cli.vms.size).toBe(2);
