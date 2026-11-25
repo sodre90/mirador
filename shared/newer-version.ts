@@ -16,6 +16,8 @@ export function isNewerVersion(candidate: string, current: string): boolean {
   return (firstDifference ?? 0) > 0;
 }
 
+export const newestFirst = (one: string, other: string) => (isNewerVersion(one, other) ? -1 : isNewerVersion(other, one) ? 1 : 0);
+
 /** Made from the tag, never taken from the response, so a link the user clicks always leads to the repository's own release page. */
 export const releasePage = (tag: string) => `https://github.com/${RELEASES_REPOSITORY}/releases/tag/${encodeURIComponent(tag)}`;
 

@@ -216,24 +216,27 @@ test("a plugin added from a git repo is built only once the user agrees, works a
     expect(await canvasToolNames(conversation)).not.toContain("app_open");
   });
 
-  await test.step("without a branch, adding installs the newest release, an update brings the next one, passing over one for a newer plugin API, which says it needs a newer Mirador once nothing else is left", async () => {
+  await test.step("without a branch, adding installs the newest release this Mirador runs, and an update brings the next one, both passing over one for a newer plugin API, which is no update once nothing else is left", async () => {
     release("1.1.0");
+    const installedCommit = git(repo(), "rev-parse", "HEAD");
+    release("1.1.1", { api: APP_PLUGIN_API + 1 });
+    const passedOverCommit = git(repo(), "rev-parse", "--short", "HEAD");
     const plugins = await openPlugins(page);
     await plugins.getByRole("button", { name: "Add from git…" }).click();
     await plugins.getByLabel("Git URL or path").fill(repo());
     await plugins.getByRole("button", { name: "Add" }).click();
-    await expect(consent(plugins, "Install Counter?").locator(".plugin-source")).toHaveText(`${repo()} · release 1.1.0 · ${git(repo(), "rev-parse", "HEAD").slice(0, 12)} Release 1.1.0`);
+    await expect(consent(plugins, "Install Counter?").locator(".plugin-source")).toHaveText(`${repo()} · release 1.1.0 · ${installedCommit.slice(0, 12)} Release 1.1.0`);
     await consent(plugins, "Install Counter?").getByRole("button", { name: "Install", exact: true }).click();
     const counter = await counterDetails(plugins);
     await expect(counter.locator(".plugin-upkeep dl")).toContainText("Version1.1.0");
-    await expect(counter.locator(".plugin-source")).toHaveText(`${repo()} · releases · ${git(repo(), "rev-parse", "--short", "HEAD")} Release 1.1.0`);
+    await expect(counter.locator(".plugin-source")).toHaveText(`${repo()} · releases · ${git(repo(), "rev-parse", "--short", installedCommit)} Release 1.1.0`);
     await counter.getByRole("button", { name: "Check for updates" }).click();
     await expect(counter.getByText("Up to date.")).toBeVisible();
 
-    release("1.2.0");
+    release("1.2.0", { api: 1 });
     await counter.getByRole("button", { name: "Check again" }).click();
     await expect(counter.locator(".plugin-release")).toHaveText("1.1.0 → 1.2.0");
-    await expect(counter.getByRole("list", { name: "New commits of Counter" })).toHaveText(`${git(repo(), "rev-parse", "--short", "HEAD")} Release 1.2.0`);
+    await expect(counter.getByRole("list", { name: "New commits of Counter" }).getByRole("listitem")).toHaveText([`${git(repo(), "rev-parse", "--short", "HEAD")} Release 1.2.0`, `${passedOverCommit} Release 1.1.1`]);
     await counter.getByRole("button", { name: "Update", exact: true }).click();
     await consent(counter, "Update Counter?").getByRole("button", { name: "Update", exact: true }).click();
     await expect(counter.locator(".plugin-upkeep dl")).toContainText("Version1.2.0");
@@ -250,8 +253,8 @@ test("a plugin added from a git repo is built only once the user agrees, works a
     await expect(counter.locator(".plugin-source")).toHaveText(`${repo()} · releases · ${supportedCommit} Release 1.2.1`);
 
     await counter.getByRole("button", { name: "Check for updates" }).click();
-    await expect(counter.locator(".plugin-release")).toHaveText("1.2.1 → 1.3.0");
-    await expect(counter.getByText(`This update is for plugin API ${APP_PLUGIN_API + 1}; this Mirador speaks plugin API 1 to ${APP_PLUGIN_API}, so it needs a newer Mirador.`)).toBeVisible();
+    await expect(counter.getByText("Up to date.")).toBeVisible();
+    await expect(counter.locator(".plugin-release")).toHaveCount(0);
     await expect(counter.getByRole("button", { name: "Update", exact: true })).toHaveCount(0);
     await expect(counter.getByRole("button", { name: "Check again" })).toBeVisible();
   });

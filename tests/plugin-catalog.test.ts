@@ -1,5 +1,5 @@
 import { afterAll, expect, test } from "bun:test";
-import { catalogPluginsOf, revokedReleasesOf } from "../shared/apps.ts";
+import { APP_PLUGIN_API, catalogPluginsOf, revokedReleasesOf, type PluginKind } from "../shared/apps.ts";
 import { offeredPluginsGuidance } from "../host/canvas/guidance.ts";
 import { PluginCatalog, revokedWhileRunning } from "../host/plugin-catalog.ts";
 import { Store } from "../host/store.ts";
@@ -46,6 +46,49 @@ test("the catalog keeps only entries pinned to a release at a full commit, so a 
       plugins: [unpinned, { ...unpinned, branch: "main" }, { ...media, release: "v1.1.4" }, { ...media, commit: "978acf8" }, { ...media, commit: media.commit.toUpperCase() }, checklist],
     }),
   ).toEqual([checklist]);
+});
+
+const needsNewerMirador = APP_PLUGIN_API + 1;
+const newest = { ...media, release: "2.0.0", commit: "a".repeat(40), api: needsNewerMirador, description: "Edit a video in 3D.", tagline: "Videos in 3D.", kinds: ["app", "canvas"] as PluginKind[] };
+const previous = { release: "1.1.4", commit: media.commit, api: APP_PLUGIN_API, description: media.description, tagline: "Mark a moment.", kinds: ["app"] as PluginKind[] };
+
+test("the catalog has each plugin at its newest release this Mirador runs, described as that release", () => {
+  const runs = { ...newest, api: APP_PLUGIN_API };
+  expect(catalogPluginsOf({ plugins: [{ ...runs, older: [previous] }] })).toEqual([runs]);
+  expect(catalogPluginsOf({ plugins: [{ ...newest, older: [previous] }] })).toEqual([{ ...newest, ...previous }]);
+  const earlier = { ...previous, release: "1.0.0", commit: "b".repeat(40), api: 2 };
+  expect(catalogPluginsOf({ plugins: [{ ...newest, older: [earlier, { ...previous, release: "1.9.0", api: needsNewerMirador }, previous] }] })).toEqual([{ ...newest, ...previous }]);
+  const { release, commit, api } = previous;
+  expect(catalogPluginsOf({ plugins: [{ ...newest, older: [{ release, commit, api }] }] }), "a field it leaves out is the entry's").toEqual([{ ...newest, release, commit, api }]);
+});
+
+test("an older release the catalog doesn't name in full, by version, commit and plugin API, is never taken, and it can't change which plugin the entry is", () => {
+  const unreadable = [{ ...previous, commit: "978acf8" }, { ...previous, release: "v1.1.4" }, { ...previous, api: "1" }, { ...previous, api: undefined }, { ...previous, description: "" }, null, "1.1.4"];
+  expect(catalogPluginsOf({ plugins: [{ ...newest, older: unreadable }, { ...newest, older: "1.1.4" }, newest] })).toEqual([newest, newest, newest]);
+  expect(catalogPluginsOf({ plugins: [{ ...newest, older: [{ ...previous, name: "evil", repo: "https://example.com/evil.git" }] }] })).toEqual([{ ...newest, ...previous }]);
+  expect(catalogPluginsOf({ plugins: [{ ...media, api: "23" }, { ...media, api: 0 }] }), "an entry whose API can't be read is found out once cloned").toEqual([media, media]);
+});
+
+test("a plugin whose every release needs a newer Mirador isn't offered, installed or shown, unless it is installed, and keeps its pin", async () => {
+  served = { plugins: [newest, checklist] };
+  const installed = new Set<string>();
+  const catalog = new PluginCatalog(new Store(":memory:"), url, (name) => installed.has(name));
+  await catalog.refresh();
+  expect(catalog.notInstalled()).toEqual([checklist]);
+  expect(catalog.shown()).toEqual([checklist]);
+  expect(() => catalog.installable("media")).toThrow("Media needs a newer Mirador.");
+  expect(() => catalog.installable("evil")).toThrow("evil is not an official plugin; they are checklist.");
+  expect(catalog.all.map(({ name, release }) => [name, release])).toEqual([["media", "2.0.0"], ["checklist", "1.0.6"]]);
+
+  installed.add("media");
+  expect(catalog.shown().map(({ name }) => name)).toEqual(["media", "checklist"]);
+  expect(catalog.notInstalled()).toEqual([checklist]);
+
+  served = { plugins: [{ ...newest, older: [previous] }, checklist] };
+  installed.clear();
+  await catalog.refresh();
+  expect(catalog.installable("media")).toMatchObject({ release: "1.1.4", commit: media.commit });
+  served = { plugins: [media, checklist] };
 });
 
 test("the catalog keeps an entry's icon and pictures when it can show them, and the entry without them when it can't", () => {

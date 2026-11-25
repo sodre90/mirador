@@ -3,12 +3,15 @@ import { cpSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { addWorkspace, callCanvasTool, openPlugins, pluginTile, signIn, startConversation } from "./helpers.ts";
+import { APP_PLUGIN_API } from "../shared/apps.ts";
 import { TestHost } from "./test-host.ts";
 
 const host: TestHost = new TestHost({ fakePrograms: true, environment: () => ({ MIRADOR_PLUGIN_CATALOG: `file://${catalogFile()}` }) });
 const catalogFile = () => join(host.root, "official-plugins.json");
 const counterRepo = () => join(host.root, "counter-repo");
 const tallyRepo = () => join(host.root, "tally-repo");
+const dialRepo = () => join(host.root, "dial-repo");
+const gaugeRepo = () => join(host.root, "gauge-repo");
 
 const git = (folder: string, ...args: string[]) =>
   execFileSync("git", ["-C", folder, "-c", "user.name=Test", "-c", "user.email=test@example.com", ...args], { encoding: "utf8" }).trim();
@@ -25,6 +28,26 @@ function counterRepoNamed(folder: string, name: string, title: string) {
 }
 
 const pinnedAtItsRelease = (repo: string) => ({ repo, release: "1.0.0", commit: git(repo, "rev-parse", "v1.0.0^{commit}") });
+
+/** Releases the plugin as 2.0.0, for a plugin API newer than this Mirador speaks. */
+function releaseForNewerMirador(repo: string) {
+  const manifest = join(repo, "plugin.json");
+  writeFileSync(manifest, JSON.stringify({ ...JSON.parse(readFileSync(manifest, "utf8")), version: "2.0.0", api: APP_PLUGIN_API + 1 }));
+  git(repo, "commit", "--quiet", "-am", "Release 2.0.0");
+  git(repo, "tag", "v2.0.0");
+  return { release: "2.0.0", commit: git(repo, "rev-parse", "HEAD"), api: APP_PLUGIN_API + 1 };
+}
+
+/** A catalog of two plugins whose newest release needs a newer Mirador; only the dial has an older one read for this Mirador. */
+function publishCatalogForNewerMirador() {
+  counterRepoNamed(dialRepo(), "dial", "Dial");
+  counterRepoNamed(gaugeRepo(), "gauge", "Gauge");
+  const { repo, ...atOlder } = pinnedAtItsRelease(dialRepo());
+  const older = [{ ...atOlder, api: 1, description: "Dials numbers by hand.", tagline: "A dial to turn by hand." }];
+  const dial = { name: "dial", title: "Dial", description: "Dials in 3D.", tagline: "A dial in 3D.", recommendWhen: "the user dials", repo, ...releaseForNewerMirador(dialRepo()), older };
+  const gauge = { name: "gauge", title: "Gauge", description: "Gauges.", recommendWhen: "the user gauges", repo: gaugeRepo(), ...releaseForNewerMirador(gaugeRepo()) };
+  writeFileSync(catalogFile(), JSON.stringify({ plugins: [gauge, dial] }));
+}
 
 /** Moves the repo's tag v1.0.0 to a new commit, as a maintainer gone bad could, and back to where it was. */
 function movedTag(repo: string) {
@@ -138,6 +161,39 @@ test("the agent recommends an official plugin, and Mirador installs it, at the c
     await expect(tally.getByText("used from the next start")).toBeVisible({ timeout: 30_000 });
     await tally.getByRole("button", { name: "← All plugins" }).click();
     await expect(pluginTile(plugins(page), "Installed", "Tally")).toContainText("Official");
+    await expect(plugins(page).getByRole("list", { name: "Discover" })).toHaveCount(0);
+  });
+});
+
+test("Plugins… offers an official plugin at the newest release this Mirador runs, and leaves out one whose releases all need a newer Mirador", async ({ page }) => {
+  publishCatalogForNewerMirador();
+  await signIn(page, host);
+  await openPlugins(page);
+
+  await test.step("Discover lists only the plugin with a release that runs here, as that release describes itself", async () => {
+    await expect(plugins(page).getByRole("list", { name: "Discover" }).getByRole("listitem")).toHaveText(["DDialA dial to turn by hand.OfficialInstall"]);
+  });
+
+  await test.step("an agent can't install the other one", async () => {
+    await page.keyboard.press("Escape");
+    const conversationId = await startConversation(page);
+    expect(await callCanvasTool(host, conversationId, "plugin_install", { name: "gauge", reason: "You gauge." })).toContain("Gauge needs a newer Mirador.");
+    expect(await callCanvasTool(host, conversationId, "plugin_install", { name: "evil", reason: "r" })).toContain("evil is not an official plugin; they are dial.");
+    await expect(page.locator(".ask")).toHaveCount(0);
+  });
+
+  await test.step("installing the first takes the release that runs here, and the newer one is no update", async () => {
+    await openPlugins(page);
+    await pluginTile(plugins(page), "Discover", "Dial").getByRole("button", { name: "Install Dial" }).click();
+    const dial = plugins(page).getByRole("region", { name: "Dial" });
+    await expect(dial.locator(".plugin-description")).toHaveText("Dials numbers by hand.");
+    const consent = dial.getByRole("group", { name: "Install Dial?" });
+    await expect(consent.locator(".plugin-source")).toContainText("release 1.0.0");
+    await consent.getByRole("button", { name: "Install", exact: true }).click();
+    await expect(dial.locator(".plugin-upkeep dl")).toContainText("Version1.0.0", { timeout: 30_000 });
+    await dial.getByRole("button", { name: "Check for updates" }).click();
+    await expect(dial.getByText("Up to date.")).toBeVisible();
+    await dial.getByRole("button", { name: "← All plugins" }).click();
     await expect(plugins(page).getByRole("list", { name: "Discover" })).toHaveCount(0);
   });
 });

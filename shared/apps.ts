@@ -1,4 +1,5 @@
 import type { HostProblem } from "./host-problems.ts";
+import { newestFirst } from "./newer-version.ts";
 /**
  * The plugin API version this Mirador speaks; a plugin.json names the one it was written for, and Mirador loads every
  * version up to its own. API 2 brought host tasks, streamed files and images in a view's message; API 3 brought canvas
@@ -313,10 +314,12 @@ export interface CatalogPlugin {
   recommendWhen: string;
   /** What git clones, which the catalog's README asks to be an https URL anyone can clone. */
   repo: string;
-  /** The release Mirador installs and updates the plugin to, the one the catalog's maintainer read: never a newer tag. */
+  /** The release Mirador installs and updates the plugin to, the newest the catalog's maintainer read that runs on this Mirador: never a newer tag. */
   release: string;
   /** The commit the release's tag pointed at when it was read; a clone at any other is refused, as the tag moved since. */
   commit: string;
+  /** The plugin API the release needs; an entry without it is found out once cloned. */
+  api?: number;
   /** The plugin's icon, as SVG text. */
   icon?: string;
   /** A line on what it does, for its tile; the description stands in without one. */
@@ -350,8 +353,31 @@ export const isTagline = (tagline: unknown): tagline is string => typeof tagline
 
 const PLUGIN_KINDS: readonly PluginKind[] = ["app", "canvas"];
 
-/** A catalog entry with only the extras this Mirador can show: a bad icon, picture, tagline or kind is left out, not the plugin. */
-function withShowableExtras({ icon, screenshots, tagline, kinds, ...plugin }: CatalogPlugin): CatalogPlugin {
+const isPluginApi = (api: unknown): api is number => typeof api === "number" && Number.isInteger(api) && api >= 1;
+
+/** Whether this Mirador speaks the plugin API the release needs. */
+export const runsOnThisMirador = ({ api }: Pick<CatalogPlugin, "api">) => !isPluginApi(api) || api <= APP_PLUGIN_API;
+
+const CATALOG_RELEASE_FIELDS = ["release", "commit", "api", "description", "tagline", "kinds", "icon", "screenshots"] as const;
+
+/** A release the catalog's maintainer read before the entry's own, for Miradors whose plugin API is too old for that one; a field it leaves out is the entry's. */
+type OlderCatalogRelease = Pick<CatalogPlugin, "release" | "commit"> & { api: number } & Partial<Pick<CatalogPlugin, (typeof CATALOG_RELEASE_FIELDS)[number]>>;
+
+function isOlderCatalogRelease(value: unknown): value is OlderCatalogRelease {
+  const { release, commit, api, description } = (value ?? {}) as Partial<OlderCatalogRelease>;
+  return isPluginVersion(release) && isCommit(commit) && isPluginApi(api) && (description === undefined || (typeof description === "string" && description !== ""));
+}
+
+/** The entry at its newest release that runs on this Mirador, as that release describes itself; at its own release when none does. */
+function atNewestThatRuns({ older, ...entry }: CatalogPlugin & { older?: unknown }): CatalogPlugin {
+  if (runsOnThisMirador(entry) || !Array.isArray(older)) return entry;
+  const [newest] = older.filter(isOlderCatalogRelease).filter(runsOnThisMirador).sort((one, other) => newestFirst(one.release, other.release));
+  if (!newest) return entry;
+  return { ...entry, ...Object.fromEntries(CATALOG_RELEASE_FIELDS.flatMap((field) => (newest[field] === undefined ? [] : [[field, newest[field]]]))) };
+}
+
+/** A catalog entry with only the extras this Mirador can show: a bad icon, picture, tagline, kind or plugin API is left out, not the plugin. */
+function withShowableExtras({ icon, screenshots, tagline, kinds, api, ...plugin }: CatalogPlugin): CatalogPlugin {
   const showable = Array.isArray(screenshots) ? screenshots.filter(isScreenshot) : [];
   const knownKinds = Array.isArray(kinds) ? PLUGIN_KINDS.filter((kind) => kinds.includes(kind)) : [];
   return {
@@ -360,6 +386,7 @@ function withShowableExtras({ icon, screenshots, tagline, kinds, ...plugin }: Ca
     ...(showable.length > 0 ? { screenshots: showable } : {}),
     ...(isTagline(tagline) ? { tagline } : {}),
     ...(knownKinds.length > 0 ? { kinds: knownKinds } : {}),
+    ...(isPluginApi(api) ? { api } : {}),
   };
 }
 
@@ -404,10 +431,10 @@ export function revokedReleasesOf(catalog: unknown): RevokedRelease[] {
 /** A full commit id, as a pin names it: an abbreviated one could match another commit. */
 export const isCommit = (commit: unknown): commit is string => typeof commit === "string" && /^[0-9a-f]{40}$/.test(commit);
 
-/** The catalog's plugins, leaving out entries this Mirador can't read, as a newer catalog may have. */
+/** The catalog's plugins, each at its newest release that runs on this Mirador, leaving out entries this Mirador can't read, as a newer catalog may have. */
 export function catalogPluginsOf(catalog: unknown): CatalogPlugin[] | null {
   const plugins = (catalog as { plugins?: unknown } | null)?.plugins;
-  return Array.isArray(plugins) ? plugins.filter(isCatalogPlugin).map(withShowableExtras) : null;
+  return Array.isArray(plugins) ? plugins.filter(isCatalogPlugin).map(atNewestThatRuns).map(withShowableExtras) : null;
 }
 
 /** A commit an update would bring. */
@@ -416,12 +443,10 @@ export interface PluginCommit {
   subject: string;
 }
 
-/** What updating a plugin would bring: a newer release, for a plugin that follows releases, and its commits, newest first. */
+/** What updating a plugin would bring, of what runs on this Mirador: a newer release, for a plugin that follows releases, and its commits, newest first. */
 export interface PluginNews {
   release: string | null;
   commits: PluginCommit[];
-  /** The plugin API the release or commits name when this Mirador speaks an older one: they can't go in until Mirador is updated. */
-  needsApi: number | null;
 }
 
 /**

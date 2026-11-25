@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import {
-  APP_PLUGIN_API,
   offerRuns,
   offerSource,
   settingValue,
@@ -137,7 +136,7 @@ async function findNews(folder: string): Promise<PluginNews & { problem: string 
       (message, requestId) => (message.type === "plugins.commits-found" && message.requestId === requestId ? { ...message, problem: replyProblemText(message) } : undefined),
     );
   } catch (error) {
-    return { release: null, commits: [], needsApi: null, problem: error instanceof Error ? error.message : String(error) };
+    return { release: null, commits: [], problem: error instanceof Error ? error.message : String(error) };
   }
 }
 
@@ -230,18 +229,9 @@ function PluginUpdate({ plugin, found, goesIn, startUpdating }: { plugin: Plugin
               </li>
             ))}
           </ul>
-          {updating.news.needsApi === null ? (
-            <button type="button" data-hint={hints.updatePlugin} onClick={() => offerUpdate(updating.news)}>
-              {words.update}
-            </button>
-          ) : (
-            <>
-              <span className="plugin-status">{words.needsNewerMirador(updating.news.needsApi, APP_PLUGIN_API)}</span>
-              <button type="button" data-hint={hints.checkPluginUpdates} onClick={check}>
-                {words.checkAgain}
-              </button>
-            </>
-          )}
+          <button type="button" data-hint={hints.updatePlugin} onClick={() => offerUpdate(updating.news)}>
+            {words.update}
+          </button>
         </>
       );
     case "cloning":

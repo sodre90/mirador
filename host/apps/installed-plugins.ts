@@ -2,7 +2,7 @@ import { existsSync, lstatSync, mkdirSync, readlinkSync, realpathSync, rmSync, s
 import { homedir } from "node:os";
 import { basename, delimiter, dirname, join, resolve, sep } from "node:path";
 import { MAX_PLUGIN_ICON_BYTES, isPluginIcon, isPluginVersion, isTagline, type PluginKind, type PluginLook, type PluginManifest, type PluginManifestPicture, type PluginNews, type PluginInfo, type PluginOffer, type PluginSource, type PluginTool, type PluginUpdate, type TakenBackBecause } from "../../shared/apps.ts";
-import { isNewerVersion } from "../../shared/newer-version.ts";
+import { isNewerVersion, newestFirst } from "../../shared/newer-version.ts";
 import { environmentWithoutPrompts, GIT_WITHOUT_REPOSITORY_PROGRAMS } from "../git-environment.ts";
 import { localImage } from "../local-images.ts";
 import { renameWhenFree } from "../rename-when-free.ts";
@@ -83,8 +83,6 @@ async function releaseCheckedOut(folder: string) {
   return newestOf(((await gitOutput(folder, ["tag", "--points-at", "HEAD", "--list", `${RELEASE_TAG_PREFIX}[0-9]*`])) ?? "").split("\n"));
 }
 
-const newestFirst = (one: string, other: string) => (isNewerVersion(one, other) ? -1 : isNewerVersion(other, one) ? 1 : 0);
-
 /** Every release the repo has tagged, newest first. */
 async function releasesOf(url: string): Promise<string[]> {
   const listed = await run(["git", ...GIT_WITHOUT_REPOSITORY_PROGRAMS, "ls-remote", "--tags", "--refs", "--", url, `${RELEASE_TAG_PREFIX}*`], process.cwd(), environmentWithoutPrompts(), GIT_GIVES_UP_AFTER_MS);
@@ -95,14 +93,27 @@ async function releasesOf(url: string): Promise<string[]> {
     .sort(newestFirst);
 }
 
-/** The newest release the repo has tagged; null when it tags none. */
-const newestRelease = async (url: string) => (await releasesOf(url))[0] ?? null;
+const taggedReleaseRef = (release: string) => `refs/tags/${releaseTag(release)}`;
 
-const NO_NEWS: PluginNews = { release: null, commits: [], needsApi: null };
+/** The newest of the releases, listed newest first, whose plugin.json names a plugin API this Mirador speaks; null when none does. */
+async function newestThatRuns(folder: string, releases: string[], refOf: (release: string) => string): Promise<string | null> {
+  for (const release of releases) {
+    const manifest = parsedOrNull(await gitOutput(folder, ["show", `${refOf(release)}:plugin.json`]));
+    if (manifest !== null && newerApiOf(manifest) === null) return release;
+  }
+  return null;
+}
+
+const NO_NEWS: PluginNews = { release: null, commits: [] };
 
 /** Where a plugin's clone keeps the releases its update checks fetch, apart from its own tags, which say what it has installed. */
 const FETCHED_RELEASES = "refs/mirador/releases/";
 const fetchedReleaseRef = (release: string) => `${FETCHED_RELEASES}${releaseTag(release)}`;
+
+async function checkOutRelease(folder: string, release: string) {
+  const checkedOut = await run(["git", ...GIT_WITHOUT_REPOSITORY_PROGRAMS, "checkout", "--quiet", "--detach", taggedReleaseRef(release)], folder, environmentWithoutPrompts(), GIT_GIVES_UP_AFTER_MS);
+  if (!checkedOut.ok) throw new HostProblemError({ code: "git-clone-failed", output: checkedOut.output });
+}
 
 /** Refuses a fetched release whose tag no longer points at the commit the catalog's maintainer read. */
 async function refuseUnlessFetchedAtPin(folder: string, pin: PluginPin) {
@@ -226,13 +237,15 @@ async function commitsOfFetchedRelease(folder: string, release: string) {
   return commitsOfLog(log);
 }
 
+const newsOf = async (folder: string, release: string | null): Promise<PluginNews> =>
+  release === null ? NO_NEWS : { release, commits: await commitsOfFetchedRelease(folder, release) };
+
 /** An official plugin's news: the release it is pinned to, once past the installed one, and never a newer tag nobody read. */
 async function pinnedNews(folder: string, installed: string, pin: PluginPin): Promise<PluginNews> {
   if (!isNewerVersion(pin.release, installed)) return NO_NEWS;
   await fetchReleases(folder);
   await refuseUnlessFetchedAtPin(folder, pin);
-  const needsApi = newerApiOf(parsedOrNull(await gitOutput(folder, ["show", `${pin.commit}:plugin.json`])));
-  return { release: pin.release, needsApi, commits: await commitsOfFetchedRelease(folder, pin.release) };
+  return newsOf(folder, await newestThatRuns(folder, [pin.release], fetchedReleaseRef));
 }
 
 /** Every text in a problem, without credentials, as the page may show any of them. */
@@ -377,24 +390,29 @@ export class InstalledPlugins {
 
   /**
    * Clones the repo at the branch or tag given, or else at the release an official plugin is pinned to, or else at its
-   * newest release, or its default branch when it tags no release, without building it: what it brings, for the user to
-   * agree to before any of its code runs. With a pinned commit, a clone at any other is refused.
+   * newest release that runs on this Mirador, or its default branch when it tags no release, without building it: what
+   * it brings, for the user to agree to before any of its code runs. With a pinned commit, a clone at any other is refused.
    */
   offer(url: string, branch: string | null, pinnedCommit: string | null = null): Promise<PluginOffer> {
     return this.oneAtATime(async () => {
       const repo = expandedHome(url.trim());
       const given = branch?.trim() || null;
-      const pin = given || !repo ? null : this.pins.ofRepo(repo);
-      const release = pin?.release ?? (given || !repo ? null : await newestRelease(repo));
-      const { staged, manifest } = await this.cloned(repo, given ?? (release && releaseTag(release)), pin?.commit ?? pinnedCommit);
+      const { staged, manifest, release } = await this.clonedToInstall(repo, given, pinnedCommit);
       try {
         await this.refuseTakenName(manifest.name);
       } catch (error) {
         rmSync(staged, { recursive: true, force: true });
         throw error;
       }
-      return this.offered(staged, manifest, { remote: repo, branch: given && !releaseOfTag(given) ? given : null, release: release ?? releaseOfTag(given) }, null);
+      return this.offered(staged, manifest, { remote: repo, branch: given && !releaseOfTag(given) ? given : null, release }, null);
     });
+  }
+
+  private async clonedToInstall(repo: string, given: string | null, pinnedCommit: string | null) {
+    if (given || !repo) return { ...(await this.cloned(repo, given, pinnedCommit)), release: releaseOfTag(given) };
+    const pin = this.pins.ofRepo(repo);
+    if (pin) return { ...(await this.cloned(repo, releaseTag(pin.release), pin.commit)), release: pin.release };
+    return this.clonedAtNewestThatRuns(repo);
   }
 
   /**
@@ -512,30 +530,18 @@ export class InstalledPlugins {
       const folder = this.clonedPlugin(folderName);
       const followed = await this.followed(folder);
       if (followed.branch === null) return this.releaseNews(folder, followed.remote, followed.release);
-      return { release: null, ...(await this.fetchedNews(folder, followed.branch)) };
+      return { release: null, commits: await this.fetchedCommits(folder, followed.branch) };
     });
   }
 
-  /**
-   * The newest release past the installed one whose plugin API this Mirador speaks, with what it brings; when every
-   * newer release needs a newer Mirador, the newest of them, saying which plugin API it needs.
-   */
+  /** The newest release past the installed one that runs on this Mirador, with what it brings. */
   private async releaseNews(folder: string, remote: string, installed: string): Promise<PluginNews> {
     const pin = this.pins.ofPlugin({ name: (await manifestFields(folder)).name, remote });
     if (pin) return this.revocations.revocationOf(pin.commit) === null ? pinnedNews(folder, installed, pin) : NO_NEWS;
     const newer = (await releasesOf(remote)).filter((release) => isNewerVersion(release, installed));
     if (newer.length === 0) return NO_NEWS;
     await fetchReleases(folder);
-    const unrevoked = await this.unrevokedReleases(folder, newer);
-    const newest = unrevoked[0];
-    if (newest === undefined) return NO_NEWS;
-    let apiTheNewestNeeds: number | null = null;
-    for (const release of unrevoked) {
-      const needsApi = newerApiOf(parsedOrNull(await gitOutput(folder, ["show", `${fetchedReleaseRef(release)}:plugin.json`])));
-      if (needsApi === null) return { release, needsApi, commits: await commitsOfFetchedRelease(folder, release) };
-      apiTheNewestNeeds ??= needsApi;
-    }
-    return { release: newest, needsApi: apiTheNewestNeeds, commits: await commitsOfFetchedRelease(folder, newest) };
+    return newsOf(folder, await newestThatRuns(folder, await this.unrevokedReleases(folder, newer), fetchedReleaseRef));
   }
 
   /** The fetched releases, in their order, but those at a commit the catalog revoked. */
@@ -549,12 +555,12 @@ export class InstalledPlugins {
     return checked.filter(({ revoked }) => !revoked).map(({ release }) => release);
   }
 
-  /** What the ref brings that the checkout doesn't have: its commits, newest first, and the plugin API its plugin.json names when this Mirador's is older. */
-  private async fetchedNews(folder: string, ref: string) {
+  /** The commits the ref brings that the checkout doesn't have, newest first; none while its plugin.json is for a newer Mirador. */
+  private async fetchedCommits(folder: string, ref: string) {
     const fetched = await run(["git", ...GIT_WITHOUT_REPOSITORY_PROGRAMS, "fetch", "--quiet", "--no-tags", "origin", ref], folder, environmentWithoutPrompts(), GIT_GIVES_UP_AFTER_MS);
     if (!fetched.ok) throw new HostProblemError({ code: "git-fetch-failed", output: fetched.output });
     const [log, manifest] = await Promise.all([gitOutput(folder, ["log", "--format=%h%x09%s", "HEAD..FETCH_HEAD"]), gitOutput(folder, ["show", "FETCH_HEAD:plugin.json"])]);
-    return { commits: commitsOfLog(log ?? ""), needsApi: newerApiOf(parsedOrNull(manifest)) };
+    return newerApiOf(parsedOrNull(manifest)) === null ? commitsOfLog(log ?? "") : [];
   }
 
   /** The plugins from git repos with news; one whose fetch fails, offline for one, keeps what was last found for it. */
@@ -569,7 +575,7 @@ export class InstalledPlugins {
         }
       }),
     );
-    return found.filter((update): update is PluginUpdate => update !== null && update.needsApi === null && (update.release !== null || update.commits.length > 0));
+    return found.filter((update): update is PluginUpdate => update !== null && (update.release !== null || update.commits.length > 0));
   }
 
   /**
@@ -636,7 +642,22 @@ export class InstalledPlugins {
    * none of its code. A clone that isn't at the pinned commit given, or that is at a commit the catalog revoked, is
    * refused before anything reads it.
    */
-  private async cloned(url: string, branchOrTag: string | null, pinnedCommit: string | null): Promise<{ staged: string; manifest: PluginManifest }> {
+  private cloned(url: string, branchOrTag: string | null, pinnedCommit: string | null): Promise<{ staged: string; manifest: PluginManifest }> {
+    return this.inStagedClone(url, branchOrTag, async (staged) => ({ staged, manifest: await this.manifestOfClone(staged, branchOrTag, pinnedCommit) }));
+  }
+
+  /** Clones the repo, as `cloned` does, at its newest release that runs on this Mirador; at its newest of all when none does, whose plugin.json says why it is refused. */
+  private async clonedAtNewestThatRuns(url: string): Promise<{ staged: string; manifest: PluginManifest; release: string | null }> {
+    const releases = await releasesOf(url);
+    const newest = releases[0] ?? null;
+    return this.inStagedClone(url, newest && releaseTag(newest), async (staged) => {
+      const release = (await newestThatRuns(staged, releases, taggedReleaseRef)) ?? newest;
+      if (release !== newest) await checkOutRelease(staged, release);
+      return { staged, manifest: await this.manifestOfClone(staged, release && releaseTag(release), null), release };
+    });
+  }
+
+  private async inStagedClone<T>(url: string, branchOrTag: string | null, read: (staged: string) => Promise<T>): Promise<T> {
     if (!url) throw new HostProblemError({ code: "plugin-needs-repo-address" });
     mkdirSync(this.staging, { recursive: true });
     const staged = join(this.staging, crypto.randomUUID());
@@ -648,24 +669,28 @@ export class InstalledPlugins {
         GIT_GIVES_UP_AFTER_MS,
       );
       if (!cloned.ok) throw new HostProblemError({ code: "git-clone-failed", output: cloned.output });
-      const head = await headOf(staged);
-      if (pinnedCommit && head !== pinnedCommit) {
-        throw new HostProblemError({ code: "plugin-release-moved", release: releaseOfTag(branchOrTag) ?? String(branchOrTag), pinned: pinnedCommit, found: head });
-      }
-      const revoked = this.revocations.revocationOf(head);
-      if (revoked !== null) throw new HostProblemError({ code: "plugin-release-revoked", reason: revoked });
-      const manifest = await readManifest(staged)
-        .then((read) => (refuseUnversioned(read), read))
-        .catch((error) => {
-          throw new HostProblemError({ code: "repo-is-not-a-plugin", ...causeOf(error, messageOf(error)) });
-        });
-      const tagged = releaseOfTag(branchOrTag);
-      if (tagged && manifest.version !== tagged) throw new HostProblemError({ code: "plugin-tag-version-mismatch", tag: String(branchOrTag), release: tagged, version: String(manifest.version) });
-      return { staged, manifest };
+      return await read(staged);
     } catch (error) {
       rmSync(staged, { recursive: true, force: true });
       throw shownWithoutCredentials(error);
     }
+  }
+
+  private async manifestOfClone(staged: string, branchOrTag: string | null, pinnedCommit: string | null): Promise<PluginManifest> {
+    const head = await headOf(staged);
+    if (pinnedCommit && head !== pinnedCommit) {
+      throw new HostProblemError({ code: "plugin-release-moved", release: releaseOfTag(branchOrTag) ?? String(branchOrTag), pinned: pinnedCommit, found: head });
+    }
+    const revoked = this.revocations.revocationOf(head);
+    if (revoked !== null) throw new HostProblemError({ code: "plugin-release-revoked", reason: revoked });
+    const manifest = await readManifest(staged)
+      .then((read) => (refuseUnversioned(read), read))
+      .catch((error) => {
+        throw new HostProblemError({ code: "repo-is-not-a-plugin", ...causeOf(error, messageOf(error)) });
+      });
+    const tagged = releaseOfTag(branchOrTag);
+    if (tagged && manifest.version !== tagged) throw new HostProblemError({ code: "plugin-tag-version-mismatch", tag: String(branchOrTag), release: tagged, version: String(manifest.version) });
+    return manifest;
   }
 
   /** Runs the plugin's build command in its clone, and checks the files plugin.json names are there then. */

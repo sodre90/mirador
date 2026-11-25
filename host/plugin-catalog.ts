@@ -1,4 +1,4 @@
-import { catalogPluginsOf, revokedReleasesOf, type CatalogPlugin, type RevokedPlugin, type RevokedRelease } from "../shared/apps.ts";
+import { catalogPluginsOf, revokedReleasesOf, runsOnThisMirador, type CatalogPlugin, type RevokedPlugin, type RevokedRelease } from "../shared/apps.ts";
 import type { ServerMessage } from "../shared/protocol.ts";
 import { withoutCredentials, type InstalledPlugins, type Revocations } from "./apps/installed-plugins.ts";
 import { messageOf } from "./apps/plugins.ts";
@@ -41,20 +41,31 @@ export class PluginCatalog implements Revocations {
     this.revocationsChanged = listener;
   }
 
+  /** Every official plugin, those that need a newer Mirador too, as their pins hold for the ones installed. */
   get all(): CatalogPlugin[] {
     return this.plugins;
   }
 
+  private get thatRun(): CatalogPlugin[] {
+    return this.plugins.filter(runsOnThisMirador);
+  }
+
+  /** The ones Plugins… shows: installed, or running on this Mirador once they are. */
+  shown(): CatalogPlugin[] {
+    return this.plugins.filter((plugin) => runsOnThisMirador(plugin) || this.isInstalled(plugin.name));
+  }
+
   /** The ones the user could install: not in the plugins folder yet. */
   notInstalled(): CatalogPlugin[] {
-    return this.plugins.filter(({ name }) => !this.isInstalled(name));
+    return this.thatRun.filter(({ name }) => !this.isInstalled(name));
   }
 
   /** Throws why the plugin can't be installed from the catalog. */
   installable(name: string): CatalogPlugin {
     const plugin = this.plugins.find((listed) => listed.name === name);
-    if (!plugin) throw new Error(`${name} is not an official plugin; they are ${this.plugins.map((listed) => listed.name).join(", ") || "not known yet"}.`);
+    if (!plugin) throw new Error(`${name} is not an official plugin; they are ${this.thatRun.map((listed) => listed.name).join(", ") || "not known yet"}.`);
     if (this.isInstalled(name)) throw new Error(`${plugin.title} is installed already.`);
+    if (!runsOnThisMirador(plugin)) throw new Error(`${plugin.title} needs a newer Mirador.`);
     return plugin;
   }
 
@@ -116,7 +127,7 @@ export const pluginsListed = async (plugins: InstalledPlugins, catalog: PluginCa
   type: "plugins.listed",
   folder: plugins.folder,
   plugins: await plugins.list(),
-  official: catalog.all,
+  official: catalog.shown(),
   restartNeeded: plugins.restartNeeded,
 });
 

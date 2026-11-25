@@ -295,7 +295,7 @@ describe("adding, updating and removing plugins", () => {
     const plugins = pluginsIn("update");
     await new InstalledPlugins(plugins, []).add(repo, null);
     const installed = new InstalledPlugins(plugins, []);
-    expect(await installed.news("counter")).toEqual({ release: null, commits: [], needsApi: null });
+    expect(await installed.news("counter")).toEqual({ release: null, commits: [] });
 
     commit(repo, "src/view.js", "document.body.textContent = 'Counting by two';\n", "Count by two");
     const [newest] = (await installed.news("counter")).commits;
@@ -391,7 +391,7 @@ describe("adding, updating and removing plugins", () => {
     commit(repo, "src/view.js", "document.body.textContent = 'Counting by two';\n", "Count by two");
     const installedAt = git(join(plugins, "counter"), "rev-parse", "--short", "HEAD");
     const found = await installed.updatesFound(null);
-    expect(found).toEqual([{ folder: "counter", title: "Counter", from: installedAt, release: null, commits: [{ commit: git(repo, "rev-parse", "--short", "HEAD"), subject: "Count by two" }], needsApi: null, ready: false, heldBack: null }]);
+    expect(found).toEqual([{ folder: "counter", title: "Counter", from: installedAt, release: null, commits: [{ commit: git(repo, "rev-parse", "--short", "HEAD"), subject: "Count by two" }], ready: false, heldBack: null }]);
 
     rmSync(repo, { recursive: true, force: true });
     expect(await installed.updatesFound(found)).toEqual(found);
@@ -418,11 +418,11 @@ describe("adding, updating and removing plugins", () => {
 
     const [listed] = await installed.list();
     expect(listed).toMatchObject({ version: "1.10.0", source: { kind: "git", branch: null, release: "1.10.0", subject: "Release 1.10.0" } });
-    expect(await installed.news("counter")).toEqual({ release: null, commits: [], needsApi: null });
+    expect(await installed.news("counter")).toEqual({ release: null, commits: [] });
 
     commit(repo, "src/view.js", "document.body.textContent = 'Counting by two';\n", "Count by two");
     release(repo, "1.11.0");
-    const news = { release: "1.11.0", commits: [{ commit: git(repo, "rev-parse", "--short", "HEAD"), subject: "Release 1.11.0" }, { commit: git(repo, "rev-parse", "--short", "HEAD~1"), subject: "Count by two" }], needsApi: null };
+    const news = { release: "1.11.0", commits: [{ commit: git(repo, "rev-parse", "--short", "HEAD"), subject: "Release 1.11.0" }, { commit: git(repo, "rev-parse", "--short", "HEAD~1"), subject: "Count by two" }] };
     expect(await installed.news("counter")).toEqual(news);
     expect(await installed.updatesFound(null)).toEqual([{ folder: "counter", title: "Counter", from: listed!.source.kind === "git" ? listed!.source.commit : "", ...news, ready: false, heldBack: null }]);
 
@@ -431,7 +431,54 @@ describe("adding, updating and removing plugins", () => {
     expect(readFileSync(join(plugins, "counter", "view.js"), "utf8")).toBe("document.body.textContent = 'Counting by two';\n");
   }, 60_000);
 
-  test("a release or commits for a newer plugin API are news that can't go in, so the updates found by itself leave them out", async () => {
+  /** Releases for a newer Mirador than this one, named in plugin.json. */
+  function releaseForNewerApi(repo: string, version: string) {
+    const manifest = join(repo, "plugin.json");
+    writeFileSync(manifest, JSON.stringify({ ...JSON.parse(readFileSync(manifest, "utf8")), api: APP_PLUGIN_API + 1 }));
+    release(repo, version);
+  }
+
+  test("installing passes over the releases for a newer plugin API and takes the newest this Mirador runs, at that release as if it were the newest", async () => {
+    const repo = builtCounterRepo("install-supported-repo");
+    git(repo, "tag", "v1.0.0");
+    commit(repo, "src/view.js", "document.body.textContent = 'Counting by two';\n", "Count by two");
+    release(repo, "1.1.0");
+    git(repo, "tag", "--force", "--annotate", "v1.1.0", "--message", "Release 1.1.0");
+    const supported = git(repo, "rev-parse", "v1.1.0^{commit}");
+    releaseForNewerApi(repo, "2.0.0");
+    releaseForNewerApi(repo, "2.1.0");
+    const plugins = pluginsIn("install-supported");
+    const installed = new InstalledPlugins(plugins, []);
+
+    const offer = await installed.offer(repo, null);
+    expect(offer).toMatchObject({ version: "1.1.0", release: "1.1.0", branch: null, commit: supported, subject: "Release 1.1.0" });
+    await installed.install(offer.id);
+    expect((await installed.list())[0]).toMatchObject({ version: "1.1.0", source: { kind: "git", branch: null, release: "1.1.0" } });
+    expect(readFileSync(join(plugins, "counter", "view.js"), "utf8")).toBe("document.body.textContent = 'Counting by two';\n");
+    expect(git(join(plugins, "counter"), "status", "--porcelain")).toBe("");
+    expect(await installed.news("counter")).toEqual({ release: null, commits: [] });
+  }, 60_000);
+
+  test("a plugin whose every release needs a newer Mirador is refused, saying so, even when an early tag isn't a plugin yet", async () => {
+    const repo = join(root, "only-newer-repo");
+    mkdirSync(repo);
+    writeFileSync(join(repo, "README.md"), "A plugin, one day.\n");
+    git(repo, "init", "--quiet", "-b", "main");
+    git(repo, "add", ".");
+    git(repo, "commit", "--quiet", "-m", "Not a plugin yet");
+    git(repo, "tag", "v0.0.1");
+    writeFileSync(join(repo, "plugin.json"), JSON.stringify({ name: "newer", title: "Newer", version: "1.0.0", api: APP_PLUGIN_API + 1 }));
+    git(repo, "add", ".");
+    git(repo, "commit", "--quiet", "-m", "Release 1.0.0");
+    git(repo, "tag", "v1.0.0");
+    const plugins = pluginsIn("only-newer");
+    await expect(new InstalledPlugins(plugins, []).offer(repo, null)).rejects.toThrow(
+      `plugin.json is for plugin API ${APP_PLUGIN_API + 1}; this Mirador speaks plugin API 1 to ${APP_PLUGIN_API}, so the plugin needs a newer Mirador.`,
+    );
+    expect(leftInStaging(plugins)).toEqual([]);
+  });
+
+  test("releases and commits that need a newer Mirador are no news", async () => {
     const repo = builtCounterRepo("newer-api-repo");
     git(repo, "tag", "v1.0.0");
     const byRelease = new InstalledPlugins(pluginsIn("newer-api-release"), []);
@@ -439,15 +486,26 @@ describe("adding, updating and removing plugins", () => {
     const onBranch = new InstalledPlugins(pluginsIn("newer-api-branch"), []);
     await onBranch.add(repo, "main");
 
-    const manifest = join(repo, "plugin.json");
-    writeFileSync(manifest, JSON.stringify({ ...JSON.parse(readFileSync(manifest, "utf8")), api: APP_PLUGIN_API + 1 }));
-    release(repo, "2.0.0");
-    const forNewerApi = { release: "2.0.0", commits: [{ commit: git(repo, "rev-parse", "--short", "HEAD"), subject: "Release 2.0.0" }], needsApi: APP_PLUGIN_API + 1 };
-    expect(await byRelease.news("counter")).toEqual(forNewerApi);
-    expect(await byRelease.updatesFound(null)).toEqual([]);
-    expect(await onBranch.news("counter")).toEqual({ ...forNewerApi, release: null });
-    expect(await onBranch.updatesFound(null)).toEqual([]);
-  });
+    releaseForNewerApi(repo, "2.0.0");
+    for (const installed of [byRelease, onBranch]) {
+      expect(await installed.news("counter")).toEqual({ release: null, commits: [] });
+      expect(await installed.updatesFound(null)).toEqual([]);
+    }
+  }, 60_000);
+
+  test("an official plugin's pin that needs a newer Mirador is no news, and no other release stands in for it", async () => {
+    const repo = builtCounterRepo("pinned-newer-repo");
+    git(repo, "tag", "v1.0.0");
+    const installed = new InstalledPlugins(pluginsIn("pinned-newer"), []);
+    await installed.add(repo, null);
+    release(repo, "1.1.0");
+    releaseForNewerApi(repo, "2.0.0");
+    const pin = { release: "2.0.0", commit: git(repo, "rev-parse", "HEAD") };
+    installed.followsPinsWith({ ofPlugin: () => pin, ofRepo: () => pin });
+    expect(await installed.news("counter")).toEqual({ release: null, commits: [] });
+    expect(await installed.updatesFound(null)).toEqual([]);
+    expect((await installed.list())[0]).toMatchObject({ version: "1.0.0" });
+  }, 60_000);
 
   test("an update passes over the releases for a newer plugin API and brings the newest release this Mirador speaks", async () => {
     const repo = builtCounterRepo("supported-release-repo");
@@ -459,11 +517,9 @@ describe("adding, updating and removing plugins", () => {
 
     commit(repo, "src/view.js", "document.body.textContent = 'Counting by two';\n", "Count by two");
     release(repo, "1.1.0");
-    const supported = { release: "1.1.0", commits: [{ commit: git(repo, "rev-parse", "--short", "HEAD"), subject: "Release 1.1.0" }, { commit: git(repo, "rev-parse", "--short", "HEAD~1"), subject: "Count by two" }], needsApi: null };
-    const manifest = join(repo, "plugin.json");
-    writeFileSync(manifest, JSON.stringify({ ...JSON.parse(readFileSync(manifest, "utf8")), api: APP_PLUGIN_API + 1 }));
-    release(repo, "2.0.0");
-    release(repo, "2.1.0");
+    const supported = { release: "1.1.0", commits: [{ commit: git(repo, "rev-parse", "--short", "HEAD"), subject: "Release 1.1.0" }, { commit: git(repo, "rev-parse", "--short", "HEAD~1"), subject: "Count by two" }] };
+    releaseForNewerApi(repo, "2.0.0");
+    releaseForNewerApi(repo, "2.1.0");
 
     expect(await installed.news("counter")).toEqual(supported);
     expect(await installed.updatesFound(null)).toEqual([{ folder: "counter", title: "Counter", from: listed!.source.kind === "git" ? listed!.source.commit : "", ...supported, ready: false, heldBack: null }]);
@@ -473,7 +529,7 @@ describe("adding, updating and removing plugins", () => {
     await installed.update("counter");
     expect((await installed.list())[0]).toMatchObject({ version: "1.1.0", source: { release: "1.1.0" } });
     expect(readFileSync(join(plugins, "counter", "view.js"), "utf8")).toBe("document.body.textContent = 'Counting by two';\n");
-    expect(await installed.news("counter")).toMatchObject({ release: "2.1.0", needsApi: APP_PLUGIN_API + 1 });
+    expect(await installed.news("counter")).toEqual({ release: null, commits: [] });
   }, 60_000);
 
   test("reads the newer releases' plugin.json after one fetch, annotated tags too, and follows tags the repo moved without losing which release is installed", async () => {
@@ -486,10 +542,8 @@ describe("adding, updating and removing plugins", () => {
     commit(repo, "src/view.js", "document.body.textContent = 'Counting by two';\n", "Count by two");
     release(repo, "1.1.0");
     git(repo, "tag", "--force", "--annotate", "v1.1.0", "--message", "Release 1.1.0");
-    const supported = { release: "1.1.0", commits: [{ commit: git(repo, "rev-parse", "--short", "HEAD"), subject: "Release 1.1.0" }, { commit: git(repo, "rev-parse", "--short", "HEAD~1"), subject: "Count by two" }], needsApi: null };
-    const manifest = join(repo, "plugin.json");
-    writeFileSync(manifest, JSON.stringify({ ...JSON.parse(readFileSync(manifest, "utf8")), api: APP_PLUGIN_API + 1 }));
-    ["2.0.0", "2.1.0", "2.2.0"].forEach((version) => release(repo, version));
+    const supported = { release: "1.1.0", commits: [{ commit: git(repo, "rev-parse", "--short", "HEAD"), subject: "Release 1.1.0" }, { commit: git(repo, "rev-parse", "--short", "HEAD~1"), subject: "Count by two" }] };
+    ["2.0.0", "2.1.0", "2.2.0"].forEach((version) => releaseForNewerApi(repo, version));
 
     const trace = join(root, "one-fetch.trace");
     const fetchesOf = async (check: () => Promise<unknown>) => {
@@ -525,7 +579,7 @@ describe("adding, updating and removing plugins", () => {
 
     release(repo, "1.1.0");
     revoked.set(git(repo, "rev-parse", "HEAD"), "It sends your files away.");
-    expect(await installed.news("counter")).toEqual({ release: null, commits: [], needsApi: null });
+    expect(await installed.news("counter")).toEqual({ release: null, commits: [] });
     expect(await installed.updatesFound(null)).toEqual([]);
     await expect(installed.offer(repo, "v1.1.0")).rejects.toMatchObject({ problem: { code: "plugin-release-revoked", reason: "It sends your files away." } });
     expect(leftInStaging(plugins), "the refused clone goes").toEqual([]);
