@@ -352,10 +352,9 @@ const admissions: { [K in ClientMessage["type"]]: K extends PersonMessageType ? 
   },
   "room.leave": ({ roomId }, person) => void roleOf(person, roomId),
   "room.set-members-bring-agents": OWNER_ONLY,
-  /** Into a room the person is in; that only a member brings one, never a guest, while the room lets them, and how many, the room's host checks and answers. */
-  "room.bring-agent": ({ requestId, roomId, name, harness, worksInRoom }, person) => {
-    if (!isRequestId(requestId) || typeof name !== "string" || name.length > MOST_AGENT_NAME_SENT || !harnessIds.includes(harness) || typeof worksInRoom !== "boolean") throw unreadable();
-    void roleOf(person, roomId);
+  /** Whether the person is in the room, that only a member brings one, never a guest, while the room lets them, and how many, the room's host checks and answers. */
+  "room.bring-agent": ({ requestId, roomId, name, harness, worksInRoom }) => {
+    if (!isRequestId(requestId) || !isRoomId(roomId) || typeof name !== "string" || name.length > MOST_AGENT_NAME_SENT || !harnessIds.includes(harness) || typeof worksInRoom !== "boolean") throw unreadable();
   },
   /** Whose agent it is, the room's host checks: a person takes out only the agents they brought. */
   "room.take-agent-out": ({ roomId, agentId }, person) => {

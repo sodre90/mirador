@@ -139,14 +139,20 @@ describe("bringing an agent into a room", () => {
     expect(agentOf(agentId)!.brought).toEqual({ personId: "m1", name: "Coder", harness: "claude", here: true });
   });
 
-  test("a guest, the owner, someone outside the room or anyone in a room that does not let members never brings one", () => {
-    const { rooms, room, ownerId, store } = roomWithMia();
-    store.insertPerson({ id: "x1", name: "Xi", color: null });
+  test("a guest, the owner or anyone in a room that does not let members never brings one", () => {
+    const { rooms, room, ownerId } = roomWithMia();
     expect(refusal(() => rooms.bringAgent(room.id, "g1", "Coder", "claude"))).toBe("room-bringing-not-yours");
     expect(refusal(() => rooms.bringAgent(room.id, ownerId, "Coder", "claude"))).toBe("room-bringing-not-yours");
-    expect(refusal(() => rooms.bringAgent(room.id, "x1", "Coder", "claude"))).toBe("room-bringing-not-yours");
     rooms.setMembersBringAgents(room.id, false);
     expect(refusal(() => rooms.bringAgent(room.id, "m1", "Coder", "claude"))).toBe("room-bringing-not-yours");
+  });
+
+  test("someone outside the room hears the same as of a room there is none of, whatever the room lets members do", () => {
+    const { rooms, room, store } = roomWithMia();
+    store.insertPerson({ id: "x1", name: "Xi", color: null });
+    const heard = [room.id, "no-such-room"].map((roomId) => refusal(() => rooms.bringAgent(roomId, "x1", "Coder", "claude")));
+    rooms.setMembersBringAgents(room.id, false);
+    expect([...heard, refusal(() => rooms.bringAgent(room.id, "x1", "Coder", "claude"))]).toEqual(["room-gone", "room-gone", "room-gone"]);
   });
 
   test("an agent of an unknown kind is refused", () => {
@@ -505,9 +511,10 @@ describe("what a person's Mirador may send about the agents they brought", () =>
   const mia = { personId: "m1", roleIn: (roomId: string) => (roomId === "r1" ? ("member" as const) : null), conversationBehind: () => null };
   const admitted = (sent: Record<string, unknown>) => refusal(() => admittedFromPerson(sent, mia));
 
-  test("ids of the room's form and texts of bounded length, in a room they are in", () => {
+  test("ids of the room's form and texts of bounded length, in a room they are in; bringing an agent into another is for its host to answer", () => {
     expect(admitted({ type: "room.bring-agent", requestId: "q1", roomId: "r1", name: "Coder", harness: "claude", worksInRoom: false })).toBeNull();
-    expect(admitted({ type: "room.bring-agent", requestId: "q1", roomId: "r2", name: "Coder", harness: "claude", worksInRoom: false })).not.toBeNull();
+    expect(admitted({ type: "room.bring-agent", requestId: "q1", roomId: "r2", name: "Coder", harness: "claude", worksInRoom: false })).toBeNull();
+    expect(admitted({ type: "room.bring-agent", requestId: "q1", roomId: "../r1", name: "Coder", harness: "claude", worksInRoom: false })).not.toBeNull();
     expect(admitted({ type: "room.bring-agent", requestId: "q1", roomId: "r1", name: "C".repeat(1_000), harness: "claude", worksInRoom: false })).not.toBeNull();
     expect(admitted({ type: "room.bring-agent", requestId: "q1", roomId: "r1", name: "Coder", harness: "nope", worksInRoom: false })).not.toBeNull();
     expect(admitted({ type: "room.take-agent-out", roomId: "r1", agentId: "../x" })).not.toBeNull();

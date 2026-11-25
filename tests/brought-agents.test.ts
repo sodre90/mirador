@@ -200,6 +200,9 @@ describe("bringing an agent of your own into a room of someone else's machine", 
     const tooMany = brought.bring("ann", "r1", "p1", "w1", "after-ok");
     letIn(null, { code: "room-agents-brought-too-many" });
     expect(await problemOf(tooMany)).toBe("room-agents-brought-too-many");
+    const gone = brought.bring("ann", "r1", "p1", "w1", "after-ok");
+    letIn(null, { code: "room-gone" });
+    expect(await problemOf(gone)).toBe("room-gone");
     const strange = brought.bring("ann", "r1", "p1", "w1", "after-ok");
     letIn(null, { code: "plugin-command-unknown", command: "rm -rf" });
     expect(await problemOf(strange)).toBe("room-agent-not-let-in");

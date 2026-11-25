@@ -65,7 +65,7 @@ interface WorkspaceCallUnderWay {
 }
 
 /** What a room's machine may say kept an agent out, which your Mirador passes on; anything else it says counts as not letting it in. */
-const REFUSALS_PASSED_ON = ["room-bringing-not-yours", "room-agents-brought-too-many", "room-agent-name-taken", "room-bringing-too-fast"] as const;
+const REFUSALS_PASSED_ON = ["room-gone", "room-bringing-not-yours", "room-agents-brought-too-many", "room-agent-name-taken", "room-bringing-too-fast"] as const;
 
 /** The machines this computer's owner joined as a person in their rooms, as this host talks to them. */
 export interface RoomMachines {

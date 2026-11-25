@@ -1036,6 +1036,18 @@ describe("a person other than the owner", () => {
     }
   }, 40_000);
 
+  test("answers bringing an agent into a room the person isn't in at once, the same as into one there is none of", async () => {
+    const answerOf = async (roomId: string) => {
+      const mark = miaPage.mark;
+      const requestId = `into-${roomId}`;
+      miaPage.send({ type: "room.bring-agent", requestId, roomId, name: "Coder", harness: "claude", worksInRoom: false });
+      const { agentId, problem } = await miaPage.waitFor(isType("room.agent-brought", (message) => message.requestId === requestId), mark);
+      return { agentId, problem };
+    };
+    expect(await answerOf(roomB.id)).toEqual({ agentId: null, problem: { code: "room-gone" } });
+    expect(await answerOf("no-such-room")).toEqual({ agentId: null, problem: { code: "room-gone" } });
+  });
+
   test("leaves the owner no name a brought agent in their rooms goes by", async () => {
     const ownerMark = owner.mark;
     owner.send({ type: "room.set-person-role", roomId: roomA.id, personId: mia.id, role: "member" });

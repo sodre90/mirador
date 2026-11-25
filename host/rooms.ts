@@ -590,6 +590,7 @@ export class RoomService implements RoomRules, TurnListener {
   bringAgent(roomId: string, personId: string, name: string, harness: HarnessId, worksInRoom = false): string {
     const room = this.existingRoom(roomId);
     const role = room.people.find((person) => person.personId === personId)?.role;
+    if (!role && personId !== this.store.ownerId()) throw new HostProblemError({ code: "room-gone" });
     if (!role || !asksAgentsAs(role) || !room.membersBringAgents) throw new HostProblemError({ code: "room-bringing-not-yours" });
     if (typeof name !== "string" || !harnessIds.includes(harness) || typeof worksInRoom !== "boolean") throw new Error("An agent is brought by its name and kind.");
     if (room.agents.filter(broughtBy(personId)).length >= MOST_AGENTS_BROUGHT) throw new HostProblemError({ code: "room-agents-brought-too-many" });
