@@ -3,13 +3,17 @@ name: Sandbox on Linux
 # Runs the sandbox guard's test in a real rootless Podman container on Ubuntu, whose AppArmor limits what unprivileged users may mount.
 on:
   workflow_dispatch:
+    inputs:
+      os:
+        type: choice
+        options: [ubuntu-latest, ubuntu-24.04]
 
 permissions:
   contents: read
 
 jobs:
   guard:
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.os }}
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
