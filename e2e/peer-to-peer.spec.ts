@@ -3,7 +3,7 @@ import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node
 import { createServer } from "node:net";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { expect, test } from "@playwright/test";
+import { expect, test, type Locator } from "@playwright/test";
 import { joinCodeIn, tunnelIn } from "../shared/machines.ts";
 import type { DeviceTunnel, InviteTunnel } from "../shared/tunnel.ts";
 import { TOKEN_COOKIE } from "../shared/protocol.ts";
@@ -316,6 +316,38 @@ test("with an address of its own as well, phone and computer invites join peer t
   } finally {
     await addressed.stop();
     await addressed.cleanUp();
+  }
+});
+
+/** As the phone app reads the tunnel in an invite. */
+const readOneCharacterAByte = (link: string): { name: string } => JSON.parse(atob(/tunnel=([\w-]+)$/.exec(link)![1]!.replace(/-/g, "+").replace(/_/g, "/")));
+
+test("a phone's and a computer's invite give a machine name with accents as Settings has it", async ({ page }) => {
+  const named = new TestHost({ environment: () => ({ MIRADOR_P2P_BINARY: binary, MIRADOR_P2P_BROKER: `localhost:${brokerPort}`, MIRADOR_P2P_BROKER_KEY: brokerKey }) });
+  await named.start();
+  try {
+    await signIn(page, named);
+    const machineName = (settings: Locator) => settings.locator("input.machine-name");
+    const opened = await openSettings(page, "Devices");
+    await machineName(opened).fill("Zoë’s Műhely");
+    await machineName(opened).press("Enter");
+    await page.reload();
+    const settings = await openSettings(page, "Devices");
+    await expect(machineName(settings)).toHaveValue("Zoë’s Műhely");
+
+    await settings.getByRole("button", { name: "Invite a device" }).click();
+    const invite = settings.getByRole("region", { name: "Invite" });
+    const link = invite.locator(".invite-link");
+    const phoneLink = (await link.textContent())!;
+    expect(readOneCharacterAByte(phoneLink).name).toBe("Zoë’s Műhely");
+    expect(tunnelIn(new URL(phoneLink).hash)!.name).toBe("Zoë’s Műhely");
+
+    await invite.getByRole("radio", { name: "Another computer" }).check();
+    await expect(link).toHaveText(/^mirador:\/\/join\//);
+    expect(readOneCharacterAByte((await link.textContent())!).name).toBe("Zoë’s Műhely");
+  } finally {
+    await named.stop();
+    await named.cleanUp();
   }
 });
 

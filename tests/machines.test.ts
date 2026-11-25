@@ -63,6 +63,16 @@ test("an invite link from a machine that connects peer to peer carries how to re
   expect(inviteIn("mirador://join/ABCD-EFGH-JKLM?tunnel=broken")).toEqual({ code: "ABCD-EFGH-JKLM", authorityFingerprint: null, tunnel: null });
 });
 
+const readOneCharacterAByte = (link: string): InviteTunnel => JSON.parse(atob(/tunnel=([\w-]+)$/.exec(link)![1]!.replace(/-/g, "+").replace(/_/g, "/")));
+
+test.each(["Zoë’s Café", "Műhely", "书房", "Studio 🎛️"])("an invite from a machine named %s reads the same in the phone app, which takes its base64 one character a byte, as in Mirador", (name) => {
+  const named = { ...tunnel, name };
+  const phoneLink = inviteLink("http://[fd12:3456:789a:1::1]:4600", "ABCD-EFGH-JKLM", null, named);
+  const computerLink = deviceTunnelInviteLink("ABCD-EFGH-JKLM", named);
+  expect([phoneLink, computerLink].map(readOneCharacterAByte)).toEqual([named, named]);
+  expect([phoneLink, computerLink].map((link) => machineAddress(link)?.tunnel)).toEqual([named, named]);
+});
+
 test("what is not a web address is not a machine", () => {
   expect(machineAddress("")).toBeNull();
   expect(machineAddress("ftp://files.example")).toBeNull();
