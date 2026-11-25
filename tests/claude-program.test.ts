@@ -42,6 +42,18 @@ async function runsOnAfter(pid: number, graceMs: number) {
   return isRunning(pid);
 }
 
+/** Longer and longer, as a loaded machine can take longer than a short timeout to start the program. */
+const VERSION_TIMEOUTS_MS = [2_000, 4_000, 8_000];
+
+async function pidOfTimedOut(program: string, pidFile: string) {
+  for (const timeout of VERSION_TIMEOUTS_MS) {
+    expect(await versionOf(program, timeout)).toBeNull();
+    const pid = existsSync(pidFile) ? Number(readFileSync(pidFile, "utf8")) : 0;
+    if (pid) return pid;
+  }
+  throw new Error(`${program} never got to write ${pidFile}`);
+}
+
 test("without a program set, claude is found on PATH; a program set in Settings is used only if it can run", () => {
   const onPath = scratch();
   const claude = programIn(onPath, "claude");
@@ -91,10 +103,8 @@ test("a claude that hangs on --version is given up on and killed, on Windows wit
   const directory = scratch();
   const pidFile = join(directory, "pid");
   const hanging = programIn(directory, "hanging", `require("node:fs").writeFileSync(${JSON.stringify(pidFile)}, String(process.pid)); ${hangs(30)}`);
-  expect(await versionOf(hanging, 2000)).toBeNull();
-  expect(existsSync(pidFile)).toBe(true);
-  expect(await runsOnAfter(Number(readFileSync(pidFile, "utf8")), KILL_GRACE_MS)).toBe(false);
-}, 15_000);
+  expect(await runsOnAfter(await pidOfTimedOut(hanging, pidFile), KILL_GRACE_MS)).toBe(false);
+}, 30_000);
 
 test("a version check is given up on within its timeout when a wrapper's child holds stdout open", async () => {
   const wrapper = programIn(scratch(), "wrapper", `require("node:child_process").spawn(process.execPath, ["-e", ${JSON.stringify(hangs(6))}], { stdio: ["ignore", "inherit", "ignore"] }); ${hangs(6)}`);
@@ -108,9 +118,8 @@ test("a version check that times out on a wrapper ends the program the wrapper s
   const pidFile = join(directory, "grandchild-pid");
   const grandchild = `require("node:fs").writeFileSync(${JSON.stringify(pidFile)}, String(process.pid)); ${hangs(30)}`;
   const wrapper = programIn(directory, "wrapper", `require("node:child_process").spawn(process.execPath, ["-e", ${JSON.stringify(grandchild)}], { stdio: "ignore" }); ${hangs(30)}`);
-  expect(await versionOf(wrapper, 2000)).toBeNull();
-  expect(await runsOnAfter(Number(readFileSync(pidFile, "utf8")), GROUP_KILL_GRACE_MS)).toBe(false);
-}, 15_000);
+  expect(await runsOnAfter(await pidOfTimedOut(wrapper, pidFile), GROUP_KILL_GRACE_MS)).toBe(false);
+}, 30_000);
 
 test("a version check is given up on within its timeout when the program ignores SIGTERM", async () => {
   const ignoresTerm = programIn(scratch(), "ignores-term", `process.on("SIGTERM", () => {}); ${hangs(5)}`);
