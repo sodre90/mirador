@@ -23,7 +23,7 @@ import { KeptCanvases } from "./KeptCanvases.tsx";
 import { KnownConversations } from "./known-conversations.ts";
 import { FileToOpenPrompt } from "./FileToOpenPrompt.tsx";
 import { OlderDeletePrompt, WorkspaceDeletePrompt, WorktreeDeletePrompt, WorktreesDialog } from "./Worktrees.tsx";
-import { tellTheRailThePlace } from "./machine-place.ts";
+import { shownInAnotherMirador, tellTheRailThePlace } from "./machine-place.ts";
 import { LinkFromMachinePrompt } from "./LinkFromMachinePrompt.tsx";
 import { MachineFrames, MachineRail, reachedAt, showsMachinesHere, useShownMachine } from "./MachineRail.tsx";
 import { MachinesDialog, openMachine } from "./Machines.tsx";
@@ -553,6 +553,23 @@ export function App() {
   useShortcuts((command, fromCanvas) => {
     if (fromCanvas && outOfCanvasPagesReach(command)) return;
     if (command.type === "reload-page") return location.reload();
+    if (seesOnlyTheirRooms(state)) {
+      switch (command.type) {
+        case "toggle-sidebar":
+          return !shownInAnotherMirador() && toggleSidebar();
+        case "toggle-canvas":
+          return toggleCanvas();
+        case "find":
+          return findsInCanvasPage(fromCanvas, canvasPageHasFocus()) ? findInCanvasPage() : findInOpenConversation();
+        case "bigger-font":
+          return setFontScale(stepFontScale(1));
+        case "smaller-font":
+          return setFontScale(stepFontScale(-1));
+        case "reset-font":
+          return setFontScale("100");
+      }
+      return;
+    }
     if (command.type === "restart-host") return restartHost();
     if (isModal(state)) {
       if ((command.type === "palette" || command.type === "search") && state.overlay?.kind === command.type) closeOverlay();
@@ -715,7 +732,18 @@ export function App() {
   }, [state.selectedConversationId, state.selectedRoomId, state.selectedJoinedRoom, state.conversationsPicked, machines.shownId]);
 
   if (status === "unauthorized") return <JoinMachine />;
-  if (seesOnlyTheirRooms(state)) return <RoomsOnlyApp state={state} dispatch={dispatch} outOfRooms={status === "out-of-rooms"} banner={<HostBanner status={status} state={state} />} />;
+  if (seesOnlyTheirRooms(state))
+    return (
+      <RoomsOnlyApp
+        state={state}
+        dispatch={dispatch}
+        outOfRooms={status === "out-of-rooms"}
+        banner={<HostBanner status={status} state={state} />}
+        layouts={conversationLayouts}
+        sidebarHidden={sidebarHidden}
+        setSidebarHidden={setSidebarHidden}
+      />
+    );
 
   const conversation = state.conversations.find(({ id }) => id === state.selectedConversationId) ?? null;
   const shownRoom = shownMachine || conversation ? null : (state.rooms.find(({ id }) => id === state.selectedRoomId) ?? null);

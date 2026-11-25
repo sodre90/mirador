@@ -1,4 +1,4 @@
-import { useState, type CSSProperties, type Dispatch, type ReactNode } from "react";
+import { useState, type CSSProperties, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import { namelessPerson } from "../shared/people.ts";
 import { isMuted } from "../shared/room-reading.ts";
 import { t } from "./i18n/index.ts";
@@ -6,7 +6,7 @@ import { inView, toggledInView, type PaneLayout } from "./layout.ts";
 import { LayoutToggles, LayoutToggleState } from "./LayoutToggles.tsx";
 import { shownInAnotherMirador } from "./machine-place.ts";
 import { Modal } from "./Palette.tsx";
-import { useConversationLayouts, useSidebarHidden, useSidebarWidth } from "./paneLayouts.ts";
+import { useConversationLayouts, useSidebarWidth } from "./paneLayouts.ts";
 import { RoomCanvas, RoomView } from "./Room.tsx";
 import { RoomsSection } from "./RoomsSidebar.tsx";
 import { OwnProfileSettings } from "./Settings.tsx";
@@ -35,10 +35,24 @@ function Welcome({ state }: { state: AppState }) {
  * their own name and colour. Taken out of their last room, they are signed out, and it says so. In their own Mirador,
  * whose sidebar lists the rooms and which mutes them, it shows the room alone.
  */
-export function RoomsOnlyApp({ state, dispatch, outOfRooms, banner }: { state: AppState; dispatch: Dispatch<AppAction>; outOfRooms: boolean; banner: ReactNode }) {
-  const layouts = useConversationLayouts();
+export function RoomsOnlyApp({
+  state,
+  dispatch,
+  outOfRooms,
+  banner,
+  layouts,
+  sidebarHidden: sidebarHiddenHere,
+  setSidebarHidden,
+}: {
+  state: AppState;
+  dispatch: Dispatch<AppAction>;
+  outOfRooms: boolean;
+  banner: ReactNode;
+  layouts: ReturnType<typeof useConversationLayouts>;
+  sidebarHidden: boolean;
+  setSidebarHidden: Dispatch<SetStateAction<boolean>>;
+}) {
   const [sidebarWidth] = useSidebarWidth();
-  const [sidebarHiddenHere, setSidebarHidden] = useSidebarHidden();
   const inTheirMirador = shownInAnotherMirador();
   const sidebarHidden = inTheirMirador || sidebarHiddenHere;
   const [ownProfileOpen, setOwnProfileOpen] = useState(false);

@@ -122,7 +122,7 @@ export function RoomVote({ roomId, item, votes, you, takesOwnWords }: { roomId: 
   const open = item.status === "waiting";
   const confirms = open && you !== null && confirmers.includes(you);
   const [ownWords, setOwnWords] = useState<string[]>(() => questions.map(() => ""));
-  const answers = questions.map((_, index) => confirmedAnswer(ownWords[index] ?? "", pickOf(ballots, index, you)));
+  const answers = questions.map((question, index) => confirmedAnswer(takesOwnWords && question.allowOther ? (ownWords[index] ?? "") : "", pickOf(ballots, index, you)));
   const given = answers.filter(isGiven);
   const ready = given.length === questions.length;
   const confirm = () => {

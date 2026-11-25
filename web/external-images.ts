@@ -43,13 +43,19 @@ const subscribeToPolicy = (listener: () => void) => {
 /** Follows the policy in force rather than the setting: after Settings stops blocking, images stay refused until a reload. */
 export const useExternalImagesBlocked = () => useSyncExternalStore(subscribeToPolicy, () => strictImagePolicyInForce);
 
+const baseFor = (pageOrigin: string) => (pageOrigin && pageOrigin !== "null" ? pageOrigin : undefined);
+
 export function isFromAnotherSite(source: string, pageOrigin: string) {
   try {
-    const url = new URL(source, pageOrigin);
+    const base = baseFor(pageOrigin);
+    const url = base ? new URL(source, base) : new URL(source);
     return (url.protocol === "http:" || url.protocol === "https:") && url.origin !== pageOrigin;
   } catch {
     return false;
   }
 }
 
-export const siteOf = (source: string, pageOrigin: string) => new URL(source, pageOrigin).hostname;
+export const siteOf = (source: string, pageOrigin: string) => {
+  const base = baseFor(pageOrigin);
+  return (base ? new URL(source, base) : new URL(source)).hostname;
+};

@@ -321,21 +321,27 @@ function JoinMachinePanel({ machine, person, onJoinedRoom }: { machine: Machine;
   const [joining, setJoining] = useState(false);
   const [askedNumber, setAskedNumber] = useState<string | null>(null);
   const nameToJoin = useNameToJoinWith(person, machine.asPerson || machineAddress(text)?.forRoom === true);
+  const stopListeningRef = useRef<(() => void) | null>(null);
+  useEffect(() => () => stopListeningRef.current?.(), []);
 
   /** Follows the host's answers until the last, as asking to join waits there until someone approves it. */
   const tryToJoin = (send: (requestId: string) => ClientMessage) => {
+    stopListeningRef.current?.();
     const requestId = crypto.randomUUID();
     const stopListening = connection.onMessage((message) => {
       if (message.type === "machine.join-asked" && message.requestId === requestId) return setAskedNumber(message.number);
       if (message.type !== "machine.join-answered" || message.requestId !== requestId) return;
       stopListening();
+      stopListeningRef.current = null;
       setProblem(replyProblemText(message));
       setJoining(false);
       setAskedNumber(null);
       if (message.roomId) onJoinedRoom(machine.id, message.roomId, message.waiting);
     });
+    stopListeningRef.current = stopListening;
     if (!connection.send(send(requestId))) {
       stopListening();
+      stopListeningRef.current = null;
       return setJoining(false);
     }
     setProblem(null);

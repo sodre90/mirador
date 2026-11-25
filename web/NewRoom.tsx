@@ -75,13 +75,21 @@ export function NewRoomDialog({
   const create = () => {
     if (!canCreate) return;
     const requestId = crypto.randomUUID();
-    const unsubscribe = connection.onMessage((message) => {
+    let stop: (() => void) | null = null;
+    const done = () => {
+      clearTimeout(timer);
+      stop?.();
+      stop = null;
+    };
+    const timer = setTimeout(done, 30_000);
+    stop = connection.onMessage((message) => {
+      if (message.type === "error") return done();
       if (message.type !== "room.created" || message.requestId !== requestId) return;
-      unsubscribe();
+      done();
       dispatch({ type: "select-room", roomId: message.roomId });
     });
     const models = Object.fromEntries(agents.map(({ profileId, model, effort }) => [profileId, { model, effort }]));
-    connection.send({ type: "room.create", requestId, name, workspaceId, profileIds: agents.map(({ profileId }) => profileId), permissions, models });
+    if (!connection.send({ type: "room.create", requestId, name, workspaceId, profileIds: agents.map(({ profileId }) => profileId), permissions, models })) done();
     onClose();
   };
   return (
