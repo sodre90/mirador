@@ -67,7 +67,7 @@ import { isPending, isPutAway, isReminder, reminderCommandIn, reminderFromComman
 import { agentAnsweredIn, lastWordsOf, replyOf } from "../shared/last-words.ts";
 import { isRealModel } from "../shared/claude-models.ts";
 import { cutWithEllipsis, firstGraphemes } from "../shared/text-cut.ts";
-import { isInformational } from "../shared/timeline.ts";
+import { isInformational, subagentsWorkingBetweenTurns } from "../shared/timeline.ts";
 import type { ConversationChoices, ConversationReply, ConversationUsage, RanOn, StartedConversation, WorkspaceConversationStart } from "../shared/canvas-plugins.ts";
 import { canTryAgain } from "../shared/try-again.ts";
 import { currentActivity, isAgentsNextStep, OpenToolCalls } from "./activity.ts";
@@ -4315,6 +4315,7 @@ export class ConversationService {
       runtime.harness = undefined;
       runtime.sessionId = undefined;
       runtime.pendingPermissions.forEach(({ settle }) => settle(null));
+      if (subagentsWorkingBetweenTurns(this.store.listEvents(conversationId))) this.append(conversationId, { type: "agent-process-ended" });
       // The agent's background tasks ran inside its process and went away with it; no terminal update can arrive.
       this.forgetAsyncTasks(conversationId);
     });

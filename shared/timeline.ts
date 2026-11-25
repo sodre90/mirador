@@ -59,6 +59,8 @@ export interface Subagent {
   turnEnded: StopReason | null;
   /** How it ended, when claude-agent-acp said: one in the background can end before the turn that started it. */
   ended?: Exclude<SubagentState, "running">;
+  /** Started after a turn ended and before the user's next message, so no turn of the user's holds it. */
+  startedBetweenTurns?: true;
 }
 
 export type SubagentBlock = ToolBlock & { subagent: Subagent };
@@ -92,7 +94,8 @@ const askedForBackground = (rawInput: unknown) => {
 /**
  * A subagent works until its tool call completes; one started in the background, whose call completes at once, works
  * until claude-agent-acp says it ended, or else until the turn that started it ends, since claude-agent-acp holds the
- * turn open for it.
+ * turn open for it. One Claude Code started between the user's turns, which no turn of theirs holds, works until its task
+ * says it ended, or until the agent's process ends or starts afresh.
  */
 export function subagentState(block: SubagentBlock, conversationBusy: boolean): SubagentState {
   if (block.status === "failed") return "failed";
@@ -100,6 +103,7 @@ export function subagentState(block: SubagentBlock, conversationBusy: boolean): 
   const { ended, turnEnded } = block.subagent;
   if (ended) return ended;
   if (turnEnded) return turnEnded === "end_turn" ? "done" : "stopped";
+  if (block.subagent.startedBetweenTurns) return "running";
   return conversationBusy ? "running" : "stopped";
 }
 
@@ -403,6 +407,8 @@ class TimelineBuilder {
   private readonly permissionBlocks = new Map<string, PermissionBlock>();
   private currentPlan: PlanBlock | null = null;
   private readonly subagentsOfThisTurn: Subagent[] = [];
+  private readonly subagentsBetweenTurns: Subagent[] = [];
+  private betweenTurns = false;
   private readonly toolsOfThisTurn: ToolBlock[] = [];
   private readonly subagentByOpencodeSession = new Map<string, Subagent>();
   private readonly takenSubagents = new Set<Subagent>();
@@ -438,6 +444,7 @@ class TimelineBuilder {
       case "user-message":
         this.currentPlan = null;
         this.turnStartAwaited = false;
+        this.betweenTurns = false;
         this.messageTexts.set(seq, event.text);
         return this.push({
           kind: "user",
@@ -472,6 +479,7 @@ class TimelineBuilder {
         }
         return this.push(noticeBlock(origin, { kind: "turn-ended", stopReason: event.stopReason }));
       case "error": {
+        this.stopSubagentsBetweenTurns();
         this.endTurn("cancelled");
         this.dropAgentEchoOf(event);
         const block: ErrorBlock = {
@@ -498,14 +506,20 @@ class TimelineBuilder {
       case "job-wait-ended":
         return this.push(noticeBlock(origin, { kind: "job-wait-ended", wait: event.wait, end: event.end }));
       case "context-cleared":
+        this.stopSubagentsBetweenTurns();
         return this.push(noticeBlock(origin, { kind: "context-cleared" }));
       case "agent-reloaded":
+        this.stopSubagentsBetweenTurns();
         return this.push(noticeBlock(origin, { kind: "agent-reloaded" }));
+      case "agent-process-ended":
+        this.stopSubagentsBetweenTurns();
+        return;
       case "update-available": {
         const { harness, installed, latest, command } = event;
         return this.push(noticeBlock(origin, { kind: "update-available", harness, installed, latest, command }));
       }
       case "profile-changed":
+        this.stopSubagentsBetweenTurns();
         return this.push(noticeBlock(origin, { kind: "profile-changed", profileName: event.profileName, agent: event.agent }));
       case "permission": {
         const block: PermissionBlock = {
@@ -619,8 +633,15 @@ class TimelineBuilder {
     this.currentPlan = null;
     this.lastBlockOfEndedTurn = this.blocks.at(-1);
     this.turnStartAwaited = true;
+    this.betweenTurns = true;
     this.subagentsOfThisTurn.splice(0).forEach((subagent) => (subagent.turnEnded = stopReason));
     this.toolsOfThisTurn.splice(0).filter((block) => block.endedAt === undefined).forEach((block) => (block.leftUnfinished = true));
+  }
+
+  private stopSubagentsBetweenTurns() {
+    this.subagentsBetweenTurns.splice(0).forEach((subagent) => {
+      if (!subagent.ended && !subagent.turnEnded) subagent.turnEnded = "cancelled";
+    });
   }
 
   private dropUserBlocks(seqs: number[]) {
@@ -726,6 +747,11 @@ class TimelineBuilder {
   private name(block: ToolBlock, toolName: string, at: number) {
     block.toolName = toolName;
     if (!SUBAGENT_TOOLS.has(toolName) || block.subagent) return;
+    if (this.betweenTurns) {
+      block.subagent = { blocks: [], lastActivityAt: at, turnEnded: null, startedBetweenTurns: true };
+      this.subagentsBetweenTurns.push(block.subagent);
+      return;
+    }
     block.subagent = { blocks: [], lastActivityAt: at, turnEnded: null };
     this.subagentsOfThisTurn.push(block.subagent);
   }
@@ -769,6 +795,11 @@ export function buildTimeline(events: StoredEvent[]): TimelineBlock[] {
   const builder = new TimelineBuilder(opencodeCallBySession(events));
   events.forEach((event) => builder.add(event));
   return builder.blocks;
+}
+
+/** Whether a subagent Claude Code started between the user's turns is still at work, so the agent's process must not end yet. */
+export function subagentsWorkingBetweenTurns(events: StoredEvent[]): boolean {
+  return subagentsIn(buildTimeline(events)).some((block) => block.subagent.startedBetweenTurns && subagentState(block, false) === "running");
 }
 
 /**

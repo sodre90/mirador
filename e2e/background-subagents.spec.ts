@@ -166,3 +166,38 @@ test("a message joins the turn also while a background subagent waits for permis
   api.answerEndedCommands();
   await waitForTurnToEnd(page);
 });
+
+test("a subagent Claude Code starts between your turns shows running while the conversation is idle and through your next turn, and done once it ends", async ({ page }) => {
+  await signIn(page, host);
+  await page.goto(host.origin);
+  await page.getByLabel("Agent", { exact: true }).selectOption({ label: `${PROFILE} · Claude Code` });
+  await startConversation(page);
+  await turnOnYolo(page);
+
+  const card = page.locator(".timeline .tool.subagent");
+  const badge = page.locator(".chat-header .badge");
+  const chip = page.locator(".chat-header .subagents-running");
+  await tellingTheStoredAgentUpdates(async () => {
+    api.subagentWhenNotified = "sleep 20; echo slept";
+    await sendMessage(page, "BACKGROUND sleep 1; echo ready");
+    await waitForTurnToEnd(page);
+
+    await test.step("the subagent started by Claude Code's own turn shows running while nothing is asked of it", async () => {
+      await expect(card).toHaveCount(1, { timeout: 60_000 });
+      await expect(chip).toHaveText("◐ 1 subagent running");
+      await expect(card).not.toHaveClass(/subagent-done/);
+      await expect(badge).not.toHaveText("running");
+    });
+
+    await test.step("it still shows running through a short turn of the user's", async () => {
+      await sendMessage(page, "?");
+      await expect(page.locator(".timeline .message.agent", { hasText: "Answered: ?" })).toBeVisible({ timeout: 30_000 });
+      await waitForTurnToEnd(page);
+      await expect(card).not.toHaveClass(/subagent-done/);
+      await expect(chip).toHaveText("◐ 1 subagent running");
+    });
+
+    await expect(card).toHaveClass(/subagent-done/, { timeout: 60_000 });
+    api.answerEndedCommands();
+  });
+});
