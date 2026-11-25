@@ -1,4 +1,4 @@
-import { afterAll, expect, setDefaultTimeout, test } from "bun:test";
+import { afterAll, beforeAll, expect, setDefaultTimeout, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -16,12 +16,13 @@ import { NO_SANDBOX, type SandboxSetting } from "../shared/sandbox.ts";
 import { agentWithModes } from "./agent-with-modes.ts";
 import { FakeContainerCli } from "./fake-container-cli.ts";
 import { FakeVmLauncher } from "./fake-vm-launcher.ts";
-import { programLeavingAMark } from "./program-leaving-a-mark.ts";
+import { prepareProgramsLeavingAMark, programLeavingAMark } from "./program-leaving-a-mark.ts";
 
 setDefaultTimeout(20_000);
 
 const scratch = mkdtempSync(join(tmpdir(), "sandboxed-room-turns-"));
 const sandboxesMade: Sandboxes[] = [];
+beforeAll(() => prepareProgramsLeavingAMark(scratch), 120_000);
 afterAll(async () => {
   await Promise.all(sandboxesMade.map((sandboxes) => sandboxes.stopAll()));
   rmSync(scratch, { recursive: true, force: true });

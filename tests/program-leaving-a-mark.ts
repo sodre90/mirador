@@ -2,20 +2,31 @@ import { execFileSync } from "node:child_process";
 import { chmodSync, existsSync, linkSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-const compiled = new Map<string, string>();
+const VERSION_BESIDE = ".version";
+const MARK_BESIDE = ".ran";
 
-/** Compiled once a version, as it takes a while and much of the disk; each program is a link to it, and its mark is beside the link it ran as. */
-function compiledSaying(directory: string, version: string) {
-  const made = compiled.get(version);
-  if (made) return made;
-  const folder = join(directory, `compiled-${crypto.randomUUID()}`);
+const SOURCE = `const { readFileSync, writeFileSync } = require("node:fs");
+if (process.argv[2] === "--version") console.log(readFileSync(process.execPath + "${VERSION_BESIDE}", "utf8"));
+else { writeFileSync(process.execPath + "${MARK_BESIDE}", ""); process.exit(1); }
+`;
+
+let compiled: string | undefined;
+
+/**
+ * For a beforeAll with time of its own: Windows takes many seconds over the first start of a program this large, more
+ * than Mirador waits for a version, and none over the links to it that the programs are.
+ */
+export function prepareProgramsLeavingAMark(directory: string) {
+  if (process.platform !== "win32") return;
+  const folder = join(directory, "compiled");
   mkdirSync(folder);
   const source = join(folder, "program.js");
-  writeFileSync(source, `if (process.argv[2] === "--version") console.log(${JSON.stringify(version)});\nelse { require("node:fs").writeFileSync(process.execPath + ".ran", ""); process.exit(1); }\n`);
+  writeFileSync(source, SOURCE);
   const program = join(folder, "program.exe");
-  execFileSync(process.execPath, ["build", "--compile", source, "--outfile", program]);
-  compiled.set(version, program);
-  return program;
+  execFileSync(process.execPath, ["build", "--compile", source, "--outfile", program], { timeout: 50_000 });
+  writeFileSync(program + VERSION_BESIDE, "0.0.0");
+  execFileSync(program, ["--version"], { timeout: 50_000 });
+  compiled = program;
 }
 
 /**
@@ -25,9 +36,10 @@ function compiledSaying(directory: string, version: string) {
  */
 export function programLeavingAMark(directory: string, name: string, version: string) {
   const program = join(directory, `${name}-${crypto.randomUUID()}${process.platform === "win32" ? ".exe" : ""}`);
-  const mark = `${program}.ran`;
+  const mark = program + MARK_BESIDE;
   if (process.platform === "win32") {
-    linkSync(compiledSaying(directory, version), program);
+    linkSync(compiled!, program);
+    writeFileSync(program + VERSION_BESIDE, version);
   } else {
     writeFileSync(program, `#!/bin/sh\nif [ "$1" = "--version" ]; then echo "${version}"; exit 0; fi\ntouch "${mark}"\nexit 1\n`);
     chmodSync(program, 0o755);
