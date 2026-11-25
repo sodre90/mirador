@@ -2,7 +2,7 @@ import { FFIType, type Pointer } from "bun:ffi";
 import { objectiveC, type ObjectReference } from "./objective-c.ts";
 
 function webViews() {
-  const { selector, classNamed, messageSender, sendOnMainThread } = objectiveC();
+  const { selector, classNamed, messageSender, release, withAutoreleasePool, sendOnMainThread } = objectiveC();
   const object = messageSender([], FFIType.ptr);
   const count = messageSender([], FFIType.u64);
   const objectAt = messageSender([FFIType.u64], FFIType.ptr);
@@ -14,18 +14,26 @@ function webViews() {
     if (isKindOf(view, selector("isKindOfClass:"), webViewClass)) return view;
     const subviews = object(view, selector("subviews"));
     if (!subviews) return null;
-    const views = Number(count(subviews, selector("count")));
-    for (let index = 0; index < views; index++) {
-      const found = webViewIn(objectAt(subviews, selector("objectAtIndex:"), index));
-      if (found) return found;
+    const snapshot = object(subviews, selector("copy"));
+    if (!snapshot) return null;
+    try {
+      const views = Number(count(snapshot, selector("count")));
+      for (let index = 0; index < views; index++) {
+        const found = webViewIn(objectAt(snapshot, selector("objectAtIndex:"), index));
+        if (found) return found;
+      }
+      return null;
+    } finally {
+      release(snapshot);
     }
-    return null;
   }
 
   return {
     giveKeys(window: ObjectReference) {
-      const webView = webViewIn(object(window, selector("contentView")));
-      if (webView) sendOnMainThread(window, "makeFirstResponder:", webView);
+      withAutoreleasePool(() => {
+        const webView = webViewIn(object(window, selector("contentView")));
+        if (webView) sendOnMainThread(window, "makeFirstResponder:", webView);
+      });
     },
   };
 }

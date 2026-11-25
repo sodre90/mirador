@@ -7,12 +7,12 @@ const APPEARANCE_NAMES = { light: "NSAppearanceNameAqua", dark: "NSAppearanceNam
 
 /** Electrobun 2.0.2 has no call for the appearance, so this goes to AppKit through the Objective-C runtime. */
 function appKit() {
-  const { selector, classNamed, messageSender, sendOnMainThread } = objectiveC();
+  const { selector, classNamed, messageSender, withAutoreleasePool, sendOnMainThread } = objectiveC();
   const sendWithObject = messageSender([FFIType.ptr], FFIType.ptr);
   const send = (receiver: ObjectReference, message: string, argument: ObjectReference | Buffer = null) => sendWithObject(receiver, selector(message), argument);
   const appearanceNamed = (name: string) =>
     send(classNamed("NSAppearance"), "appearanceNamed:", send(classNamed("NSString"), "stringWithUTF8String:", cString(name)));
-  return { classNamed, send, appearanceNamed, sendOnMainThread };
+  return { classNamed, send, appearanceNamed, withAutoreleasePool, sendOnMainThread };
 }
 
 let runtime: ReturnType<typeof appKit> | null = null;
@@ -25,7 +25,9 @@ let runtime: ReturnType<typeof appKit> | null = null;
 export function giveAppAppearance(appearance: DesktopAppearance) {
   if (process.platform !== "darwin") return;
   runtime ??= appKit();
-  const app = runtime.send(runtime.classNamed("NSApplication"), "sharedApplication");
-  if (!app) return;
-  runtime.sendOnMainThread(app, "setAppearance:", appearance === "system" ? null : runtime.appearanceNamed(APPEARANCE_NAMES[appearance]));
+  runtime.withAutoreleasePool(() => {
+    const app = runtime!.send(runtime!.classNamed("NSApplication"), "sharedApplication");
+    if (!app) return;
+    runtime!.sendOnMainThread(app, "setAppearance:", appearance === "system" ? null : runtime!.appearanceNamed(APPEARANCE_NAMES[appearance]));
+  });
 }

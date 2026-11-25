@@ -60,19 +60,23 @@ export class MainWindow {
     const rememberFrame = () => this.frameKeeper.remember(window.getFrame());
     window.on("move", rememberFrame);
     window.on("resize", rememberFrame);
-    window.on("close", () => {
-      this.frameKeeper.flush();
-      this.window = null;
-      setDockIconVisible(this.otherWindowsOpen());
-    });
     // Blocked navigations and new windows are not opened in the browser: any frame can cause or forge those events, the
     // agents' canvas pages included. The app's own page asks for its links with the nonce instead (web/outside-links.ts).
     // The page's first message says it is there to take the keys, which a new window keeps for itself.
+    const pageMessages = `host-message-${window.webview.id}`;
     let pageHasKeys = false;
-    Electrobun.events.on(`host-message-${window.webview.id}`, (event: unknown) => {
+    const onHostMessage = (event: unknown) => {
+      if (this.window !== window) return;
       if (!pageHasKeys) giveKeysToPage(window.ptr);
       pageHasKeys = true;
       this.onPageMessage((event as HostMessageEvent).data?.detail);
+    };
+    Electrobun.events.on(pageMessages, onHostMessage);
+    window.on("close", () => {
+      Electrobun.events.off(pageMessages, onHostMessage);
+      this.frameKeeper.flush();
+      this.window = null;
+      setDockIconVisible(this.otherWindowsOpen());
     });
     this.window = window;
   }
