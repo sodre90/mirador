@@ -251,6 +251,23 @@ test("a fork and a side chat of the conversation of an agent brought to work in 
   await conversations.shutdown();
 });
 
+test("a fork and a side chat of a room agent's conversation keep room isolation", async () => {
+  const { conversations, withItsAgent, store, prompts } = heldToTheRoomsWorkspace();
+  const inRoom = withItsAgent(() => conversations.startInRoom("room-1", "own", { harness: "claude", profileId: "p1" }, "Room agent"));
+  await conversations.send(inRoom.id, "from a guest", []);
+  await until(() => prompts.length === 1 && conversations.get(inRoom.id).status === "idle");
+  store.appendEvent(inRoom.id, { type: "acp", update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "done" }, messageId: "m1" } as never });
+
+  const fork = withItsAgent(() => conversations.fork(inRoom.id));
+  const sideChat = withItsAgent(() => conversations.startSideChat(inRoom.id, "Why", store.ownerId()));
+  for (const each of [fork, sideChat]) expect(store.findConversation(each.id)).toMatchObject({ broughtIntoRoom: true, bypassPermissions: false });
+  await conversations.promoteSideChat(sideChat.id);
+  const promoted = store.findConversation(sideChat.id);
+  expect(promoted).toMatchObject({ broughtIntoRoom: true, bypassPermissions: false });
+  expect(promoted?.sideChatOf).toBeUndefined();
+  await conversations.shutdown();
+});
+
 describe("the canvas tools of an agent that works in a room's workspace", () => {
   function canvasOf(answer: WorkspaceCallResult) {
     const { store, conversations, conversation } = heldToTheRoomsWorkspace();

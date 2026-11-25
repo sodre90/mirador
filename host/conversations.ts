@@ -1115,10 +1115,14 @@ export class ConversationService {
    * conversation does, as the agent keeps a session by its folder, with no more of this computer than it has.
    */
   fork(conversationId: string, throughTurnSeq?: number): Conversation {
-    const { workspaceId, harness, profileId, acpSessionId, title, titleSetByUser, worktree, broughtIntoRoom, worksInRoomsWorkspace } = this.get(conversationId);
+    const source = this.get(conversationId);
+    const { workspaceId, harness, profileId, acpSessionId, title, titleSetByUser, worktree, roomId, broughtIntoRoom, worksInRoomsWorkspace } = source;
     if (!acpSessionId || !this.canFork(conversationId)) throw new HostProblemError({ code: "nothing-to-fork-yet" });
     const forkPoint = throughTurnSeq === undefined ? null : this.forkPointThrough(conversationId, throughTurnSeq);
-    const forked = this.adoptSession(workspaceId, { harness, profileId }, { sessionId: acpSessionId, title, titleSetByUser }, "fork", forkPoint, worktree, { broughtIntoRoom, worksInRoomsWorkspace });
+    const forked = this.adoptSession(workspaceId, { harness, profileId }, { sessionId: acpSessionId, title, titleSetByUser }, "fork", forkPoint, worktree, {
+      broughtIntoRoom: broughtIntoRoom || roomId !== undefined ? true : undefined,
+      worksInRoomsWorkspace,
+    });
     this.store.copyLoadedPlugins(conversationId, forked.id);
     return forked;
   }
@@ -1136,7 +1140,7 @@ export class ConversationService {
    */
   canFork(conversationId: string): boolean {
     const conversation = this.get(conversationId);
-    return conversation.acpSessionId !== null && sessionHasRecord(this.store.listEvents(conversationId)) && this.keepsSessionSetup(conversation);
+    return !(conversation.roomId && this.sandboxOf(conversation)) && conversation.acpSessionId !== null && sessionHasRecord(this.store.listEvents(conversationId)) && this.keepsSessionSetup(conversation);
   }
 
   /**
@@ -1150,7 +1154,7 @@ export class ConversationService {
     const asked = this.get(conversationId);
     const parent = asked.sideChatOf ? this.get(asked.sideChatOf) : asked;
     if (parent.roomId && this.sandboxOf(parent)) throw new HostProblemError({ code: "sandboxed-room-side-chat" });
-    const { workspaceId, harness, profileId, worktree, broughtIntoRoom, worksInRoomsWorkspace } = parent;
+    const { workspaceId, harness, profileId, worktree, roomId, broughtIntoRoom, worksInRoomsWorkspace } = parent;
     const mayChangeFiles = sideChatMayChangeFiles({
       parent,
       openedByOwner: authorId !== undefined && authorId === this.store.ownerId(),
@@ -1158,7 +1162,10 @@ export class ConversationService {
       setting: this.store.sideChatAccess(),
     });
     const title = titleFrom(askedOutsideQuotes(text)) || UNTITLED;
-    const sideChat = this.insertConversation(workspaceId, { harness, profileId }, title, true, worktree, { of: parent.id, mayChangeFiles }, { broughtIntoRoom, worksInRoomsWorkspace });
+    const sideChat = this.insertConversation(workspaceId, { harness, profileId }, title, true, worktree, { of: parent.id, mayChangeFiles }, {
+      broughtIntoRoom: broughtIntoRoom || roomId !== undefined ? true : undefined,
+      worksInRoomsWorkspace,
+    });
     this.store.copyLoadedPlugins(parent.id, sideChat.id);
     this.ensureSession(sideChat.id, () => this.openSideChatSession(sideChat.id, parent.id)).catch(() => {});
     this.send(sideChat.id, text, [], { authorId }).catch(() => {});
