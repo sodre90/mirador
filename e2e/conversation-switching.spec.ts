@@ -51,7 +51,7 @@ test("a recently opened conversation shows again at once, where it was left, wit
 
   await test.step("output of a command that finishes while another conversation is shown is there on return, at the bottom where the reader was", async () => {
     const composer = page.locator(".composer textarea:visible");
-    await composer.fill("!sleep 2 && echo printed while away");
+    await composer.fill('!sleep 2 && echo printed while "away"');
     await composer.press("Enter");
     await selectInSidebar(page, other);
     await expect(page.locator(".chat-header h2:visible")).toHaveText("New conversation");
