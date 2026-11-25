@@ -80,6 +80,7 @@ const EVERY_CLIENT_MESSAGE: Record<ClientMessage["type"], true> = {
   "settings.set-conversations-shown": true,
   "settings.set-side-chat-access": true,
   "settings.export": true,
+  "settings.save-export": true,
   "settings.plan-import": true,
   "settings.import": true,
   "settings.set-claude-program": true,

@@ -494,4 +494,5 @@ export const problems: Messages["problems"] = {
   workspaceSandboxNotReady: (why: string) => `这个工作区的沙箱还没有就绪，因此它的 Agent 没有启动。${why}`,
   workspaceSandboxRefusesAgent: (why: string) =>
     `这个工作区在沙箱中运行它的 Agent，而这个 Agent 无法在其中运行。${why}请选择一个可以在其中运行的配置，或为这个工作区关闭沙箱。`,
+  exportPathIsFolder: (name) => `“${name}”是一个文件夹。请给文件换个名称。`,
 };

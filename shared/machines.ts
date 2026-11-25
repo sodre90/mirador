@@ -33,6 +33,9 @@ export const tunnelIn = (hash: string) => tunnelOf(joinPath.exec(hash)?.[3]);
 export const inviteLink = (origin: string, code: string, authorityFingerprint: string | null = null, tunnel: InviteTunnel | null = null) =>
   `${origin}/#/join/${code}${authorityFingerprint ? `/${authorityFingerprint}` : ""}${tunnel ? `?tunnel=${encodedInviteTunnel(tunnel)}` : ""}`;
 
+/** A device invite link only Mirador opens, carrying the machine's tunnel alone for another computer's Mirador to paste under Machines. */
+export const deviceTunnelInviteLink = (code: string, tunnel: InviteTunnel) => `mirador://join/${code}?tunnel=${encodedInviteTunnel(tunnel)}`;
+
 /**
  * A room invite link's #part: the code, then the fingerprint of the machine's own certificate authority when it has one,
  * then either how to reach it peer to peer, or the machine's name, which a link to its address has nowhere else.
@@ -123,10 +126,10 @@ function addressInTunnel(hash: string): MachineAddress | null {
   const roomInvite = roomInvitePath.exec(hash);
   const tunnel = roomInvite ? tunnelInRoomInvite(roomInvite) : tunnelIn(hash);
   if (!tunnel) return null;
-  return { origin: tunnelOrigin(tunnel), joinCode: roomInvite?.[1] ?? joinCodeIn(hash), authorityFingerprint: null, forRoom: roomInvite !== null, tunnel: roomInvite ? tunnel : null, name: null };
+  return { origin: tunnelOrigin(tunnel), joinCode: roomInvite?.[1] ?? joinCodeIn(hash), authorityFingerprint: null, forRoom: roomInvite !== null, tunnel, name: null };
 }
 
-/** What someone types or pastes for a machine: its name on the network, its address, or an invite link from it; a room invite's link whose tunnel isn't one is none. */
+/** What someone types or pastes for a machine: its name on the network, its address, or an invite link from it; an invite link whose tunnel isn't one is none. */
 export function machineAddress(text: string): MachineAddress | null {
   const trimmed = text.trim();
   if (!trimmed) return null;
@@ -140,7 +143,10 @@ export function machineAddress(text: string): MachineAddress | null {
     if (roomInvite?.[3] === "tunnel" && !tunnel) return null;
     const name = roomInvite?.[3] === "name" ? nameOf(roomInvite[4]) : null;
     if (roomInvite) return { origin: url.origin, joinCode: roomInvite[1]!, authorityFingerprint: roomInvite[2] ?? null, forRoom: true, tunnel, name };
-    return { origin: url.origin, joinCode: joinCodeIn(url.hash), authorityFingerprint: authorityFingerprintIn(url.hash), forRoom: false, tunnel: null, name: null };
+    const join = joinPath.exec(url.hash);
+    const joinTunnel = join?.[3] ? tunnelOf(join[3]) : null;
+    if (join?.[3] && !joinTunnel) return null;
+    return { origin: url.origin, joinCode: join?.[1] ?? null, authorityFingerprint: join?.[2] ?? null, forRoom: false, tunnel: joinTunnel, name: null };
   } catch {
     return null;
   }

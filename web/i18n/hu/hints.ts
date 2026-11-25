@@ -81,7 +81,7 @@ export const hints: Messages["hints"] = {
   inviteDevice:
     "Egyszer használható kódot készít, amellyel egy másik böngésző vagy alkalmazás 15 percen belül csatlakozhat ehhez a Miradorhoz. Egy csatlakozott készülék itt mindent megtehet, terminálokban parancsokat is futtathat.",
   inviteJoins:
-    "Egy telefon a Mirador alkalmazással egyenrangú (peer to peer) kapcsolattal csatlakozik, ahol az működik: a legtöbb hálózatról, VPN nélkül. Böngésző vagy másik számítógép ennek a gépnek a címén csatlakozik. A QR-kód és a link a választással együtt változik.",
+    "Telefon vagy másik, Miradort futtató számítógép egyenrangú (peer to peer) kapcsolattal csatlakozik, ahol az működik: a legtöbb hálózatról, VPN nélkül. Böngésző ennek a gépnek a címén csatlakozik. A QR-kód és a link a választással együtt változik.",
   removeMachineArmed: "Kattints újra, hogy eltávolítsd ezt a gépet a listáról. Tovább fut, és ez a számítógép a készülékei között marad, amíg ott vissza nem vonod.",
   removeSomeoneElsesMachineArmed: "Kattints újra, hogy eltávolítsd ezt a gépet a listáról. Az ottani szobáidban benne maradsz, amíg a tulajdonosa ki nem vesz belőlük.",
   removeMachineNotJoinedArmed: "Kattints újra, hogy eltávolítsd ezt a gépet a listáról. Később újra hozzáadhatod.",

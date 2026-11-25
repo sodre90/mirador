@@ -61,7 +61,7 @@ export const devices: Messages["devices"] = {
     title: "Conexión",
     intro: "Una a la vez. El host usa la elegida desde su próximo inicio, para los enlaces de invitación y para los dispositivos que ya se unieron.",
     peerToPeer: "De igual a igual (peer to peer)",
-    peerToPeerAbout: "Para teléfonos con la aplicación Mirador y las personas de tus salas, desde la mayoría de las redes y sin VPN. Cifrado de extremo a extremo.",
+    peerToPeerAbout: "Para teléfonos con la aplicación Mirador, otros equipos con Mirador y las personas de tus salas, desde la mayoría de las redes y sin VPN. Cifrado de extremo a extremo.",
     peerToPeerStatus: {
       waiting: "Se inicia cuando hace falta",
       connecting: "Conectando…",
@@ -72,7 +72,7 @@ export const devices: Messages["devices"] = {
     },
     at: (host) => `Dirección: ${host}`,
     addressAbout: "Los navegadores y otros equipos se unen aquí.",
-    noAddressAbout: "Los navegadores y otros equipos no pueden unirse. Los teléfonos sí, de igual a igual.",
+    noAddressAbout: "Los navegadores no pueden unirse. Los teléfonos y otros equipos con Mirador sí, de igual a igual.",
     noneReaches: "Ningún otro dispositivo llega a este Mirador.",
     certificateBefore: "HTTPS en el puerto",
     certificateMiddle: " usa un certificado que genera Mirador. Los navegadores avisan una vez, o confían en él para siempre cuando instalan la ",
@@ -116,15 +116,20 @@ export const devices: Messages["devices"] = {
     joinsLabel: "Qué se une",
     joins: {
       phone: "Teléfono",
-      computer: "Navegador o equipo",
+      computer: "Otro equipo",
+      browser: "Navegador",
     },
     scan: "Escanea con la aplicación Mirador",
     throughTunnel:
       "La aplicación llega a esta máquina desde la mayoría de las redes, con datos móviles u otra Wi-Fi, sin VPN. Un servidor solo los presenta; lo que se envían está cifrado de extremo a extremo.",
     phoneAtAddress: (host) => `El teléfono tiene que llegar a ${host}, por ejemplo estando en la misma tailnet.`,
-    openLink: "Abre el enlace allí",
-    openLinkAbout: (host) =>
-      `Un navegador lo abre; en el Mirador de otro equipo, pégalo en Máquinas. El dispositivo tiene que llegar a ${host}, por ejemplo estando en la misma tailnet.`,
+    pasteInMachines: "Pega en Máquinas en el otro equipo",
+    computerThroughTunnel:
+      "Abre Máquinas… en el Mirador del otro equipo y pega este enlace. Se conecta de igual a igual desde la mayoría de las redes sin VPN; lo que se envían está cifrado de extremo a extremo.",
+    computerAtAddress: (host) =>
+      `Abre Máquinas… en el Mirador del otro equipo y pega este enlace. El equipo tiene que llegar a ${host}, por ejemplo estando en la misma tailnet.`,
+    openLink: "Abre el enlace en un navegador",
+    browserAtAddress: (host) => `El navegador tiene que llegar a ${host}, por ejemplo estando en la misma tailnet.`,
     qrLabel: "Enlace como código QR",
     copyLink: "Copiar enlace",
     showLink: "Mostrar el enlace",
@@ -138,8 +143,8 @@ export const devices: Messages["devices"] = {
     addressGoesAway: "Esta dirección desaparece en el próximo reinicio, y un dispositivo que se una en ella pierde entonces la conexión.",
     unreachableTitle: "Ningún otro dispositivo puede llegar a este Mirador",
     unreachable: "Solo funciona en esta máquina, así que una invitación no tiene adónde apuntar. Deja que lleguen los dispositivos de esta red o elige otra forma.",
-    needsAddressTitle: "Los navegadores y otros equipos necesitan una dirección",
-    needsAddress: "Esta máquina no tiene ninguna, así que solo pueden unirse teléfonos. Deja que lleguen los dispositivos de esta red o elige otra forma.",
+    needsAddressTitle: "Los navegadores necesitan una dirección",
+    needsAddress: "Esta máquina no tiene ninguna, así que solo teléfonos y otros equipos con Mirador pueden unirse de igual a igual. Deja que lleguen los dispositivos de esta red o elige otra forma.",
     anotherWay: "Elegir otra forma…",
     restartToReach: "Guardado. Reinicia el host y vuelve a invitar para tener un enlace y un código QR.",
     useThisNetwork: "Usar esta red",

@@ -106,6 +106,7 @@ export type HostProblem =
   | { code: "save-path-absolute"; name: string }
   | { code: "save-path-outside"; name: string }
   | { code: "save-path-is-folder"; name: string }
+  | { code: "export-path-is-folder"; name: string }
   | { code: "save-already-there"; path: string }
   | { code: "save-path-part-is-file"; name: string }
   | { code: "config-file-must-be-object"; path: string }

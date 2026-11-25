@@ -520,6 +520,8 @@ export function problemText(problem: HostProblem, words: ProblemWords): string {
       return words.settingsPluginNotPortable(problem.plugin);
     case "settings-item-failed":
       return words.settingsItemFailed(problem.name, causeText(problem, words));
+    case "export-path-is-folder":
+      return words.exportPathIsFolder(problem.name);
     default:
       return words.fixed[problem.code];
   }

@@ -80,7 +80,7 @@ export const hints: Messages["hints"] = {
   inviteDevice:
     "生成一次性邀请码，另一个浏览器或应用可在 15 分钟内用它加入这个 Mirador。加入的设备可以在这里做任何事，包括在终端里运行命令。",
   inviteJoins:
-    "装有 Mirador 应用的手机在可用时通过点对点加入：大多数网络下都行，无需 VPN。浏览器或另一台电脑通过这台机器的地址加入。二维码和链接会随选择而变化。",
+    "装有 Mirador 应用的手机或运行 Mirador 的另一台电脑在可用时通过点对点加入：大多数网络下都行，无需 VPN。浏览器通过这台机器的地址加入。二维码和链接会随选择而变化。",
   removeMachineArmed: "再次点击，将从列表中移除这台机器。它会继续运行，这台电脑仍留在它的设备中，直到你在那里撤销。",
   removeSomeoneElsesMachineArmed: "再次点击，将从列表中移除这台机器。你仍在那边的房间里，直到它的所有者将你移出。",
   removeMachineNotJoinedArmed: "再次点击，将从列表中移除这台机器。以后可以重新添加。",

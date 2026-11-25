@@ -521,4 +521,5 @@ export const problems = {
   workspaceSandboxNotReady: (why: string) => `This workspace's sandbox is not ready, so its agent did not start. ${why}`,
   workspaceSandboxRefusesAgent: (why: string) =>
     `This workspace runs its agents in a sandbox, where this one can't run. ${why} Pick a profile that can run there, or turn the sandbox off for this workspace.`,
+  exportPathIsFolder: (name: string) => `"${name}" is a folder. Name the file differently.`,
 };

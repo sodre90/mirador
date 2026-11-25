@@ -382,6 +382,7 @@ export function personView(store: PeopleSeen & Pick<Store, "findRoom" | "listPro
     "settings.conversations-shown": HIDDEN,
     "settings.side-chat-access": HIDDEN,
     "settings.exported": HIDDEN,
+    "settings.export-saved": HIDDEN,
     "settings.import-planned": HIDDEN,
     "settings.imported": HIDDEN,
     "settings.claude-program": HIDDEN,

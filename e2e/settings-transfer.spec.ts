@@ -23,6 +23,7 @@ async function exported(page: Page, settings: Locator): Promise<SettingsFile> {
   await settings.getByRole("button", { name: "Export settings" }).click();
   const download = await downloading;
   expect(download.suggestedFilename()).toMatch(/^mirador-settings-\d{4}-\d{2}-\d{2}\.json$/);
+  await expect(settings.getByRole("status")).toContainText(`Downloaded ${download.suggestedFilename()}`);
   return JSON.parse(readFileSync(await download.path(), "utf8"));
 }
 
@@ -67,6 +68,32 @@ test.describe("a running Mirador", () => {
     await settings.getByLabel("Include secrets").check();
     await expect(settings.getByText("Keep it safe.")).toBeVisible();
     expect((await exported(page, settings)).profiles!.find(({ name }) => name === "gateway")!.environment).toMatchObject({ TOKEN: "sk-secret" });
+  });
+
+  test("the desktop app asks where to save exported settings, asks before replacing, and says where it saved", async ({ page }) => {
+    await page.addInitScript(() => {
+      (window as unknown as { __electrobunSendToHost?: () => void }).__electrobunSendToHost = () => {};
+    });
+    await signIn(page, host);
+    const settings = await transferPage(page);
+    await settings.getByRole("button", { name: "Export settings" }).click();
+
+    const pathInput = settings.getByLabel("Save as");
+    await expect(pathInput).toHaveValue(/^~\/Downloads\/mirador-settings-\d{4}-\d{2}-\d{2}\.json$/);
+
+    const out = join(host.root, "desktop-export.json");
+    await pathInput.fill(out);
+    await settings.getByRole("button", { name: "Save", exact: true }).click();
+    await expect(settings.getByRole("status")).toContainText(`Saved to ${out}`);
+    const saved: SettingsFile = JSON.parse(readFileSync(out, "utf8"));
+    expect(saved.profiles!.map(({ name }) => name)).toContain("Claude Code");
+
+    await settings.getByRole("button", { name: "Export settings" }).click();
+    await settings.getByLabel("Save as").fill(out);
+    await settings.getByRole("button", { name: "Save", exact: true }).click();
+    await expect(settings.getByRole("alert")).toContainText("is already there. Replace it?");
+    await settings.getByRole("button", { name: "Replace", exact: true }).click();
+    await expect(settings.getByRole("status")).toContainText(`Saved to ${out}`);
   });
 
   test("Settings brings in what is new in a file, and overwrites only what is ticked", async ({ page }) => {

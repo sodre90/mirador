@@ -58,7 +58,7 @@ export const devices = {
     title: "Connection",
     intro: "One at a time. The host uses the chosen one from its next start, for invite links and for the devices that already joined.",
     peerToPeer: "Peer to peer",
-    peerToPeerAbout: "Phones with the Mirador app, and people in your rooms, from most networks with no VPN. Encrypted end to end.",
+    peerToPeerAbout: "Phones with the Mirador app, other computers running Mirador, and people in your rooms, from most networks with no VPN. Encrypted end to end.",
     peerToPeerStatus: {
       waiting: "Starts when needed",
       connecting: "Connecting…",
@@ -69,7 +69,7 @@ export const devices = {
     },
     at: (host: string) => `Address: ${host}`,
     addressAbout: "Browsers and other computers join here.",
-    noAddressAbout: "Browsers and other computers can't join. Phones still can, peer to peer.",
+    noAddressAbout: "Browsers can't join. Phones and other computers with Mirador still can, peer to peer.",
     noneReaches: "No other device reaches this Mirador.",
     certificateBefore: "HTTPS on port",
     certificateMiddle: " uses a certificate Mirador makes. Browsers warn once about it, or trust it for good once they install Mirador's ",
@@ -112,15 +112,20 @@ export const devices = {
     joinsLabel: "What joins",
     joins: {
       phone: "Phone",
-      computer: "Browser or computer",
+      computer: "Another computer",
+      browser: "Browser",
     },
     scan: "Scan with the Mirador app",
     throughTunnel:
       "The app reaches this machine from most networks, over mobile data or another Wi-Fi, with no VPN. A server only introduces the two; what they send is encrypted end to end.",
     phoneAtAddress: (host: string) => `The phone has to reach ${host}, for example by being on the same tailnet.`,
-    openLink: "Open the link there",
-    openLinkAbout: (host: string) =>
-      `A browser opens it; in another computer's Mirador, paste it under Machines. The device has to reach ${host}, for example by being on the same tailnet.`,
+    pasteInMachines: "Paste in Machines on the other computer",
+    computerThroughTunnel:
+      "Open Machines… in the other computer's Mirador and paste this link. It connects peer to peer from most networks with no VPN; what they send is encrypted end to end.",
+    computerAtAddress: (host: string) =>
+      `Open Machines… in the other computer's Mirador and paste this link. The computer has to reach ${host}, for example by being on the same tailnet.`,
+    openLink: "Open the link in a browser",
+    browserAtAddress: (host: string) => `The browser has to reach ${host}, for example by being on the same tailnet.`,
     qrLabel: "Link as a QR code",
     copyLink: "Copy link",
     showLink: "Show the link",
@@ -134,8 +139,8 @@ export const devices = {
     addressGoesAway: "This address goes away at the next restart, and a device that joins at it loses touch then.",
     unreachableTitle: "No other device can reach this Mirador",
     unreachable: "It runs only on this machine, so an invite has nowhere to point. Let devices on this network reach it, or choose another way.",
-    needsAddressTitle: "Browsers and other computers need an address",
-    needsAddress: "This machine has none, so only phones can join it. Let devices on this network reach it, or choose another way.",
+    needsAddressTitle: "Browsers need an address",
+    needsAddress: "This machine has none, so only phones and other computers with Mirador can join it peer to peer. Let devices on this network reach it, or choose another way.",
     anotherWay: "Choose another way…",
     restartToReach: "Saved. Restart the host, then invite again for a link and a QR code.",
     useThisNetwork: "Use this network",

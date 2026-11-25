@@ -527,4 +527,5 @@ export const problems: Messages["problems"] = {
   workspaceSandboxNotReady: (why: string) => `A munkaterület sandboxa nem áll készen, ezért az ágense nem indult el. ${why}`,
   workspaceSandboxRefusesAgent: (why: string) =>
     `Ez a munkaterület sandboxban futtatja az ágenseit, ahol ez nem tud futni. ${why} Válassz olyan profilt, amely futhat benne, vagy kapcsold ki a sandboxot ennél a munkaterületnél.`,
+  exportPathIsFolder: (name) => `Ez egy mappa: „${name}”. Adj más nevet a fájlnak.`,
 };

@@ -55,6 +55,7 @@ import type { ReadyPluginUpdates } from "./apps/ready-plugin-updates.ts";
 import type { PluginSettingsStore } from "./plugin-settings.ts";
 import { pluginsListed as listedPlugins, type PluginCatalog } from "./plugin-catalog.ts";
 import { FileAlreadyThere } from "./canvas/save-to-project.ts";
+import { saveExportedSettings } from "./settings-file/save-export.ts";
 import { OutsideWorkspace } from "./changes.ts";
 import { extensionFor, isImageId } from "../shared/images.ts";
 import { canvasChangedSince, DEFLATED_MESSAGES_HEADER, type LowDataSubscription } from "../shared/low-data.ts";
@@ -1623,6 +1624,18 @@ export function startServer(services: HostServices) {
       case "settings.export": {
         const { answer: text, ...problem } = await answerAboutSettings(socket, () => settingsAsText(message.includeSecrets));
         return reply({ type: "settings.exported", requestId: message.requestId, text, ...problem });
+      }
+      case "settings.save-export": {
+        const { answer: path, ...problem } = await answerAboutSettings(socket, async () =>
+          saveExportedSettings(message.path, await settingsAsText(message.includeSecrets), { replace: message.replace }),
+        );
+        return reply({
+          type: "settings.export-saved",
+          requestId: message.requestId,
+          path,
+          ...problem,
+          ...("problemAbout" in problem && problem.problemAbout?.code === "save-already-there" && { alreadyThere: true }),
+        });
       }
       case "settings.plan-import": {
         const { answer: plan, ...problem } = await answerAboutSettings(socket, () => settingsImport.plan(message.text));

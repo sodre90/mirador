@@ -59,7 +59,7 @@ export const devices: Messages["devices"] = {
     title: "Kapcsolat",
     intro: "Egyszerre csak egy. A host a következő indulásától a kiválasztottat használja, a meghívólinkekhez és a már csatlakozott készülékekhez is.",
     peerToPeer: "Egyenrangú kapcsolat (peer to peer)",
-    peerToPeerAbout: "A Mirador alkalmazást futtató telefonoknak és a szobáidban lévő embereknek, a legtöbb hálózatról, VPN nélkül. Végig titkosított.",
+    peerToPeerAbout: "A Mirador alkalmazást futtató telefonoknak, más Miradort futtató számítógépeknek és a szobáidban lévő embereknek, a legtöbb hálózatról, VPN nélkül. Végig titkosított.",
     peerToPeerStatus: {
       waiting: "Elindul, ha kell",
       connecting: "Kapcsolódás…",
@@ -70,7 +70,7 @@ export const devices: Messages["devices"] = {
     },
     at: (host) => `Cím: ${host}`,
     addressAbout: "Itt csatlakoznak a böngészők és más számítógépek.",
-    noAddressAbout: "Böngészők és más számítógépek nem tudnak csatlakozni. Telefonok igen, egyenrangú kapcsolattal.",
+    noAddressAbout: "Böngészők nem tudnak csatlakozni. Telefonok és más, Miradort futtató számítógépek igen, egyenrangú kapcsolattal.",
     noneReaches: "Más készülék nem éri el ezt a Miradort.",
     certificateBefore: "A HTTPS ezen a porton:",
     certificateMiddle: ", a Mirador által készített tanúsítvánnyal. A böngészők egyszer figyelmeztetnek rá, vagy végleg megbíznak benne, ha telepítik a Mirador ",
@@ -113,15 +113,20 @@ export const devices: Messages["devices"] = {
     joinsLabel: "Mi csatlakozik",
     joins: {
       phone: "Telefon",
-      computer: "Böngésző vagy számítógép",
+      computer: "Másik számítógép",
+      browser: "Böngésző",
     },
     scan: "Olvasd be a Mirador alkalmazással",
     throughTunnel:
       "Az alkalmazás a legtöbb hálózatról eléri ezt a gépet, mobilneten vagy egy másik Wi-Fi-n át, VPN nélkül. Egy szerver csak összehozza a kettőt; amit küldenek, az végig titkosított.",
     phoneAtAddress: (host) => `A telefonnak el kell érnie ezt a címet: ${host}. Ehhez elég például, ha ugyanazon a tailneten van.`,
-    openLink: "Nyisd meg ott a linket",
-    openLinkAbout: (host) =>
-      `Böngészőben nyisd meg; egy másik számítógép Miradorában illeszd be a Gépek alatt. A készüléknek el kell érnie ezt a címet: ${host}. Ehhez elég például, ha ugyanazon a tailneten van.`,
+    pasteInMachines: "Illeszd be a másik számítógépen a Gépek alatt",
+    computerThroughTunnel:
+      "Nyisd meg a Gépek… ablakot a másik számítógép Miradorában, és illeszd be ezt a linket. A legtöbb hálózatról VPN nélkül, egyenrangú kapcsolattal csatlakozik; amit küldenek, az végig titkosított.",
+    computerAtAddress: (host) =>
+      `Nyisd meg a Gépek… ablakot a másik számítógép Miradorában, és illeszd be ezt a linket. A számítógépnek el kell érnie ezt a címet: ${host}. Ehhez elég például, ha ugyanazon a tailneten van.`,
+    openLink: "Nyisd meg a linket böngészőben",
+    browserAtAddress: (host) => `A böngészőnek el kell érnie ezt a címet: ${host}. Ehhez elég például, ha ugyanazon a tailneten van.`,
     qrLabel: "A link QR-kódként",
     copyLink: "Link másolása",
     showLink: "A link megjelenítése",
@@ -135,8 +140,8 @@ export const devices: Messages["devices"] = {
     addressGoesAway: "Ez a cím a következő újraindításkor megszűnik, és a rajta csatlakozó készülék akkor elveszíti a kapcsolatot.",
     unreachableTitle: "Más készülék nem éri el ezt a Miradort",
     unreachable: "Csak ezen a gépen fut, így egy meghívó sehova sem mutathat. Engedd, hogy az ezen a hálózaton lévő készülékek elérjék, vagy válassz más módot.",
-    needsAddressTitle: "A böngészőknek és más számítógépeknek cím kell",
-    needsAddress: "Ennek a gépnek nincs címe, ezért csak telefonok csatlakozhatnak hozzá. Engedd, hogy az ezen a hálózaton lévő készülékek elérjék, vagy válassz más módot.",
+    needsAddressTitle: "A böngészőknek cím kell",
+    needsAddress: "Ennek a gépnek nincs címe, ezért csak telefonok és más, Miradort futtató számítógépek csatlakozhatnak egyenrangú kapcsolattal. Engedd, hogy az ezen a hálózaton lévő készülékek elérjék, vagy válassz más módot.",
     anotherWay: "Más mód választása…",
     restartToReach: "Mentve. Indítsd újra a hostot, majd hívj meg újra, hogy legyen link és QR-kód.",
     useThisNetwork: "Ez a hálózat",

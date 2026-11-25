@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { isPrivateHostname, wayToMachine } from "../host/machine-trust.ts";
 import {
   authorityFingerprintIn,
+  deviceTunnelInviteLink,
   fittedMachineName,
   hashOfMiradorLink,
   inviteConnectFor,
@@ -98,7 +99,7 @@ test("an invite link from a machine that connects peer to peer carries how to re
   expect(tunnelIn(hash)).toEqual(tunnel);
   expect(joinCodeIn(hash)).toBe("ABCD-EFGH-JKLM");
   expect(authorityFingerprintIn(hash)).toBe(fingerprint);
-  expect(inviteIn(link)).toEqual({ code: "ABCD-EFGH-JKLM", authorityFingerprint: fingerprint, tunnel: null });
+  expect(inviteIn(link)).toEqual({ code: "ABCD-EFGH-JKLM", authorityFingerprint: fingerprint, tunnel });
   expect(tunnelIn(new URL(inviteLink("https://box.local", "ABCD-EFGH-JKLM", null, tunnel)).hash)).toEqual(tunnel);
   expect(tunnelIn("#/join/ABCD-EFGH-JKLM?tunnel=bm90LWEtdHVubmVs")).toBeNull();
   expect(tunnelIn("#/join/ABCD-EFGH-JKLM")).toBeNull();
@@ -209,9 +210,11 @@ test("a link only Mirador opens names the machine by its tunnel alone, so withou
   expect(machineAddress("mirador://somewhere/else")).toBeNull();
 });
 
-test("a device's invite as a link only Mirador opens gives a phone the code and the way through the tunnel", () => {
-  const link = `mirador://join/ABCD-EFGH-JKLM?tunnel=${encoded(tunnel)}`;
-  expect(machineAddress(link)).toEqual({ origin: tunnelOrigin(tunnel), joinCode: "ABCD-EFGH-JKLM", authorityFingerprint: null, forRoom: false, tunnel: null, name: null });
+test("a device's invite as a link only Mirador opens gives another computer or a phone the code and the way through the tunnel", () => {
+  const link = deviceTunnelInviteLink("ABCD-EFGH-JKLM", tunnel);
+  expect(link).toBe(`mirador://join/ABCD-EFGH-JKLM?tunnel=${encoded(tunnel)}`);
+  expect(machineAddress(link)).toEqual({ origin: tunnelOrigin(tunnel), joinCode: "ABCD-EFGH-JKLM", authorityFingerprint: null, forRoom: false, tunnel, name: null });
+  expect(inviteIn(link)).toEqual({ code: "ABCD-EFGH-JKLM", authorityFingerprint: null, tunnel });
   expect(tunnelIn(hashOfMiradorLink(link)!)).toEqual(tunnel);
   expect(hashOfMiradorLink("https://box.local/#/join/ABCD-EFGH-JKLM")).toBeNull();
   expect(machineAddress("mirador://join/ABCD-EFGH-JKLM")).toBeNull();

@@ -85,7 +85,7 @@ export const hints: Messages["hints"] = {
   inviteDevice:
     "Erzeugt einen Einmalcode, mit dem ein anderer Browser oder eine App diesem Mirador innerhalb von 15 Minuten beitritt. Ein beigetretenes Gerät kann hier alles, auch Befehle in Terminals ausführen.",
   inviteJoins:
-    "Ein Handy mit der Mirador-App tritt über Peer-to-Peer bei, wo das funktioniert: aus den meisten Netzwerken, ohne VPN. Ein Browser oder ein anderer Computer tritt unter der Adresse dieses Rechners bei. QR-Code und Link ändern sich mit der Auswahl.",
+    "Ein Handy oder ein anderer Computer mit Mirador tritt per Peer-to-Peer bei, wo das funktioniert: aus den meisten Netzwerken, ohne VPN. Ein Browser tritt an der Adresse dieses Rechners bei. QR-Code und Link ändern sich mit der Auswahl.",
   removeMachineArmed:
     "Klicke erneut, um diesen Rechner aus der Liste zu entfernen. Er läuft weiter, und dieser Computer bleibt unter seinen Geräten, bis du ihn dort widerrufst.",
   removeSomeoneElsesMachineArmed: "Klicke erneut, um diesen Rechner aus der Liste zu entfernen. Du bleibst in deinen Räumen dort, bis sein Besitzer dich daraus entfernt.",

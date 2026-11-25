@@ -85,7 +85,7 @@ export const hints: Messages["hints"] = {
   inviteDevice:
     "Genera un código de un solo uso con el que otro navegador o aplicación se une a este Mirador, durante 15 minutos. Un dispositivo unido puede hacer de todo aquí, incluso ejecutar comandos en las terminales.",
   inviteJoins:
-    "Un teléfono con la aplicación Mirador se une de igual a igual donde eso funciona: desde la mayoría de las redes, sin VPN. Un navegador u otro equipo se une en la dirección de esta máquina. El código QR y el enlace cambian con la elección.",
+    "Un teléfono u otro equipo con Mirador se une de igual a igual donde funciona: desde la mayoría de las redes, sin VPN. Un navegador se une en la dirección de esta máquina. El código QR y el enlace cambian con la elección.",
   removeMachineArmed:
     "Haz clic de nuevo para quitar esta máquina de la lista. Sigue funcionando, y este equipo permanece entre sus dispositivos hasta que lo revoques allí.",
   removeSomeoneElsesMachineArmed: "Haz clic de nuevo para quitar esta máquina de la lista. Sigues en tus salas de allí hasta que su propietario te saque de ellas.",

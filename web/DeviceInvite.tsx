@@ -76,7 +76,7 @@ function FoldedLink({ link, appOnly }: { link: string; appOnly: boolean }) {
 }
 
 /** With nowhere to point, an invite says so plainly and offers the shortest way to fix it. */
-function InviteWithoutLink({ settings, phonesJoin, onChooseAddress }: { settings: ReachabilitySettings; phonesJoin: boolean; onChooseAddress: () => void }) {
+function InviteWithoutLink({ settings, peerToPeerReaches, onChooseAddress }: { settings: ReachabilitySettings; peerToPeerReaches: boolean; onChooseAddress: () => void }) {
   const [problem, setProblem] = useState<string | null>(null);
   const useThisNetwork = () => {
     setProblem(null);
@@ -93,7 +93,7 @@ function InviteWithoutLink({ settings, phonesJoin, onChooseAddress }: { settings
       );
     return (
       <>
-        <p>{phonesJoin ? words.needsAddress : words.unreachable}</p>
+        <p>{peerToPeerReaches ? words.needsAddress : words.unreachable}</p>
         <div className="invite-ways">
           <button type="button" data-hint={hints.useThisNetwork} onClick={useThisNetwork}>
             {words.useThisNetwork}
@@ -107,7 +107,7 @@ function InviteWithoutLink({ settings, phonesJoin, onChooseAddress }: { settings
   };
   return (
     <div className="warning invite-without-link" role="alert">
-      <strong>{phonesJoin ? words.needsAddressTitle : words.unreachableTitle}</strong>
+      <strong>{peerToPeerReaches ? words.needsAddressTitle : words.unreachableTitle}</strong>
       {fix()}
       {problem && <p className="setting-problem">{problem}</p>}
     </div>
@@ -115,7 +115,8 @@ function InviteWithoutLink({ settings, phonesJoin, onChooseAddress }: { settings
 }
 
 function howToJoin(joins: InviteJoins, appOnly: boolean, host: string) {
-  if (joins === "computer") return { title: words.openLink, about: words.openLinkAbout(host) };
+  if (joins === "computer") return { title: words.pasteInMachines, about: appOnly ? words.computerThroughTunnel : words.computerAtAddress(host) };
+  if (joins === "browser") return { title: words.openLink, about: words.browserAtAddress(host) };
   return { title: words.scan, about: appOnly ? words.throughTunnel : words.phoneAtAddress(host) };
 }
 
@@ -133,12 +134,12 @@ function WaitingInvite({
   onChooseAddress: () => void;
 }) {
   const reached = inviteLinkFor(joins, invite, settings);
-  const noPeerToPeer = joins === "phone" && !invite.tunnel && peerToPeerProblem(peerToPeer);
+  const noPeerToPeer = joins !== "browser" && !invite.tunnel && peerToPeerProblem(peerToPeer);
   const atAddress = reached !== null && !reached.appOnly;
   const { title, about } = howToJoin(joins, reached?.appOnly ?? false, settings.publicAddress ? new URL(settings.publicAddress.origin).host : "");
   return (
     <div className="invite-body">
-      {reached && <QrCode text={reached.link} label={words.qrLabel} />}
+      {reached && joins !== "computer" && <QrCode text={reached.link} label={words.qrLabel} />}
       <div className="invite-how">
         {reached ? (
           <>
@@ -146,11 +147,11 @@ function WaitingInvite({
             <span className="hint">{about}</span>
           </>
         ) : (
-          <InviteWithoutLink settings={settings} phonesJoin={invite.tunnel !== null} onChooseAddress={onChooseAddress} />
+          <InviteWithoutLink settings={settings} peerToPeerReaches={invite.tunnel !== null} onChooseAddress={onChooseAddress} />
         )}
         {noPeerToPeer && <p className="warning">{noPeerToPeer}</p>}
         {atAddress && addressGoesAway(settings) && <p className="warning invite-address-goes">{words.addressGoesAway}</p>}
-        {reached && joins === "computer" && <code className="invite-link">{reached.link}</code>}
+        {reached && joins !== "phone" && <code className="invite-link">{reached.link}</code>}
         {!reached?.appOnly && (
           <span>
             {words.code} <code className="invite-code">{invite.code}</code>

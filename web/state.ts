@@ -739,6 +739,7 @@ function applyServerMessage(state: AppState, message: ServerMessage): AppState {
     case "machine.join-answered":
     case "settings.saved":
     case "settings.exported":
+    case "settings.export-saved":
     case "settings.import-planned":
     case "settings.imported":
     case "app.storage":

@@ -105,6 +105,7 @@ const admissions: { [K in ClientMessage["type"]]: K extends PersonMessageType ? 
   "settings.set-conversations-shown": OWNER_ONLY,
   "settings.set-side-chat-access": OWNER_ONLY,
   "settings.export": OWNER_ONLY,
+  "settings.save-export": OWNER_ONLY,
   "settings.plan-import": OWNER_ONLY,
   "settings.import": OWNER_ONLY,
   "settings.set-claude-program": OWNER_ONLY,

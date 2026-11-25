@@ -1,38 +1,50 @@
 import { describe, expect, test } from "bun:test";
-import { joinCodeIn, tunnelIn } from "../shared/machines.ts";
+import { machineAddress, tunnelIn } from "../shared/machines.ts";
 import type { InviteTunnel } from "../shared/tunnel.ts";
 import { inviteLinkFor } from "../web/invite-link.ts";
 
-const key = "tne9fR0CU9toO26+5x2ggHdtuq+Z0kfmk/nqAnFmkyg=";
-const tunnel: InviteTunnel = { hostKey: key, hostAddress: "fd12:3456:789a:1::1", port: 4600, broker: { address: "p2p.example.com:47800", key }, joinKey: key, joinAddress: "fd12:3456:789a:1::9" };
-const code = "ABCD-EFGH-JKLM";
-const publicAddress = { origin: "https://box.example.ts.net:4600", canvasOrigin: "https://box.example.ts.net:4601" };
-const addressed = { publicAddress, authorityFingerprint: null };
-const nowhere = { publicAddress: null, authorityFingerprint: null };
+const tunnel: InviteTunnel = {
+  hostKey: "TfdU+RVSAYU/VwqNJh5dDtXFyyZCkHgiPG8knt29NU0=",
+  hostAddress: "fd12:3456:789a:1::1",
+  port: 4600,
+  broker: { address: "203.0.113.7:47800", key: "3Q85Sl/Vr65bJz+OyEhIQtyAeBRDJQqqkVWJgryS2WE=" },
+  joinKey: "tne9fR0CU9toO26+5x2ggHdtuq+Z0kfmk/nqAnFmkyg=",
+  joinAddress: "fd12:3456:789a:1:8f1e:22c4:aa01:93b7",
+  name: "studio",
+};
+
+const atAddress = { publicAddress: { origin: "https://box.local:4602", canvasOrigin: "https://box.local:4603" }, authorityFingerprint: "fp-123" };
+const noAddress = { publicAddress: null, authorityFingerprint: null };
 
 describe("inviteLinkFor", () => {
-  test("a phone joins through the tunnel, even where there is an address, with a link only the app opens", () => {
-    const { link, appOnly } = inviteLinkFor("phone", { code, tunnel }, addressed)!;
-    expect(appOnly).toBe(true);
-    expect(new URL(link).origin).toBe("http://[fd12:3456:789a:1::1]:4600");
-    expect(tunnelIn(new URL(link).hash)).toEqual(tunnel);
-    expect(joinCodeIn(new URL(link).hash)).toBe(code);
+  test("phones use the tunnel when the invite has one, even with an address", () => {
+    const reached = inviteLinkFor("phone", { code: "ABCD-EFGH-JKLM", tunnel }, atAddress)!;
+    expect(reached.appOnly).toBe(true);
+    expect(reached.link).toStartWith("http://[fd12:3456:789a:1::1]:4600/#/join/ABCD-EFGH-JKLM?tunnel=");
+    expect(tunnelIn(new URL(reached.link).hash)).toEqual(tunnel);
   });
 
-  test("with no tunnel a phone joins at the address, as a browser or computer always does", () => {
-    const atAddress = { link: `https://box.example.ts.net:4600/#/join/${code}`, appOnly: false };
-    expect(inviteLinkFor("phone", { code, tunnel: null }, addressed)).toEqual(atAddress);
-    expect(inviteLinkFor("computer", { code, tunnel }, addressed)).toEqual(atAddress);
+  test("another computer uses a mirador:// peer-to-peer link when the invite has a tunnel, and falls back to the address", () => {
+    const throughTunnel = inviteLinkFor("computer", { code: "ABCD-EFGH-JKLM", tunnel }, noAddress)!;
+    expect(throughTunnel.appOnly).toBe(true);
+    expect(throughTunnel.link).toStartWith("mirador://join/ABCD-EFGH-JKLM?tunnel=");
+    expect(machineAddress(throughTunnel.link)).toMatchObject({ joinCode: "ABCD-EFGH-JKLM", tunnel });
+
+    const throughAddress = inviteLinkFor("computer", { code: "ABCD-EFGH-JKLM", tunnel: null }, atAddress)!;
+    expect(throughAddress).toEqual({ link: "https://box.local:4602/#/join/ABCD-EFGH-JKLM/fp-123", appOnly: false });
   });
 
-  test("the link to the address names the host's own certificate authority", () => {
-    const fingerprint = "a".repeat(43);
-    expect(inviteLinkFor("computer", { code, tunnel: null }, { publicAddress, authorityFingerprint: fingerprint })?.link).toBe(`https://box.example.ts.net:4600/#/join/${code}/${fingerprint}`);
+  test("browsers always need an address, never the tunnel", () => {
+    expect(inviteLinkFor("browser", { code: "ABCD-EFGH-JKLM", tunnel }, noAddress)).toBeNull();
+    expect(inviteLinkFor("browser", { code: "ABCD-EFGH-JKLM", tunnel }, atAddress)).toEqual({
+      link: "https://box.local:4602/#/join/ABCD-EFGH-JKLM/fp-123",
+      appOnly: false,
+    });
   });
 
-  test("with no address there is nothing for a browser or computer, and for a phone only the tunnel", () => {
-    expect(inviteLinkFor("computer", { code, tunnel }, nowhere)).toBeNull();
-    expect(inviteLinkFor("phone", { code, tunnel: null }, nowhere)).toBeNull();
-    expect(inviteLinkFor("phone", { code, tunnel }, nowhere)?.appOnly).toBe(true);
+  test("without a tunnel or an address, nothing reaches", () => {
+    expect(inviteLinkFor("phone", { code: "ABCD-EFGH-JKLM", tunnel: null }, noAddress)).toBeNull();
+    expect(inviteLinkFor("computer", { code: "ABCD-EFGH-JKLM", tunnel: null }, noAddress)).toBeNull();
+    expect(inviteLinkFor("browser", { code: "ABCD-EFGH-JKLM", tunnel: null }, noAddress)).toBeNull();
   });
 });

@@ -21,7 +21,7 @@ async function openInvite(page: Page) {
   return { settings, card };
 }
 
-test("an invite opens as a card above the devices, for a phone or for a browser or computer, and hides again", async ({ page, context }) => {
+test("an invite opens as a card above the devices, for a phone, another computer or a browser, and hides again", async ({ page, context }) => {
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   await signIn(page, host);
   const { settings, card } = await openInvite(page);
@@ -44,18 +44,25 @@ test("an invite opens as a card above the devices, for a phone or for a browser 
     await expect(link).toBeVisible();
   });
 
-  await test.step("a browser or computer opens the link, which says where it goes", async () => {
-    await card.getByRole("radio", { name: "Browser or computer" }).check();
+  await test.step("another computer pastes the link under Machines", async () => {
+    await card.getByRole("radio", { name: "Another computer" }).check();
     await expect(link).toBeVisible();
-    await expect(card).toContainText("in another computer's Mirador, paste it under Machines.");
-    await expect(card).toContainText(`The device has to reach 127.0.0.1:${host.port}`);
+    await expect(card).toContainText("Open Machines… in the other computer's Mirador and paste this link.");
+    await expect(card).toContainText(`The computer has to reach 127.0.0.1:${host.port}`);
+  });
+
+  await test.step("a browser opens the link, which says where it goes", async () => {
+    await card.getByRole("radio", { name: "Browser" }).check();
+    await expect(link).toBeVisible();
+    await expect(card).toContainText("Open the link in a browser");
+    await expect(card).toContainText(`The browser has to reach 127.0.0.1:${host.port}`);
   });
 
   await test.step("Invite a device makes another, for what was chosen last", async () => {
     const before = await card.locator(".invite-code").textContent();
     await settings.getByRole("button", { name: "Invite a device" }).click();
     await expect(card.locator(".invite-code")).not.toHaveText(before!);
-    await expect(card.getByRole("radio", { name: "Browser or computer" })).toBeChecked();
+    await expect(card.getByRole("radio", { name: "Browser" })).toBeChecked();
   });
 
   await test.step("it hides, and Settings stays", async () => {
@@ -122,7 +129,7 @@ test("an invite that reaches nothing leads to the ways to an address", async ({ 
   const { settings, card } = await openInvite(page);
   const alert = card.getByRole("alert");
   await expect(alert).toContainText("No other device can reach this Mirador");
-  await card.getByRole("radio", { name: "Browser or computer" }).check();
+  await card.getByRole("radio", { name: "Browser" }).check();
   await expect(alert).toContainText("No other device can reach this Mirador");
   await alert.getByRole("button", { name: "Choose another way…" }).click();
   const ways = settings.getByRole("form", { name: "How browsers and other computers reach this Mirador" });
@@ -135,6 +142,8 @@ test("in a narrow window the card and the connection rows stay within Settings",
   const { settings } = await openInvite(page);
   const pageArea = settings.locator(".settings-page");
   expect(await pageArea.evaluate((area) => area.scrollWidth - area.clientWidth)).toBe(0);
-  await settings.getByRole("radio", { name: "Browser or computer" }).check();
+  await settings.getByRole("radio", { name: "Another computer" }).check();
+  expect(await pageArea.evaluate((area) => area.scrollWidth - area.clientWidth)).toBe(0);
+  await settings.getByRole("radio", { name: "Browser" }).check();
   expect(await pageArea.evaluate((area) => area.scrollWidth - area.clientWidth)).toBe(0);
 });

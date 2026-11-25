@@ -192,8 +192,8 @@ test("a device joins through the tunnel with an invite's one-time key, then reac
   await test.step("a device that joined over the network takes its place in the tunnel with its token, and no other device's token works through it", async () => {
     await settings.getByRole("button", { name: "Invite a device" }).click();
     const card = settings.getByRole("region", { name: "Invite" });
-    await card.getByRole("radio", { name: "Browser or computer" }).check();
-    await expect(card.getByRole("alert"), "only phones join through the tunnel").toContainText("Browsers and other computers need an address");
+    await card.getByRole("radio", { name: "Browser" }).check();
+    await expect(card.getByRole("alert"), "browsers need an address").toContainText("Browsers need an address");
     const laptopCode = (await settings.locator(".invite-code").textContent())!;
     expect(laptopCode).not.toBe(code);
     const overNetwork = await fetch(`${host.origin}/join`, { method: "POST", body: JSON.stringify({ code: laptopCode, name: "Laptop" }) });
@@ -232,7 +232,44 @@ test("a device joins through the tunnel with an invite's one-time key, then reac
   });
 });
 
-test("with an address of its own as well, a phone's invite joins peer to peer, and a browser's or computer's at the address", async ({ page }) => {
+test("another computer running Mirador joins through the tunnel with a peer-to-peer invite link, and opens this one in its window", async ({ page, browser }) => {
+  const peer = new TestHost({ environment: () => ({ MIRADOR_P2P_BINARY: binary, MIRADOR_P2P_BROKER: `localhost:${brokerPort}`, MIRADOR_P2P_BROKER_KEY: brokerKey }) });
+  await peer.start();
+  const peerContext = await browser.newContext();
+  const peerPage = await peerContext.newPage();
+  try {
+    await signIn(page, host);
+    const settings = await openSettings(page, "Devices");
+    await settings.getByRole("button", { name: "Invite a device" }).click();
+    const invite = settings.getByRole("region", { name: "Invite" });
+    await invite.getByRole("radio", { name: "Another computer" }).check();
+    const link = (await invite.locator(".invite-link").textContent())!;
+    expect(link).toMatch(/^mirador:\/\/join\/[A-Z2-9]{4}-[A-Z2-9]{4}-[A-Z2-9]{4}\?tunnel=/);
+
+    await signIn(peerPage, peer);
+    await peerPage.getByRole("button", { name: "Machines…" }).click();
+    const machines = peerPage.getByRole("dialog", { name: "Machines" });
+    await machines.getByLabel("Name").fill("Studio");
+    await machines.getByLabel("Address or invite link").fill(link);
+    await machines.getByRole("button", { name: "Add and join" }).click();
+
+    const row = machines.locator(".machine-list li", { hasText: "Studio" });
+    await expect(row).toBeVisible({ timeout: 25_000 });
+    await expect(row.locator(".machine-origin")).toHaveText("peer to peer");
+    await expect(row.locator(".machine-not-joined")).toHaveCount(0);
+    await expect(invite).toContainText(/Mirador on .+ joined/);
+
+    await row.getByRole("button", { name: "Open" }).click();
+    const frame = peerPage.frameLocator('iframe.machine-frame[title="Studio"]');
+    await expect(frame.getByRole("button", { name: "Settings…" })).toBeVisible({ timeout: 20_000 });
+  } finally {
+    await peerContext.close();
+    await peer.stop();
+    await peer.cleanUp();
+  }
+});
+
+test("with an address of its own as well, phone and computer invites join peer to peer, and a browser's at the address", async ({ page }) => {
   const addressed = new TestHost({
     environment: () => ({
       MIRADOR_P2P_BINARY: binary,
@@ -261,11 +298,16 @@ test("with an address of its own as well, a phone's invite joins peer to peer, a
     const tunnel = tunnelIn(new URL((await link.textContent())!).hash)!;
     expect(new URL((await link.textContent())!).origin).toBe(`http://[${tunnel.hostAddress}]:4600`);
 
-    await joins.getByRole("radio", { name: "Browser or computer" }).check();
+    await joins.getByRole("radio", { name: "Another computer" }).check();
+    await expect(link).toHaveText(/^mirador:\/\/join\//);
+    await expect(link).toBeVisible();
+    await expect(invite).toContainText("Open Machines… in the other computer's Mirador and paste this link.");
+
+    await joins.getByRole("radio", { name: "Browser" }).check();
     await expect(link).toHaveText(/^https:\/\/mirador\.example\.ts\.net\//);
     await expect(link).toBeVisible();
     expect(tunnelIn(new URL((await link.textContent())!).hash)).toBeNull();
-    await expect(invite).toContainText("The device has to reach mirador.example.ts.net");
+    await expect(invite).toContainText("The browser has to reach mirador.example.ts.net");
     await expect(invite.locator(".invite-code")).toBeVisible();
   } finally {
     await addressed.stop();

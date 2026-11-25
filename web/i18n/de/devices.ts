@@ -61,7 +61,7 @@ export const devices: Messages["devices"] = {
     title: "Verbindung",
     intro: "Es gilt immer nur ein Weg. Der Host verwendet den gewählten ab seinem nächsten Start, für Einladungslinks und für die Geräte, die schon beigetreten sind.",
     peerToPeer: "Peer-to-Peer",
-    peerToPeerAbout: "Für Handys mit der Mirador-App und Personen in deinen Räumen, aus den meisten Netzwerken und ohne VPN. Ende-zu-Ende-verschlüsselt.",
+    peerToPeerAbout: "Für Handys mit der Mirador-App, andere Computer mit Mirador und Personen in deinen Räumen, aus den meisten Netzwerken und ohne VPN. Ende-zu-Ende-verschlüsselt.",
     peerToPeerStatus: {
       waiting: "Startet bei Bedarf",
       connecting: "Verbindet…",
@@ -72,7 +72,7 @@ export const devices: Messages["devices"] = {
     },
     at: (host) => `Adresse: ${host}`,
     addressAbout: "Hier treten Browser und andere Computer bei.",
-    noAddressAbout: "Browser und andere Computer können nicht beitreten. Handys schon, über Peer-to-Peer.",
+    noAddressAbout: "Browser können nicht beitreten. Handys und andere Computer mit Mirador schon, über Peer-to-Peer.",
     noneReaches: "Kein anderes Gerät erreicht dieses Mirador.",
     certificateBefore: "HTTPS auf Port",
     certificateMiddle: " verwendet ein Zertifikat, das Mirador erstellt. Browser warnen einmal davor oder vertrauen ihm dauerhaft nach der Installation der ",
@@ -115,15 +115,20 @@ export const devices: Messages["devices"] = {
     joinsLabel: "Was beitritt",
     joins: {
       phone: "Handy",
-      computer: "Browser oder Computer",
+      computer: "Anderer Computer",
+      browser: "Browser",
     },
     scan: "Mit der Mirador-App scannen",
     throughTunnel:
       "Die App erreicht diesen Rechner aus den meisten Netzwerken, über mobile Daten oder ein anderes WLAN, ohne VPN. Ein Server macht die beiden nur miteinander bekannt; was sie senden, ist Ende-zu-Ende-verschlüsselt.",
     phoneAtAddress: (host) => `Das Handy muss ${host} erreichen, zum Beispiel, indem es im selben Tailnet ist.`,
-    openLink: "Öffne den Link dort",
-    openLinkAbout: (host) =>
-      `Ein Browser öffnet ihn; im Mirador eines anderen Computers fügst du ihn unter Rechner ein. Das Gerät muss ${host} erreichen, zum Beispiel, indem es im selben Tailnet ist.`,
+    pasteInMachines: "Auf dem anderen Computer unter Rechner einfügen",
+    computerThroughTunnel:
+      "Öffne Rechner… im Mirador des anderen Computers und füge diesen Link ein. Er verbindet sich per Peer-to-Peer aus den meisten Netzwerken ohne VPN; was sie senden, ist Ende-zu-Ende-verschlüsselt.",
+    computerAtAddress: (host) =>
+      `Öffne Rechner… im Mirador des anderen Computers und füge diesen Link ein. Der Computer muss ${host} erreichen, zum Beispiel, indem er im selben Tailnet ist.`,
+    openLink: "Link im Browser öffnen",
+    browserAtAddress: (host) => `Der Browser muss ${host} erreichen, zum Beispiel, indem er im selben Tailnet ist.`,
     qrLabel: "Link als QR-Code",
     copyLink: "Link kopieren",
     showLink: "Link anzeigen",
@@ -137,8 +142,8 @@ export const devices: Messages["devices"] = {
     addressGoesAway: "Diese Adresse fällt beim nächsten Neustart weg, und ein Gerät, das unter ihr beitritt, verliert dann die Verbindung.",
     unreachableTitle: "Kein anderes Gerät erreicht dieses Mirador",
     unreachable: "Es läuft nur auf diesem Rechner, daher kann eine Einladung nirgendwohin zeigen. Lass Geräte in diesem Netzwerk es erreichen oder wähle einen anderen Weg.",
-    needsAddressTitle: "Browser und andere Computer brauchen eine Adresse",
-    needsAddress: "Dieser Rechner hat keine, daher können nur Handys beitreten. Lass Geräte in diesem Netzwerk ihn erreichen oder wähle einen anderen Weg.",
+    needsAddressTitle: "Browser brauchen eine Adresse",
+    needsAddress: "Dieser Rechner hat keine, daher können nur Handys und andere Computer mit Mirador per Peer-to-Peer beitreten. Lass Geräte in diesem Netzwerk ihn erreichen oder wähle einen anderen Weg.",
     anotherWay: "Anderen Weg wählen…",
     restartToReach: "Gespeichert. Starte den Host neu und lade dann erneut ein, um einen Link und einen QR-Code zu bekommen.",
     useThisNetwork: "Dieses Netzwerk verwenden",

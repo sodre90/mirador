@@ -532,4 +532,5 @@ export const problems: Messages["problems"] = {
   workspaceSandboxNotReady: (why: string) => `Die Sandbox dieses Arbeitsbereichs ist nicht bereit, daher ist sein Agent nicht gestartet. ${why}`,
   workspaceSandboxRefusesAgent: (why: string) =>
     `Dieser Arbeitsbereich lässt seine Agenten in einer Sandbox laufen, in der dieser nicht laufen kann. ${why} Wähle ein Profil, das dort laufen kann, oder schalte die Sandbox für diesen Arbeitsbereich aus.`,
+  exportPathIsFolder: (name) => `„${name}“ ist ein Ordner. Gib der Datei einen anderen Namen.`,
 };

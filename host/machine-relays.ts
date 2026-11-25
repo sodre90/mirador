@@ -395,12 +395,16 @@ export class MachineRelays {
         const response = await fetchAnswered(forward.web, path, init, FORWARD_ANSWER_TIMEOUT_MS);
         return forward.running ? response : null;
       };
-      const challenged = await post("/join-challenges", { code });
-      if (!challenged) throw unreachable;
-      const person = challenged.ok ? this.ownerAsPerson(code, { tunnelKey: invite.hostKey }, await challenged.json().catch(() => ({}))) : undefined;
-      if (!person) throw new HostProblemError(joinRefusalIn(challenged) ?? { code: "machine-ignored-room-invite", machine: machine.name });
+      const isRoom = isRoomInviteCode(code);
+      let person: ReturnType<MachineRelays["ownerAsPerson"]>;
+      if (isRoom) {
+        const challenged = await post("/join-challenges", { code });
+        if (!challenged) throw unreachable;
+        person = challenged.ok ? this.ownerAsPerson(code, { tunnelKey: invite.hostKey }, await challenged.json().catch(() => ({}))) : undefined;
+        if (!person) throw new HostProblemError(joinRefusalIn(challenged) ?? { code: "machine-ignored-room-invite", machine: machine.name });
+      }
       const own = newKeyPair();
-      const response = await post("/join", { code, name: thisHostAsDevice(this.store), person, tunnelKey: own.publicKey });
+      const response = await post("/join", { code, name: thisHostAsDevice(this.store), ...(person && { person }), tunnelKey: own.publicKey });
       if (!response) throw unreachable;
       if (!response.ok) throw await refusedJoin(response);
       const answer = (await response.json().catch(() => ({}))) as { token?: unknown; roomId?: unknown; waiting?: unknown; tunnel?: unknown };
@@ -408,8 +412,8 @@ export class MachineRelays {
       if (typeof answer.token !== "string" || !given || !isFromMachine(given)) throw new HostProblemError({ code: "machine-gave-no-token", machine: machine.name });
       this.store.setMachineTunnelDevice(machine.id, placesIn(given), { address: given.deviceAddress, privateKey: own.privateKey });
       this.tunnels.start(machine.id);
-      const joined = this.roomJoined(machine.id, answer);
-      this.signInFromNowOn(machine, null, answer.token, { asPerson: true, relayKey: this.relayKeyFor(machine.id) });
+      const joined = person ? this.roomJoined(machine.id, answer) : NO_ROOM;
+      this.signInFromNowOn(machine, null, answer.token, person ? { asPerson: true, relayKey: this.relayKeyFor(machine.id) } : { asPerson: false });
       return joined;
     } finally {
       joining.stop();

@@ -201,6 +201,8 @@ export type ClientMessage =
   | { type: "settings.set-side-chat-access"; sideChatAccess: SideChatAccess }
   /** The settings as a file's text; answered with "settings.exported". */
   | { type: "settings.export"; requestId: string; includeSecrets: boolean }
+  /** Writes the exported settings to a file on this computer; answered with "settings.export-saved". */
+  | { type: "settings.save-export"; requestId: string; includeSecrets: boolean; path: string; replace: boolean }
   /** What importing a settings file's text would do; answered with "settings.import-planned". */
   | { type: "settings.plan-import"; requestId: string; text: string }
   /** Brings in the plan's chosen items, by id; answered with "settings.imported". */
@@ -939,6 +941,7 @@ export type ServerMessage =
   | { type: "join-request.answered"; requestId: string; problem: string | null; problemAbout?: HostProblem }
   | { type: "settings.saved"; requestId: string; problem: string | null; problemAbout?: HostProblem }
   | { type: "settings.exported"; requestId: string; text: string | null; problem: string | null; problemAbout?: HostProblem }
+  | { type: "settings.export-saved"; requestId: string; path: string | null; problem: string | null; problemAbout?: HostProblem; alreadyThere?: boolean }
   | { type: "settings.import-planned"; requestId: string; plan: SettingsPlan | null; problem: string | null; problemAbout?: HostProblem }
   | { type: "settings.imported"; requestId: string; report: SettingsImportReport | null; problem: string | null; problemAbout?: HostProblem }
   /** The conversation with the newest hit first. */

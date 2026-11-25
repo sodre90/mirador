@@ -7569,6 +7569,40 @@ input.script-program {
   white-space: pre-wrap;
 }
 
+.transfer-saved {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: calc(12px * var(--font-scale));
+  overflow-wrap: anywhere;
+}
+
+.transfer-save {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.transfer-save label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--muted);
+  font-size: calc(12px * var(--font-scale));
+}
+
+.transfer-save input {
+  font-family: var(--mono);
+}
+
+.transfer-save .form-actions {
+  margin-top: 2px;
+}
+
 .modal.settings h4 {
   margin: 12px 0 4px;
   font-size: calc(12px * var(--font-scale));
@@ -9116,6 +9150,7 @@ button.device-revoke:hover:not(:disabled) {
 
 .invite-joins {
   display: flex;
+  flex-wrap: wrap;
   border: 1px solid var(--border);
   border-radius: 7px;
   overflow: hidden;
