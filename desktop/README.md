@@ -164,13 +164,16 @@ The app keeps the answer while it runs, for a day at most, so a Block holds unti
   "hostDirectory": "<repo path at build time>, or null in a release build",
   "bun": "<absolute bun path at build time>, or null in a release build",
   "hostRunsInBackground": false,
-  "openAtLogin": true
+  "openAtLogin": true,
+  "language": "en",
+  "spellCheck": { "enabled": true, "languages": [] }
 }
 ```
 
 - `hostDirectory`: the checkout the host runs from; null for the copy of Mirador the app carries.
 - `bun`: the Bun that runs the host; null for the app's own.
 - `hostRunsInBackground` and `openAtLogin` are switched from the app's menu; edit the file only while the app is quit.
+- `language` and `spellCheck` follow what Mirador's page last told the app. `spellCheck` comes from Settings → Conversations → Check spelling. Its `languages` are dictionary tags as Enchant lists them (`en_US`, `hu_HU`), and none means the system's language when a dictionary exists for it, else no checking; only the Linux app uses them, by turning on WebKitGTK's spell checker through a small C helper that Bun compiles at launch.
 
 The data directory, port and canvas port follow the host's own environment variables: `MIRADOR_DATA_DIR`, `MIRADOR_PORT` and `MIRADOR_CANVAS_PORT` (by default `~/.mirador`, 4600, and the port after it).
 

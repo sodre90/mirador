@@ -159,6 +159,17 @@ describe("menu in the window", () => {
   });
 });
 
+describe("spell checking", () => {
+  test("is taken only from the page with the nonce, with a boolean and a list of languages", () => {
+    const message = { type: "desktop-spell-check", nonce: "n-1", enabled: false, languages: ["hu_HU", 4] };
+    expect(pageRequest(message, "n-1")).toEqual({ type: "spell-check", spellCheck: { enabled: false, languages: ["hu_HU"] } });
+    expect(pageRequest(message, "guess")).toBeNull();
+    expect(pageRequest({ ...message, nonce: undefined }, "n-1")).toBeNull();
+    expect(pageRequest({ ...message, enabled: "yes" }, "n-1")).toBeNull();
+    expect(pageRequest({ ...message, languages: "hu_HU" }, "n-1")).toBeNull();
+  });
+});
+
 describe("opening a conversation from the tray", () => {
   test("goes to the page's address for it", () => {
     expect(conversationRoute("c-1")).toBe("#/c/c-1");

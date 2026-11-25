@@ -1,6 +1,8 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
+import type { DesktopSpellCheck } from "../../../shared/desktop-menu.ts";
 import { isLanguage, type Language } from "../../../shared/i18n/languages.ts";
+import { parseSpellCheck } from "./spell-check.ts";
 
 export interface DesktopSettings {
   hostDirectory: string;
@@ -9,6 +11,8 @@ export interface DesktopSettings {
   openAtLogin: boolean;
   /** Mirador's language, as its page last told the app, so the tray and the app's dialogs speak it before any page loads. */
   language: Language;
+  /** Spell checking as the page last told the app, applied at startup before any page speaks. */
+  spellCheck: DesktopSpellCheck;
 }
 
 /** Where a build finds the host. */
@@ -27,6 +31,7 @@ export const defaultSettings = <Build extends BuildDefaults>(build: Build) => ({
   hostRunsInBackground: false,
   openAtLogin: true,
   language: "en" as Language,
+  spellCheck: { enabled: true, languages: [] } as DesktopSpellCheck,
 });
 
 const isNonEmptyString = (value: unknown): value is string => typeof value === "string" && value.trim() !== "";
@@ -54,6 +59,7 @@ export function parseSettings(text: string, defaults: StoredSettings): StoredSet
     hostRunsInBackground: typeof stored.hostRunsInBackground === "boolean" ? stored.hostRunsInBackground : defaults.hostRunsInBackground,
     openAtLogin: typeof stored.openAtLogin === "boolean" ? stored.openAtLogin : defaults.openAtLogin,
     language: isLanguage(stored.language) ? stored.language : defaults.language,
+    spellCheck: parseSpellCheck(stored.spellCheck, defaults.spellCheck),
   };
 }
 

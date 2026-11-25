@@ -288,6 +288,7 @@ Windows support is new and experimental: expect rough edges, and please report w
 - **Queue while the agent works**: with Claude Code, pi and Codex each message either joins the running turn (steering: at once, or once the tools it runs finish) or waits until after the turn; Enter and ⌥Enter pick, and Settings can swap them. opencode can't be steered, so its messages wait. Drag queued messages to reorder them, *Edit* one back into the box, or press ↑ in an empty box to pull back the last. The queue lives in the database, so it survives reloads and restarts.
 - **Drafts**: text and images are kept per conversation.
 - **Resizable**: drag the box's top edge; double-click resets it.
+- **Check spelling** underlines misspelled words in the message boxes; right-click one for suggestions. In the macOS and Linux desktop apps it also turns spell checking on or off for the app's other text fields. The Linux desktop app lets you choose its spelling languages from the dictionaries your system has, and with none chosen checks your system's language if it has a dictionary; elsewhere the browser or macOS picks them.
 - **macOS keys**: fn+←/→ go to the start and end of the line; spelling autocorrection and inline predictions are off by default and can be switched on.
 
 ### Voice

@@ -1,5 +1,5 @@
 import { knownEditorIds, knownEditorNames, type EditorSetting, type EditorState } from "../shared/editors.ts";
-import { useEffect, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import { PUSH_RELAY_CHOICES, pushRelayChoiceOf, pushRelayHost, type PushRelayChoice, type PushRelayRequest, type PushRelaySetting } from "../shared/push.ts";
 import { saveSetting } from "./saved-setting.ts";
 import { CONVERSATIONS_SHOWN_CHOICES, OLDER_AFTER_CHOICES, SIDE_CHAT_ACCESS_CHOICES, type CanvasUse, type KeepAwake, type KeepDeletedCanvas, type OlderAfter, type ConversationsShown, type ClaudeProgram, type Person, type Profile, type PromptTemplate, type SideChatAccess } from "../shared/model.ts";
@@ -22,7 +22,7 @@ import type { PageLibraries } from "../shared/canvas-export.ts";
 import { setPageLibraries, usePageLibraries } from "./page-libraries.ts";
 import { rememberSettingsSize } from "./paneLayouts.ts";
 import { hints } from "./hints.ts";
-import { formatNumber, t } from "./i18n/index.ts";
+import { formatNumber, locale, t } from "./i18n/index.ts";
 import { chooseLanguage, language } from "./language.ts";
 import { languageNames, type Language } from "../shared/i18n/languages.ts";
 import { LONGEST_MACHINE_NAME } from "../shared/machines.ts";
@@ -72,6 +72,8 @@ import { useTimestampsShown } from "./timestamps.ts";
 import { NAME_FIELD_ATTRIBUTES, setTypingAids, useTypingAids, type TypingAids } from "./typing-aids.ts";
 import { SettingsPageList, settingsPanel } from "./SettingsPages.tsx";
 import { SettingsSearchScope, SettingsSection, useSettingRow } from "./SettingsSection.tsx";
+import { setSpellCheck, useDesktopSpellCheckLanguages, useSpellCheck } from "./spell-check.ts";
+import { spellingLanguageChoices, spellingLanguageName } from "./spelling-languages.ts";
 import { useWaitingStyle, waitingStyleLabels } from "./waiting.ts";
 import { setWorkspaceColorStyle, useWorkspaceColorStyle, workspaceColorStyleLabels } from "./workspace-colors.ts";
 
@@ -606,7 +608,90 @@ function ShellLookSettings() {
   );
 }
 
+function SpellingLanguages() {
+  const spellCheck = useSpellCheck();
+  const available = useDesktopSpellCheckLanguages();
+  const [pending, setPending] = useState("");
+  const row = useSettingRow();
+  const fieldset = useRef<HTMLFieldSetElement>(null);
+  if (!spellCheck.enabled || available.length === 0) return null;
+  const choices = spellingLanguageChoices(available, locale);
+  const chosen = spellCheck.languages.filter((tag) => available.includes(tag));
+  const addable = choices
+    .map((choice) => ({ ...choice, grouped: choice.options.length > 1, options: choice.options.filter((option) => !spellCheck.languages.includes(option.tag)) }))
+    .filter((choice) => choice.options.length > 0);
+  const canAdd = addable.some((choice) => choice.options.some((option) => option.tag === pending));
+  const add = () => {
+    if (!canAdd) return;
+    setPending("");
+    setSpellCheck({ ...spellCheck, languages: [...spellCheck.languages, pending] });
+    requestAnimationFrame(() => {
+      const select = fieldset.current?.querySelector<HTMLElement>("select");
+      const lastRemoveButton = [...(fieldset.current?.querySelectorAll<HTMLElement>("button[data-tag]") ?? [])].at(-1);
+      (select ?? lastRemoveButton)?.focus();
+    });
+  };
+  const remove = (tag: string) => {
+    const index = chosen.indexOf(tag);
+    const neighbour = chosen[index + 1] ?? chosen[index - 1];
+    setSpellCheck({ ...spellCheck, languages: spellCheck.languages.filter((other) => other !== tag) });
+    requestAnimationFrame(() => {
+      const buttons = [...(fieldset.current?.querySelectorAll<HTMLElement>("button[data-tag]") ?? [])];
+      (buttons.find((button) => button.dataset.tag === neighbour) ?? fieldset.current?.querySelector<HTMLElement>("select"))?.focus();
+    });
+  };
+  return (
+    <fieldset className="spell-check-languages" ref={fieldset} {...row(text.sending.spellingLanguages, undefined, text.sending.spellingLanguagesHint, ...choices.flatMap((choice) => [choice.label, ...choice.options.map((option) => option.label)]))}>
+      <legend>{text.sending.spellingLanguages}</legend>
+      {chosen.map((tag) => {
+        const name = spellingLanguageName(tag, choices);
+        return (
+          <span key={tag} className="spell-check-language">
+            {name}
+            <button type="button" className="icon" data-tag={tag} aria-label={text.sending.removeSpellingLanguage(name)} onClick={() => remove(tag)}>
+              ×
+            </button>
+          </span>
+        );
+      })}
+      {addable.length > 0 && (
+        <select
+          aria-label={text.sending.addSpellingLanguage}
+          value={canAdd ? pending : ""}
+          onChange={(event) => setPending(event.target.value)}
+        >
+          <option value="" disabled>
+            {text.sending.addSpellingLanguage}
+          </option>
+          {addable.map((choice) =>
+            choice.grouped ? (
+              <optgroup key={choice.base} label={choice.label}>
+                {choice.options.map((option) => (
+                  <option key={option.tag} value={option.tag}>
+                    {option.label}
+                  </option>
+                ))}
+              </optgroup>
+            ) : (
+              <option key={choice.base} value={choice.options[0].tag}>
+                {choice.label}
+              </option>
+            ),
+          )}
+        </select>
+      )}
+      {addable.length > 0 && (
+        <button type="button" disabled={!canAdd} onClick={add}>
+          {text.sending.addSpellingLanguageButton}
+        </button>
+      )}
+      <p className="hint">{text.sending.spellingLanguagesHint}</p>
+    </fieldset>
+  );
+}
+
 function SendingSettings() {
+  const spellCheck = useSpellCheck();
   const enterWhileBusy = useEnterWhileBusy();
   const messageBox = useMessageBox();
   const formatBar = useFormatBar();
@@ -637,7 +722,12 @@ function SendingSettings() {
               </select>
             </label>
           )}
+          <label {...row(text.sending.spellCheck, hints.spellCheck)}>
+            <input type="checkbox" checked={spellCheck.enabled} onChange={(event) => setSpellCheck({ ...spellCheck, enabled: event.target.checked })} />
+            {text.sending.spellCheck}
+          </label>
         </div>
+        <SpellingLanguages />
       </SettingsSection>
       <SettingsSection title={text.sending.whileAgentWorks} hint={text.sending.whileAgentWorksHint}>
         <div className="sending-settings">

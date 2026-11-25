@@ -58,6 +58,12 @@ export const settings: Messages["settings"] = {
     whileAgentWorks: "Küldés, amíg az ágens dolgozik",
     whileAgentWorksHint: "Az ⌥Enter (Alt+Enter) a másikat teszi; minden sorba állított üzenetnél látszik, melyik módon megy ki. Ez a böngésző megjegyzi.",
     enter: "Enter",
+    spellCheck: "Helyesírás-ellenőrzés",
+    spellingLanguages: "Helyesírási nyelvek",
+    spellingLanguagesHint: "Az asztali alkalmazás az itt kiválasztott nyelveken ellenőriz. Ha egyik sincs kiválasztva, a rendszer nyelvén ellenőriz, ha van hozzá szótár; ha nincs, nem ellenőriz.",
+    addSpellingLanguage: "Nyelv hozzáadása…",
+    addSpellingLanguageButton: "Hozzáadás",
+    removeSpellingLanguage: (language: string) => `${language} eltávolítása`,
   },
   terminal: {
     title: "Terminál",
@@ -184,7 +190,7 @@ export const settings: Messages["settings"] = {
   },
   typing: {
     title: "Gépelés",
-    hint: "Mit tehet a macOS a szavaiddal az asztali alkalmazásban: szóköz leütésekor kijavítja őket, és szürkével felajánlja a szó folytatását. A helyesírási hibák mindkét esetben alá vannak húzva; jobb kattintással javíthatod őket.",
+    hint: "Mit tehet a macOS a szavaiddal az asztali alkalmazásban: szóköz leütésekor kijavítja őket, és szürkével felajánlja a szó folytatását. Ha a Helyesírás-ellenőrzés be van kapcsolva, a helyesírási hibák mindkét esetben alá vannak húzva; jobb kattintással javíthatod őket.",
     autocorrect: "Automatikus helyesírás-javítás",
     predictions: "Szövegjavaslatok gépelés közben",
   },

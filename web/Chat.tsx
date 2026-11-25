@@ -123,6 +123,7 @@ import { noticeText } from "./notice-text.ts";
 import { errorText } from "./problem-text.ts";
 import { statusDetailOf } from "./status-detail.ts";
 import { formatClockTime, formatDuration, formatFullTime } from "./timestamps.ts";
+import { useSpellCheck } from "./spell-check.ts";
 import { useTypingAidAttributes } from "./typing-aids.ts";
 import { FullscreenToggle, PaneGrip } from "./Workspace.tsx";
 import { LayoutToggles } from "./LayoutToggles.tsx";
@@ -1988,6 +1989,7 @@ function Composer({
   const droppedFiles = useDroppedFiles(conversation.id, setText, textarea);
   const attaching = images.uploading || droppedFiles.copying;
   const typingAidAttributes = useTypingAidAttributes();
+  const { enabled: spellCheck } = useSpellCheck();
   const enterWhileBusy = useEnterWhileBusy();
   const canSteer = harnessSteers[conversation.harness];
   const stoppedEdit = useStoppedMessageEdit({ conversation, events, holdsEarliest, busy });
@@ -2222,7 +2224,7 @@ function Composer({
             text={text}
             facade={textarea}
             placeholder={placeholder}
-            attributes={{ ...typingAidAttributes, ...suggestions.textareaAttributes }}
+            attributes={{ ...typingAidAttributes, spellCheck, ...suggestions.textareaAttributes }}
             style={composerHeight === null ? undefined : { minHeight: composerHeight }}
             onText={typed}
             onCaret={setCaret}
@@ -2232,6 +2234,7 @@ function Composer({
         ) : (
           <textarea
             {...typingAidAttributes}
+            spellCheck={spellCheck}
             {...suggestions.textareaAttributes}
             ref={textarea}
             value={text}

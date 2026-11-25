@@ -44,6 +44,18 @@ export type DesktopAppearance = "light" | "dark" | "system";
 
 export const isDesktopAppearance = (value: unknown): value is DesktopAppearance => value === "light" || value === "dark" || value === "system";
 
+/**
+ * Spell checking as the page last told the app. Languages are dictionary tags as Enchant lists them ("en_US", "hu_HU");
+ * none means the system's language. Only the Linux app checks languages chosen here: macOS and browsers choose their own.
+ */
+export interface DesktopSpellCheck {
+  enabled: boolean;
+  languages: string[];
+}
+
+/** The Linux app answers the page's nonce request with this event, carrying the dictionary tags its spell checker has. */
+export const DESKTOP_SPELL_CHECK_LANGUAGES_EVENT = "mirador:desktop-spell-check-languages";
+
 export type DesktopMenuMessage =
   | { type: "desktop-menu-request"; nonce: string }
   | { type: "desktop-action"; nonce: string; action: string }
@@ -52,6 +64,7 @@ export type DesktopMenuMessage =
   | { type: "desktop-close-window"; nonce: string }
   | { type: "desktop-appearance"; nonce: string; appearance: DesktopAppearance }
   | { type: "desktop-language"; nonce: string; language: Language }
+  | ({ type: "desktop-spell-check"; nonce: string } & DesktopSpellCheck)
   | { type: "desktop-open-item-window"; nonce: string; conversationId: string; itemId: string; title: string }
   | { type: "desktop-open-plugin-window"; nonce: string; plugin: string }
   | { type: "desktop-window-title"; nonce: string; title: string };

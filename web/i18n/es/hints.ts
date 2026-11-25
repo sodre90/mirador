@@ -336,6 +336,7 @@ export const hints: Messages["hints"] = {
   steerMessage:
     "Agrega el mensaje al turno en curso: Claude Code lo lee de inmediato, interrumpiendo lo que está escribiendo o, mientras ejecuta herramientas, en cuanto terminan. Un subagente al que espera no retiene el mensaje: el subagente sigue en segundo plano. pi lo lee cuando termina de escribir o de ejecutar sus herramientas.",
   afterTurnMessage: "Guarda el mensaje hasta que termine el turno en curso (o pulses Detener) y luego lo envía como tu siguiente mensaje.",
+  spellCheck: "Subraya las palabras mal escritas en los cuadros de mensaje. Con clic derecho en una ofrece sugerencias. En la aplicación de escritorio de macOS y Linux también activa o desactiva la revisión ortográfica en los demás campos de texto de la aplicación. Fuera de la aplicación de escritorio de Linux, tu navegador o tu sistema elige los idiomas de ortografía.",
   messageBox:
     "Se formatea al escribir convierte **negrita**, *cursiva*, ~~tachado~~, `código`, bloques de código con ```, citas con > y listas con - en formato mientras los escribes, como en Slack; ⌘B, ⌘I, ⌘⇧X y ⌘E dan formato a una selección. El agente recibe el mismo markdown en ambos casos.",
   formatBar: "Botones de formato sobre el cuadro de mensaje. Configuración › Conversaciones puede mantenerlos visibles.",

@@ -16,6 +16,7 @@ import { addToComposer, askInSideChat, closeSideChat, dropQuote, firstMessage, s
 import { questionWaitsOn } from "./side-chat-canvas.ts";
 import { Splitter } from "./Splitter.tsx";
 import type { OpenConversation } from "./state.ts";
+import { useSpellCheck } from "./spell-check.ts";
 import { useTypingAidAttributes } from "./typing-aids.ts";
 
 const words = t.sideChat;
@@ -204,6 +205,7 @@ export function NewSideChat({ parent, quotes, mayChangeFiles }: { parent: Conver
   const [starting, setStarting] = useState(false);
   const box = useRef<HTMLTextAreaElement>(null);
   const typingAidAttributes = useTypingAidAttributes();
+  const { enabled: spellCheck } = useSpellCheck();
   useEffect(() => box.current?.focus(), [quotes.length]);
   const canAsk = !starting && (question.trim() !== "" || quotes.length > 0);
   const ask = () => {
@@ -242,6 +244,7 @@ export function NewSideChat({ parent, quotes, mayChangeFiles }: { parent: Conver
       <div className="composer side-chat-new-composer">
         <textarea
           {...typingAidAttributes}
+          spellCheck={spellCheck}
           ref={box}
           rows={3}
           value={question}

@@ -7437,6 +7437,36 @@ button.arrangement.chosen {
   white-space: nowrap;
 }
 
+.spell-check-languages {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 6px;
+  margin: 14px 0 0;
+  padding: 0;
+  border: 0;
+}
+
+.spell-check-languages legend {
+  padding: 0;
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+
+.spell-check-language {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 1px 4px 1px 10px;
+}
+
+.spell-check-languages .hint {
+  flex-basis: 100%;
+  margin: 0;
+}
+
 .shell-look-settings {
   align-items: center;
 }

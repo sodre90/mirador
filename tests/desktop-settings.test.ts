@@ -28,14 +28,22 @@ describe("desktop settings", () => {
   });
 
   test("default to hosting from the repo with the build's bun, in the foreground, opening at login, in English", () => {
-    expect(defaultSettings(build)).toEqual({ hostDirectory: "/repo", bun: "/bin/bun", hostRunsInBackground: false, openAtLogin: true, language: "en" });
+    expect(defaultSettings(build)).toEqual({ hostDirectory: "/repo", bun: "/bin/bun", hostRunsInBackground: false, openAtLogin: true, language: "en", spellCheck: { enabled: true, languages: [] } });
   });
 
   test("keep valid stored values and fall back per field for the rest", () => {
     const defaults = defaultSettings(build);
-    const stored = JSON.stringify({ hostDirectory: "/elsewhere", bun: "", hostRunsInBackground: "yes", openAtLogin: false, language: "hu" });
-    expect(parseSettings(stored, defaults)).toEqual({ hostDirectory: "/elsewhere", bun: "/bin/bun", hostRunsInBackground: false, openAtLogin: false, language: "hu" });
+    const stored = JSON.stringify({ hostDirectory: "/elsewhere", bun: "", hostRunsInBackground: "yes", openAtLogin: false, language: "hu", spellCheck: { enabled: true, languages: [] } });
+    expect(parseSettings(stored, defaults)).toEqual({ hostDirectory: "/elsewhere", bun: "/bin/bun", hostRunsInBackground: false, openAtLogin: false, language: "hu", spellCheck: { enabled: true, languages: [] } });
     expect(parseSettings(JSON.stringify({ language: "klingon" }), defaults).language).toBe("en");
+  });
+
+  test("keep stored spell checking and fall back per field for the rest", () => {
+    const defaults = defaultSettings(build);
+    const parse = (spellCheck: unknown) => parseSettings(JSON.stringify({ spellCheck }), defaults).spellCheck;
+    expect(parse({ enabled: false, languages: ["hu_HU", 3, "en_US"] })).toEqual({ enabled: false, languages: ["hu_HU", "en_US"] });
+    expect(parse({ enabled: "no", languages: "hu_HU" })).toEqual({ enabled: true, languages: [] });
+    expect(parse("off")).toEqual({ enabled: true, languages: [] });
   });
 
   test("fall back to the defaults for text that is not a JSON object", () => {

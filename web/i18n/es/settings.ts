@@ -60,6 +60,12 @@ export const settings: Messages["settings"] = {
     whileAgentWorks: "Envío mientras trabaja el agente",
     whileAgentWorksHint: "⌥Enter (Alt+Enter) hace lo contrario; cada mensaje en cola muestra de qué manera saldrá. Se recuerda en este navegador.",
     enter: "Enter",
+    spellCheck: "Revisar la ortografía",
+    spellingLanguages: "Idiomas de ortografía",
+    spellingLanguagesHint: "La aplicación de escritorio revisa los idiomas elegidos aquí. Si no eliges ninguno, revisa el idioma de tu sistema si hay un diccionario para él; si no, no revisa nada.",
+    addSpellingLanguage: "Agregar un idioma…",
+    addSpellingLanguageButton: "Agregar",
+    removeSpellingLanguage: (language: string) => `Quitar ${language}`,
   },
   terminal: {
     title: "Terminal",
@@ -186,7 +192,7 @@ export const settings: Messages["settings"] = {
   },
   typing: {
     title: "Escritura",
-    hint: "Lo que macOS puede hacer con tus palabras en la aplicación de escritorio: corregirlas al escribir un espacio y ofrecer en gris el resto de una palabra. Las faltas de ortografía siguen subrayadas en ambos casos; haz clic derecho en una para corregirla.",
+    hint: "Lo que macOS puede hacer con tus palabras en la aplicación de escritorio: corregirlas al escribir un espacio y ofrecer en gris el resto de una palabra. Con «Revisar la ortografía» activado, las faltas de ortografía siguen subrayadas en ambos casos; haz clic derecho en una para corregirla.",
     autocorrect: "Corregir la ortografía automáticamente",
     predictions: "Predicciones en línea",
   },

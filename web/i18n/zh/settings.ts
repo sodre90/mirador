@@ -58,6 +58,12 @@ export const settings: Messages["settings"] = {
     whileAgentWorks: "Agent 工作时发送",
     whileAgentWorksHint: "⌥Enter（Alt+Enter）执行另一种方式；每条已排队的消息都会显示它将以哪种方式发出。保存在这个浏览器中。",
     enter: "Enter",
+    spellCheck: "检查拼写",
+    spellingLanguages: "拼写检查语言",
+    spellingLanguagesHint: "桌面应用会检查此处选择的语言。如果一个都不选，且系统语言有词典，则检查系统语言，否则不检查。",
+    addSpellingLanguage: "添加语言…",
+    addSpellingLanguageButton: "添加",
+    removeSpellingLanguage: (language: string) => `移除${language}`,
   },
   terminal: {
     title: "终端",
@@ -184,7 +190,7 @@ export const settings: Messages["settings"] = {
   },
   typing: {
     title: "输入",
-    hint: "macOS 在桌面应用中可以对你的文字做什么：输入空格时自动更正，并以灰色显示单词的其余部分。无论如何，拼写错误都会保留下划线；右键点击可更正。",
+    hint: "macOS 在桌面应用中可以对你的文字做什么：输入空格时自动更正，并以灰色显示单词的其余部分。开启“检查拼写”后，无论如何，拼写错误都会保留下划线；右键点击可更正。",
     autocorrect: "自动更正拼写",
     predictions: "行内预测",
   },

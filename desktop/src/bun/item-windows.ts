@@ -42,6 +42,7 @@ export class ItemWindows {
     private readonly pageNonce: string,
     private readonly urlOf: (route: string) => string,
     private readonly onAllClosed: () => void,
+    private readonly spellCheckEnabled: () => boolean,
   ) {}
 
   get anyOpen() {
@@ -64,7 +65,7 @@ export class ItemWindows {
       return;
     }
     // sandbox keeps Electrobun's bridge secret out of every frame, including the plugin's canvas frame.
-    const window = new BrowserWindow({ title, url: this.urlOf(route), frame: OWN_WINDOW_FRAME, sandbox: true });
+    const window = new BrowserWindow({ title, url: this.urlOf(route), frame: OWN_WINDOW_FRAME, sandbox: true, spellCheck: this.spellCheckEnabled() });
     if (process.platform === "win32" && window.ptr !== null) giveWindowIcon(BigInt(window.ptr), join(PATHS.RESOURCES_FOLDER, "app.ico"));
     // The navigationRules constructor option is ignored by Electrobun 2.0.2; only this call takes effect.
     window.webview.setNavigationRules(navigationRules([this.appOrigin, ...this.framedOrigins]));
@@ -82,6 +83,10 @@ export class ItemWindows {
       if (!this.anyOpen) this.onAllClosed();
     });
     this.windows.set(name, window);
+  }
+
+  setSpellCheck(enabled: boolean) {
+    for (const window of this.windows.values()) window.setSpellCheck(enabled);
   }
 
   /** ⌘W closes the window of these that has focus; false when none has it, for the main window to take the key. */

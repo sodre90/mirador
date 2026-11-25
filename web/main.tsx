@@ -2,6 +2,7 @@ import { createRoot } from "react-dom/client";
 import { itemWindowRouteOf, pluginWindowRouteOf } from "../shared/item-window.ts";
 import { App } from "./App.tsx";
 import { askDesktopAppForNonce, giveLanguageToDesktopApp } from "./desktop-bridge.ts";
+import { giveSpellCheckToDesktopApp } from "./spell-check.ts";
 import { closeWhatHasFocusOnCommandW } from "./desktop-close.ts";
 import { applyExternalImages, externalImages } from "./external-images.ts";
 import { openOutsideLinksInTheBrowser } from "./outside-links.ts";
@@ -37,6 +38,7 @@ applyTextCursor();
 askDesktopAppForNonce();
 giveThemeToDesktopApp();
 giveLanguageToDesktopApp();
+giveSpellCheckToDesktopApp();
 openOutsideLinksInTheBrowser();
 closeWhatHasFocusOnCommandW();
 function Page() {
