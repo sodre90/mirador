@@ -481,10 +481,11 @@ function ToolLocation({ path, line, conversationId }: { path: string; line: numb
 
 function ToolCard({ block, conversationId }: { block: ToolBlock; conversationId: string }) {
   const status = useShownStatus(block);
+  const { drawsWork, drawWork, drawOnceOpened } = useDrawnWork(block);
   if (isShellCommand(block)) return <ShellCard block={block} />;
   return (
-    <details className={`tool tool-${status}`}>
-      <summary>
+    <details className={`tool tool-${status}`} onToggle={drawOnceOpened}>
+      <summary onClick={drawWork}>
         <span className="tool-status">{statusIcons[status]}</span>
         <span className="tool-title">{readableToolTitle(block)}</span>
       </summary>
@@ -498,11 +499,15 @@ function ToolCard({ block, conversationId }: { block: ToolBlock; conversationId:
           ))}
         </div>
       )}
-      {block.content.map((content, index) => (
-        <ToolContent key={index} content={content} />
-      ))}
-      <RawJson label={words.tool.input} value={block.rawInput} />
-      <RawOutput block={block} conversationId={conversationId} />
+      {drawsWork && (
+        <>
+          {block.content.map((content, index) => (
+            <ToolContent key={index} content={content} />
+          ))}
+          <RawJson label={words.tool.input} value={block.rawInput} />
+          <RawOutput block={block} conversationId={conversationId} />
+        </>
+      )}
     </details>
   );
 }
@@ -541,22 +546,25 @@ function useTallerThanTimeline(ref: RefObject<HTMLElement | null>) {
 const SubagentToShow = createContext<string | null>(null);
 
 /**
- * A subagent's card draws its work from the first time it opens, and while find has a match in it: in a conversation
- * followed for hours the cards nobody opened would hold hundreds of thousands of elements, which slow the whole page.
+ * A tool call's card, a subagent's too, draws its work from the first time it opens, and while find has a match in it:
+ * the cards nobody opened would hold hundreds of thousands of elements, as a subagent followed for hours or edits that
+ * carry whole files do, which slow the whole page. The click that opens a card draws it first: drawn once open, it
+ * would pass for new content and pull a reader at the bottom down.
  */
-function useDrawnWork(block: SubagentBlock) {
+function useDrawnWork(block: ToolBlock) {
   const [everOpened, setEverOpened] = useState(false);
   const askedFor = useContext(SubagentToShow) === block.toolCallId;
   if (askedFor && !everOpened) setEverOpened(true);
   const matchesFind = useContext(MatchesFind);
   const drawsWork = everOpened || (matchesFind !== null && textsOf(block).some(matchesFind));
-  const drawOnceOpened = (event: ToggleEvent<HTMLDetailsElement>) => event.currentTarget.open && setEverOpened(true);
-  return { drawsWork, drawOnceOpened };
+  const drawWork = () => setEverOpened(true);
+  const drawOnceOpened = (event: ToggleEvent<HTMLDetailsElement>) => event.currentTarget.open && drawWork();
+  return { drawsWork, drawWork, drawOnceOpened };
 }
 
 function SubagentCard({ block, conversationId, harness }: { block: SubagentBlock; conversationId: string; harness: HarnessId }) {
   const card = useRef<HTMLDetailsElement>(null);
-  const { drawsWork, drawOnceOpened } = useDrawnWork(block);
+  const { drawsWork, drawWork, drawOnceOpened } = useDrawnWork(block);
   const closesAtItsEnd = useTallerThanTimeline(card);
   const close = () => {
     card.current!.open = false;
@@ -578,7 +586,7 @@ function SubagentCard({ block, conversationId, harness }: { block: SubagentBlock
   ].filter(Boolean);
   return (
     <details ref={card} className={`tool subagent subagent-${state}`} data-tool-call-id={block.toolCallId} onToggle={drawOnceOpened}>
-      <summary>
+      <summary onClick={drawWork}>
         <span className="tool-status" aria-label={words.subagent.state[state]}>
           {subagentIcons[state]}
         </span>

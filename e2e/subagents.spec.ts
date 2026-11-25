@@ -63,6 +63,21 @@ test("a subagent's work folds into its card, and the header counts the subagents
     await expect(page.locator(".subagent-work")).toHaveCount(0);
   });
 
+  await test.step("opening a card leaves a reader at the bottom where they are", async () => {
+    const timeline = page.locator(".timeline:visible");
+    const atTheBottom = await timeline.evaluate((element) => {
+      element.scrollTop = element.scrollHeight;
+      element.dispatchEvent(new Event("scroll"));
+      return element.scrollTop;
+    });
+    await expect(watch.locator(":scope > summary")).toBeInViewport({ ratio: 1 });
+    await watch.locator(":scope > summary").click();
+    await expect(watch.locator(".subagent-work")).toBeVisible();
+    expect(Math.abs((await timeline.evaluate((element) => element.scrollTop)) - atTheBottom)).toBeLessThanOrEqual(2);
+    await page.reload();
+    await expect(cards).toHaveCount(2);
+  });
+
   await test.step("each subagent is one card with what it is, and what it did is inside it", async () => {
     await expect(cards).toHaveCount(2);
     await expect(explore.locator(".subagent-task")).toHaveText("Explore the cache");

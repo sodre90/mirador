@@ -128,6 +128,6 @@ test("a reader at the bottom who opens a tool call stays where they are", async 
     return element.scrollTop;
   });
   await toolCall.locator(":scope > summary").click();
-  await expect(toolCall).toHaveJSProperty("open", true);
+  await expect(toolCall.locator("details.raw"), "the card's contents are drawn").toBeVisible();
   expect(Math.abs((await timeline.evaluate((element) => element.scrollTop)) - atTheBottom)).toBeLessThanOrEqual(2);
 });
