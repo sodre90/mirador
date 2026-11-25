@@ -15,6 +15,7 @@ import starter from "./fixtures/background-plugins/starter/host.ts";
 import { canvasPluginHost, storeWithConversation } from "./canvas-plugin-host.ts";
 
 const FIXTURES = join(import.meta.dir, "fixtures", "background-plugins");
+const FIXTURES_NAMING_PROFILES = join(import.meta.dir, "fixtures", "plugins-naming-profiles");
 const settled = () => new Promise((resolve) => setTimeout(resolve, 150));
 const scratch = mkdtempSync(join(tmpdir(), "plugin-background-"));
 afterAll(() => rmSync(scratch, { recursive: true, force: true }));
@@ -179,6 +180,44 @@ describe("a plugin's workspace context", () => {
     expect(plugins.actInWorkspaceTab("starter", "w1", { profileId: "p1" })).rejects.toThrow(
       "Starter can't start conversations of its own: its plugin.json doesn't set startsConversations.",
     );
+  });
+});
+
+describe("a plugin for an API before 23, which names profiles", () => {
+  async function olderStarter() {
+    const { plugins } = await canvasPluginHost(FIXTURES_NAMING_PROFILES, storeWithProfiles());
+    const starts: WorkspaceConversationStart[] = [];
+    plugins.startsWorkspaceConversationsWith(async (_workspaceId, _pluginTitle, start) => {
+      starts.push(start);
+      return { id: "started", profile: "Night runs" };
+    });
+    const asked: string[] = [];
+    plugins.asksProfileChoicesWith(async (profileId) => {
+      asked.push(profileId);
+      return [{ id: "effort", name: "Effort", category: "thought_level", type: "select", currentValue: "low", options: [{ value: "low", name: "Low" }] }];
+    });
+    const act = (action: unknown) => plugins.actInWorkspaceTab("older-starter", "w1", action);
+    return { act, starts, asked };
+  }
+
+  test("starts a conversation on the profile of that name, whatever its case", async () => {
+    const { act, starts } = await olderStarter();
+    expect(await act({ profile: "night runs" })).toEqual({ id: "started", profile: "Night runs" });
+    expect(starts).toEqual([{ profileId: "p2", prompt: "Check the older results", title: "Older results" }]);
+  });
+
+  test("asks the choices of the profile of that name", async () => {
+    const { act, asked } = await olderStarter();
+    expect(await act({ profile: "Claude", choices: true })).toEqual({ models: [], efforts: [{ id: "low", name: "Low" }] });
+    expect(asked).toEqual(["p1"]);
+  });
+
+  test("is told the profiles there are when none has that name", async () => {
+    const { act, starts, asked } = await olderStarter();
+    const unknown = "There is no profile named Gone; the profiles are Claude, Night runs.";
+    await expect(act({ profile: "Gone" })).rejects.toThrow(unknown);
+    await expect(act({ profile: "Gone", choices: true })).rejects.toThrow(unknown);
+    expect([starts, asked]).toEqual([[], []]);
   });
 });
 

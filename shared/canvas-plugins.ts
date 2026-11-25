@@ -365,7 +365,8 @@ export interface WorkspaceTabContext {
    * message shown as the plugin's. Unlike one a tool starts, it works for nobody: it stands in the sidebar as any other,
    * takes its profile's defaults, YOLO included, and tells the user when its turns end; the plugin hears of them through
    * `activity`. Throws unless the plugin's plugin.json sets `startsConversations`, and when no profile has that id.
-   * Plugin API 11 brought it; API 23 made it take the profile's id.
+   * Plugin API 11 brought it; API 23 made it take the profile's id, where a plugin for an older API gives its name as
+   * `profile`.
    */
   startConversation(start: WorkspaceConversationStart): Promise<StartedConversation>;
   /**
@@ -373,7 +374,7 @@ export interface WorkspaceTabContext {
    * `model` and `effort`. Mirador asks the agent as the Profiles dialog does, starting it for a few seconds unless it
    * answered in the last 15 minutes. Resolves to null when the agent couldn't start, didn't answer within 30 seconds, or
    * answered without listing any choices, and rejects when no profile has that id. Plugin API 18 brought it; API 23 made
-   * it take the profile's id.
+   * it take the profile's id, where a plugin for an older API gives its name.
    */
   profileChoices(profileId: string): Promise<ProfileChoices | null>;
 }

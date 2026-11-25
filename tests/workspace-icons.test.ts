@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, spyOn, test, type Mock } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -7,12 +7,17 @@ import { iconInTheme } from "../shared/workspace-icon.ts";
 
 let root: string;
 let folder: string;
+let logged: Mock<typeof console.error>;
 beforeEach(() => {
+  logged = spyOn(console, "error").mockImplementation(() => {});
   root = mkdtempSync(join(tmpdir(), "workspace-icons-"));
   folder = join(root, "project");
   mkdirSync(folder);
 });
-afterEach(() => rmSync(root, { recursive: true, force: true }));
+afterEach(() => {
+  logged.mockRestore();
+  rmSync(root, { recursive: true, force: true });
+});
 
 const drawing = (name: string) => `<svg xmlns="http://www.w3.org/2000/svg"><title>${name}</title></svg>`;
 const write = (path: string, content: string) => {
@@ -51,6 +56,18 @@ describe("workspaceIcon", () => {
     mkdirSync(join(folder, ".mirador/icon.png"));
     draw(".idea/icon.svg");
     expect(await shown()).toEqual({ light: ".idea/icon.svg", dark: null });
+  });
+
+  test("logs why it passes over one, once, and nothing of one behind the icon it shows", async () => {
+    write(".mirador/icon.svg", "<svg><script/></svg>");
+    write(".mirador/icon.png", "a".repeat(257 * 1024));
+    draw(".idea/icon.svg");
+    write("favicon.svg", "<svg><script/></svg>");
+    await workspaceIcon(folder);
+    expect(logged.mock.calls.flat()).toEqual([
+      `${join(folder, ".mirador/icon.svg")} isn't shown as its workspace's icon: it holds "<script", which is no plain shape`,
+      `${join(folder, ".mirador/icon.png")} isn't shown as its workspace's icon: it is over 256 KB`,
+    ]);
   });
 
   test("gives a dark theme the dark icon beside the icon, and nothing for favicons", async () => {

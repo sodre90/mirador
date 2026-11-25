@@ -1,7 +1,7 @@
 import { realpath, stat } from "node:fs/promises";
 import { join, sep } from "node:path";
 import type { WorkspaceIcon } from "../shared/workspace-icon.ts";
-import { iconDataUrl, MAX_ICON_BYTES } from "./icon-image.ts";
+import { checkedIcon, MAX_ICON_BYTES, refused, TOO_LARGE, type CheckedIcon } from "./icon-image.ts";
 
 const projectFolders = [".mirador", ".idea"];
 const namedIn = (folder: string, name: string, extensions: string[]) => extensions.map((extension) => join(folder, `${name}.${extension}`));
@@ -15,27 +15,42 @@ const pageIcons = [...["", "public", "static"].flatMap((folder) => namedIn(folde
 const lightIcons = [...projectFolders.flatMap(projectIcons), ...pageIcons];
 const darkIcons = [...projectFolders.flatMap((folder) => [...darkProjectIcons(folder), ...projectIcons(folder)]), ...pageIcons];
 
-/** The file's bytes, unless it leads out of the workspace: a repository someone else made may hold links. */
-async function bytesInside(realFolder: string, path: string): Promise<Uint8Array | null> {
-  const real = await realpath(join(realFolder, path));
-  const found = await stat(real);
-  if (!real.startsWith(realFolder + sep) || !found.isFile() || found.size > MAX_ICON_BYTES) return null;
-  return Bun.file(real).slice(0, MAX_ICON_BYTES).bytes();
+/** What the file there gives, null when there is none. A repository someone else made may hold links out of the workspace. */
+async function iconAt(realFolder: string, path: string): Promise<CheckedIcon | null> {
+  const real = await realpath(join(realFolder, path)).catch(() => null);
+  if (real === null) return null;
+  if (!real.startsWith(realFolder + sep)) return refused("it leads out of the workspace");
+  try {
+    const found = await stat(real);
+    if (!found.isFile()) return refused("it is no file");
+    return found.size > MAX_ICON_BYTES ? refused(TOO_LARGE) : checkedIcon(await Bun.file(real).slice(0, MAX_ICON_BYTES).bytes());
+  } catch {
+    return refused("it can't be read");
+  }
 }
 
-async function iconAt(realFolder: string, path: string): Promise<string | null> {
-  const bytes = await bytesInside(realFolder, path).catch(() => null);
-  return bytes && iconDataUrl(bytes);
+type CheckedIcons = Map<string, CheckedIcon | null>;
+
+function firstShown(candidates: string[], icons: CheckedIcons) {
+  const path = candidates.find((candidate) => icons.get(candidate)?.dataUrl);
+  const passedOver = path === undefined ? candidates : candidates.slice(0, candidates.indexOf(path));
+  return { dataUrl: (path !== undefined && icons.get(path)?.dataUrl) || null, passedOver };
 }
+
+const logRefusals = (folder: string, paths: string[], icons: CheckedIcons) =>
+  [...new Set(paths)].forEach((path) => {
+    const refusal = icons.get(path)?.refusal;
+    if (refusal) console.error(`${join(folder, path)} isn't shown as its workspace's icon: ${refusal}`);
+  });
 
 /** The icon a workspace's folder holds, as IntelliJ IDEA finds a project's own, or as its web pages name theirs. */
 export async function workspaceIcon(folder: string): Promise<WorkspaceIcon | null> {
   const realFolder = await realpath(folder).catch(() => null);
   if (realFolder === null) return null;
   const paths = [...new Set([...lightIcons, ...darkIcons])];
-  const icons = new Map(await Promise.all(paths.map(async (path) => [path, await iconAt(realFolder, path)] as const)));
-  const firstOf = (candidates: string[]) => candidates.map((path) => icons.get(path)).find(Boolean) ?? null;
-  const light = firstOf(lightIcons);
-  const dark = firstOf(darkIcons);
+  const icons: CheckedIcons = new Map(await Promise.all(paths.map(async (path) => [path, await iconAt(realFolder, path)] as const)));
+  const { dataUrl: light, passedOver: passedOverInLight } = firstShown(lightIcons, icons);
+  const { dataUrl: dark, passedOver: passedOverInDark } = firstShown(darkIcons, icons);
+  logRefusals(folder, [...passedOverInLight, ...passedOverInDark], icons);
   return light || dark ? { light, dark: dark === light ? null : dark } : null;
 }

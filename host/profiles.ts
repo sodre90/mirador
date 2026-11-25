@@ -19,6 +19,14 @@ export function profileToLaunch(store: Store, launch: Launch): Profile {
   return profile;
 }
 
+/** For an agent or a plugin that names a profile; throws, naming the profiles there are, when none has that name. */
+export function profileNamed(store: Store, profileName: string): Profile {
+  const profiles = store.listProfiles();
+  const profile = profiles.find(({ name }) => name.toLowerCase() === profileName.trim().toLowerCase());
+  if (!profile) throw new Error(`There is no profile named ${profileName}; the profiles are ${profiles.map(({ name }) => name).join(", ")}.`);
+  return profile;
+}
+
 const launchOn = ({ harness, id }: Profile): Launch => ({ harness, profileId: id });
 
 /**
