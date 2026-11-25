@@ -223,6 +223,7 @@ export const problems: Messages["problems"] = {
   savePathAbsolute: (name) => `“${name}” es una ruta absoluta. Indica una ruta dentro de la carpeta del proyecto.`,
   savePathOutside: (name) => `“${name}” no es un archivo dentro de la carpeta del proyecto.`,
   savePathIsFolder: (name) => `“${name}” es una carpeta. Ponle otro nombre a la página.`,
+  exportPathIsFolder: (name) => `“${name}” es una carpeta. Ponle otro nombre al archivo.`,
   saveAlreadyThere: (path) => `${path} ya existe.`,
   savePathPartIsFile: (name) => `Parte de “${name}” es un archivo, no una carpeta.`,
   configFileMustBeObject: (path) => `${path} tiene que contener un objeto JSON, como {"publicOrigin": "https://…", "publicCanvasOrigin": "https://…"}.`,

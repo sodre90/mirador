@@ -224,6 +224,7 @@ export const problems: Messages["problems"] = {
   savePathAbsolute: (name) => `„${name}“ ist ein absoluter Pfad. Gib einen Pfad im Projektordner an.`,
   savePathOutside: (name) => `„${name}“ ist keine Datei im Projektordner.`,
   savePathIsFolder: (name) => `„${name}“ ist ein Ordner. Gib der Seite einen anderen Namen.`,
+  exportPathIsFolder: (name) => `„${name}“ ist ein Ordner. Gib der Datei einen anderen Namen.`,
   saveAlreadyThere: (path) => `${path} gibt es schon.`,
   savePathPartIsFile: (name) => `Ein Teil von „${name}“ ist eine Datei, kein Ordner.`,
   configFileMustBeObject: (path) => `${path} muss ein JSON-Objekt enthalten, etwa {"publicOrigin": "https://…", "publicCanvasOrigin": "https://…"}.`,

@@ -79,6 +79,7 @@ import { launchForNewWorkspace, profileFor, type ProfileService } from "./profil
 import { errorResponse, problemResponse } from "./problem-response.ts";
 import { savePromptTemplate } from "./prompt-templates.ts";
 import { exportedSettings, pluginsOnDisk, settingsFileText } from "./settings-file/export-settings.ts";
+import { saveExportedSettings } from "./settings-file/save-export.ts";
 import type { SettingsImport } from "./settings-file/import-settings.ts";
 import type { ConfigFileStatus } from "../shared/settings-file.ts";
 import type { DesktopAppCheck } from "./desktop-app-check.ts";
@@ -1263,6 +1264,18 @@ export function startServer(services: HostServices) {
       case "settings.export": {
         const { answer: text, ...problem } = await answerAboutSettings(socket, () => settingsAsText(message.includeSecrets));
         return reply({ type: "settings.exported", requestId: message.requestId, text, ...problem });
+      }
+      case "settings.save-export": {
+        const { answer: path, ...problem } = await answerAboutSettings(socket, async () =>
+          saveExportedSettings(message.path, await settingsAsText(message.includeSecrets), { replace: message.replace }),
+        );
+        return reply({
+          type: "settings.export-saved",
+          requestId: message.requestId,
+          path,
+          ...problem,
+          ...("problemAbout" in problem && problem.problemAbout?.code === "save-already-there" && { alreadyThere: true }),
+        });
       }
       case "settings.plan-import": {
         const { answer: plan, ...problem } = await answerAboutSettings(socket, () => settingsImport.plan(message.text));

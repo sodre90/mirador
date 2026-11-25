@@ -1,13 +1,16 @@
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
 import type { PluginOffer } from "../shared/apps.ts";
 import type { HostProblem } from "../shared/host-problems.ts";
 import { settingsItemKinds, type ConfigFileStatus, type PluginToInstall, type SettingsImportReport, type SettingsItem, type SettingsPlan } from "../shared/settings-file.ts";
+import { AlreadyThere } from "./canvas-export.ts";
 import { connection } from "./connection.ts";
+import { inDesktopApp } from "./desktop-bridge.ts";
 import { downloadFile } from "./download-file.ts";
 import { replyProblemText } from "./host-error.ts";
 import { t } from "./i18n/index.ts";
 import { offerPlugin, PluginConsent, type Settled } from "./Plugins.tsx";
 import { problemText } from "./problem-text.ts";
+import { useTypingAidAttributes } from "./typing-aids.ts";
 
 const words = t.settings.transfer;
 
@@ -60,6 +63,17 @@ const exportedSettings = (includeSecrets: boolean) =>
     (message, requestId) => (message.type === "settings.exported" && message.requestId === requestId ? answered(message.text, message) : undefined),
   );
 
+const savedExport = (includeSecrets: boolean, path: string, replace: boolean) =>
+  connection.sendAndAwait(
+    (requestId) => ({ type: "settings.save-export", requestId, includeSecrets, path, replace }),
+    (message, requestId) => {
+      if (message.type !== "settings.export-saved" || message.requestId !== requestId) return undefined;
+      if (message.path !== null) return message.path;
+      const text = replyProblemText(message) ?? "";
+      throw message.alreadyThere ? new AlreadyThere(text) : new Error(text);
+    },
+  );
+
 const plannedImport = (text: string) =>
   connection.sendAndAwait(
     (requestId) => ({ type: "settings.plan-import", requestId, text }),
@@ -73,6 +87,8 @@ const importedSettings = (text: string, items: string[]) =>
   );
 
 const exportFileName = () => `mirador-settings-${new Date().toLocaleDateString("sv")}.json`;
+/** The desktop app's webview puts downloads in ~/Downloads without a word, so its own host writes to a chosen path instead. */
+const savesExportOnHost = () => inDesktopApp() && window.parent === window;
 
 export function SettingsTransfer({ configFile }: { configFile: ConfigFileStatus | null | undefined }) {
   if (configFile === undefined) return <p className="hint">{words.needsNewerHost}</p>;
@@ -87,13 +103,23 @@ export function SettingsTransfer({ configFile }: { configFile: ConfigFileStatus 
 
 function SettingsExport() {
   const [includeSecrets, setIncludeSecrets] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [choosingPath, setChoosingPath] = useState(false);
+  const [status, setStatus] = useState<string | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
-  const download = async () => {
+  const exportNow = async () => {
     setProblem(null);
+    setStatus(null);
+    if (savesExportOnHost()) return setChoosingPath(true);
+    setExporting(true);
     try {
-      downloadFile(exportFileName(), new Blob([await exportedSettings(includeSecrets)], { type: "application/json" }));
+      const name = exportFileName();
+      downloadFile(name, new Blob([await exportedSettings(includeSecrets)], { type: "application/json" }));
+      setStatus(words.downloaded(name));
     } catch (error) {
       setProblem(messageOf(error));
+    } finally {
+      setExporting(false);
     }
   };
   return (
@@ -102,16 +128,93 @@ function SettingsExport() {
       <p className="hint">{words.exportHint}</p>
       <div className="sending-settings">
         <label>
-          <input type="checkbox" checked={includeSecrets} onChange={(event) => setIncludeSecrets(event.target.checked)} />
+          <input
+            type="checkbox"
+            checked={includeSecrets}
+            onChange={(event) => {
+              setIncludeSecrets(event.target.checked);
+              setStatus(null);
+            }}
+          />
           {words.includeSecrets}
         </label>
-        <button type="button" onClick={download}>
-          {words.export}
+        <button type="button" disabled={exporting || choosingPath} onClick={() => void exportNow()}>
+          {exporting ? words.exporting : words.export}
         </button>
       </div>
       <p className={includeSecrets ? "hint transfer-warning" : "hint"}>{includeSecrets ? words.secretsIncluded : words.secretsLeftOut}</p>
+      {choosingPath && (
+        <SaveExportForm
+          includeSecrets={includeSecrets}
+          onSaved={(path) => {
+            setChoosingPath(false);
+            setStatus(words.savedTo(path));
+          }}
+          onCancel={() => setChoosingPath(false)}
+        />
+      )}
+      {status && (
+        <p className="transfer-saved" role="status">
+          {status}
+        </p>
+      )}
       <Problem text={problem} />
     </section>
+  );
+}
+
+function SaveExportForm({ includeSecrets, onSaved, onCancel }: { includeSecrets: boolean; onSaved: (path: string) => void; onCancel: () => void }) {
+  const [path, setPath] = useState(() => `~/Downloads/${exportFileName()}`);
+  const [alreadyThere, setAlreadyThere] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
+  const typingAidAttributes = useTypingAidAttributes();
+
+  const save = async (event: FormEvent) => {
+    event.preventDefault();
+    setSaving(true);
+    setProblem(null);
+    try {
+      onSaved(await savedExport(includeSecrets, path, alreadyThere));
+    } catch (error) {
+      setAlreadyThere(error instanceof AlreadyThere);
+      setProblem(messageOf(error));
+      setSaving(false);
+    }
+  };
+
+  return (
+    <form className="transfer-save" onSubmit={(event) => void save(event)}>
+      <label>
+        {words.saveAs}
+        <input
+          autoFocus
+          spellCheck={false}
+          {...typingAidAttributes}
+          value={path}
+          disabled={saving}
+          onChange={(event) => {
+            setPath(event.target.value);
+            setAlreadyThere(false);
+            setProblem(null);
+          }}
+        />
+      </label>
+      {problem && (
+        <p className="transfer-problem" role="alert">
+          {problem}
+          {alreadyThere && words.replaceIt}
+        </p>
+      )}
+      <div className="form-actions">
+        <button type="submit" className="primary" disabled={saving || !path.trim()}>
+          {saving ? words.saving : alreadyThere ? words.replace : words.save}
+        </button>
+        <button type="button" disabled={saving} onClick={onCancel}>
+          {words.cancel}
+        </button>
+      </div>
+    </form>
   );
 }
 

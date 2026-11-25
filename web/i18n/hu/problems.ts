@@ -223,6 +223,7 @@ export const problems: Messages["problems"] = {
   savePathAbsolute: (name) => `Ez abszolút útvonal: „${name}”. Adj meg egy útvonalat a projektmappán belül.`,
   savePathOutside: (name) => `Ez nem a projektmappán belüli fájl: „${name}”.`,
   savePathIsFolder: (name) => `Ez egy mappa: „${name}”. Adj más nevet az oldalnak.`,
+  exportPathIsFolder: (name) => `Ez egy mappa: „${name}”. Adj más nevet a fájlnak.`,
   saveAlreadyThere: (path) => `Ez már létezik: ${path}`,
   savePathPartIsFile: (name) => `Az útvonal egy része fájl, nem mappa: „${name}”.`,
   configFileMustBeObject: (path) => `${path}: JSON-objektumot kell tartalmaznia, például {"publicOrigin": "https://…", "publicCanvasOrigin": "https://…"}.`,

@@ -190,6 +190,8 @@ export function problemText(problem: HostProblem, words: ProblemWords): string {
       return words.savePathOutside(problem.name);
     case "save-path-is-folder":
       return words.savePathIsFolder(problem.name);
+    case "export-path-is-folder":
+      return words.exportPathIsFolder(problem.name);
     case "save-already-there":
       return words.saveAlreadyThere(problem.path);
     case "save-path-part-is-file":

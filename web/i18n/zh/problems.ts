@@ -216,6 +216,7 @@ export const problems: Messages["problems"] = {
   savePathAbsolute: (name) => `“${name}”是绝对路径。请提供项目文件夹内的路径。`,
   savePathOutside: (name) => `“${name}”不是项目文件夹内的文件。`,
   savePathIsFolder: (name) => `“${name}”是一个文件夹。请给页面换个名称。`,
+  exportPathIsFolder: (name) => `“${name}”是一个文件夹。请给文件换个名称。`,
   saveAlreadyThere: (path) => `${path} 已存在。`,
   savePathPartIsFile: (name) => `“${name}”的一部分是文件，而不是文件夹。`,
   configFileMustBeObject: (path) => `${path} 必须包含一个 JSON 对象，例如 {"publicOrigin": "https://…", "publicCanvasOrigin": "https://…"}。`,

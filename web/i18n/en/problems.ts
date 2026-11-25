@@ -221,6 +221,7 @@ export const problems = {
   savePathAbsolute: (name: string) => `"${name}" is an absolute path. Give a path inside the project folder.`,
   savePathOutside: (name: string) => `"${name}" is not a file inside the project folder.`,
   savePathIsFolder: (name: string) => `"${name}" is a folder. Name the page differently.`,
+  exportPathIsFolder: (name: string) => `"${name}" is a folder. Name the file differently.`,
   saveAlreadyThere: (path: string) => `${path} is already there.`,
   savePathPartIsFile: (name: string) => `Part of "${name}" is a file, not a folder.`,
   configFileMustBeObject: (path: string) => `${path} must hold a JSON object, like {"publicOrigin": "https://…", "publicCanvasOrigin": "https://…"}.`,
