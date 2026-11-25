@@ -11,6 +11,7 @@ import { Store } from "../host/store.ts";
 import { createdSince, filesWrittenSince, ignoredFilesWritten, loggedCommitsIn, projectFiles, treeChangesIn, uncommittedChanges, writtenSince } from "../host/working-tree.ts";
 import type { StoredEvent } from "../shared/model.ts";
 import { changesRefreshPoint, firstChangedLine } from "../web/changes.ts";
+import { removeOnceFree } from "./remove-once-free.ts";
 
 let root: string;
 let projectDir: string;
@@ -100,7 +101,7 @@ beforeEach(async () => {
   );
 });
 
-afterEach(() => rm(root, { recursive: true, force: true }));
+afterEach(() => removeOnceFree(root));
 
 async function startTurn() {
   const checkpoint = await checkpoints.snapshot(workspace());
