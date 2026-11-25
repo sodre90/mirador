@@ -9,6 +9,9 @@ export const runsPast = (textWidth: number, room: number) => textWidth > room + 
 /** Whether a box that ends its text in an ellipsis cuts it short. */
 export const textCutShort = (element: HTMLElement) => element.scrollWidth > element.clientWidth;
 
+/** Whether a box clamped to a number of lines cuts its text short. */
+export const linesCutShort = (element: HTMLElement) => element.scrollHeight > element.clientHeight;
+
 let measuring: CanvasRenderingContext2D | null = null;
 
 /** Whether a select cuts the label of its chosen option short; the select's own size tells nothing of its label's. */

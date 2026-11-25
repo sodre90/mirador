@@ -43,6 +43,7 @@ import { useDroppedFiles } from "./dropped-files.ts";
 import { DictateButton, DictationLines, useDictation } from "./Dictation.tsx";
 import { setComposerHeight, useComposerHeight } from "./composer-height.ts";
 import { ConversationTitle } from "./ConversationTitle.tsx";
+import { linesCutShort, useCutShort } from "./cut-short.tsx";
 import { FavouriteStar } from "./FavouriteStar.tsx";
 import { lineDiff } from "./diff.ts";
 import { CodeText } from "./CodeText.tsx";
@@ -1446,11 +1447,10 @@ function describeJob({ job, sshHost }: Pick<JobWait, "job" | "sshHost">) {
 
 /** A long message shows its first lines; a click shows all of it, and another its first lines again. */
 function JobWaitMessage({ text }: { text: string }) {
-  const element = useRef<HTMLDivElement>(null);
+  const [element, cutShort] = useCutShort<HTMLDivElement>(linesCutShort, text);
   const [open, setOpen] = useState(false);
-  const cutOff = useCutOff(element);
   const toggle = () => setOpen((wasOpen) => !wasOpen);
-  const opensOnClick = open || cutOff;
+  const opensOnClick = open || cutShort;
   return (
     <div
       ref={element}
@@ -1470,20 +1470,6 @@ function JobWaitMessage({ text }: { text: string }) {
       {text}
     </div>
   );
-}
-
-/** Whether the element's text runs past the lines it is clamped to. */
-function useCutOff(element: RefObject<HTMLElement | null>) {
-  const [cutOff, setCutOff] = useState(false);
-  useLayoutEffect(() => {
-    const target = element.current!;
-    const measure = () => setCutOff(target.scrollHeight > target.clientHeight);
-    measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(target);
-    return () => observer.disconnect();
-  }, [element]);
-  return cutOff;
 }
 
 function JobWaits({ conversationId, waits }: { conversationId: string; waits: JobWait[] }) {
