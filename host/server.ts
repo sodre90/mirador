@@ -63,7 +63,7 @@ import { checkGroupMove, checkLanding, type SidebarNow } from "./sidebar-moves.t
 import { withChunksCoalesced } from "../shared/timeline.ts";
 import { authorityFingerprint as fingerprintOf, type ServingCertificate } from "./certificates.ts";
 import { publicAddressOf, SETTINGS_ADDRESS_NAMES, reachability, savedNetwork, saveNetwork, savedPublicAddress, savePublicAddress, type HostConfig } from "./config.ts";
-import { HERE_PATH, addressesThatAnswer, loopbackNameFromAfar, addressesUsed, ownPageOrigins, rememberAddressUsed, type AddressCandidate } from "./addresses.ts";
+import { HERE_PATH, addressedLocally, addressesThatAnswer, addressesUsed, ownPageOrigins, rememberAddressUsed, type AddressCandidate } from "./addresses.ts";
 import { servePortOnTailnet, tailnetName, tailscaleCommand } from "./tailscale.ts";
 import { errorMessage, type ConversationService, type DeleteOptions } from "./conversations.ts";
 import { deviceName, inviteKey, type DeviceService } from "./devices.ts";
@@ -468,7 +468,7 @@ export function startServer(services: HostServices) {
     const end = tunnelEnds.get(request);
     const reached = reachedAt(request, code, { authorityFingerprint, tunnelKey: p2p?.publicKey ?? null }, end);
     if (!reached) return problemResponse({ code: "room-invite-not-through-tunnel" }, 403);
-    const fromAfar = !end && loopbackNameFromAfar(request.headers.get("host") ?? "", server.requestIP(request)?.address ?? "");
+    const fromAfar = !end && addressedLocally(request.headers.get("host") ?? "") && !madeOnThisComputer.has(request);
     return fromAfar ? problemResponse({ code: "room-invite-loopback-from-afar" }, 403) : reached;
   }
 
@@ -579,6 +579,7 @@ export function startServer(services: HostServices) {
   const sendJoinRequestsToEveryPage = () => hub.broadcast({ type: "join-requests.listed", joinRequests: joinRequests.waiting() });
 
   async function answerAboutJoining(request: Request, answer: (body: Record<string, unknown>) => Response | Promise<Response>) {
+    if (tunnelEnds.has(request)) return new Response("Join requests are not served through a device's tunnel.", { status: 403 });
     const refused = refusedSender(request);
     if (refused) return refused;
     const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;

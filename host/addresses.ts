@@ -18,7 +18,7 @@ const REMEMBERED = 3;
 /** The addresses other devices have reached this host at, newest first, as their browsers sent them. */
 const seen: string[] = [];
 
-const addressedLocally = (host: string) => ["127.0.0.1", "localhost", "[::1]", "::1"].includes(host.replace(/:\d+$/, ""));
+export const addressedLocally = (host: string) => ["127.0.0.1", "localhost", "[::1]", "::1"].includes(host.replace(/:\d+$/, ""));
 
 /** Every machine answers at a loopback address, so a request naming one names this host only when it comes from this computer. */
 export const loopbackNameFromAfar = (host: string, peerAddress: string) => addressedLocally(host) && !isLoopback(peerAddress);

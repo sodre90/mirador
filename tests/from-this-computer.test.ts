@@ -9,6 +9,7 @@ import { SignInCodes } from "../host/sign-in-codes.ts";
 import { Store } from "../host/store.ts";
 import { conversationCanvasToken } from "../host/canvas-token.ts";
 import { AGENT_TOKENS_ONLY_HERE, BROWSER_TOKEN_ONLY_HERE, fromThisComputer } from "../host/from-this-computer.ts";
+import { englishProblem } from "../shared/host-problems.ts";
 import { TOKEN_COOKIE } from "../shared/protocol.ts";
 
 const PORT = 4600;
@@ -127,10 +128,10 @@ describe("the host's own token", () => {
   }
 
   /** Answers as soon as the host's answer is whole, whether it keeps the connection open or turns it into a socket. */
-  function raw(method: "GET" | "POST" | "DELETE", path: string, headers: Record<string, string>) {
+  function raw(method: "GET" | "POST" | "DELETE", path: string, headers: Record<string, string>, body = "") {
     return new Promise<{ status: number; body: string }>((resolve, reject) => {
       let received = Buffer.alloc(0);
-      const socket = connect(port, "127.0.0.1", () => socket.write([`${method} ${path} HTTP/1.1`, ...Object.entries(headers).map(([name, value]) => `${name}: ${value}`), "", ""].join("\r\n")));
+      const socket = connect(port, "127.0.0.1", () => socket.write(`${[`${method} ${path} HTTP/1.1`, ...Object.entries(headers).map(([name, value]) => `${name}: ${value}`), "", ""].join("\r\n")}${body}`));
       socket.on("data", (chunk: Buffer) => {
         received = Buffer.concat([received, chunk]);
         const answer = answerIn(received);
@@ -227,4 +228,15 @@ describe("the host's own token", () => {
       expect((await linkWithCode(thisComputer(), code)).status, "a code tried from afar is not used up").toBe(302);
     });
   }
+
+  test("refuses a room join challenge naming a loopback Host when passed on by tailscale serve", async () => {
+    const body = JSON.stringify({ code: "R-ABCD-EFGH-JKLM" });
+    const headers = {
+      ...forwardedShapes["tailscale serve, passing on a Host its client set to this computer's"]!(),
+      "Content-Type": "application/json",
+      "Content-Length": String(Buffer.byteLength(body)),
+    };
+    const answer = await raw("POST", "/join-challenges", headers, body);
+    expect(answer).toEqual({ status: 403, body: englishProblem({ code: "room-invite-loopback-from-afar" }) });
+  });
 });
