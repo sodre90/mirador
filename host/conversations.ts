@@ -1449,7 +1449,7 @@ export class ConversationService {
     this.restartForFoldersOnceIdle(change);
     await Promise.race([change.taken, stopped]);
     change.held.delete(conversationId);
-    this.setStatus(conversationId, "starting");
+    if (!runtime.turn?.stoppedBeforePrompt) this.setStatus(conversationId, "starting");
   }
 
   private letHeldTurnGo(conversationId: string) {
@@ -2198,6 +2198,12 @@ export class ConversationService {
     let sessionOpened = false;
     try {
       await this.waitForSandboxFolders(conversationId);
+      if (turn.stoppedBeforePrompt) {
+        this.append(conversationId, { type: "turn-end", stopReason: "cancelled", ...this.measuredTurn(conversationId, turn) });
+        this.notifyTurnEnded(conversationId, { stopReason: "cancelled" });
+        this.setStatus(conversationId, "idle");
+        return;
+      }
       const sessionId = await this.ensureSession(conversationId);
       sessionOpened = true;
       this.setStatus(conversationId, "running");
@@ -3935,8 +3941,14 @@ export class ConversationService {
     if (this.stopping || !this.store.hasConversation(conversationId)) return;
     const conversation = this.get(conversationId);
     if (conversation.harness !== "antigravity") return;
-    const profile = this.profileOf(conversation);
-    const given = this.environmentGivenTo(conversation, profile);
+    let profile: Profile | undefined;
+    let given: ReturnType<ConversationService["environmentGivenTo"]>;
+    try {
+      profile = this.profileOf(conversation);
+      given = this.environmentGivenTo(conversation, profile);
+    } catch {
+      return;
+    }
     const claudeProgram = this.store.claudeProgramSetting();
     const hasExpiredWindow = this.planQuotas.hasExpiredWindow(conversation.profileId, now);
     this.antigravityQuotas.refresh(

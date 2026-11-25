@@ -600,6 +600,7 @@ describe("a change of a sandbox's folders", () => {
     await until(() => conversations.get(held.id).busyWith === "waiting-for-sandbox-folders");
     await conversations.cancel(held.id);
     await until(() => conversations.get(held.id).status === "idle");
+    expect(latestAgentOf(held.id).prompts()).toBe(0);
     expect(conversations.waitsForSandboxFolders(owner)).toBe(true);
 
     conversations.applySandboxFoldersNow(owner);
