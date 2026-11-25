@@ -94,14 +94,27 @@ async function releasesOf(url: string): Promise<string[]> {
     .sort(newestFirst);
 }
 
-/** The newest release the repo has tagged; null when it tags none. */
-const newestRelease = async (url: string) => (await releasesOf(url))[0] ?? null;
+const taggedReleaseRef = (release: string) => `refs/tags/${releaseTag(release)}`;
+
+/** The newest of the releases, listed newest first, whose plugin.json names a plugin API this Mirador speaks; null when none does. */
+async function newestThatRuns(folder: string, releases: string[], refOf: (release: string) => string): Promise<string | null> {
+  for (const release of releases) {
+    const manifest = parsedOrNull(await gitOutput(folder, ["show", `${refOf(release)}:plugin.json`]));
+    if (manifest !== null && newerApiOf(manifest) === null) return release;
+  }
+  return null;
+}
 
 const NO_NEWS: PluginNews = { release: null, commits: [], needsApi: null };
 
 /** Where a plugin's clone keeps the releases its update checks fetch, apart from its own tags, which say what it has installed. */
 const FETCHED_RELEASES = "refs/mirador/releases/";
 const fetchedReleaseRef = (release: string) => `${FETCHED_RELEASES}${releaseTag(release)}`;
+
+async function checkOutRelease(folder: string, release: string) {
+  const checkedOut = await run(["git", "checkout", "--quiet", "--detach", taggedReleaseRef(release)], folder, environmentWithoutPrompts(), GIT_GIVES_UP_AFTER_MS);
+  if (!checkedOut.ok) throw new HostProblemError({ code: "git-clone-failed", output: checkedOut.output });
+}
 
 /** Every release in one fetch, a tag the repo moved since included, so reading the newer ones' plugin.json fetches nothing more. */
 async function fetchReleases(folder: string) {
@@ -326,22 +339,21 @@ export class InstalledPlugins {
   }
 
   /**
-   * Clones the repo at the branch or tag given, or else at its newest release, or its default branch when it tags no
-   * release, without building it: what it brings, for the user to agree to before any of its code runs.
+   * Clones the repo at the branch or tag given, or else at its newest release that runs on this Mirador, or its default
+   * branch when it tags no release, without building it: what it brings, for the user to agree to before any of its code runs.
    */
   offer(url: string, branch: string | null): Promise<PluginOffer> {
     return this.oneAtATime(async () => {
       const repo = expandedHome(url.trim());
       const given = branch?.trim() || null;
-      const release = given || !repo ? null : await newestRelease(repo);
-      const { staged, manifest } = await this.cloned(repo, given ?? (release && releaseTag(release)));
+      const { staged, manifest, release } = given || !repo ? { ...(await this.cloned(repo, given)), release: releaseOfTag(given) } : await this.clonedAtNewestThatRuns(repo);
       try {
         await this.refuseTakenName(manifest.name);
       } catch (error) {
         rmSync(staged, { recursive: true, force: true });
         throw error;
       }
-      return this.offered(staged, manifest, { remote: repo, branch: given && !releaseOfTag(given) ? given : null, release: release ?? releaseOfTag(given) }, null);
+      return this.offered(staged, manifest, { remote: repo, branch: given && !releaseOfTag(given) ? given : null, release }, null);
     });
   }
 
@@ -560,7 +572,22 @@ export class InstalledPlugins {
   }
 
   /** Clones the repo at the branch or tag, or its default branch, into the staging folder, and reads its plugin.json; runs none of its code. */
-  private async cloned(url: string, branchOrTag: string | null): Promise<{ staged: string; manifest: PluginManifest }> {
+  private cloned(url: string, branchOrTag: string | null): Promise<{ staged: string; manifest: PluginManifest }> {
+    return this.inStagedClone(url, branchOrTag, async (staged) => ({ staged, manifest: await this.manifestOfClone(staged, branchOrTag) }));
+  }
+
+  /** Clones the repo, as `cloned` does, at its newest release that runs on this Mirador; at its newest of all when none does, whose plugin.json says why it is refused. */
+  private async clonedAtNewestThatRuns(url: string): Promise<{ staged: string; manifest: PluginManifest; release: string | null }> {
+    const releases = await releasesOf(url);
+    const newest = releases[0] ?? null;
+    return this.inStagedClone(url, newest && releaseTag(newest), async (staged) => {
+      const release = (await newestThatRuns(staged, releases, taggedReleaseRef)) ?? newest;
+      if (release !== newest) await checkOutRelease(staged, release);
+      return { staged, manifest: await this.manifestOfClone(staged, release && releaseTag(release)), release };
+    });
+  }
+
+  private async inStagedClone<T>(url: string, branchOrTag: string | null, read: (staged: string) => Promise<T>): Promise<T> {
     if (!url) throw new HostProblemError({ code: "plugin-needs-repo-address" });
     mkdirSync(this.staging, { recursive: true });
     const staged = join(this.staging, crypto.randomUUID());
@@ -572,18 +599,22 @@ export class InstalledPlugins {
         GIT_GIVES_UP_AFTER_MS,
       );
       if (!cloned.ok) throw new HostProblemError({ code: "git-clone-failed", output: cloned.output });
-      const manifest = await readManifest(staged)
-        .then((read) => (refuseUnversioned(read), read))
-        .catch((error) => {
-          throw new HostProblemError({ code: "repo-is-not-a-plugin", ...causeOf(error, messageOf(error)) });
-        });
-      const tagged = releaseOfTag(branchOrTag);
-      if (tagged && manifest.version !== tagged) throw new HostProblemError({ code: "plugin-tag-version-mismatch", tag: String(branchOrTag), release: tagged, version: String(manifest.version) });
-      return { staged, manifest };
+      return await read(staged);
     } catch (error) {
       rmSync(staged, { recursive: true, force: true });
       throw shownWithoutCredentials(error);
     }
+  }
+
+  private async manifestOfClone(staged: string, branchOrTag: string | null): Promise<PluginManifest> {
+    const manifest = await readManifest(staged)
+      .then((read) => (refuseUnversioned(read), read))
+      .catch((error) => {
+        throw new HostProblemError({ code: "repo-is-not-a-plugin", ...causeOf(error, messageOf(error)) });
+      });
+    const tagged = releaseOfTag(branchOrTag);
+    if (tagged && manifest.version !== tagged) throw new HostProblemError({ code: "plugin-tag-version-mismatch", tag: String(branchOrTag), release: tagged, version: String(manifest.version) });
+    return manifest;
   }
 
   /** Runs the plugin's build command in its clone, and checks the files plugin.json names are there then. */

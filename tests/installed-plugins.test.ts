@@ -429,6 +429,53 @@ describe("adding, updating and removing plugins", () => {
     expect(readFileSync(join(plugins, "counter", "view.js"), "utf8")).toBe("document.body.textContent = 'Counting by two';\n");
   });
 
+  /** Releases for a newer Mirador than this one, named in plugin.json. */
+  function releaseForNewerApi(repo: string, version: string) {
+    const manifest = join(repo, "plugin.json");
+    writeFileSync(manifest, JSON.stringify({ ...JSON.parse(readFileSync(manifest, "utf8")), api: APP_PLUGIN_API + 1 }));
+    release(repo, version);
+  }
+
+  test("installing passes over the releases for a newer plugin API and takes the newest this Mirador runs, at that release as if it were the newest", async () => {
+    const repo = builtCounterRepo("install-supported-repo");
+    git(repo, "tag", "v1.0.0");
+    commit(repo, "src/view.js", "document.body.textContent = 'Counting by two';\n", "Count by two");
+    release(repo, "1.1.0");
+    git(repo, "tag", "--force", "--annotate", "v1.1.0", "--message", "Release 1.1.0");
+    const supported = git(repo, "rev-parse", "v1.1.0^{commit}");
+    releaseForNewerApi(repo, "2.0.0");
+    releaseForNewerApi(repo, "2.1.0");
+    const plugins = pluginsIn("install-supported");
+    const installed = new InstalledPlugins(plugins, []);
+
+    const offer = await installed.offer(repo, null);
+    expect(offer).toMatchObject({ version: "1.1.0", release: "1.1.0", branch: null, commit: supported, subject: "Release 1.1.0" });
+    await installed.install(offer.id);
+    expect((await installed.list())[0]).toMatchObject({ version: "1.1.0", source: { kind: "git", branch: null, release: "1.1.0" } });
+    expect(readFileSync(join(plugins, "counter", "view.js"), "utf8")).toBe("document.body.textContent = 'Counting by two';\n");
+    expect(git(join(plugins, "counter"), "status", "--porcelain")).toBe("");
+    expect(await installed.updatesFound(null)).toEqual([]);
+  }, 60_000);
+
+  test("a plugin whose every release needs a newer Mirador is refused, saying so, even when an early tag isn't a plugin yet", async () => {
+    const repo = join(root, "only-newer-repo");
+    mkdirSync(repo);
+    writeFileSync(join(repo, "README.md"), "A plugin, one day.\n");
+    git(repo, "init", "--quiet", "-b", "main");
+    git(repo, "add", ".");
+    git(repo, "commit", "--quiet", "-m", "Not a plugin yet");
+    git(repo, "tag", "v0.0.1");
+    writeFileSync(join(repo, "plugin.json"), JSON.stringify({ name: "newer", title: "Newer", version: "1.0.0", api: APP_PLUGIN_API + 1 }));
+    git(repo, "add", ".");
+    git(repo, "commit", "--quiet", "-m", "Release 1.0.0");
+    git(repo, "tag", "v1.0.0");
+    const plugins = pluginsIn("only-newer");
+    await expect(new InstalledPlugins(plugins, []).offer(repo, null)).rejects.toThrow(
+      `plugin.json is for plugin API ${APP_PLUGIN_API + 1}; this Mirador speaks plugin API 1 to ${APP_PLUGIN_API}, so the plugin needs a newer Mirador.`,
+    );
+    expect(leftInStaging(plugins)).toEqual([]);
+  });
+
   test("a release or commits for a newer plugin API are news that can't go in, so the updates found by itself leave them out", async () => {
     const repo = builtCounterRepo("newer-api-repo");
     git(repo, "tag", "v1.0.0");
