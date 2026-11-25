@@ -52,9 +52,10 @@ async function readInto(stream: ReadableStream<Uint8Array>, output: OutputKept) 
   for await (const bytes of stream) output.add(decoder.decode(bytes, { stream: true }));
 }
 
-/** Kills the process and all it started that stayed in its group. */
+/** Kills the process and all it started that stayed in its group, all of it halted first: a shell whose command is killed before it is goes on to its next. */
 export function killGroup(child: { pid: number; kill(signal: "SIGKILL"): void }) {
   try {
+    process.kill(-child.pid, "SIGSTOP");
     process.kill(-child.pid, "SIGKILL");
   } catch {
     child.kill("SIGKILL");
