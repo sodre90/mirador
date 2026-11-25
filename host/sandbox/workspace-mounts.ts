@@ -301,7 +301,7 @@ async function copyRegularFile(original: string, copy: string) {
 
 /** Whether git reads the git folder's `config.worktree` too, which the VM could make where there is none yet. */
 async function readsWorktreeConfig(gitFolder: string) {
-  const { stdout } = await git(gitFolder, ["config", "--file", join(gitFolder, "config"), "--bool", "--get", "extensions.worktreeConfig"]);
+  const { stdout } = await git(gitFolder, ["config", "--includes", "--file", join(gitFolder, "config"), "--bool", "--get", "extensions.worktreeConfig"]);
   return stdout.trim() === "true";
 }
 
@@ -368,15 +368,34 @@ async function configuredHooksFolder(workspace: string): Promise<string | null> 
 }
 
 /**
- * A hooks folder the config names inside the workspace, as husky's, which the VM could otherwise write: made where it is
- * not there yet, and mounted where it truly is, never through a link.
+ * A hooks folder the config names inside the workspace, as husky's, which the VM could otherwise write: walked without
+ * following links first, refusing any link or non-folder on the way, and created only once every existing ancestor is
+ * verified to be a real folder inside the workspace.
  */
-async function configuredHooksInside(workspace: string): Promise<Mount[]> {
+async function configuredHooksInside(workspace: string): Promise<Mount[] | { refused: SandboxBlocker }> {
   const named = await configuredHooksFolder(workspace);
-  if (!named || !isInside(named, workspace) || named === workspace) return [];
-  await mkdir(named, { recursive: true }).catch(() => {});
+  if (!named) return [];
+  const walk = await walkTo(named);
+  const ofWorkspace = (path: string) => path !== workspace && isInside(path, workspace);
+  if (![...walk.passed, ...walk.links, walk.ends].some(ofWorkspace)) return [];
+  if (walk.links[0]) return { refused: { kind: "part-is-link", part: shownFrom(workspace, walk.links[0]) } };
+  if (!ofWorkspace(named)) return [];
+  if (!walk.missing) {
+    if ((await kindOf(walk.ends)) !== "folder") return { refused: { kind: "part-is-link", part: shownFrom(workspace, walk.ends) } };
+    return [atItsOwnPath(walk.ends, true)];
+  }
+  const steps = relative(workspace, named).split(sep).filter(Boolean);
+  let at = workspace;
+  for (const part of steps) {
+    at = join(at, part);
+    const kind = await kindOf(at);
+    if (kind === "folder") continue;
+    if (kind !== "missing") return { refused: { kind: "part-is-link", part: shownFrom(workspace, at) } };
+    await mkdir(at).catch(() => {});
+    if ((await kindOf(at)) !== "folder") return { refused: { kind: "part-is-link", part: shownFrom(workspace, at) } };
+  }
   const real = await realpath(named).catch(() => null);
-  return real && real !== workspace && isInside(real, workspace) && (await kindOf(real)) === "folder" ? [atItsOwnPath(real, true)] : [];
+  return real === named && (await kindOf(real)) === "folder" ? [atItsOwnPath(real, true)] : { refused: { kind: "part-is-link", part: shownFrom(workspace, named) } };
 }
 
 /**
@@ -398,7 +417,9 @@ export async function workspaceMounts(givenWorkspace: string, copies: string, pl
   const gitParts = (await Promise.all(gitFolders.map((folder) => readOnlyPartsOf(folder, copies, folder === gitFolder)))).flat();
   const includedFiles = await Promise.all(included.files.map((file) => readOnlyCopyOf(file, copies)));
   const held = await Promise.all(heldReadOnly.map((path) => heldMount(join(workspace, path), copies)));
-  const readOnly = outermostOf([...gitParts, ...includedFiles, ...(await configuredHooksInside(workspace)), ...held]);
+  const hooks = await configuredHooksInside(workspace);
+  if ("refused" in hooks) return hooks;
+  const readOnly = outermostOf([...gitParts, ...includedFiles, ...hooks, ...held]);
   const parentsFirst = [atItsOwnPath(workspace, false), ...foldersHolding(workspace, readOnly, included.folders), ...readOnly].toSorted((a, b) => (a.target < b.target ? -1 : a.target > b.target ? 1 : 0));
   const reachingOut = await mountReachingOut(workspace, copies, parentsFirst);
   return reachingOut ? { refused: { kind: "part-is-link", part: reachingOut } } : { mounts: parentsFirst };

@@ -468,3 +468,32 @@ test.skipIf(!RUNS_SANDBOXES)("a relative hooks folder this Mac's own config name
     else process.env.GIT_CONFIG_GLOBAL = before;
   }
 });
+
+test.skipIf(!RUNS_SANDBOXES)("a configured hooksPath through a symlink or at a non-folder is refused without creating folders outside, and included worktreeConfig is mounted read-only", async () => {
+  const outside = join(scratch, `outside-hooks-${crypto.randomUUID()}`);
+  mkdirSync(outside);
+  const linkedOut = repositoryIn("hooks-linked-out");
+  symlinkSync(outside, join(linkedOut, "scripts"));
+  Bun.spawnSync(["git", "-C", linkedOut, "config", "core.hooksPath", "scripts/git-hooks"]);
+  expect(await workspaceMounts(linkedOut, join(scratch, `copies-${crypto.randomUUID()}`), ELSEWHERE)).toEqual({ refused: { kind: "part-is-link", part: "scripts" } });
+  expect(existsSync(join(outside, "git-hooks"))).toBe(false);
+
+  const linkedIn = repositoryIn("hooks-linked-in");
+  mkdirSync(join(linkedIn, "tools/git-hooks"), { recursive: true });
+  symlinkSync("tools", join(linkedIn, "scripts"));
+  Bun.spawnSync(["git", "-C", linkedIn, "config", "core.hooksPath", "scripts/git-hooks"]);
+  expect(await workspaceMounts(linkedIn, join(scratch, `copies-${crypto.randomUUID()}`), ELSEWHERE)).toEqual({ refused: { kind: "part-is-link", part: "scripts" } });
+
+  const fileHooks = repositoryIn("hooks-file");
+  writeFileSync(join(fileHooks, "hooks"), "not a folder");
+  Bun.spawnSync(["git", "-C", fileHooks, "config", "core.hooksPath", "hooks"]);
+  expect(await workspaceMounts(fileHooks, join(scratch, `copies-${crypto.randomUUID()}`), ELSEWHERE)).toEqual({ refused: { kind: "part-is-link", part: "hooks" } });
+
+  const withInclude = repositoryIn("included-worktree-config");
+  const extraConfig = join(scratch, `worktree-inc-${crypto.randomUUID()}.gitconfig`);
+  writeFileSync(extraConfig, "[extensions]\n\tworktreeConfig = true\n");
+  Bun.spawnSync(["git", "-C", withInclude, "config", "include.path", extraConfig]);
+  const planned = await workspaceMounts(withInclude, join(scratch, `copies-${crypto.randomUUID()}`), ELSEWHERE);
+  if ("refused" in planned) throw new Error(`refused: ${planned.refused.kind}`);
+  expect(planned.mounts).toContainEqual(expect.objectContaining({ target: join(withInclude, ".git/config.worktree"), readOnly: true }));
+});
