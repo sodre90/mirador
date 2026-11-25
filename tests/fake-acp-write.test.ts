@@ -1,5 +1,5 @@
 import { afterAll, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, statSync } from "node:fs";
 import { realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -10,10 +10,15 @@ import { Hub } from "../host/hub.ts";
 import { SystemNotifications } from "../host/system-notifications.ts";
 import { Store } from "../host/store.ts";
 import { fakeProgram } from "./fake-program.ts";
+import { removeOnceFree } from "./remove-once-free.ts";
 
 /** Spelled as the host spells a workspace's folder to its agent: on Windows, a long name for an 8.3 one such as RUNNER~1. */
 const scratch = await realpath(mkdtempSync(join(tmpdir(), "fake-acp-write-")));
-afterAll(() => rmSync(scratch, { recursive: true, force: true }));
+const services: ConversationService[] = [];
+afterAll(async () => {
+  await Promise.all(services.map((service) => service.shutdown()));
+  await removeOnceFree(scratch);
+});
 
 const fakeAgent = join(import.meta.dirname, "..", "e2e", "fake-acp-agent.ts");
 
@@ -43,6 +48,7 @@ const serviceInFolder = () => {
   store.insertWorkspace({ id: "w1", name: "project", path: folder, defaultLaunch: { harness: "antigravity", profileId: "p1" }, createdAt: 1 });
   const config = loadConfig({ MIRADOR_DATA_DIR: join(scratch, `data-${crypto.randomUUID()}`) });
   const service = new ConversationService(store, new Hub(), config, {} as never, {} as never, {} as never, new SystemNotifications(store, new Hub()));
+  services.push(service);
   return { service, store, folder };
 };
 
