@@ -328,7 +328,7 @@ function RawOutput({ block, conversationId }: { block: ToolBlock; conversationId
   }, [onHost, shown, current !== null, block.rawOutput]);
   if (!onHost) return <RawJson label={words.tool.output} value={block.rawOutput} />;
   return (
-    <details className="raw" onToggle={(event) => setShown(event.currentTarget.open)}>
+    <details className="raw" data-fetched={current ? "" : undefined} onToggle={(event) => setShown(event.currentTarget.open)}>
       <summary>{words.tool.output}</summary>
       <pre>{current ? rawJsonText(current.rawOutput) : words.tool.loading}</pre>
     </details>
@@ -1245,10 +1245,15 @@ export function useScrollAnchor() {
       heightSeen = timeline.scrollHeight;
     });
     resizes.observe(timeline);
-    /** A section the reader opens or closes leaves the view where it is, and whether they are at the bottom is taken anew. */
-    const onlyToggled = (records: MutationRecord[]) => records.every(({ type }) => type === "attributes");
+    /**
+     * A section the reader opens or closes, or whose text arrives once it opens, leaves the view where it is, and
+     * whether they are at the bottom is taken anew.
+     */
+    const elementOf = (node: Node) => (node instanceof Element ? node : node.parentElement);
+    const fromOpen = (record: MutationRecord) =>
+      record.type === "attributes" || Boolean(elementOf(record.target)?.closest("details.raw[data-fetched]"));
     const changes = new MutationObserver((records) => {
-      if (!onlyToggled(records)) return followGrowth();
+      if (!records.every(fromOpen)) return followGrowth();
       if (timeline.clientHeight) rememberPlaceIn(timeline);
       heightSeen = timeline.scrollHeight;
     });

@@ -60,12 +60,21 @@ test("a long conversation opens with its newest part, and earlier parts come fro
     await expect(earlier(page)).toHaveText("Show earlier entries");
   });
 
-  await test.step("a tool's raw output comes from the host when it is shown", async () => {
-    const card = page.locator(".timeline details.tool").filter({ hasText: numbered("Grep needle", TURNS - 1) });
+  await test.step("a tool's raw output comes from the host when it is shown, without pulling a reader at the bottom down", async () => {
+    const timeline = page.locator(".timeline:visible");
+    const card = timeline.locator("details.tool").filter({ hasText: numbered("Grep needle", TURNS - 1) });
     await card.locator(":scope > summary").click();
     const output = card.locator("details.raw").filter({ has: page.locator("summary", { hasText: "output" }) });
+    const atTheBottom = await timeline.evaluate((element) => {
+      element.scrollTop = element.scrollHeight;
+      element.dispatchEvent(new Event("scroll"));
+      return element.scrollTop;
+    });
+    const heightBefore = await timeline.evaluate((element) => element.scrollHeight);
     await output.locator("summary").click();
     await expect(output.locator("pre")).toContainText(numbered("raw listing", TURNS - 1));
+    expect((await timeline.evaluate((element) => element.scrollHeight)) - heightBefore).toBeGreaterThan(200);
+    expect(Math.abs((await timeline.evaluate((element) => element.scrollTop)) - atTheBottom)).toBeLessThanOrEqual(2);
     await card.locator(":scope > summary").click();
   });
 
