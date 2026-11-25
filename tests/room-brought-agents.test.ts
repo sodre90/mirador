@@ -423,6 +423,27 @@ describe("taking a brought agent out", () => {
     expect(refusal(() => rooms.takeAgentOut(room.id, agentId, "m1"))).toBe("brought-agent-gone");
   });
 
+  test("taking a brought agent out declines waiting held tasks written by it or asking only it, leaving ones still asking other agents", () => {
+    const fixture = roomWithMia({ peoplesTasksWait: true });
+    const { rooms, room, ownerId, miaArrives, tasksToMia, posted } = fixture;
+    miaArrives();
+    const agentId = rooms.bringAgent(room.id, "m1", "Coder", "claude");
+    const taskForAgent = rooms.write(room.id, ownerId, "@Mia's Coder fix it", [agentId], null);
+    rooms.broughtTaskAnswered("m1", room.id, agentId, tasksToMia().at(-1)!.taskId, "@Builder follow up", null);
+    const heldByAgent = posted().at(-1)!;
+    expect(heldByAgent.taskHeld).toBe("waiting");
+
+    const heldForOnlyAgent = rooms.write(room.id, "m1", "@Mia's Coder check it", [agentId], null);
+    const heldForBoth = rooms.write(room.id, "m1", "@Mia's Coder @Builder both", [agentId, "p1"], null);
+    expect(rooms.tasksWaiting(room.id).map(({ messageId }) => messageId)).toEqual([heldByAgent.id, heldForOnlyAgent.id, heldForBoth.id]);
+    expect(taskForAgent.id).toBeTruthy();
+
+    rooms.takeAgentOut(room.id, agentId, "m1");
+    expect(rooms.tasksWaiting(room.id).map(({ messageId }) => messageId)).toEqual([heldForBoth.id]);
+    expect(posted().findLast(({ id }) => id === heldByAgent.id)?.taskHeld).toBe("declined");
+    expect(posted().findLast(({ id }) => id === heldForOnlyAgent.id)?.taskHeld).toBe("declined");
+  });
+
   test("a bringer made a guest, taken out of the room, or in a room that stops letting members bring them, loses them at once", () => {
     const { rooms, room, agentOf } = roomWithMia();
     const asGuest = rooms.bringAgent(room.id, "m1", "One", "claude");

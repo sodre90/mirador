@@ -3,7 +3,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadConfig } from "../host/config.ts";
-import { pushRegistrationProblem, PushNotifications } from "../host/push-notifications.ts";
+import { pushRegistrationProblem, PushNotifications, roomPushTarget } from "../host/push-notifications.ts";
 import { Store } from "../host/store.ts";
 import { DEFAULT_PUSH_RELAY, openedPushBlob, PUSH_BLOB_BYTES, pushRelayAddressProblem, pushRelayChoiceOf, pushRelayHost, sealedPushBlob, type ClearMessage, type PushKey, type PushMessage, type PushRegistration, type PushRelayRequest, type PushRequest } from "../shared/push.ts";
 import type { SystemNotification } from "../shared/system-notifications.ts";
@@ -327,6 +327,33 @@ describe("pushing notifications", () => {
     await pushes.read(["c1"]);
     await pushed;
     expect(posted).toHaveLength(0);
+  });
+
+  test("a room-level held-task notification carries roomId and is cleared when the room is read", async () => {
+    const { pushes, posted } = pushingHost();
+    pushes.register("phone", registration(["permission"]));
+    const roomHeld: SystemNotification = {
+      id: "n-room-1",
+      kind: "permission",
+      roomId: "r1",
+      title: "Garden",
+      workspace: "mirador",
+      body: "Wants permission: a task of Mia, member",
+    };
+    await pushes.notify(roomHeld);
+    expect(posted).toHaveLength(1);
+    const alert = (await openedPushBlob(pushKey, posted[0]!.request.blob!)) as PushMessage;
+    expect(alert.notification.roomId).toBe("r1");
+    await pushes.read([roomPushTarget("r1")]);
+    expect(posted.map(({ request }) => request.kind)).toEqual(["alert", "clear"]);
+    const clear = (await openedPushBlob(pushKey, posted[1]!.request.blob!)) as ClearMessage;
+    expect(clear.cleared).toEqual({ roomId: "r1" });
+
+    // Reading the room before the delayed push fires cancels it completely.
+    const pending = pushes.notify({ ...roomHeld, id: "n-room-2" });
+    await pushes.read([roomPushTarget("r1")]);
+    await pending;
+    expect(posted).toHaveLength(2);
   });
 
   test("a revoked phone's registration goes with it", () => {

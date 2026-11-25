@@ -2,7 +2,7 @@ import type { RoomAlert } from "../shared/room-reading.ts";
 import type { Room } from "../shared/rooms.ts";
 import { roomNotification, roomWaitingNotification, systemNotification, type NotificationReason, type SystemNotification } from "../shared/system-notifications.ts";
 import type { Hub } from "./hub.ts";
-import type { PushNotifications } from "./push-notifications.ts";
+import { roomPushTarget, type PushNotifications } from "./push-notifications.ts";
 import type { Store } from "./store.ts";
 
 const TOLD_OF_IN_ROOMS = new Set<NotificationReason["kind"]>(["permission", "question", "finished"]);
@@ -65,11 +65,11 @@ export class SystemNotifications {
   }
 
   /**
-   * A focused page shows the room, or its approver answered a task there: what phones were told of its agents goes from
-   * them, unless it still waits. A room's answer finished, or a task held, leaves no conversation waiting to clear it.
+   * A focused page shows the room, or its approver answered a task there: what phones were told of its agents or of the
+   * room itself goes from them, unless it still waits. A room's answer finished, or a task held, leaves no conversation waiting to clear it.
    */
   roomRead(roomId: string) {
     const agentsConversations = this.store.findRoom(roomId)?.agents.flatMap(({ conversationId }) => conversationId ?? []) ?? [];
-    void this.pushes?.read(agentsConversations);
+    void this.pushes?.read([...agentsConversations, roomPushTarget(roomId)]);
   }
 }

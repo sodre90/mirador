@@ -79,7 +79,7 @@ import type { OwnerKey } from "./person-keys.ts";
 import { DEVICE_ROUTES, OPEN_TO_PEOPLE, SOCKETS_OPEN_TO_PEOPLE, THIS_MACHINE_ROUTES, type RouteHandlers } from "./routes.ts";
 import { admittedFromPerson, type PersonInRooms } from "./person-admission.ts";
 import { RoomPresenceService } from "./room-presence.ts";
-import { conversationBehindStandIn, namesOthersGoBy, personView } from "./person-view.ts";
+import { broughtAgentNamesIn, conversationBehindStandIn, namesOthersGoBy, personView } from "./person-view.ts";
 import type { SystemNotifications } from "./system-notifications.ts";
 import { fittedMachineName, inviteIn, isRoomId, isRoomInviteConnect, machineAddress, roomInviteText, type RoomInviteConnect } from "../shared/machines.ts";
 import { nameRefused, nameTaken, personName, readsAsMiradorsWords } from "../shared/people.ts";
@@ -1374,7 +1374,9 @@ export function startServer(services: HostServices) {
     if (personId === store.ownerId()) {
       const named = personName(name);
       const renamed = named !== store.listPeople().find(({ id }) => id === personId)?.name;
-      if (renamed && (readsAsMiradorsWords(named) || nameTaken(named, namesOfPeopleBut(personId)))) throw new HostProblemError({ code: "person-name-taken" });
+      if (renamed && (readsAsMiradorsWords(named) || nameTaken(named, [...namesOfPeopleBut(personId), ...broughtAgentNamesIn(store, store.listRooms())]))) {
+        throw new HostProblemError({ code: "person-name-taken" });
+      }
       return keepOwnProfile(personId, named, color);
     }
     if (!changingOwnProfile.allows(personId)) throw new HostProblemError({ code: "profile-changing-too-fast" });

@@ -630,8 +630,8 @@ const roomBroughtTaskColumns = "id, room_id AS roomId, agent_id AS agentId, mess
 
 const toRoomBroughtTask = (row: Omit<RoomBroughtTask, "fromBringer" | "letThrough"> & { fromBringer: number; letThrough: number }): RoomBroughtTask => ({ ...row, fromBringer: row.fromBringer === 1, letThrough: row.letThrough === 1 });
 
-/** Where a task stands on the Mirador of the person who brought the agent it is for. */
-export type BroughtTaskState = "waiting" | "sent" | "answered";
+/** Where a task stands on the Mirador of the person who brought the agent it is for; `forgotten` keeps the id after its answer is pruned so it never runs again. */
+export type BroughtTaskState = "waiting" | "sent" | "answered" | "forgotten";
 
 /** A task a room's machine sent an agent this computer's owner brought there, kept so that one sent again runs once. */
 export interface BroughtTask {
@@ -1770,16 +1770,19 @@ export class Store {
 
   /** The tasks of the agent not answered yet: waiting for an OK, or sent to its conversation. */
   broughtTasksQueued(broughtId: string): BroughtTask[] {
-    return this.db.query(`SELECT ${broughtTaskColumns} FROM brought_tasks WHERE brought_id = ? AND state != 'answered' ORDER BY at, rowid`).all(broughtId) as BroughtTask[];
+    return this.db.query(`SELECT ${broughtTaskColumns} FROM brought_tasks WHERE brought_id = ? AND state IN ('waiting', 'sent') ORDER BY at, rowid`).all(broughtId) as BroughtTask[];
   }
 
   broughtTasksWaiting(): BroughtTask[] {
     return this.db.query(`SELECT ${broughtTaskColumns} FROM brought_tasks WHERE state = 'waiting' ORDER BY at, rowid`).all() as BroughtTask[];
   }
 
-  /** Answered tasks are kept a while after their answer so that one a room's machine sends again is answered again, not run again. */
+  /**
+   * Answered tasks' text and answers are pruned a day after their answer, while keeping each task id as a tombstone
+   * (`forgotten`) so a room's machine resending an old task id later can never make it run a second time.
+   */
   forgetBroughtTasksAnsweredBefore(at: number) {
-    this.db.query("DELETE FROM brought_tasks WHERE state = 'answered' AND answered_at < ?").run(at);
+    this.db.query("UPDATE brought_tasks SET state = 'forgotten', text = '', answer = NULL WHERE state = 'answered' AND answered_at < ?").run(at);
   }
 
   /** An agent a room's machine had not let in when the host stopped is not waited for any more. */

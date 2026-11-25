@@ -403,6 +403,13 @@ describe("what a host keeps of the tasks of agents you brought", () => {
     afterRestart.heard("ann", { type: "room.brought-task", personId: "mia", roomId: "r1", agentId: "a1", taskId: "t1", text: "again", byName: "Ann", byRole: "owner", fromYou: true } as ServerMessage);
     expect(prompts).toEqual([]);
     expect(sentToAnn("room.brought-task-answered").map(({ ended }) => ended)).toEqual(["refused", "refused"]);
+
+    // Past 24 hours after the answer, the heavy answer/text are pruned to a tombstone, and resending t1 still never runs it again.
+    clock.now += ANSWERS_KEPT_MS;
+    const afterDay = startHost();
+    afterDay.heard("ann", { type: "room.brought-task", personId: "mia", roomId: "r1", agentId: "a1", taskId: "t1", text: "replay after day", byName: "Ann", byRole: "owner", fromYou: true } as ServerMessage);
+    expect(prompts).toEqual([]);
+    expect(sentToAnn("room.brought-task-answered")).toHaveLength(2);
   });
 
   test("an agent the room's machine had not let in when the host stopped is not waited for, nor keeps one the room says you brought from going", () => {

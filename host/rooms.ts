@@ -1175,7 +1175,11 @@ export class RoomService implements RoomRules, TurnListener {
 
   /** The writer, or the bringer of the agent that wrote it, is still in the room, in a role that lets them ask what the task asks. */
   private writerMayStillAsk(room: Room, task: RoomMessage) {
-    if (task.broughtBy !== undefined) return this.mayTag(room, task.broughtBy);
+    if (task.broughtBy !== undefined) {
+      const { author } = task;
+      if (writtenByAgent(author) && room.agents.every(({ profileId }) => profileId !== author.profileId)) return false;
+      return this.mayTag(room, task.broughtBy);
+    }
     if (writtenByAgent(task.author)) return false;
     const { personId } = task.author;
     const role = room.people.find((person) => person.personId === personId)?.role;
@@ -1235,7 +1239,7 @@ export class RoomService implements RoomRules, TurnListener {
   private takeOutAgentsOf(roomId: string, personId: string) {
     const room = this.existingRoom(roomId);
     const theirs = room.agents.filter(broughtBy(personId));
-    theirs.forEach((agent) => this.takeOut(room, agent));
+    theirs.forEach((agent) => this.takeOut(this.existingRoom(roomId), agent));
     if (theirs.length > 0) this.publish(roomId);
   }
 
@@ -1245,13 +1249,21 @@ export class RoomService implements RoomRules, TurnListener {
   }
 
   private takeOut(room: Room, agent: RoomAgent) {
+    const heldForOrBy = this.store
+      .listRoomTasksWaiting(room.id)
+      .filter(
+        (task) =>
+          (writtenByAgent(task.author) && task.author.profileId === agent.profileId) ||
+          (this.agentsAsked(task).includes(agent.profileId) && this.agentsAsked(task).every((id) => id === agent.profileId || !this.answers(room, id))),
+      );
+    heldForOrBy.forEach((task) => this.declineTask(room, task));
     this.store.roomBroughtTasksOfAgent(room.id, agent.profileId).forEach(({ messageId }) => {
       const asked = this.store.findRoomMessage(messageId);
       if (asked) this.postEnding(asked, agent.profileId, "taken-out");
     });
     this.endsInWorkspace(room.id, agent.profileId);
     this.store.removeBroughtAgent(room.id, agent.profileId);
-    if (agent.brought?.workspace !== undefined) this.waitingChanged(room.id);
+    if (agent.brought?.workspace !== undefined || heldForOrBy.length > 0) this.waitingChanged(room.id);
   }
 
   /**

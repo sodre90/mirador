@@ -1035,6 +1035,22 @@ describe("a person other than the owner", () => {
       secretsFrom(page).forEach((secret) => expect(everything).not.toContain(secret));
     }
   }, 40_000);
+
+  test("leaves the owner no name a brought agent in their rooms goes by", async () => {
+    const ownerMark = owner.mark;
+    owner.send({ type: "room.set-person-role", roomId: roomA.id, personId: mia.id, role: "member" });
+    owner.send({ type: "room.set-members-bring-agents", roomId: roomA.id, allowed: true });
+    await owner.waitFor(isType("room.upserted", ({ room }) => room.id === roomA.id && room.membersBringAgents && room.people.some((p) => p.personId === mia.id && p.role === "member")), ownerMark);
+    const miaMark = miaPage.mark;
+    miaPage.send({ type: "room.bring-agent", requestId: "owner-rename-check", roomId: roomA.id, name: "Coder", harness: "claude", worksInRoom: false });
+    const brought = await miaPage.waitFor(isType("room.agent-brought", ({ requestId }) => requestId === "owner-rename-check"), miaMark);
+    expect(brought.agentId).toBeTruthy();
+
+    for (const name of ["Mia R's Coder", "mia r's coder"]) {
+      expect({ name, problem: problemOf(await settingOwnProfile(owner, name)) }).toEqual({ name, problem: "person-name-taken" });
+    }
+    expect(problemOf(await settingOwnProfile(owner, "Ann"))).toBeNull();
+  });
 });
 
 /** A Mirador's owner as another machine knows them: by an Ed25519 key, whose public half is raw and in base64url. */

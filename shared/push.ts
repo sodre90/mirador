@@ -83,14 +83,14 @@ export interface PushKey {
 export interface PushMessage {
   id: string;
   sentAt: number;
-  notification: { kind: string; conversationId?: string; title: string; workspace: string; body: string };
+  notification: { kind: string; conversationId?: string; roomId?: string; title: string; workspace: string; body: string };
 }
 
-/** A clear's blob: the conversation got read or answered, so the phone takes its notification away. A phone from before clears can't open it, as it has no notification. */
+/** A clear's blob: the conversation or room got read or answered, so the phone takes its notification away. A phone from before clears can't open it, as it has no notification. */
 export interface ClearMessage {
   id: string;
   sentAt: number;
-  cleared: { conversationId: string };
+  cleared: { conversationId?: string; roomId?: string };
 }
 
 const KEY_ID_BYTES = 16;

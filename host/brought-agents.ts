@@ -352,8 +352,9 @@ export class BroughtAgents {
     this.changed();
   }
 
-  /** A task the room's machine sent before, again, e.g. once this host is back: its answer goes again, or that its turn is under way. */
+  /** A task the room's machine sent before, again, e.g. once this host is back: its answer goes again while still kept, one forgotten never runs again, and one running says so. */
   private sentAgain(task: BroughtTask) {
+    if (task.state === "forgotten") return;
     if (task.state === "answered") return this.sendAnswer(task);
     const conversationId = this.store.findBroughtAgentHere(task.broughtId)?.conversationId;
     if (task.state === "sent" && conversationId && this.turnsOnTasks.get(conversationId)?.taskId === task.id) this.tellStarted(task);
@@ -399,7 +400,7 @@ export class BroughtAgents {
   /** The task's answer, kept and sent to the room's machine once; one already answered, or of an agent taken out, is left. */
   private finish(task: BroughtTask, text: string, ended: BroughtAnswerEnd | null) {
     const current = this.store.findBroughtTaskById(task.id);
-    if (!current || current.state === "answered") return;
+    if (!current || current.state === "answered" || current.state === "forgotten") return;
     this.store.answerBroughtTask(task.id, text, ended, this.now());
     this.sendAnswer({ ...current, answer: text, ended });
     this.changed();

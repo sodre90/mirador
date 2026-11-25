@@ -22,6 +22,11 @@ import type { Store } from "./store.ts";
 export const SHOWN_WAIT_MS = 5_000;
 const RELAY_TIMEOUT_MS = 20_000;
 export const NOTIFICATION_KINDS = new Set<NotificationKind>(["question", "permission", "finished", "error", "job-ended", "join-request", "reminder"]);
+/** Prefix under which room-level notifications are tracked in `toldOf` / `push_told` beside conversation ids. */
+const ROOM_PUSH_PREFIX = "room:";
+
+export const roomPushTarget = (roomId: string) => `${ROOM_PUSH_PREFIX}${roomId}`;
+
 /** The kinds whose conversation waits for you until it's read or answered, which takes their notification away. */
 const WAITING_KINDS = new Set<NotificationKind>(["question", "permission", "finished", "error", "reminder"]);
 
@@ -129,20 +134,21 @@ export class PushNotifications {
 
   /** Another machine's notifications reach phones from that machine, which they join themselves. */
   notify(notification: SystemNotification): Promise<void> {
-    const { id, kind, conversationId, title, workspace, body } = notification;
+    const { id, kind, conversationId, roomId, title, workspace, body } = notification;
     if (!id || notification.machineId || !this.store.pushRegistrations().some(({ registration }) => this.routeTo(registration))) return Promise.resolve();
     this.shownOn.set(id, new Set());
-    const told = conversationId && WAITING_KINDS.has(kind) ? this.toldOfWaiting(conversationId) : null;
+    const target = conversationId ?? (roomId ? roomPushTarget(roomId) : undefined);
+    const told = target && WAITING_KINDS.has(kind) ? this.toldOfWaiting(target) : null;
     return new Promise((resolve) =>
       setTimeout(() => {
         const shownOn = this.shownOn.get(id)!;
         this.shownOn.delete(id);
-        if (told && this.toldOf.get(conversationId!) !== told) return resolve();
+        if (told && this.toldOf.get(target!) !== told) return resolve();
         shownOn.forEach((deviceId) => told?.devices.add(deviceId));
         const unshown = this.store.pushRegistrations().filter(({ deviceId, registration }) => !shownOn.has(deviceId) && registration.kinds.includes(kind));
         unshown.forEach(({ deviceId }) => told?.devices.add(deviceId));
-        if (told) this.rememberToldDevices(conversationId!, told);
-        const message: PushMessage = { id, sentAt: Date.now(), notification: { kind, conversationId, title, workspace, body } };
+        if (told) this.rememberToldDevices(target!, told);
+        const message: PushMessage = { id, sentAt: Date.now(), notification: { kind, conversationId, ...(roomId && { roomId }), title, workspace, body } };
         void Promise.all(unshown.map(({ deviceId, registration }) => this.push(deviceId, registration, "alert", message))).then(() => resolve());
       }, this.shownWaitMs),
     );
@@ -166,7 +172,7 @@ export class PushNotifications {
     const settled = conversationIds.map((conversationId) => [conversationId, this.toldOf.get(conversationId)!] as const);
     settled.forEach(([conversationId]) => {
       this.toldOf.delete(conversationId);
-      this.store.forgetPushTold(conversationId);
+      if (!conversationId.startsWith(ROOM_PUSH_PREFIX)) this.store.forgetPushTold(conversationId);
     });
     return Promise.all(settled.map(([conversationId, { devices }]) => this.clear(conversationId, devices))).then(() => {});
   }
@@ -182,16 +188,18 @@ export class PushNotifications {
   private markSeenWaiting(conversationId: string, told: ToldOfWaiting) {
     if (told.seenWaiting) return;
     told.seenWaiting = true;
-    this.store.markPushToldSeenWaiting(conversationId);
+    if (!conversationId.startsWith(ROOM_PUSH_PREFIX)) this.store.markPushToldSeenWaiting(conversationId);
   }
 
   private rememberToldDevices(conversationId: string, told: ToldOfWaiting) {
+    if (conversationId.startsWith(ROOM_PUSH_PREFIX)) return;
     told.devices.forEach((deviceId) => this.store.addPushToldDevice(conversationId, deviceId));
     if (told.seenWaiting) this.store.markPushToldSeenWaiting(conversationId);
   }
 
-  private async clear(conversationId: string, devices: Set<string>) {
-    const message: ClearMessage = { id: crypto.randomUUID(), sentAt: Date.now(), cleared: { conversationId } };
+  private async clear(target: string, devices: Set<string>) {
+    const cleared = target.startsWith(ROOM_PUSH_PREFIX) ? { roomId: target.slice(ROOM_PUSH_PREFIX.length) } : { conversationId: target };
+    const message: ClearMessage = { id: crypto.randomUUID(), sentAt: Date.now(), cleared };
     const told = this.store.pushRegistrations().filter(({ deviceId }) => devices.has(deviceId));
     await Promise.all(told.map(({ deviceId, registration }) => this.push(deviceId, registration, "clear", message)));
   }
