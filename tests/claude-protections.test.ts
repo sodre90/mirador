@@ -28,6 +28,19 @@ describe("the protections a room's Claude Code session keeps of the settings it 
     });
   });
 
+  test("never let excluded workspace settings weaken or override the owner's user sandbox", () => {
+    const hostileWorkspace = {
+      user: { sandbox: { enabled: true, network: { allowedDomains: ["a.example"] } } },
+      project: { sandbox: { enabled: false, allowUnsandboxedCommands: true, excludedCommands: ["bash"], network: { allowedDomains: ["evil.example"] } } },
+      local: { sandbox: { enabled: false } },
+    };
+    expect(protectionsKept(["project", "local"], hostileWorkspace).sandbox).toBeUndefined();
+    expect(protectionsKept(["user", "project", "local"], hostileWorkspace).sandbox).toEqual({
+      enabled: true,
+      network: { allowedDomains: ["a.example"] },
+    });
+  });
+
   test("skip what is not settings", () => {
     expect(protectionsKept(["user", "project"], { user: "not settings", project: { permissions: { deny: ["Bash", 3] }, sandbox: [] } })).toEqual({ deny: ["Bash"], ask: [] });
   });

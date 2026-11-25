@@ -35,13 +35,14 @@ function laidOver(under: Settings, over: Settings): Settings {
 }
 
 /**
- * The protections of the sources a session leaves out, kept: their deny and ask rules, and the sandbox as all the
- * sources together set it, since the settings that carry it go over the sources the session loads.
+ * The protections of the sources a session leaves out, kept: their deny and ask rules, and the owner's user sandbox
+ * when `user` is left out (merged under loaded workspace sources only, never overridden by excluded workspace sources).
  */
 export function protectionsKept(leftOut: SettingSource[], settingsOf: Partial<Record<SettingSource, unknown>>): ClaudeProtections {
   if (leftOut.length === 0) return NO_PROTECTIONS;
   const permissionsOf = (source: SettingSource) => settingsIn(settingsIn(settingsOf[source])?.permissions) ?? {};
-  const sandboxes = SETTING_SOURCES.flatMap((source): Settings[] => {
+  const sandboxSources = leftOut.includes("user") ? SETTING_SOURCES.filter((source) => source === "user" || !leftOut.includes(source)) : [];
+  const sandboxes = sandboxSources.flatMap((source): Settings[] => {
     const sandbox = settingsIn(settingsIn(settingsOf[source])?.sandbox);
     return sandbox ? [sandbox] : [];
   });
