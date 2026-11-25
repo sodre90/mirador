@@ -88,6 +88,8 @@ const schema = `
     conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
     seq INTEGER NOT NULL, at INTEGER NOT NULL, event TEXT NOT NULL, PRIMARY KEY (conversation_id, seq));
   CREATE INDEX IF NOT EXISTS events_by_type ON events (json_extract(event, '$.type'));
+  CREATE INDEX IF NOT EXISTS events_by_tool_call ON events (conversation_id, json_extract(event, '$.update.toolCallId'))
+    WHERE json_extract(event, '$.update.toolCallId') IS NOT NULL;
   CREATE TABLE IF NOT EXISTS canvas_items (
     id TEXT PRIMARY KEY, conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
     created_at INTEGER NOT NULL, item TEXT NOT NULL);
@@ -2833,7 +2835,7 @@ export class Store {
   toolCallReports(conversationId: string, toolCallId: string): ToolCallUpdate[] {
     return this.db
       .query(
-        `SELECT event FROM events WHERE conversation_id = ? AND json_extract(event, '$.type') = 'acp'
+        `SELECT event FROM events INDEXED BY events_by_tool_call WHERE conversation_id = ? AND json_extract(event, '$.type') = 'acp'
          AND json_extract(event, '$.update.sessionUpdate') IN ('tool_call', 'tool_call_update') AND json_extract(event, '$.update.toolCallId') = ? ORDER BY seq`,
       )
       .all(conversationId, toolCallId)
@@ -2964,7 +2966,8 @@ export class Store {
   latestRawOutput(conversationId: string, toolCallId: string): unknown {
     const row = this.db
       .query(
-        `SELECT event FROM events WHERE conversation_id = ? AND json_extract(event, '$.update.toolCallId') = ? AND json_extract(event, '$.update.rawOutput') IS NOT NULL
+        `SELECT event FROM events INDEXED BY events_by_tool_call
+         WHERE conversation_id = ? AND json_extract(event, '$.update.toolCallId') = ? AND json_extract(event, '$.update.rawOutput') IS NOT NULL
          ORDER BY seq DESC LIMIT 1`,
       )
       .get(conversationId, toolCallId) as { event: string } | null;
@@ -2974,7 +2977,7 @@ export class Store {
   turnsBefore(conversationId: string, beforeSeq: number, turns: number): { fromSeq: number; hasEarlier: boolean } {
     const [firstTurn, earlierTurn] = this.db
       .query(
-        `SELECT seq FROM events WHERE conversation_id = ? AND seq < ? AND json_extract(event, '$.type') = 'user-message'
+        `SELECT seq FROM events INDEXED BY events_by_type WHERE conversation_id = ? AND seq < ? AND json_extract(event, '$.type') = 'user-message'
          ORDER BY seq DESC LIMIT 2 OFFSET ?`,
       )
       .all(conversationId, beforeSeq, turns - 1) as { seq: number }[];
@@ -3022,7 +3025,7 @@ export class Store {
   typedBefore(conversationId: string, beforeSeq: number, limit = TYPED_IN_WORKSPACE_LIMIT): ConversationEvent[] {
     const rows = this.db
       .query(
-        `SELECT event FROM events WHERE conversation_id = ? AND seq < ? AND json_extract(event, '$.type') IN ('user-message', 'user-command')
+        `SELECT event FROM events INDEXED BY events_by_type WHERE conversation_id = ? AND seq < ? AND json_extract(event, '$.type') IN ('user-message', 'user-command')
          ORDER BY seq DESC LIMIT ?`,
       )
       .all(conversationId, beforeSeq, limit) as { event: string }[];
@@ -3042,7 +3045,7 @@ export class Store {
 
   lastUserMessageAt(conversationId: string): number | null {
     const row = this.db
-      .query("SELECT at FROM events WHERE conversation_id = ? AND json_extract(event, '$.type') = 'user-message' ORDER BY seq DESC LIMIT 1")
+      .query("SELECT at FROM events INDEXED BY events_by_type WHERE conversation_id = ? AND json_extract(event, '$.type') = 'user-message' ORDER BY seq DESC LIMIT 1")
       .get(conversationId) as { at: number } | null;
     return row?.at ?? null;
   }

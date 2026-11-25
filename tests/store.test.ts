@@ -348,6 +348,20 @@ describe("Store", () => {
     expect(store.latestRawOutput("c1", "t2")).toBeNull();
   });
 
+  test("a tool call's reports are its own in its conversation, the first and every update, in order", () => {
+    const { store, conversation } = seededStore();
+    store.insertConversation({ ...conversation, id: "c2" });
+    const report = (sessionUpdate: string, toolCallId: string, status: string) => ({ type: "acp", update: { sessionUpdate, toolCallId, status } }) as ConversationEvent;
+    store.appendEvent("c1", report("tool_call", "t1", "pending"));
+    store.appendEvent("c1", report("tool_call", "t2", "pending"));
+    store.appendEvent("c2", report("tool_call", "t1", "failed"));
+    store.appendEvent("c1", { type: "user-message", text: "meanwhile" });
+    store.appendEvent("c1", report("tool_call_update", "t1", "completed"));
+    expect(store.toolCallReports("c1", "t1").map(({ status }) => status)).toEqual(["pending", "completed"]);
+    expect(store.toolCallReports("c2", "t1").map(({ status }) => status)).toEqual(["failed"]);
+    expect(store.toolCallReports("c1", "t3")).toEqual([]);
+  });
+
   test("updates a conversation's persisted fields but always loads it idle", () => {
     const { store, conversation } = seededStore();
     store.saveProfile({ id: "p1", name: "work", harness: "claude", environment: "", prelaunch: "", model: null, mode: null, effort: null, bypassPermissions: false, askMode: "wait", color: null, pluginsOff: [], createdAt: 1 });
