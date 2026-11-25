@@ -414,6 +414,7 @@ export const rooms: Messages["rooms"] = {
   takeOutAgent: (agent) => `带出 ${agent}`,
   takeOutArmed: "确定带出？",
   takeOutArmedHint: "再点一次。它还没回答的任务会结束，它的对话留在带入它的人的电脑上。",
+  takeOutOwnArmedHint: "再点一次。它还没回答的任务会结束，它的对话留在这台电脑上。",
   membersBringAgents: "成员可以带入自己的 Agent",
   membersBringAgentsHint: "成员可以从自己的 Mirador 带入一个 Agent：它在成员自己的电脑上、成员的工作区里、按成员的权限运行，它的回答会进入房间。它从不读取你的文件，除非它请求在这个房间的工作区里工作并得到你的允许。关闭后，已在这里的会离开。",
   moreFor: (room) => `${room} 的更多选项`,

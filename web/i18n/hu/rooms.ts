@@ -422,6 +422,7 @@ export const rooms: Messages["rooms"] = {
   takeOutAgent: (agent) => `${agent} kivitele`,
   takeOutArmed: "Végleg kiviszed?",
   takeOutArmedHint: "Kattints újra. A még meg nem válaszolt feladatai véget érnek, a beszélgetése megmarad annál, aki behozta.",
+  takeOutOwnArmedHint: "Kattints újra. A még meg nem válaszolt feladatai véget érnek, a beszélgetése megmarad ezen a gépen.",
   membersBringAgents: "A tagok behozhatják a saját ágenseiket",
   membersBringAgentsHint:
     "Egy tag behozhat egy ágenst a saját Miradorjából: az ő gépén fut, az ő munkaterületén, az ő engedélyeivel, és a válaszai a szobába kerülnek. A te fájljaidat sosem olvassa, hacsak nem kéri, hogy a szoba munkaterületén dolgozhasson, és te engeded. Kikapcsolva a már itt lévők távoznak.",

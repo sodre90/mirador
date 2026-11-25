@@ -436,6 +436,7 @@ export const rooms = {
   takeOutAgent: (agent: string) => `Take out ${agent}`,
   takeOutArmed: "Take out for good?",
   takeOutArmedHint: "Click again. The tasks it has not answered end, and its conversation stays on its bringer's computer.",
+  takeOutOwnArmedHint: "Click again. The tasks it has not answered end, and its conversation stays on this computer.",
   membersBringAgents: "Members may bring agents of their own",
   membersBringAgentsHint:
     "A member can bring an agent from their own Mirador: it runs on their computer, in their workspace, with their permissions, and its answers come into the room. It never reads your files, unless it asks to work in this room's workspace and you let it. Turned off, those already here go.",

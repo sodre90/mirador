@@ -423,6 +423,7 @@ export const rooms: Messages["rooms"] = {
   takeOutAgent: (agent) => `Sacar a ${agent}`,
   takeOutArmed: "¿Sacarlo definitivamente?",
   takeOutArmedHint: "Haz clic de nuevo. Las tareas que no ha respondido terminan, y su conversación se queda en el equipo de quien lo trajo.",
+  takeOutOwnArmedHint: "Haz clic de nuevo. Las tareas que no ha respondido terminan, y su conversación se queda en este equipo.",
   membersBringAgents: "Los miembros pueden traer agentes propios",
   membersBringAgentsHint:
     "Un miembro puede traer un agente de su propio Mirador: se ejecuta en su equipo, en su espacio de trabajo, con sus permisos, y sus respuestas llegan a la sala. Nunca lee tus archivos, salvo que pida trabajar en el espacio de trabajo de esta sala y se lo permitas. Desactivado, los que ya están se van.",

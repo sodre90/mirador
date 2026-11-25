@@ -273,10 +273,14 @@ const ownRoomEntries = (room: Room, dispatch: Dispatch<AppAction>): RoomMenuEntr
 /** Of a room of someone else's machine: bringing an agent of your own into it, taking out those you brought, and leaving it. */
 const joinedRoomEntries = ({ machine, room }: JoinedRoomShown, brought: BroughtAgentHere[], profiles: Profile[], dispatch: Dispatch<AppAction>): RoomMenuEntry[] => [
   { label: words.bringAgent, onChoose: () => dispatch({ type: "open-overlay", overlay: { kind: "bring-agent", machineId: machine.id, roomId: room.id } }) },
-  ...brought.map(({ id, profileId }) => ({
-    label: words.takeOutAgent(profiles.find((profile) => profile.id === profileId)?.name ?? words.agentGone),
-    onChoose: () => connection.send({ type: "machine.take-agent-out", broughtId: id }),
-  })),
+  ...brought.map(({ id, profileId }) => {
+    const label = words.takeOutAgent(profiles.find((profile) => profile.id === profileId)?.name ?? words.agentGone);
+    return {
+      label,
+      asked: { label, armedText: words.takeOutArmed, armedHint: words.takeOutOwnArmedHint },
+      onChoose: () => connection.send({ type: "machine.take-agent-out", broughtId: id }),
+    };
+  }),
   {
     label: words.leaveRoom,
     asked: { label: words.leaveRoom, armedText: words.leaveArmed, armedHint: words.leaveArmedHint },

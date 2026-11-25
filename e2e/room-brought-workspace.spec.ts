@@ -59,7 +59,12 @@ const joinedCard = () => roomCard(mia, "Garden").and(mia.locator(".joined-room")
 async function chooseInMenuOfJoinedRoom(item: string) {
   await joinedCard().hover();
   await joinedCard().getByRole("button", { name: "More for Garden" }).click();
-  await mia.getByRole("menuitem", { name: item }).click();
+  await mia.getByRole("menuitem", { name: item, exact: true }).click();
+}
+
+async function takeOutOfJoinedRoom(agent: string) {
+  await chooseInMenuOfJoinedRoom(`Take out ${agent}`);
+  await mia.getByRole("menuitem", { name: `Confirm: Take out ${agent}` }).click();
 }
 
 async function bringDialog(profile: string) {
@@ -309,7 +314,7 @@ test("an approver allows its calls too, a guest sees none of them, and a member'
 
 test("nothing of Mia's computer went to the model, and once she takes it out it is gone from the room", async () => {
   expect(api.history.map((messages) => messages.join("\n")).filter((sent) => sent.includes(MIAS_SECRET))).toEqual([]);
-  await chooseInMenuOfJoinedRoom("Take out Coder");
+  await takeOutOfJoinedRoom("Coder");
   await expect(agentChip(ann)).toHaveCount(0);
   await bringCoder();
   await expect(accessCard(ann)).toContainText("Mia's Coder asks to work in this room's workspace");
@@ -318,7 +323,7 @@ test("nothing of Mia's computer went to the model, and once she takes it out it 
 
 test("brought to work in a workspace of hers, it runs in the mode that asks, though her settings start Claude in one that never does", async () => {
   writeFileSync(join(mias.claudeConfigDir, "settings.json"), JSON.stringify({ permissions: { defaultMode: "bypassPermissions" }, skipDangerousModePermissionPrompt: true }));
-  await chooseInMenuOfJoinedRoom("Take out Coder");
+  await takeOutOfJoinedRoom("Coder");
   await expect(agentChip(ann)).toHaveCount(0);
   const dialog = await bringDialog("Coder");
   await dialog.getByRole("combobox", { name: /^Workspace/ }).selectOption({ label: basename(mias.projectDir) });

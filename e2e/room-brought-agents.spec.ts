@@ -144,7 +144,11 @@ test("brought to take others' tasks any time, the agent answers without a card; 
   await test.step("Mia takes her Coder out from the room's card on her own Mirador", async () => {
     await joinedCard(mia).hover();
     await joinedCard(mia).getByRole("button", { name: "More for Garden" }).click();
-    await mia.getByRole("menuitem", { name: "Take out Coder" }).click();
+    const takeOut = mia.getByRole("menuitem", { name: "Take out Coder" });
+    await takeOut.click();
+    await expect(takeOut).toHaveText("Take out for good?");
+    await expect(agentChip(ann)).toHaveCount(1);
+    await mia.getByRole("menuitem", { name: "Confirm: Take out Coder" }).click();
     await expect(agentChip(ann)).toHaveCount(0);
   });
 

@@ -423,6 +423,7 @@ export const rooms: Messages["rooms"] = {
   takeOutAgent: (agent) => `${agent} herausnehmen`,
   takeOutArmed: "Endgültig herausnehmen?",
   takeOutArmedHint: "Klicke erneut. Die Aufgaben, die er noch nicht beantwortet hat, enden, und seine Unterhaltung bleibt auf dem Computer der Person, die ihn mitgebracht hat.",
+  takeOutOwnArmedHint: "Klicke erneut. Die Aufgaben, die er noch nicht beantwortet hat, enden, und seine Unterhaltung bleibt auf diesem Computer.",
   membersBringAgents: "Mitglieder dürfen eigene Agenten mitbringen",
   membersBringAgentsHint:
     "Ein Mitglied kann einen Agenten aus dem eigenen Mirador mitbringen: Er läuft auf dessen Computer, in dessen Arbeitsbereich, mit dessen Berechtigungen, und seine Antworten kommen in den Raum. Deine Dateien liest er nie, außer er bittet darum, im Arbeitsbereich dieses Raums zu arbeiten, und du lässt ihn. Ausgeschaltet gehen die, die schon hier sind.",
