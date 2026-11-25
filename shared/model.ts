@@ -839,7 +839,7 @@ export type ConversationEvent =
   | { type: "context-cleared" }
   /** From here on the agent goes on in the same session, started again with its settings read anew. */
   | { type: "agent-reloaded" }
-  /** The agent's process ended between turns, and took the background work it had started with it. */
+  /** The agent's process or session ended, and took the background work it had started with it, such as a subagent whose task ran. */
   | { type: "agent-process-ended" }
   /** A newer release of the agent is out; `command` runs its updater on the program the agent runs, as a `!` command. */
   | { type: "update-available"; harness: HarnessId; installed: string; latest: string; command: string }

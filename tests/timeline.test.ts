@@ -5,7 +5,7 @@ import { MODE_NAME_META_KEY } from "../shared/notices.ts";
 import { lineDiff } from "../web/diff.ts";
 import { pageEvent } from "../host/low-data.ts";
 import { canTryAgain } from "../shared/try-again.ts";
-import { approvalsWaiting, authorOf, buildTimeline, latestPlan, runsInBackground, spokenSeverity, startsAuthorGroup, stepsAtWork, stepsRunning, subagentAsking, subagentEndedAt, subagentsIn, subagentsWorkingBetweenTurns, subagentState, timelineWithStreamedText, toolCallsAwaitingPermission, withStreamedEvent, writtenByAPerson, type SubagentBlock, type TimelineBlock } from "../shared/timeline.ts";
+import { approvalsWaiting, authorOf, buildTimeline, latestPlan, runsInBackground, spokenSeverity, startsAuthorGroup, stepsAtWork, stepsRunning, subagentAsking, subagentEndedAt, subagentsIn, subagentState, subagentTaskLeftRunning, timelineWithStreamedText, toolCallsAwaitingPermission, withStreamedEvent, writtenByAPerson, type SubagentBlock, type TimelineBlock } from "../shared/timeline.ts";
 
 function stored(events: ConversationEvent[]): StoredEvent[] {
   return events.map((event, index) => ({ seq: index + 1, at: (index + 1) * 1000, event }));
@@ -393,35 +393,74 @@ describe("subagents", () => {
     expect(states([...background("b1"), taskIs("b1", "constructor")])).toEqual(["running"]);
   });
 
-  test("one Claude Code starts between your turns works on while the conversation is idle and through your next turn, until its task ends", () => {
+  describe("whose task claude-agent-acp said runs", () => {
     const states = (events: ConversationEvent[], busy = false) => subagentsIn(buildTimeline(stored(events))).map((block) => subagentState(block, busy));
     const taskIs = (toolCallId: string, subagentTaskStatus: string) => acp({ sessionUpdate: "tool_call_update", toolCallId, _meta: { claudeCode: { subagentTaskStatus } } });
-    const yourTurn = (text: string): ConversationEvent[] => [{ type: "user-message", text }, { type: "turn-end", stopReason: "end_turn" }];
-    const betweenTurns = [...yourTurn("Start the screenshot pass"), launch("b1", { description: "Verify screenshot pass" }), answeredAtOnce("b1"), finish("b1"), read("r1", "b1")];
-    expect(states(betweenTurns)).toEqual(["running"]);
-    expect(states([...betweenTurns, ...yourTurn("?")]), "your short turn meanwhile is not the one that started it").toEqual(["running"]);
-    expect(states([...betweenTurns, ...yourTurn("?"), taskIs("b1", "completed")])).toEqual(["done"]);
-    expect(states([...betweenTurns, taskIs("b1", "failed")])).toEqual(["failed"]);
-  });
+    const turnEnd: ConversationEvent = { type: "turn-end", stopReason: "end_turn" };
+    const yourTurn = (text: string): ConversationEvent[] => [{ type: "user-message", text }, turnEnd];
+    const running = [launch("b1", { description: "Verify screenshot pass" }), taskIs("b1", "running"), answeredAtOnce("b1"), finish("b1"), read("r1", "b1")];
 
-  test("one started between your turns stops when the agent starts afresh, since its task goes with the old process", () => {
-    const states = (events: ConversationEvent[]) => subagentsIn(buildTimeline(stored(events))).map((block) => subagentState(block, false));
-    const betweenTurns: ConversationEvent[] = [{ type: "user-message", text: "Go" }, { type: "turn-end", stopReason: "end_turn" }, launch("b1", {}), answeredAtOnce("b1"), finish("b1")];
-    expect(states([...betweenTurns, { type: "agent-reloaded" }])).toEqual(["stopped"]);
-    expect(states([...betweenTurns, { type: "context-cleared" }])).toEqual(["stopped"]);
-    expect(states([...betweenTurns, { type: "error", message: "ACP connection closed" }])).toEqual(["stopped"]);
-    expect(states([...betweenTurns, { type: "agent-process-ended" }])).toEqual(["stopped"]);
-  });
+    test("a subagent works on past the end of the turn, and through your next turn, until its task ends", () => {
+      expect(states([{ type: "user-message", text: "Go" }, ...running, turnEnd])).toEqual(["running"]);
+      expect(states([{ type: "user-message", text: "Go" }, ...running, turnEnd, ...yourTurn("?")])).toEqual(["running"]);
+      expect(states([{ type: "user-message", text: "Go" }, ...running, turnEnd, ...yourTurn("?"), taskIs("b1", "completed")])).toEqual(["done"]);
+      expect(states([{ type: "user-message", text: "Go" }, ...running, turnEnd, taskIs("b1", "failed")])).toEqual(["failed"]);
+      expect(states([{ type: "user-message", text: "Go" }, ...running, turnEnd, taskIs("b1", "killed")])).toEqual(["stopped"]);
+    });
 
-  test("subagentsWorkingBetweenTurns is true only while a between-turns subagent is at work", () => {
-    const yourTurn = (text: string): ConversationEvent[] => [{ type: "user-message", text }, { type: "turn-end", stopReason: "end_turn" }];
-    const taskIs = (toolCallId: string, subagentTaskStatus: string) => acp({ sessionUpdate: "tool_call_update", toolCallId, _meta: { claudeCode: { subagentTaskStatus } } });
-    const working = (events: ConversationEvent[]) => subagentsWorkingBetweenTurns(stored(events));
-    const betweenTurns = [...yourTurn("Start the screenshot pass"), launch("b1", { description: "Verify screenshot pass" }), answeredAtOnce("b1"), finish("b1")];
-    expect(working(betweenTurns)).toBe(true);
-    expect(working([...betweenTurns, taskIs("b1", "completed")])).toBe(false);
-    expect(working([{ type: "user-message", text: "Start" }, launch("s1", {}), answeredAtOnce("s1"), finish("s1")])).toBe(false);
-    expect(working([...betweenTurns, { type: "agent-process-ended" }])).toBe(false);
+    test("one that Claude Code's own turn starts while you write stays running when that turn ends, and is done once its task completes", () => {
+      const written: ConversationEvent[] = [turnEnd, { type: "user-message", text: "Meanwhile, a question" }, ...running, turnEnd];
+      expect(states(written)).toEqual(["running"]);
+      expect(states([...written, taskIs("b1", "completed")])).toEqual(["done"]);
+    });
+
+    test("an error ends the turn, not the process, so the task goes on", () => {
+      expect(states([{ type: "user-message", text: "Go" }, ...running, { type: "error", message: "529 overloaded" }])).toEqual(["running"]);
+    });
+
+    test("a turn a restart cut short stops it", () => {
+      expect(states([{ type: "user-message", text: "Go" }, ...running, { type: "turn-end", stopReason: "cancelled", cutShortByRestart: true }])).toEqual(["stopped"]);
+    });
+
+    test("the agent's process ending or starting afresh stops it", () => {
+      const settled: ConversationEvent[] = [{ type: "user-message", text: "Go" }, ...running, turnEnd];
+      expect(states([...settled, { type: "agent-process-ended" }])).toEqual(["stopped"]);
+      expect(states([...settled, { type: "agent-reloaded" }])).toEqual(["stopped"]);
+      expect(states([...settled, { type: "context-cleared" }])).toEqual(["stopped"]);
+      expect(states([...settled, { type: "profile-changed", profileName: "Other", agent: "claude" }])).toEqual(["stopped"]);
+    });
+
+    test("a restart stops only the subagents whose tasks run, and leaves one that already ended as it ended", () => {
+      const ended = [launch("b2", {}), taskIs("b2", "running"), answeredAtOnce("b2"), finish("b2"), taskIs("b2", "completed")];
+      expect(states([{ type: "user-message", text: "Go" }, ...ended, ...running, turnEnd, { type: "agent-process-ended" }])).toEqual(["done", "stopped"]);
+    });
+
+    test("one with no running report keeps its old state: stopped when the turn is stopped, done when it ends", () => {
+      const background = [launch("b1", {}), answeredAtOnce("b1"), finish("b1")];
+      expect(states([{ type: "user-message", text: "Go" }, ...background, turnEnd])).toEqual(["done"]);
+      expect(states([{ type: "user-message", text: "Go" }, ...background, { type: "turn-end", stopReason: "cancelled" }])).toEqual(["stopped"]);
+    });
+
+    test("subagentTaskLeftRunning is true while a task's last report is running, and false once it ended, or a restart ended it", () => {
+      const left = (events: ConversationEvent[]) => subagentTaskLeftRunning(stored(events));
+      const settled: ConversationEvent[] = [{ type: "user-message", text: "Go" }, ...running, turnEnd];
+      expect(left(settled)).toBe(true);
+      expect(left([...settled, taskIs("b1", "completed")])).toBe(false);
+      expect(left([...settled, { type: "agent-process-ended" }])).toBe(false);
+      expect(left([...settled, { type: "turn-end", stopReason: "cancelled", cutShortByRestart: true }])).toBe(false);
+      expect(left([...settled, { type: "agent-reloaded" }])).toBe(false);
+      expect(left([...settled, { type: "context-cleared" }])).toBe(false);
+      expect(left([...settled, { type: "profile-changed", profileName: "other" }])).toBe(false);
+      expect(left([...settled, taskIs("b1", "constructor")]), "a status it does not know leaves the task as it was").toBe(true);
+      expect(left([{ type: "user-message", text: "Go" }, launch("s1", {}), answeredAtOnce("s1"), finish("s1"), turnEnd])).toBe(false);
+    });
+
+    test("one the agent waits for in the foreground ends with its turn, though its task said it runs", () => {
+      const states = (events: ConversationEvent[]) => subagentsIn(buildTimeline(stored(events))).map((block) => subagentState(block, false));
+      const foreground: ConversationEvent[] = [{ type: "user-message", text: "Go" }, launch("s1", {}), taskIs("s1", "running")];
+      expect(states([...foreground, { type: "turn-end", stopReason: "cancelled" }])).toEqual(["stopped"]);
+      expect(states([...foreground, finish("s1"), turnEnd])).toEqual(["done"]);
+    });
   });
 
   test("an error ends the turn as a stop does, so a subagent it leaves behind stops working with it", () => {

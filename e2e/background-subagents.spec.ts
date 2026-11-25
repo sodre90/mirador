@@ -179,7 +179,7 @@ test("a subagent Claude Code starts between your turns shows running while the c
   const chip = page.locator(".chat-header .subagents-running");
   await tellingTheStoredAgentUpdates(async () => {
     api.subagentWhenNotified = "sleep 20; echo slept";
-    await sendMessage(page, "BACKGROUND sleep 1; echo ready");
+    await sendMessage(page, "BACKGROUND sleep 8; echo ready");
     await waitForTurnToEnd(page);
 
     await test.step("the subagent started by Claude Code's own turn shows running while nothing is asked of it", async () => {

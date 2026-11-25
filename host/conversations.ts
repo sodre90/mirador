@@ -67,7 +67,7 @@ import { isPending, isPutAway, isReminder, reminderCommandIn, reminderFromComman
 import { agentAnsweredIn, lastWordsOf, replyOf } from "../shared/last-words.ts";
 import { isRealModel } from "../shared/claude-models.ts";
 import { cutWithEllipsis, firstGraphemes } from "../shared/text-cut.ts";
-import { isInformational, subagentsWorkingBetweenTurns } from "../shared/timeline.ts";
+import { isInformational, subagentTaskLeftRunning } from "../shared/timeline.ts";
 import type { ConversationChoices, ConversationReply, ConversationUsage, RanOn, StartedConversation, WorkspaceConversationStart } from "../shared/canvas-plugins.ts";
 import { canTryAgain } from "../shared/try-again.ts";
 import { currentActivity, isAgentsNextStep, OpenToolCalls } from "./activity.ts";
@@ -390,6 +390,8 @@ interface Runtime {
   /** The latest profile switch; the next one starts after it. */
   profileSwitch?: Promise<void>;
   pendingPermissions: Map<string, PendingPermission>;
+  /** The Agent tool calls whose subagent's task claude-agent-acp last said runs; they outlive the turns, and the agent's process or session ending takes them with it. */
+  subagentTasksAtWork: Set<string>;
   /** A session Continue found held by Codex's daemon: the next message tries to continue it again, once the user has freed it, so its history replays ahead of that message. */
   heldCodexSession?: string;
   /** What a side chat's brief hands over to its agent, until the first question takes the brief along; null where its session holds the conversation. */
@@ -1458,7 +1460,7 @@ export class ConversationService {
     const stopped = new Promise<void>((resolve) => change.held.set(conversationId, resolve));
     runtime.harness = undefined;
     runtime.sessionId = undefined;
-    this.forgetAsyncTasks(conversationId);
+    this.endBackgroundWorkOf(conversationId);
     this.setBusy(conversationId, "waiting-for-sandbox-folders");
     this.restartForFoldersOnceIdle(change);
     await Promise.race([change.taken, stopped]);
@@ -2495,8 +2497,9 @@ export class ConversationService {
       const forked = point && conversation.acpSessionId ? await this.forkSessionAt(conversationId, point, joinedRunningTurn(events, seq)) : null;
       const checkpoint = this.checkpointAt(conversationId, seq);
       if (!keepFiles && checkpoint && (await this.checkpoints.keeps(this.workspaceOf(conversationId), checkpoint))) await this.restoredWithNoVmAtWork(this.workspaceOf(conversationId), checkpoint);
-      const released = this.releaseSession(conversationId, runtime, conversation.acpSessionId);
+      const released = this.releaseSession(conversationId, runtime, conversation.acpSessionId, { endBackgroundWork: false });
       this.store.deleteEventsFrom(conversationId, seq);
+      this.endBackgroundWorkOf(conversationId);
       this.forgetContextUsage(conversationId);
       this.save({ ...this.get(conversationId), acpSessionId: forked });
       this.hub.publishToConversation(conversationId, { type: "conversation.rewound", conversationId, fromSeq: seq });
@@ -2941,7 +2944,8 @@ export class ConversationService {
   /**
    * The next message of a conversation idle on an agent being stopped starts a fresh one, rather than reach this one
    * before its exit is noticed, which on Windows, where ending a process tree takes a while, it would. Its background
-   * tasks end with the process, and once moved off it, its exit no longer finds the conversation to forget them for.
+   * tasks, and the subagents whose tasks ran, end with the process, and once moved off it, its exit no longer finds the
+   * conversation to end them for.
    */
   private moveIdleConversationsOff(harness: HarnessProcess) {
     this.agentProcesses.forEach((current, profileId) => {
@@ -2951,7 +2955,7 @@ export class ConversationService {
       if (runtime.harness !== harness || runtime.running) return;
       runtime.harness = undefined;
       runtime.sessionId = undefined;
-      this.forgetAsyncTasks(conversationId);
+      this.endBackgroundWorkOf(conversationId);
     });
   }
 
@@ -3104,6 +3108,8 @@ export class ConversationService {
   private ensureSession(conversationId: string, open = () => this.openSession(conversationId)): Promise<string> {
     const runtime = this.runtime(conversationId);
     if (runtime.sessionId) return runtime.sessionId;
+    // A host that was killed hard left no event for the subagent tasks that ran on the process it lost.
+    if (subagentTaskLeftRunning(this.store.listEvents(conversationId))) this.append(conversationId, { type: "agent-process-ended" });
     const opening: Promise<string> = (this.get(conversationId).worktree ? this.openAfterItsWorktree(conversationId, open) : open()).catch((error) => {
       if (runtime.sessionId && runtime.sessionId !== opening) throw error;
       runtime.sessionId = undefined;
@@ -3170,13 +3176,14 @@ export class ConversationService {
     if (succeeded && setupCommandId) this.dropCommandOutputs(conversation.id, [setupCommandId]);
   }
 
-  private releaseSession(conversationId: string, runtime: Runtime, sessionId: string | null) {
+  /** `endBackgroundWork: false` leaves ending the background work to the caller, which has events of the log still to delete first. */
+  private releaseSession(conversationId: string, runtime: Runtime, sessionId: string | null, { endBackgroundWork = true } = {}) {
     const harness = runtime.harness;
     runtime.harness = undefined;
     runtime.sessionId = undefined;
     if (!harness || !sessionId) return Promise.resolve();
     // Once the session is released, nothing can stop or report its background tasks through this conversation.
-    this.forgetAsyncTasks(conversationId);
+    if (endBackgroundWork) this.endBackgroundWorkOf(conversationId);
     return Promise.race([harness.closeSession(sessionId).catch(() => {}), Bun.sleep(SESSION_CLOSE_TIMEOUT_MS)]);
   }
 
@@ -3846,6 +3853,7 @@ export class ConversationService {
       return;
     }
     const update = notification.update;
+    if (update.sessionUpdate === "tool_call_update") this.followSubagentTask(conversationId, update);
     const subagentSession = opencodeSubagentSessionOf(update);
     if (subagentSession) this.subagentSessions.record(subagentSession, conversationId);
     const asyncTaskUpdate = asyncTaskUpdateOf(update);
@@ -3882,6 +3890,14 @@ export class ConversationService {
     this.append(conversationId, { type: "acp", update: this.withModeName(conversationId, update) });
     if (update.sessionUpdate === "tool_call" || update.sessionUpdate === "tool_call_update") this.runtime(conversationId).toolCallReportsHeard.heard(update.toolCallId);
     this.followToolCalls(conversationId, update);
+  }
+
+  /** Only claude-agent-acp reports a subagent's task, as `subagentTaskStatus` on the Agent tool call that started it. */
+  private followSubagentTask(conversationId: string, update: acp.ToolCallUpdate) {
+    const { subagentTaskStatus } = (update._meta?.claudeCode ?? {}) as { subagentTaskStatus?: unknown };
+    const { subagentTasksAtWork } = this.runtime(conversationId);
+    if (subagentTaskStatus === "running") subagentTasksAtWork.add(update.toolCallId);
+    else if (typeof subagentTaskStatus === "string" && ["completed", "failed", "stopped", "killed"].includes(subagentTaskStatus)) subagentTasksAtWork.delete(update.toolCallId);
   }
 
   /** What Mirador saw of the turn itself, whatever the agent reports of its tokens. */
@@ -4315,9 +4331,7 @@ export class ConversationService {
       runtime.harness = undefined;
       runtime.sessionId = undefined;
       runtime.pendingPermissions.forEach(({ settle }) => settle(null));
-      if (subagentsWorkingBetweenTurns(this.store.listEvents(conversationId))) this.append(conversationId, { type: "agent-process-ended" });
-      // The agent's background tasks ran inside its process and went away with it; no terminal update can arrive.
-      this.forgetAsyncTasks(conversationId);
+      this.endBackgroundWorkOf(conversationId);
     });
   }
 
@@ -4493,7 +4507,7 @@ export class ConversationService {
     let runtime = this.runtimes.get(conversationId);
     if (!runtime) {
       const queuedMessages = this.store.findConversation(conversationId)?.queuedMessages ?? [];
-      runtime = { running: false, holdingQueue: false, pendingPermissions: new Map(), queuedMessages, openToolCalls: new OpenToolCalls(), toolCallReportsHeard: new ToolCallReportsHeard(), automaticContinues: 0, stallNudges: 0 };
+      runtime = { running: false, holdingQueue: false, pendingPermissions: new Map(), subagentTasksAtWork: new Set(), queuedMessages, openToolCalls: new OpenToolCalls(), toolCallReportsHeard: new ToolCallReportsHeard(), automaticContinues: 0, stallNudges: 0 };
       this.runtimes.set(conversationId, runtime);
     }
     return runtime;
@@ -4611,6 +4625,16 @@ export class ConversationService {
     const updated = { ...conversation, updatedAt: Date.now() };
     this.store.updateConversation(updated);
     this.publish(updated);
+  }
+
+  /** The agent's process or session is gone, so its background tasks and the subagents whose tasks ran end with it, and no terminal update can arrive. */
+  private endBackgroundWorkOf(conversationId: string) {
+    const { subagentTasksAtWork } = this.runtime(conversationId);
+    if (subagentTasksAtWork.size > 0) {
+      subagentTasksAtWork.clear();
+      this.append(conversationId, { type: "agent-process-ended" });
+    }
+    this.forgetAsyncTasks(conversationId);
   }
 
   private forgetAsyncTasks(conversationId: string) {
