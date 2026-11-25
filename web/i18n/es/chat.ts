@@ -159,9 +159,9 @@ export const chat: Messages["chat"] = {
   },
   usageLimit: {
     label: "Límite de uso",
-    continuesAt: (time) => `Se alcanzó el límite de uso de Claude · el agente continúa por sí solo a esta hora: ${time}`,
-    resetsAt: (time) => `Se alcanzó el límite de uso de Claude · se restablece a esta hora: ${time}`,
-    reached: "Se alcanzó el límite de uso de Claude",
+    continuesAt: (time) => `Se alcanzó el límite de uso · el agente continúa por sí solo a esta hora: ${time}`,
+    resetsAt: (time) => `Se alcanzó el límite de uso · se restablece a esta hora: ${time}`,
+    reached: "Se alcanzó el límite de uso",
     continueNow: "Continuar ahora",
     stopWaiting: "Dejar de esperar",
   },

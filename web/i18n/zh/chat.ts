@@ -156,9 +156,9 @@ export const chat: Messages["chat"] = {
   },
   usageLimit: {
     label: "用量上限",
-    continuesAt: (time) => `已达到 Claude 的用量上限 · Agent 将在 ${time} 自动继续`,
-    resetsAt: (time) => `已达到 Claude 的用量上限 · 将在 ${time} 重置`,
-    reached: "已达到 Claude 的用量上限",
+    continuesAt: (time) => `已达到用量上限 · Agent 将在 ${time} 自动继续`,
+    resetsAt: (time) => `已达到用量上限 · 将在 ${time} 重置`,
+    reached: "已达到用量上限",
     continueNow: "立即继续",
     stopWaiting: "停止等待",
   },

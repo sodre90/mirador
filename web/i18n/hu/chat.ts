@@ -156,9 +156,9 @@ export const chat: Messages["chat"] = {
   },
   usageLimit: {
     label: "Használati korlát",
-    continuesAt: (time) => `A Claude használati korlátja elfogyott · az ágens magától folytatja ekkor: ${time}`,
-    resetsAt: (time) => `A Claude használati korlátja elfogyott · újraindul ekkor: ${time}`,
-    reached: "A Claude használati korlátja elfogyott",
+    continuesAt: (time) => `Elérted a használati korlátot · az ágens magától folytatja ekkor: ${time}`,
+    resetsAt: (time) => `Elérted a használati korlátot · újraindul ekkor: ${time}`,
+    reached: "Elérted a használati korlátot",
     continueNow: "Folytatás most",
     stopWaiting: "Várakozás leállítása",
   },

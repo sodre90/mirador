@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import type { HarnessId } from "../shared/model.ts";
 import { isUsageLimitError, usageLimitMessage, usageLimitReplyIn, usageLimitResetIn } from "../shared/usage-limit.ts";
 
 const at = (iso: string) => new Date(iso).getTime();
@@ -25,6 +26,21 @@ describe("a usage limit's reset", () => {
     expect(usageLimitResetIn("resets 11pm (Not/AZone)", now)).toBe(local);
     expect(usageLimitResetIn("You've hit your session limit", now)).toBeNull();
     expect(usageLimitResetIn("resets 13pm", now)).toBeNull();
+  });
+
+  test("is after the delay Antigravity's message names, which may lack hours, minutes or seconds", () => {
+    const now = at("2026-11-25T07:31:57+01:00");
+    expect(usageLimitResetIn("⚠ Individual quota reached. Please upgrade your subscription to increase your limits. Resets in 4h15m13s.", now)).toBe(at("2026-11-25T11:47:10+01:00"));
+    expect(usageLimitResetIn("⚠ Individual quota reached. Resets in 163h0m4s.", now)).toBe(now + (163 * 60 * 60 + 4) * 1000);
+    expect(usageLimitResetIn("⚠ Individual quota reached. Resets in 59m1s.", now)).toBe(now + (59 * 60 + 1) * 1000);
+    expect(usageLimitResetIn("⚠ Individual quota reached. Resets in 8s.", now)).toBe(now + 8_000);
+  });
+
+  test("is unknown when the delay is in words it does not read, rather than now", () => {
+    expect(usageLimitResetIn("⚠ Individual quota reached. Resets in 5 hours.")).toBeNull();
+    expect(usageLimitResetIn("⚠ Individual quota reached. Resets in a while.")).toBeNull();
+    expect(usageLimitResetIn("⚠ Individual quota reached. Resets in 500ms.")).toBeNull();
+    expect(usageLimitResetIn("⚠ Individual quota reached.")).toBeNull();
   });
 
   test("comes with the rate_limit error kind, in Claude Code's own words", () => {
@@ -78,6 +94,25 @@ describe("a usage limit that ends a turn as a reply", () => {
   test("is not a model's one-line reply in the same words, which carries the API's message id", () => {
     expect(usageLimitReplyIn(endedWith("You've hit your GitHub API rate limit; wait an hour or set a token.", "end_turn", "msg_011CgrBVwC3vaAnZhL9ySkso"), "claude")).toBeNull();
     expect(usageLimitReplyIn(endedWith("You've hit your 5-hour limit · resets 10:30pm", "end_turn", null), "claude")).toBeNull();
+  });
+
+  test("is Antigravity's quota notice, alone or after the agent's own words, as its messages carry no id", () => {
+    const notice = "⚠ Individual quota reached. Please upgrade your subscription to increase your limits. Resets in 4h15m13s.";
+    expect(usageLimitReplyIn(endedWith(`\n${notice}\n`, "end_turn", null), "antigravity")).toBe(notice);
+    expect(usageLimitReplyIn(endedWith(`Waiting for the subagents.\n${notice}\n`, "end_turn", null), "antigravity")).toBe(notice);
+  });
+
+  test("is not Antigravity's notice of another error, the quota's words within a reply, a stopped turn, or another agent's reply", () => {
+    const notice = "⚠ Individual quota reached. Resets in 4h15m13s.";
+    const limitOf = (lastMessage: string, harness: HarnessId = "antigravity", stopReason = "end_turn") => usageLimitReplyIn(endedWith(lastMessage, stopReason, null), harness);
+    expect(limitOf("\n⚠ request failed (code 429): Too many requests\n")).toBeNull();
+    expect(limitOf("\n⚠ bad key\n")).toBeNull();
+    expect(limitOf(`The log says "${notice}"\n`)).toBeNull();
+    expect(limitOf(`\n${notice}\nThat is what agy printed.\n`)).toBeNull();
+    expect(limitOf(`\n${notice}\n`, "antigravity", "cancelled")).toBeNull();
+    expect(limitOf(`\n${notice}\n`, "claude")).toBeNull();
+    expect(limitOf(`\n${notice}\n`, "opencode")).toBeNull();
+    expect(limitOf("You've hit your 5-hour limit · resets 10:30pm")).toBeNull();
   });
 
   test("is only a turn that ended by itself: a stopped one, or one at its token limit, is not waited out", () => {

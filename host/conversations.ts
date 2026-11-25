@@ -83,7 +83,7 @@ import { AntigravityQuotaReader, readAntigravityQuotas, type ModelIdentity } fro
 import { PlanQuotasByProfile, reportedQuotas } from "./plan-quotas.ts";
 import { turnEndReason, type TurnOutcome } from "../shared/system-notifications.ts";
 import { hasBegun, sessionHasRecord, updatesTheAgentRecords } from "../shared/conversation-begun.ts";
-import { isUsageLimitError, usageLimitMessage, usageLimitReplyIn, usageLimitResetIn } from "../shared/usage-limit.ts";
+import { isUsageLimitError, usageLimitMessage, usageLimitReplyIn, usageLimitResetIn, type UsageLimitWords } from "../shared/usage-limit.ts";
 import { summarizeWaiting, waitingTones, type WaitingConversation, type WaitingSummary } from "../shared/waiting.ts";
 import { awaitingDelivery, USER_COMMAND_EVENT_TYPES, userCommandsIn, withCommandOutputs, type UserCommand } from "../shared/user-commands.ts";
 import { withCanvasNotes, type CanvasNote } from "./canvas/notes.ts";
@@ -282,6 +282,8 @@ export interface BroughtTaskRules {
 
 const NO_BROUGHT_TASKS: BroughtTaskRules = { conversationsHoldingTasks: () => new Set(), stillToRun: () => false };
 
+type TurnFailure = Extract<TurnOutcome, { error: string }>;
+
 interface PromptStart {
   imageIds?: string[];
   /** The person who wrote it. */
@@ -323,7 +325,7 @@ interface TurnInProgress {
   fromScript: boolean;
   /** The turn's own reply since its last tool call: whether it stopped at a step it announced, or asked in chat what ask should have. */
   reply: string;
-  /** The text of the turn's last message on its own, which is Claude Code's words when a usage limit ended the turn as if it ended by itself. */
+  /** The text of the turn's last message on its own, which is, or with Antigravity ends in, the agent program's words when a usage limit ended the turn as if it ended by itself. */
   lastMessage: string;
   /** The turn's own tool calls, to tell whether a page it showed was its last step. */
   toolCalls: TurnToolCall[];
@@ -2219,7 +2221,7 @@ export class ConversationService {
       const model = runtime.reportedModel ?? chosenModel(this.get(conversationId).configOptions)?.id;
       const spent = { ...turnUsageOf(response), ...(model && { model }), ...this.measuredTurn(conversationId, turn), ...this.filesEditedSince(conversationId, turnSeq) };
       if (limitReply !== null) {
-        this.notifyTurnEnded(conversationId, this.recordTurnFailure(conversationId, { message: limitReply }, true, spent));
+        this.notifyTurnEnded(conversationId, this.recordUsageLimit(conversationId, { message: limitReply }, true, spent));
       } else {
         endedOnItsOwn = response;
         this.append(conversationId, { type: "turn-end", stopReason: response.stopReason, ...spent });
@@ -4358,18 +4360,19 @@ export class ConversationService {
     return null;
   }
 
-  /** Returns the failure, as a notification tells it. A turn Claude's usage limit stopped holds the queue until the limit resets. */
-  private recordTurnFailure(conversationId: string, error: unknown, promptSent: boolean, spent: TurnSpend): Extract<TurnOutcome, { error: string }> {
-    const continuable = promptSent && { continuable: true as const };
+  /** Returns the failure, as a notification tells it. */
+  private recordTurnFailure(conversationId: string, error: unknown, promptSent: boolean, spent: TurnSpend): TurnFailure {
     const conversation = this.store.findConversation(conversationId);
-    if (!conversation || !isUsageLimitError(error, conversation.harness)) {
-      const failure = { message: errorMessage(error), ...problemOf(error) };
-      this.append(conversationId, { type: "error", ...failure, ...continuable, ...(isAuthRequiredError(error) && { authRequired: true as const }), endsTurn: true, ...spent });
-      return { error: failure.message, ...problemOf(error) };
-    }
-    const limit = usageLimitMessage(error);
+    if (conversation && isUsageLimitError(error, conversation.harness)) return this.recordUsageLimit(conversationId, usageLimitMessage(error), promptSent, spent);
+    const failure = { message: errorMessage(error), ...problemOf(error) };
+    this.append(conversationId, { type: "error", ...failure, ...(promptSent && { continuable: true as const }), ...(isAuthRequiredError(error) && { authRequired: true as const }), endsTurn: true, ...spent });
+    return { error: failure.message, ...problemOf(error) };
+  }
+
+  /** Returns the failure, as a notification tells it. A turn the agent's usage limit stopped holds the queue until the limit resets. */
+  private recordUsageLimit(conversationId: string, limit: UsageLimitWords, promptSent: boolean, spent: TurnSpend): TurnFailure {
     const resetsAt = usageLimitResetIn(limit.message);
-    this.append(conversationId, { type: "error", ...limit, usageLimit: { resetsAt }, ...continuable, endsTurn: true, ...spent });
+    this.append(conversationId, { type: "error", ...limit, usageLimit: { resetsAt }, ...(promptSent && { continuable: true as const }), endsTurn: true, ...spent });
     this.waitForUsageLimitReset(conversationId, resetsAt);
     return { error: limit.message, ...(limit.problem && { problem: limit.problem }) };
   }

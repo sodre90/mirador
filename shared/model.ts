@@ -840,7 +840,7 @@ export type ConversationEvent =
   /** A newer release of the agent is out; `command` runs its updater on the program the agent runs, as a `!` command. */
   | { type: "update-available"; harness: HarnessId; installed: string; latest: string; command: string }
   /**
-   * `usageLimit`: Claude's usage limit stopped the turn; it resets at `resetsAt`, when the message names a time.
+   * `usageLimit`: the agent's usage limit stopped the turn; it resets at `resetsAt`, when the message names a time.
    * `authRequired`: the agent refused the prompt until the user signs in again.
    * `continuable`: the error ended a turn after its message went to the agent, so the agent can continue from it.
    * `endsTurn`: the turn failed with it, where other errors come before a turn starts or beside one.

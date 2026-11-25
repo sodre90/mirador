@@ -274,6 +274,15 @@ describe("an API error Claude Code also says as the agent's message", () => {
     expect(buildTimeline(stored([agentText(limit), error])).map(({ kind }) => kind)).toEqual(["error"]);
   });
 
+  test("drops Antigravity's quota notice too, alone or after the agent's own words", () => {
+    const notice = "⚠ Individual quota reached. Please upgrade your subscription to increase your limits. Resets in 4h15m13s.";
+    const error: ConversationEvent = { type: "error", message: notice, usageLimit: { resetsAt: 1 }, endsTurn: true };
+    expect(buildTimeline(stored([agentText(`\n${notice}\n`), error]))).toEqual([expect.objectContaining({ kind: "error", usageLimit: true, message: notice })]);
+    const glued = buildTimeline(stored([agentText("Waiting for the subagents."), agentText(`\n${notice}\n`), error]));
+    expect(glued.map(({ kind }) => kind)).toEqual(["agent", "error"]);
+    expect(glued[0]).toMatchObject({ kind: "agent", text: "Waiting for the subagents.\n" });
+  });
+
   test("keeps a reply an unrelated error follows, even one the error happens to contain", () => {
     expect(buildTimeline(stored([agentText("All done."), { type: "error", message: "ACP connection closed" }])).map(({ kind }) => kind)).toEqual(["agent", "error"]);
     expect(buildTimeline(stored([agentText("Done."), { type: "error", message: "Done. Then the agent stopped" }])).map(({ kind }) => kind)).toEqual(["agent", "error"]);

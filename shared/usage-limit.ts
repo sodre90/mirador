@@ -6,7 +6,13 @@ const MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "
 /** "resets 6:20pm (Europe/Budapest)", "resets 3pm", "resets Oct 9, 2pm (Europe/Budapest)" */
 const RESET = /resets\s+(?:([a-z]{3})[a-z]*\s+(\d{1,2}),?\s+(?:at\s+)?)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)(?:\s*\(([^)]+)\))?/i;
 
-const DAY_MS = 24 * 60 * 60 * 1000;
+/** "Resets in 4h15m13s" */
+const RESET_AFTER = /resets in (?:(\d+)h)?(?:(\d+)m(?!s))?(?:(\d+)s)?/i;
+
+const SECOND_MS = 1000;
+const MINUTE_MS = 60 * SECOND_MS;
+const HOUR_MS = 60 * MINUTE_MS;
+const DAY_MS = 24 * HOUR_MS;
 
 function wallClockIn(timeZone: string, at: number) {
   const parts = new Intl.DateTimeFormat("en-US", {
@@ -43,11 +49,20 @@ const knownTimeZone = (timeZone: string | undefined) => {
   }
 };
 
+function resetDelayIn(text: string): number | null {
+  const [hours, minutes, seconds] = RESET_AFTER.exec(text)?.slice(1) ?? [];
+  if (!hours && !minutes && !seconds) return null;
+  return Number(hours ?? 0) * HOUR_MS + Number(minutes ?? 0) * MINUTE_MS + Number(seconds ?? 0) * SECOND_MS;
+}
+
 /**
- * When the usage limit in Claude Code's message resets, as epoch milliseconds: the next time the clock shows that time in
- * the named time zone (the host's own when none is named), on the named day if there is one. Null if it names no time.
+ * When the usage limit in an agent's message resets, as epoch milliseconds: after the delay Antigravity names, or the
+ * next time the clock shows the time Claude Code names in its time zone (the host's own when none is named), on the named
+ * day if there is one. Null if it names neither.
  */
 export function usageLimitResetIn(text: string, now = Date.now()): number | null {
+  const delay = resetDelayIn(text);
+  if (delay !== null) return now + delay;
   const match = RESET.exec(text);
   if (!match) return null;
   const [, monthName, dayOfMonth, hourText, minuteText, meridiem, zone] = match;
@@ -90,16 +105,37 @@ const isClaudeCodesOwnMessage = (messageId: string | null) => messageId !== null
  */
 const NAMES_A_LIMIT = /limit|usage|credits|budget/i;
 
+interface TurnsLastWords {
+  stopReason: string;
+  lastMessage: string;
+  messageId: string | null;
+}
+
 /**
  * A usage limit that stops the cycle Claude Code starts for a background subagent's end, while claude-agent-acp holds the
  * turn open for that subagent, reaches the client as an ordinary end of turn: acp settles the held turn with the end it
  * had stored, and keeps that cycle's error from it. Claude Code's words are then the turn's last message, on a line of
  * their own.
  */
-export function usageLimitReplyIn({ stopReason, lastMessage, messageId }: { stopReason: string; lastMessage: string; messageId: string | null }, harness: HarnessId): string | null {
+function claudeCodesLimitReply({ lastMessage, messageId }: TurnsLastWords) {
   const banner = lastMessage.trim();
-  const isBanner = stopReason === "end_turn" && harness === "claude" && isClaudeCodesOwnMessage(messageId) && !banner.includes("\n") && NAMES_A_LIMIT.test(banner) && USAGE_LIMIT_OPENINGS.some((opening) => banner.startsWith(opening));
+  const isBanner = isClaudeCodesOwnMessage(messageId) && !banner.includes("\n") && NAMES_A_LIMIT.test(banner) && USAGE_LIMIT_OPENINGS.some((opening) => banner.startsWith(opening));
   return isBanner ? banner : null;
+}
+
+/**
+ * Antigravity says what stopped a turn as one more chunk of the agent's message, "\n⚠ …\n", and then ends the turn as if
+ * it ended by itself. Its messages have no ids, so the chunk may follow the agent's own words.
+ */
+const ANTIGRAVITY_QUOTA_NOTICE = /(?:^|\n)(⚠ Individual quota reached\b.*)\n$/;
+
+const antigravitysLimitReply = ({ lastMessage }: TurnsLastWords) => ANTIGRAVITY_QUOTA_NOTICE.exec(lastMessage)?.[1] ?? null;
+
+/** What the agent said of the usage limit that ended a turn as if it ended by itself; null for any other end. */
+export function usageLimitReplyIn(turn: TurnsLastWords, harness: HarnessId): string | null {
+  if (turn.stopReason !== "end_turn") return null;
+  if (harness === "claude") return claudeCodesLimitReply(turn);
+  return harness === "antigravity" ? antigravitysLimitReply(turn) : null;
 }
 
 const bannerOf = (error: unknown) => String((error as { message?: unknown }).message ?? "").replace(/^Internal error(:\s*|$)/, "");
@@ -115,8 +151,13 @@ export const isUsageLimitError = (error: unknown, harness: HarnessId) => {
   return harness === "claude" && USAGE_LIMIT_OPENINGS.some((opening) => bannerOf(error).startsWith(opening));
 };
 
+export interface UsageLimitWords {
+  message: string;
+  problem?: HostProblem;
+}
+
 /** Claude Code's own words for the limit, e.g. "You've hit your session limit · resets 6:20pm (Europe/Budapest)", or the host's when it gave none. */
-export function usageLimitMessage(error: unknown): { message: string; problem?: HostProblem } {
+export function usageLimitMessage(error: unknown): UsageLimitWords {
   const banner = bannerOf(error);
   if (banner) return { message: banner };
   const problem: HostProblem = { code: "usage-limit-reached" };

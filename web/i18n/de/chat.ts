@@ -160,9 +160,9 @@ export const chat: Messages["chat"] = {
   },
   usageLimit: {
     label: "Nutzungslimit",
-    continuesAt: (time) => `Claudes Nutzungslimit ist erreicht · der Agent macht um ${time} von selbst weiter`,
-    resetsAt: (time) => `Claudes Nutzungslimit ist erreicht · es wird um ${time} zurückgesetzt`,
-    reached: "Claudes Nutzungslimit ist erreicht",
+    continuesAt: (time) => `Nutzungslimit erreicht · der Agent macht um ${time} von selbst weiter`,
+    resetsAt: (time) => `Nutzungslimit erreicht · es wird um ${time} zurückgesetzt`,
+    reached: "Nutzungslimit erreicht",
     continueNow: "Jetzt weitermachen",
     stopWaiting: "Nicht mehr warten",
   },
