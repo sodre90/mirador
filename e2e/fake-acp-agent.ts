@@ -76,6 +76,7 @@ import { END_OF_OTHERS_WORDS, ROOM_MESSAGES_HEADING } from "../shared/rooms.ts";
  * steered into a `REPLY STEERED ` or `ENDS UNREAD ` turn joins it, any other is refused as needing a prompt of its own.
  * `FAKE_ACP_RESUMES=1` closes and resumes sessions, logging new, closed and resumed ones; a resumed session keeps the
  * canvas server and the folders beside its own the resume gave it.
+ * `FAKE_ACP_NEW_SESSIONS_HELD_BY` names a file no new session is answered while it exists.
  * `FAKE_ACP_COMMANDS`, a JSON list of ACP available commands, is announced as each session starts, for its / menu.
  * Each of these may come named `OPENCODE_FAKE_ACP_…` instead, as a room's opencode agent gets them of its profile.
  * A side chat's brief, sent before its first question, is written to the prompts file but leaves the commands alone.
@@ -368,9 +369,12 @@ async function reportUsage(client: acp.AgentContext, sessionId: string, used: nu
   return { stopReason: "end_turn" as const };
 }
 
+async function heldBy(file: string | undefined) {
+  while (file && existsSync(file)) await Bun.sleep(50);
+}
+
 async function goWithAnswer(client: acp.AgentContext, sessionId: string, answer: string) {
-  const held = process.env.FAKE_ACP_ANSWERS_HELD_BY;
-  while (held && existsSync(held)) await Bun.sleep(50);
+  await heldBy(process.env.FAKE_ACP_ANSWERS_HELD_BY);
   return sayText(client, sessionId, `Going with ${answer}`);
 }
 
@@ -635,7 +639,9 @@ acp
       ...(offersSteering ? { _meta: { steering: { supported: true } } } : {}),
     };
   })
-  .onRequest(acp.methods.agent.session.new, (ctx) => {
+  .onRequest(acp.methods.agent.session.new, async (ctx) => {
+    trace("asked for a new session");
+    await heldBy(process.env.FAKE_ACP_NEW_SESSIONS_HELD_BY);
     const sessionId = `fake-session-${process.pid}-${++nextSession}`;
     sessionFolders.set(sessionId, ctx.params.cwd);
     sessionAddedFolders.set(sessionId, ctx.params.additionalDirectories ?? []);

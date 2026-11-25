@@ -1,7 +1,7 @@
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type Locator, type Page } from "@playwright/test";
-import { addWorkspace, createProfile, createRoom, openNewRoom, openRoomAgent, openRoomSettings, sendMessage, signIn, startConversation, whatItMeans } from "./helpers.ts";
+import { addWorkspace, createProfile, createRoom, openNewRoom, openProfiles, openProfileTab, openRoomAgent, openRoomSettings, sendMessage, signIn, startConversation, whatItMeans } from "./helpers.ts";
 import { TestHost, writeBunProgram } from "./test-host.ts";
 
 const HOSTS_SECRET = "hosts-own-secret";
@@ -9,6 +9,7 @@ const HOSTS_DEPLOY_TOKEN = "hosts-deploy-token";
 const host = new TestHost({ fakePrograms: true, environment: { HOSTS_SECRET, DEPLOY_TOKEN: HOSTS_DEPLOY_TOKEN } });
 const promptsFile = () => join(host.root, "builder-prompts");
 const heldUntil = () => join(host.root, "held-until");
+const sessionsHeld = () => join(host.root, "sessions-held");
 const MODEL_KEY = "sk-room-model-key";
 const DEPLOY_TOKEN = "room-deploy-token";
 const VAULT_TOKEN = "room-vault-token";
@@ -24,6 +25,8 @@ test.beforeAll(async ({ browser }) => {
     ["Builder", `OPENAI_API_KEY=${MODEL_KEY}\nDEPLOY_TOKEN=${DEPLOY_TOKEN}`],
     ["Plain", ""],
     ["Located", `XDG_CACHE_HOME=${join(host.root, "located-cache")}`],
+    ["Keyed", "OPENAI_API_KEY=first-key"],
+    ["Opener", `OPENCODE_FAKE_ACP_NEW_SESSIONS_HELD_BY=${sessionsHeld()}`],
     ["Vaulted", `VAULT_TOKEN=$(printf %s ${VAULT_TOKEN})`],
   ]) {
     const profiles = await createProfile(page, name!, environment!, "", "opencode");
@@ -170,6 +173,54 @@ test("a room's agent gets this computer's environment only when the owner turns 
   await expect(answerSaying(page, "Held answer")).toHaveCount(0);
 });
 
+async function giveHostsEnvironmentTo(page: Page, room: string, agent: string, given: boolean) {
+  const settings = await openRoomSettings(page, room, "Agents");
+  await openRoomAgent(settings, agent);
+  await wholeHostEnvironment(settings).setChecked(given);
+  const confirm = settings.locator(".room-starts-afresh").getByRole("button", { name: "Change" });
+  if (await confirm.isVisible()) await confirm.click();
+  await settings.getByRole("button", { name: "Agents", exact: true }).click();
+  await expect(agentRow(settings, agent).getByText("Everything from this computer's environment")).toHaveCount(given ? 1 : 0);
+  await settings.getByRole("button", { name: "Close" }).click();
+}
+
+const workingLine = (page: Page, agent: string) => page.locator(".room-timeline > .room-thread-line", { hasText: `${agent} is working…` });
+
+test("a change made while an agent's session opens stops the turn when it gives the agent less, saying so in the room, and the next turn runs under it", async ({ page }) => {
+  await signIn(page, host);
+  await createRoom(page, "Opening", ["Opener"]);
+  await giveHostsEnvironmentTo(page, "Opening", "Opener", true);
+  writeFileSync(sessionsHeld(), "");
+  await tagAgent(page, "Opening", "Opener", "ENV HOSTS_SECRET");
+  await expect(workingLine(page, "Opener")).toBeVisible();
+  await giveHostsEnvironmentTo(page, "Opening", "Opener", false);
+  await expect(page.locator(".room-timeline")).toContainText("Stopped before it finished.");
+  await page.locator(".room-timeline").getByRole("button", { name: "Open thread" }).click();
+  const thread = page.getByRole("complementary", { name: "Thread of Opener" });
+  await expect(thread.getByText("Turn ended: cancelled")).toBeVisible();
+  await expect(thread.getByText(/agent process/)).toHaveCount(0);
+  await thread.getByRole("button", { name: "Close thread" }).click();
+  rmSync(sessionsHeld());
+
+  await tagAgent(page, "Opening", "Opener", "ENV HOSTS_SECRET");
+  await expect(answerSaying(page, "HOSTS_SECRET is not set")).toBeVisible();
+  await expect(answerSaying(page, HOSTS_SECRET)).toHaveCount(0);
+});
+
+test("a change made while an agent's session opens that gives it more lets the turn go on as it started, and holds from the next turn on", async ({ page }) => {
+  await signIn(page, host);
+  await createRoom(page, "Widening", ["Opener"]);
+  writeFileSync(sessionsHeld(), "");
+  await tagAgent(page, "Widening", "Opener", "ENV HOSTS_SECRET");
+  await expect(workingLine(page, "Opener")).toBeVisible();
+  await giveHostsEnvironmentTo(page, "Widening", "Opener", true);
+  rmSync(sessionsHeld());
+  await expect(answerSaying(page, "HOSTS_SECRET is not set")).toBeVisible();
+
+  await tagAgent(page, "Widening", "Opener", "ENV HOSTS_SECRET");
+  await expect(answerSaying(page, `HOSTS_SECRET is ${HOSTS_SECRET}`)).toBeVisible();
+});
+
 test("a value that says where an agent's files are is always given, and an agent whose profile sets none still offers this computer's environment", async ({ page }) => {
   await signIn(page, host);
   await createRoom(page, "Kinds", ["Plain", "Located"]);
@@ -207,6 +258,25 @@ test("a value that a command prints is held back by its name like one the profil
 
   await tagAgent(page, "Vault", "Vaulted", "ENV VAULT_TOKEN");
   await expect(answerSaying(page, `VAULT_TOKEN is ${VAULT_TOKEN}`)).toBeVisible();
+});
+
+test("a value edited in the profile reaches a room's agent with its next turn", async ({ page }) => {
+  await signIn(page, host);
+  await createRoom(page, "Edited", ["Keyed"]);
+  await tagAgent(page, "Edited", "Keyed", "ENV OPENAI_API_KEY");
+  await expect(answerSaying(page, "OPENAI_API_KEY is first-key")).toBeVisible();
+
+  const profiles = await openProfiles(page);
+  await profiles.locator(".profile-list li", { hasText: "Keyed" }).click();
+  await openProfileTab(profiles, "Launch");
+  await profiles.getByRole("button", { name: "Edit environment" }).click();
+  await profiles.getByLabel("Environment", { exact: true }).fill("OPENAI_API_KEY=second-key");
+  await profiles.getByRole("button", { name: "Save" }).click();
+  await expect(profiles.locator(".saved")).toHaveText("Saved");
+  await profiles.getByRole("button", { name: "Close" }).click();
+
+  await tagAgent(page, "Edited", "Keyed", "ENV OPENAI_API_KEY");
+  await expect(answerSaying(page, "OPENAI_API_KEY is second-key")).toBeVisible();
 });
 
 test("whether a room's agents read what guests write stays as the owner set it", async ({ page }) => {

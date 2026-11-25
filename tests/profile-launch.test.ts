@@ -64,6 +64,16 @@ test("a profile takes one of the workspace colours, and changing it alone leaves
   expect(() => profiles.save({ ...draft, color: "plaid" as never })).toThrow("Unknown colour plaid.");
 });
 
+test("a value edited under the same name restarts the profile's agents, as an edited pre-launch command does", () => {
+  const restarted: string[] = [];
+  const profiles = new ProfileService(new Store(":memory:"), new Hub(), { restartProfile: (profileId: string) => restarted.push(profileId) } as unknown as ConversationService, {}, () => undefined);
+  const draft = { name: "Work", harness: "claude", environment: "ANTHROPIC_API_KEY=first", prelaunch: "", model: null, mode: null, effort: null, bypassPermissions: false, askMode: "wait", color: null, pluginsOff: [] as string[] } as const;
+  const { id } = profiles.save(draft);
+  profiles.save({ ...draft, id, environment: "ANTHROPIC_API_KEY=second" });
+  profiles.save({ ...draft, id, environment: "ANTHROPIC_API_KEY=second", prelaunch: "true" });
+  expect(restarted).toEqual([id, id]);
+});
+
 test("a save over a profile tells what it was and what it is now, keeping each plugin turned off once and sorted; a new profile tells none", () => {
   const store = new Store(":memory:");
   const profiles = new ProfileService(store, new Hub(), { restartProfile: () => {} } as unknown as ConversationService, {}, () => undefined);

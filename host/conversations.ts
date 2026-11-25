@@ -393,6 +393,8 @@ interface Runtime {
   /** The latest profile switch; the next one starts after it. */
   profileSwitch?: Promise<void>;
   pendingPermissions: Map<string, PendingPermission>;
+  /** What the room or workspace gave its agents as the session was begun to be opened, which it runs under. */
+  openedUnder?: string | null;
   /** A session Continue found held by Codex's daemon: the next message tries to continue it again, once the user has freed it, so its history replays ahead of that message. */
   heldCodexSession?: string;
   /** What a side chat's brief hands over to its agent, until the first question takes the brief along; null where its session holds the conversation. */
@@ -1190,9 +1192,8 @@ export class ConversationService {
   private async openSideChatSession(sideChatId: string, parentId: string): Promise<string> {
     const sideChat = this.get(sideChatId);
     const parent = this.store.findConversation(parentId);
-    const harness = this.harnessFor(sideChat);
+    const harness = this.processToOpenOn(sideChat);
     const runtime = this.runtime(sideChatId);
-    runtime.harness = harness;
     const capabilities = (await harness.start()).agentCapabilities;
     const sessionRequest = await this.sessionRequest(sideChatId);
     const copied = parent?.acpSessionId && capabilities?.sessionCapabilities?.fork && capabilities.loadSession && this.canFork(parentId) ? parent.acpSessionId : null;
@@ -3275,6 +3276,14 @@ export class ConversationService {
     return sessionHasRecord(this.store.listEvents(conversationId));
   }
 
+  /** A change of what its room or workspace gives its agents while the session opens is not what it was opened under. */
+  private processToOpenOn(conversation: Conversation) {
+    const runtime = this.runtime(conversation.id);
+    runtime.openedUnder = this.sessionSetupOf(conversation);
+    runtime.harness = this.harnessFor(conversation);
+    return runtime.harness;
+  }
+
   private async openSession(conversationId: string): Promise<string> {
     const runtime = this.runtime(conversationId);
     const held = runtime.heldCodexSession;
@@ -3285,8 +3294,7 @@ export class ConversationService {
     const conversation = this.get(conversationId);
     const isFirstSession = conversation.acpSessionId === null;
     const setupKept = this.keepsSessionSetup(conversation);
-    const harness = this.harnessFor(conversation);
-    this.runtime(conversationId).harness = harness;
+    const harness = this.processToOpenOn(conversation);
     const capabilities = await harness.start();
     const sessionRequest = await this.sessionRequest(conversationId);
 
@@ -3384,8 +3392,7 @@ export class ConversationService {
   /** Replayed history arrives as session updates before the load request returns, so the session is bound first. */
   private async loadExternalSession(conversationId: string, sessionId: string, mode: AdoptMode, forkPoint: SessionForkPoint | null): Promise<string> {
     const conversation = this.get(conversationId);
-    const harness = this.harnessFor(conversation);
-    this.runtime(conversationId).harness = harness;
+    const harness = this.processToOpenOn(conversation);
     const capabilities = await harness.start();
     if (!capabilities.agentCapabilities?.loadSession) throw new HostProblemError({ code: "agent-cannot-load-sessions", agent: harness.spec.label });
     if (mode === "fork" && !capabilities.agentCapabilities.sessionCapabilities?.fork) throw new HostProblemError({ code: "agent-cannot-fork-sessions", agent: harness.spec.label });
@@ -3419,8 +3426,7 @@ export class ConversationService {
 
   private async loadWithTerminalTurns(conversationId: string, sessionId: string): Promise<string> {
     const conversation = this.get(conversationId);
-    const harness = this.harnessFor(conversation);
-    this.runtime(conversationId).harness = harness;
+    const harness = this.processToOpenOn(conversation);
     const capabilities = await harness.start();
     if (!capabilities.agentCapabilities?.loadSession) throw new HostProblemError({ code: "agent-cannot-load-sessions", agent: harness.spec.label });
     this.setBusy(conversationId, "reading-terminal-turns");
@@ -3507,10 +3513,11 @@ export class ConversationService {
   }
 
   private bindSession(conversationId: string, sessionId: string, configOptions: acp.SessionConfigOption[] | null | undefined) {
+    const runtime = this.runtime(conversationId);
     this.sessions.bind(conversationId, sessionId);
-    this.runtime(conversationId).cancelledReply = undefined;
+    runtime.cancelledReply = undefined;
     this.save({ ...this.get(conversationId), acpSessionId: sessionId, configOptions: configOptions ?? [] });
-    this.store.setSetupOfSession(conversationId, this.sessionSetupOf(this.get(conversationId)));
+    this.store.setSetupOfSession(conversationId, runtime.openedUnder ?? null);
     this.updatesForUnknownSessions.take(sessionId).forEach((notification) => this.handleSessionUpdate(notification));
   }
 
