@@ -489,7 +489,7 @@ export function startServer(services: HostServices) {
       const joined = roomInvites.redeem(code, deviceName(name), person, reached, p2p);
       const tunnel = tunnelForDevice?.register(joined.device.id, tunnelKey);
       if (joined.waiting) tellOwnerOfKnock(joined.roomId, joined.personId);
-      else personCameIn(joined.roomId);
+      else personCameIn(joined.roomId, joined.personId, joined.previousRole);
       roomJoinersChanged(joined.personId);
       sendRoomInvitesToEveryPage();
       sendDevicesToEveryPage();
@@ -500,8 +500,8 @@ export function startServer(services: HostServices) {
     }
   }
 
-  function personCameIn(roomId: string) {
-    rooms.personCameIn(roomId);
+  function personCameIn(roomId: string, personId?: string, previousRole?: Parameters<RoomService["personCameIn"]>[2]) {
+    rooms.personCameIn(roomId, personId, previousRole);
     roomPeopleChanged(roomId);
   }
 

@@ -1,7 +1,7 @@
 import { HostProblemError } from "../shared/host-problems.ts";
 import { isPastel, type Device, type Pastel } from "../shared/model.ts";
 import { nameRefused, nameTaken, personName, readsAsMiradorsWords } from "../shared/people.ts";
-import { isRoomInviteLetsIn, isRoomInviteLifetime, isRoomInviteSeats, isRoomRole, type RoomInvite, type RoomInviteLetsIn, type RoomInviteLifetime, type RoomInviteSeats, type RoomJoiner, type RoomRole } from "../shared/rooms.ts";
+import { broughtAgentName, isRoomInviteLetsIn, isRoomInviteLifetime, isRoomInviteSeats, isRoomRole, type RoomInvite, type RoomInviteLetsIn, type RoomInviteLifetime, type RoomInviteSeats, type RoomJoiner, type RoomRole } from "../shared/rooms.ts";
 import { shownAsWritten } from "../shared/written-text.ts";
 import type { InviteTunnel } from "../shared/tunnel.ts";
 import { inviteKey, newRoomInvite, type DeviceService } from "./devices.ts";
@@ -57,6 +57,7 @@ export interface Admitted {
   personId: string;
   roomId: string;
   waiting: boolean;
+  previousRole: RoomRole | null;
 }
 
 /** Of a name a person presented, what the name rules let them go by: cleaned, or none. */
@@ -220,8 +221,8 @@ export class RoomInvites {
       const personId = this.personWithKey(publicKey);
       if (this.store.tookRoomInviteSeat(invite.id, personId)) throw new HostProblemError({ code: "room-invite-used-already" });
       const wasLastSeat = this.store.takeRoomInviteSeat(invite.id, personId);
-      const waiting = this.comeIn(invite, personId, { name, color: isPastel(color) ? color : null, deviceName });
-      return { admitted: { ...this.devices.admit(deviceName, personId), personId, roomId: invite.roomId, waiting }, wasLastSeat };
+      const { waiting, previousRole } = this.comeIn(invite, personId, { name, color: isPastel(color) ? color : null, deviceName });
+      return { admitted: { ...this.devices.admit(deviceName, personId), personId, roomId: invite.roomId, waiting, previousRole }, wasLastSeat };
     });
     if (wasLastSeat) this.lastSeatTaken(invite.id, code, p2p);
     return admitted;
@@ -230,17 +231,18 @@ export class RoomInvites {
   /**
    * Into the room with the invite's role and the name they presented, or, where it asks the owner's OK first, at the
    * room's door, with nothing of theirs changed until the owner lets them in; someone already in the room stays in it as
-   * they are then. Whether they wait.
+   * they are then. Whether they wait, and any role they held in the room before.
    */
   private comeIn(invite: RoomInvite, personId: string, { name, color, deviceName }: { name: unknown; color: Pastel | null; deviceName: string }) {
+    const existing = this.store.findRoom(invite.roomId)?.people.find((person) => person.personId === personId);
     if (invite.letsIn === "at-once") {
       this.store.setRoomPersonRole(invite.roomId, personId, invite.role);
       this.namePerson(invite.roomId, personId, name, color);
-      return false;
+      return { waiting: false, previousRole: existing?.role ?? null };
     }
-    const inTheRoom = this.store.findRoom(invite.roomId)?.people.some((person) => person.personId === personId) === true;
+    const inTheRoom = existing !== undefined;
     if (!inTheRoom) this.store.addRoomJoiner({ roomId: invite.roomId, personId, role: invite.role, presentedName: presentedName(name), color, deviceName, since: this.now() });
-    return !inTheRoom;
+    return { waiting: !inTheRoom, previousRole: existing?.role ?? null };
   }
 
   /**
@@ -271,10 +273,32 @@ export class RoomInvites {
    * that reads as one already in their rooms leaves them without one too, and the owner sees it beside them in the room.
    */
   private namePerson(roomId: string, personId: string, presented: unknown, color: Pastel | null) {
-    const { name, nameClash } = checkedName(presented, namesOthersGoBy(this.store, personId));
+    const checked = checkedName(presented, namesOthersGoBy(this.store, personId));
+    const { name, nameClash } = checked.name && this.broughtAgentsClash(personId, checked.name) ? { name: "", nameClash: checked.name } : checked;
     this.store.setPersonProfile(personId, { name, color });
     this.store.forgetNameClashesOf(personId);
     if (nameClash) this.store.setRoomPersonNameClash(roomId, personId, nameClash);
+  }
+
+  private broughtAgentsClash(personId: string, name: string) {
+    const people = this.store.listPeople();
+    return this.store.roomsOf(personId).some((room) => {
+      const personIds = new Set([this.store.ownerId(), ...room.people.map(({ personId: id }) => id), ...this.store.writersIn(room.id)]);
+      personIds.delete(personId);
+      const taken = [
+        ...people.filter(({ id }) => personIds.has(id)).map(({ name: each }) => each),
+        ...room.agents.flatMap((agent) => {
+          if (agent.brought?.personId === personId) return [];
+          if (agent.brought) {
+            const bringer = people.find(({ id }) => id === agent.brought!.personId)?.name ?? "";
+            return [broughtAgentName(bringer, agent.brought.name)];
+          }
+          const profile = this.store.findProfile(agent.profileId);
+          return profile ? [profile.name] : [];
+        }),
+      ];
+      return room.agents.filter((agent) => agent.brought?.personId === personId).some(({ brought }) => nameTaken(broughtAgentName(name, brought!.name), taken));
+    });
   }
 
   private takeChallenge(challenge: string) {

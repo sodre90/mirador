@@ -1,6 +1,6 @@
 import { endsTurnWithSpend, type StoredEvent, type TurnUsage } from "../shared/model.ts";
 import type { RoomUsage, Spend } from "../shared/room-usage.ts";
-import { personMessageBehind, writtenByAgent, type RoomMessage } from "../shared/rooms.ts";
+import { personIdBehind, type RoomMessage } from "../shared/rooms.ts";
 
 type Cost = NonNullable<Spend["cost"]>;
 
@@ -34,11 +34,10 @@ function costOfTurn(before: Cost | undefined, soFar: Cost | undefined): Cost | n
   return { amount: soFar.amount - before.amount, currency: soFar.currency };
 }
 
-/** The person whose message a turn on the room message goes back to: its writer, or for an agent's answer, the writer of the message its chain began with. */
+/** The person whose message a turn on the room message goes back to: its writer, or for an agent's answer, the writer of the message its chain began with (stopping at a brought agent's bringer). */
 function personBehind(roomMessageId: string | undefined, messagesById: Map<string, RoomMessage>): string | null {
   const asked = roomMessageId === undefined ? undefined : messagesById.get(roomMessageId);
-  const behind = asked && personMessageBehind(asked, messagesById);
-  return behind && !writtenByAgent(behind.author) ? behind.author.personId : null;
+  return asked ? personIdBehind(asked, messagesById) : null;
 }
 
 /**

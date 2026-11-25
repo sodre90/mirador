@@ -44,6 +44,7 @@ import {
   catchUpShown,
   isRoomRole,
   mayWriteAs,
+  personIdBehind,
   personMessageBehind,
   PROFILES_MODEL,
   readByAgentsOf,
@@ -301,8 +302,16 @@ export class RoomService implements RoomRules, TurnListener {
     this.waitingListener = listener;
   }
 
-  /** A person an invite just let into the room: pages hear of them as of one the owner let in. */
-  personCameIn(roomId: string) {
+  /** A person an invite just let into the room: pages hear of them as of one the owner let in, cleaning up if an existing member's role was lowered. */
+  personCameIn(roomId: string, personId?: string, previousRole?: RoomRole | null) {
+    const room = this.store.findRoom(roomId);
+    if (room && personId && previousRole) {
+      const role = room.people.find((person) => person.personId === personId)?.role;
+      if (role && !asksAgentsAs(role)) this.takeOutAgentsOf(roomId, personId);
+      else if (role && approvesAs(previousRole) && !approvesAs(role)) this.workspaceIsAskedForAgainOf(room, personId);
+      this.declineTasksNoLongerAsked(roomId);
+      this.waitingChanged(roomId);
+    }
     this.peopleChanged(roomId);
   }
 
@@ -1446,10 +1455,10 @@ export class RoomService implements RoomRules, TurnListener {
     return named?.answering === answering.id && this.personBehindMayTag(room, answering) ? named.profileIds : [];
   }
 
-  /** An agent's answer works for the person whose message began its chain. */
+  /** An agent's answer works for the person whose message began its chain, stopping at a brought agent's bringer. */
   private personBehindMayTag(room: Room, answering: RoomMessage) {
-    const { author } = personMessageBehind(answering, new Map(this.store.listRoomMessages(room.id).map((message) => [message.id, message])));
-    return !writtenByAgent(author) && this.mayTag(room, author.personId);
+    const personId = personIdBehind(answering, new Map(this.store.listRoomMessages(room.id).map((message) => [message.id, message])));
+    return personId !== null && this.mayTag(room, personId);
   }
 
   /** The owner may tag agents in every room, and a member in theirs. */

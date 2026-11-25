@@ -438,20 +438,33 @@ export function roomMessageAnswered(userMessages: StoredEvent[]): { answering: s
 /** At most this many turns of agents that other agents tagged may follow a message of a person. */
 export const AGENT_TAGGED_TURNS_AFTER_A_PERSON = 8;
 
-/** The message of a person that a chain of agents' answers goes back to. */
+/** The message of a person, or of a brought agent (carrying its bringer), that a chain of room agents' answers goes back to. */
 export function personMessageBehind(message: RoomMessage, messagesById: Map<string, RoomMessage>): RoomMessage {
+  if (message.broughtBy !== undefined) return message;
   const answered = message.answers === undefined ? undefined : messagesById.get(message.answers);
   return writtenByAgent(message.author) && answered ? personMessageBehind(answered, messagesById) : message;
 }
 
+/** Who is behind `message`: its human writer, or the bringer of a brought agent whose answer began the chain. */
+export function personIdBehind(message: RoomMessage, messagesById: Map<string, RoomMessage>): string | null {
+  const behind = personMessageBehind(message, messagesById);
+  if (behind.broughtBy !== undefined) return behind.broughtBy;
+  return writtenByAgent(behind.author) ? null : behind.author.personId;
+}
+
+function rootMessageBehind(message: RoomMessage, messagesById: Map<string, RoomMessage>): RoomMessage {
+  const answered = message.answers === undefined ? undefined : messagesById.get(message.answers);
+  return writtenByAgent(message.author) && answered ? rootMessageBehind(answered, messagesById) : message;
+}
+
 const TASK_TEXT_SHOWN = 80;
 
-/** The task a turn on this message works on: the person behind a chain of agents' answers is the one it is for. */
+/** The task a turn on this message works on: the person behind a chain of agents' answers is the one it is for, stopping at a brought agent. */
 export function taskOf(asked: RoomMessage, messagesById: Map<string, RoomMessage>, ownerId: string): RoomTask | null {
   const behind = personMessageBehind(asked, messagesById);
-  const { author, text } = behind;
-  if (writtenByAgent(author)) return null;
-  return { personId: author.personId, role: authorRoleOf(behind, ownerId), text: cutWithEllipsis(oneLine(text), TASK_TEXT_SHOWN) };
+  const personId = behind.broughtBy !== undefined ? behind.broughtBy : writtenByAgent(behind.author) ? null : behind.author.personId;
+  if (personId === null) return null;
+  return { personId, role: authorRoleOf(behind, ownerId), text: cutWithEllipsis(oneLine(behind.text), TASK_TEXT_SHOWN) };
 }
 
 /** The turns agents took on other agents' tags after this message of a person: one for each thread started on an agent's answer that goes back to it. */
@@ -459,7 +472,7 @@ export function agentTaggedTurnsAfter({ messages, threads }: RoomTimeline, perso
   const messagesById = new Map(messages.map((message) => [message.id, message]));
   return threads.filter(({ messageId }) => {
     const tagging = messagesById.get(messageId);
-    return tagging !== undefined && writtenByAgent(tagging.author) && personMessageBehind(tagging, messagesById).id === personMessage.id;
+    return tagging !== undefined && writtenByAgent(tagging.author) && rootMessageBehind(tagging, messagesById).id === personMessage.id;
   }).length;
 }
 

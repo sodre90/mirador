@@ -326,6 +326,20 @@ describe("a room invite for several people", () => {
     expect(profileOf(store, alice.personId)).toMatchObject({ name: "Mallory", color: "rose" });
   });
 
+  test("marks a name clash on an at-once invite when renaming would collide one of the person's brought agents in another room", () => {
+    const { invites, store } = machine();
+    addRoom(store, "r2");
+    const key = keyPair();
+    const mia = joining(invites, invites.invite("r1", "member", 1, "at-once", "15-minutes").code, key, "Mia");
+    store.insertPerson({ id: "z1", name: "Bob's Bot", color: null });
+    store.setRoomPersonRole("r1", "z1", "guest");
+    store.addBroughtAgent("r1", "b1", { personId: mia.personId, name: "Bot", harness: "claude" }, true);
+    const { code } = invites.invite("r2", "member", 1, "at-once", "15-minutes");
+    const joined = joining(invites, code, key, "Bob");
+    expect(profileOf(store, joined.personId)?.name).toBe("");
+    expect(store.findRoom("r2")!.people.find(({ personId }) => personId === joined.personId)?.nameClash).toBe("Bob");
+  });
+
   test("takes no second seat for the same key, whether it came in, waits or was turned away: a repeat is refused", () => {
     const { invites, store } = machine();
     const atOnce = invites.invite("r1", "member", 5, "at-once", "15-minutes");

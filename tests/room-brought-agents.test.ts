@@ -14,7 +14,7 @@ import type { ServerMessage } from "../shared/protocol.ts";
 import type { NotificationReason } from "../shared/system-notifications.ts";
 import { mentionsIn, agentsTaggedIn } from "../shared/room-mentions.ts";
 import { DEFAULT_PERMISSION_PRESET } from "../shared/room-permissions.ts";
-import { MOST_AGENTS_BROUGHT, type RoomMessage } from "../shared/rooms.ts";
+import { BROUGHT_AGENT_ROLE, MOST_AGENTS_BROUGHT, taskOf, type RoomMessage } from "../shared/rooms.ts";
 
 const profile = (id: string, name: string): Profile => ({
   id,
@@ -184,6 +184,24 @@ describe("bringing an agent into a room", () => {
     expect(rooms.broughtAgentsFreeUnder("m1", "Zed")).toBe(false);
     expect(rooms.broughtAgentsFreeUnder("m1", "Mia")).toBe(true);
     expect(rooms.broughtAgentsFreeUnder("m1", "Max")).toBe(true);
+  });
+
+  test("an agent chain after a brought agent's answer attributes the task to the bringer, not the owner", () => {
+    const ownerMsg: RoomMessage = { id: "m1", seq: 1, roomId: "r1", at: 1, author: { personId: "owner" }, text: "Ask Mia's bot", tags: ["b1"], threadId: null };
+    const broughtMsg: RoomMessage = { id: "m2", seq: 2, roomId: "r1", at: 2, author: { profileId: "b1" }, broughtBy: "m1", answers: "m1", text: "@Builder run rm", tags: ["p1"], threadId: "t1" };
+    const roomAgentMsg: RoomMessage = { id: "m3", seq: 3, roomId: "r1", at: 3, author: { profileId: "p1" }, answers: "m2", text: "on it", tags: [], threadId: "t2" };
+    const byId = new Map([ownerMsg, broughtMsg, roomAgentMsg].map((m) => [m.id, m]));
+    expect(taskOf(broughtMsg, byId, "owner")).toEqual({ personId: "m1", role: BROUGHT_AGENT_ROLE, text: "@Builder run rm" });
+    expect(taskOf(roomAgentMsg, byId, "owner")).toEqual({ personId: "m1", role: BROUGHT_AGENT_ROLE, text: "@Builder run rm" });
+  });
+
+  test("an invite that lowers an existing member's role to guest removes their brought agents", () => {
+    const { rooms, room, store } = roomWithMia();
+    rooms.bringAgent(room.id, "m1", "Coder", "claude");
+    expect(store.findRoom(room.id)!.agents.some(({ brought }) => brought?.personId === "m1")).toBe(true);
+    store.setRoomPersonRole(room.id, "m1", "guest");
+    rooms.personCameIn(room.id, "m1", "member");
+    expect(store.findRoom(room.id)!.agents.some(({ brought }) => brought?.personId === "m1")).toBe(false);
   });
 
   test("its name has the bringer's in it, so it never reads as the room's own agent or as its bringer", () => {
