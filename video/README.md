@@ -1,68 +1,45 @@
-# The Mirador trailer
+# The Mirador trailer & README GIFs
 
-A trailer of about 60 seconds at 4K and 60 fps, made from footage of a real Mirador: a throwaway host on a fake home folder,
-running the real Claude Code and opencode against a scripted stand-in for the model. Nothing in it is mocked up by hand, and no
-account, conversation or setting of yours is used.
+A flagship 0.15.5 trailer (~87 seconds at 4K and 60 fps, dark theme) plus 7 reproducible light-theme feature GIFs for `README.md`, all filmed from a real Mirador host running real Claude Code, opencode, official plugins, and a local peer-to-peer broker against a scripted stand-in model. Nothing is mocked by hand, and no account, conversation, or setting of yours is used.
 
 ```bash
 cd video
 bun install
 bun run build      # narrates, films, encodes, scores and renders: out/mirador-trailer.mp4
+bun run gifs       # films and two-pass encodes the 7 README GIFs into ../docs/gifs/
 ```
 
-It needs Google Chrome, [opencode](https://opencode.ai), ffmpeg, [uv](https://docs.astral.sh/uv/), git and about 3 GB of free disk while it films. The
-render alone takes about 20 minutes on an M-series Mac.
+It needs Google Chrome, [opencode](https://opencode.ai), ffmpeg, [uv](https://docs.astral.sh/uv/), git and about 3 GB of free disk while it films. The 4K render takes about 15–20 minutes on an M-series Mac.
 
 ## The stages
 
 | Step | Command | What it does |
 | --- | --- | --- |
-| Narrate | `bun run narrate` | Speaks `narration/lines.ts` with [Kokoro](https://github.com/thewh1teagle/kokoro-onnx), on this machine, into `public/narration`. Only changed lines are spoken again. The model is downloaded once to `~/.cache/mirador-video` and checked against its hash. It comes first because the voice scene's microphone plays the spoken question. |
-| Film | `bun run capture` | `capture/trailer.spec.ts` starts Mirador on a free port with the demo projects in `capture/demo-world.ts`, and films each scene in a 4K Chrome window at 250% zoom. The agents' answers come from `capture/scenes.ts`, through the fake model in `capture/director.ts`; in the delegate scene, Claude Code hands its task to opencode, and in the jobs scene an `ssh` stand-in reaches a build server on this machine (`/tmp/build-01`). Each scene becomes `public/clips/<scene>.frames` and `<scene>.json`, with the moments and boxes the edit uses. `MIRADOR_VIDEO_SCENES=plugins,media` films only those scenes and keeps the other clips; a scene may need the one before it. |
-| Encode | `bun run encode` | Turns the frames into 60 fps videos at the speed they were filmed, and deletes the frames. |
-| Score | `bun run music` | Synthesises the score into `public/music/score.wav` (`audio/compose.ts`), timed to the storyboard. |
-| Render | `bun run render` | Renders the [Remotion](https://www.remotion.dev) composition in `src` to `out/render.mp4`, then `audio/master.ts` brings its sound to YouTube's loudness (-14 LUFS) in `out/mirador-trailer.mp4`. |
+| Narrate | `bun run narrate` | Speaks `narration/lines.ts` with [Kokoro](https://github.com/thewh1teagle/kokoro-onnx) into `public/narration`. Only changed lines are spoken again. The model downloads once to `~/.cache/mirador-video` and is verified by SHA-256. |
+| Film | `bun run capture` | `capture/trailer.spec.ts` starts Mirador on a free port with the demo projects in `capture/demo-world.ts` (including custom `.mirador/icon.svg` project icons) and a local `mirador-p2p` broker when installed, and films each chapter in a 4K Chrome window at 250% zoom. `MIRADOR_VIDEO_SCENES=showPoint,p2p` films only those scenes and keeps the other clips. |
+| Encode | `bun run encode` | Turns the captured frames into 60 fps MP4 clips in `public/clips` and deletes the temporary frame folders. |
+| Score | `bun run music` | Synthesises the 120 BPM score and stereo transition SFX into `public/music/score.wav` (`audio/compose.ts`), locked to the storyboard's exact bar grid. |
+| Render | `bun run render` | Renders the [Remotion](https://www.remotion.dev) composition in `src` to `out/render.mp4`, then `audio/master.ts` masters its loudness to YouTube's -14 LUFS target in `out/mirador-trailer.mp4`. |
+| README GIFs | `bun run gifs` | Runs `capture/readme-gifs.spec.ts` (light theme, 1280×760) and encodes all 7 feature GIFs into `../docs/gifs/` via two-pass ffmpeg palette generation (`capture/encode-gifs.ts`). `MIRADOR_GIFS=show-and-point,ask` regenerates a subset. |
 
-`bun run studio` opens the composition in Remotion's editor, to scrub through it. `bun run test` checks the timing and
-camera logic, and that the storyboard speaks every line.
+`bun run studio` opens the composition in Remotion's editor. `bun run test` checks timing, camera framing, beat/bar alignment, and narration coverage.
+
+## Structure of the 0.15.5 trailer
+
+- **Hook (0:00–0:08)**: Accelerating wall of agent text and diffs with a bold kinetic headline (*"Coding agents write faster than you can read."*) flips on the beat into the live Checkout sequence diagram drawing every actor, step, glowing warning flare, and risk card.
+- **01 · Canvas (`showPoint`)**: Live checkout diagram beside the chat, clicking *Point and ask* on a bottleneck, and watching the diagram redraw with a mail queue.
+- **02 · Ask (`ask`)**: Visual iPhone car-mode previews answered with a click.
+- **03 · Review & Tours (`review`)**: Full-screen guided code review — Flow walkthrough, Findings tab, asking about a blocker, and watching it update in place.
+- **04 · Side Chat & Changes (`sideChat`)**: Asking `/btw` in a read-only side chat without interrupting the turn, then inspecting the inline diff in *Changes*.
+- **05 · Plugins & Media (`media`)**: Official *Plugins…* gallery, then Media marking a slow spinner on the frame, cutting it, and playing the rendered clip.
+- **06 · Multi-Agent (`delegate`)**: Claude Code delegating a dead-flag sweep to a local Qwen model on opencode and verifying the result.
+- **07 · Background Jobs (`jobs`)**: Watching a 214-test e2e run on `build-01`, following it live in a terminal, and waking the agent when green.
+- **08 · New in 0.15.5 (`p2p`)**: Zero-setup peer-to-peer invites in *Settings → Devices* for a phone (QR code) and another computer (`mirador://join/…`).
+- **End Card**: Animated Mirador 0.15.5 wordmark, all six supported agents, one-line `curl` install command, platforms, and website/GitHub addresses.
 
 ## Changing it
 
-- **A scene's cut, camera or slam**: `src/storyboard.ts`. Shots and camera moves are keyed to the moments the capture
-  marked, such as `["sent", 0.2]`, so they stay right when the footage is filmed again. A scene's `seconds` sets its
-  length. A scene with `slam: true` cuts straight in with a flash and a punch of zoom
-  (`src/components/Hit.tsx`); the score hits on every slam. A line of narration's
-  `musicDipsTo` makes the music dip less under it. The score's last chord rings out over the `backdrop` scene before
-  the end card.
-- **Keeping the cuts on the beat**: every slammed scene lasts whole beats of the score (`beats(n)`, at `TEMPO`), long
-  enough for its narration, and each of the score's sections (from show, review, plugins and jobs) adds up to
-  whole bars, so no section bends its tempo. `tests/timeline.test.ts` checks the scenes; when you change a scene's
-  length, keep its section's beats a multiple of four.
-- **The cold open**: `COLD_OPEN` in `src/storyboard.ts` is six slammed cuts of two beats each, one moment of a clip
-  apiece.
-- **The opening**: the `hook` scene opens on an agent's answer racing past as a wall of text
-  (`src/scenes/WallOfText.tsx`), speeding up while the camera pulls back, and at `CANVAS_AT` in `src/Trailer.tsx` it
-  hits (`HITS_AT`) and cuts to a drawing of the checkout diagram the agent draws in the show clip
-  (`capture/checkout-flow.ts`). The show scene picks up once the app has drawn it, so it is never drawn twice. The
-  score builds under the picture into a hit on the cut to show. The wall used to be a 14-second opening of its own,
-  during which YouTube's retention showed a third of viewers leaving; now it lasts 3.5 seconds, after the cold open.
-- **The corner labels**: each feature scene names its feature in the bottom-left corner for the whole scene
-  (`featureTag` in `src/storyboard.ts`, drawn by `src/components/CaptionCard.tsx`).
-- **What the agents say and draw**: `capture/scenes.ts`, then film again.
-- **The plugins**: `capture/plugins.ts` clones the plugins that come with Mirador, at the tags `plugins/defaults.json`
-  names, and Media at `MEDIA`'s tag, once into `~/.cache/mirador-video/plugins`. Mirador installs Media on camera from
-  a catalog that names its GitHub repo, and git fetches it from that cache. Delete a release's folder there to clone it
-  again.
-- **The voice clip**: the capture still films it, though the trailer no longer shows it: the microphone plays the
-  spoken `voiceAsk` line, and a stand-in voice server transcribes it and reads `voiceReply` back (`CAPTURE_ONLY_LINES`).
-  A line's `from` in the storyboard names a moment of the clip that its `at` counts from, so a line stays with the
-  footage however the shots speed it up.
-- **The narration**: edit `narration/lines.ts` and run `bun run narrate`. The render stops with an error while the
-  spoken lines don't match the text.
-- **The voice**: `bun run narrate --samples` speaks a line in eight voices into `out/voice-samples`. Set `VOICE` in
-  `narration/lines.ts` (or `MIRADOR_VIDEO_VOICE`) and narrate again.
-- **The music**: put a track in `public/music` and name it in `MUSIC` in `src/storyboard.ts`. It plays under the whole
-  trailer and dips while the narrator speaks; `bun run music` would then no longer be needed.
-- **The end card's addresses**: `WHERE_TO_GET_IT` and `PLUGIN_CATALOG` in `src/storyboard.ts`.
-- **Light theme**: `MIRADOR_VIDEO_THEME=light bun run capture` films the app in its light theme. The trailer has only been
-  made in the dark one so far.
+- **Cuts, camera, accents, chapter labels**: `src/storyboard.ts`. Every scene uses whole beats at `TEMPO = 120` (exact 0.5 s = 30 frames/beat), and each musical act sums to whole 4-beat bars. `camera.ts` reserves a 168 px top inset so zoomed views never collide with the floating chapter bar (`src/components/CaptionCard.tsx`).
+- **Narration**: edit `narration/lines.ts` and run `bun run narrate`.
+- **Scripts & demo projects**: `capture/scenes.ts` and `capture/demo-world.ts`.
+- **Plugins**: `capture/plugins.ts` caches clean release clones in `~/.cache/mirador-video/plugins`.

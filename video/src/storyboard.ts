@@ -1,202 +1,232 @@
-import type { CameraKey, Caption, ClipScene, Scene } from "./timeline.ts";
+import { ACCENTS, BRAND } from "./brand.ts";
+import type { Caption, Scene } from "./timeline.ts";
 
-/** The score's tempo. Every slammed scene lasts whole beats of it, and each of the score's sections whole bars, so every cut lands on a hit. */
-export const TEMPO = 144;
-/** Whole beats of the score, in seconds: at 60 fps one beat is 25 frames. */
+/**
+ * The score's tempo: 120 BPM gives exactly 0.5 s (30 frames at 60 fps) per beat and 2.0 s (120 frames) per bar,
+ * keeping every cut and musical accent frame-accurate.
+ */
+export const TEMPO = 120;
+/** Whole beats of the score, in seconds. */
 export const beats = (count: number) => (count * 60) / TEMPO;
-
 
 /** The review's flow: the steps along the top, and the code of the step under them. */
 const FLOW = { x: 256, y: 80, width: 1280, height: 720 };
-/** The plugin's install question and its answers, at the top of the canvas. */
-const INSTALL_QUESTION = { x: 836, y: 0, width: 700, height: 560 };
 /** Media's frame, its timeline and the note under it. */
-const MEDIA_EDITOR = { x: 836, y: 80, width: 700, height: 640 };
+const MEDIA_EDITOR = { x: 830, y: 74, width: 706, height: 660 };
 /** The workspace with the delegated conversation under its caller, and the task working above the composer. */
-const DELEGATED_TASK = { x: 0, y: 290, width: 830, height: 467 };
+const DELEGATED_TASK = { x: 0, y: 260, width: 840, height: 500 };
 
-/** A page the agent shows shows its diagram's source for a few frames before Mermaid draws it: the show scene starts once it's drawn. */
-const ONCE_DRAWN = -0.05;
+const NARRATION_AT = 0.25;
+/** The music dips gently under feature chapters to preserve rhythmic drive. */
+const FEATURE_DIP = 0.58;
 
-const COLD_CUT = beats(2);
-const NARRATION_AT = 0.3;
-/** The music dips less under the feature lines than under the hook, to keep their drive. */
-const FEATURE_DIP = 0.65;
-
-/** The feature a scene shows, named in its corner for the whole scene. */
-const featureTag = (kicker: string, title: string): Caption[] => [{ kicker, title, at: 0.25 }];
-
-/** A cut of the cold open: a moment of a clip, framed close, cut in on a hit. */
-function coldCut(id: string, clip: string, from: [string, number], look: CameraKey["look"], zoom: number | undefined): ClipScene {
-  return { kind: "clip", id, clip, shots: [{ from, to: [from[0], from[1] + COLD_CUT + 0.1] }], camera: [{ at: from, look, zoom }], seconds: COLD_CUT, slam: true };
-}
-
-/** The opening seconds, where viewers left the last cut: the best moments, a beat-synced burst of them. */
-const COLD_OPEN: Scene[] = [
-  coldCut("coldShow", "show", ["canvasShown", 1], "canvas", 1.1),
-  coldCut("coldAsk", "ask", ["questionShown", 0.6], "options", 1.1),
-  coldCut("coldReview", "review", ["flowStep", 0.6], FLOW, 1.05),
-  coldCut("coldMedia", "media", ["boxed", -0.4], MEDIA_EDITOR, 1.15),
-  coldCut("coldDelegate", "delegate", ["delegated", 0.8], DELEGATED_TASK, 1.15),
-  coldCut("coldJobs", "jobs", ["following", 3], "terminals", undefined),
-];
+/** Top-floating chapter bar naming the chapter number, feature, and one-line takeaway without overlapping the UI. */
+const chapter = (kicker: string, title: string, accent: string, position: "top" | "bottom" = "top"): Caption[] => [{ kicker, title, at: 0.18, position, accent }];
 
 /**
- * The trailer, scene by scene. A clip scene plays stretches of a filmed clip (capture/trailer.spec.ts films them) and
- * moves the camera to boxes the capture measured, at moments it named; a scene lasts at least as long as its lines of
- * narration (narration/lines.ts). To show a new feature: film it as a clip, add its line, add a scene here.
+ * The Mirador 0.15.5 flagship trailer, chapter by chapter (~87 s, 4K 60fps).
+ * Every musical act spans whole 4-beat bars so the score never bends its tempo, and every clip's shots are paced so
+ * the payoff lands right before the cut with continuous live motion throughout.
  */
 export const STORYBOARD: Scene[] = [
-  ...COLD_OPEN,
-  { kind: "picture", id: "hook", seconds: 5, narration: [{ line: "hook", at: 0.3 }], fadeInFrames: 0 },
+  {
+    kind: "picture",
+    id: "hook",
+    accent: BRAND.violet,
+    seconds: beats(16),
+    narration: [{ line: "hook", at: 0.25 }],
+    fadeInFrames: 0,
+  },
   {
     kind: "clip",
-    id: "show",
-    clip: "show",
-    captions: featureTag("Canvas", "Diagrams beside your chat"),
-    shots: [{ from: ["canvasShown", ONCE_DRAWN], to: ["turnEnded", 1.5], speed: 1.15 }],
+    id: "showPoint",
+    clip: "showPoint",
+    accent: ACCENTS.violet,
+    tilt: 1,
+    captions: chapter("01 · Canvas", "Live diagrams — point at anything to change it", ACCENTS.violet),
+    shots: [
+      { from: ["canvasShown", -0.05], to: ["pointing", 0.2], speed: 3.0 },
+      { from: ["pointing", 0.2], to: ["asked", 0.1], speed: 2.9 },
+      { from: ["asked", 0.1], to: ["turnEnded", 1.8], speed: 2.1 },
+    ],
     camera: [
-      { at: ["canvasShown", ONCE_DRAWN], look: "canvas", zoom: 1.3 },
-      { at: ["canvasShown", 1.4], look: "app" },
+      { at: ["canvasShown", -0.05], look: "canvas", zoom: 1.16 },
+      { at: ["pointing", 0.2], look: "canvas", zoom: 1.32 },
+      { at: ["redrawn", 0.0], look: "app" },
     ],
     slam: true,
-    narration: [{ line: "show", at: NARRATION_AT, musicDipsTo: FEATURE_DIP }],
-    seconds: beats(10),
+    narration: [{ line: "showPoint", at: NARRATION_AT, musicDipsTo: FEATURE_DIP }],
+    seconds: beats(16),
   },
   {
     kind: "clip",
     id: "ask",
     clip: "ask",
-    captions: featureTag("Ask", "Pick from pictures"),
+    accent: ACCENTS.sky,
+    tilt: -1,
+    captions: chapter("02 · Ask", "Pick from real previews with a click", ACCENTS.sky),
     shots: [
-      { from: ["opened", -0.2], to: ["picked", 0.3], speed: 2 },
-      { from: ["picked", 0.3], to: ["submitted", 0.6], speed: 1.8 },
+      { from: ["opened", -0.1], to: ["picked", 0.25], speed: 2.2 },
+      { from: ["picked", 0.25], to: ["turnEnded", 1.2], speed: 1.7 },
     ],
     camera: [
-      { at: ["opened", -0.2], look: "question", zoom: 1.12 },
-      { at: ["submitted", 0.3], look: "timeline", zoom: 1.35 },
+      { at: ["opened", -0.1], look: "question", zoom: 1.14 },
+      { at: ["submitted", 0.2], look: "app" },
     ],
     slam: true,
     narration: [{ line: "ask", at: NARRATION_AT, musicDipsTo: FEATURE_DIP }],
-    seconds: beats(10),
+    seconds: beats(12),
   },
   {
     kind: "clip",
     id: "review",
     clip: "review",
-    captions: featureTag("Review", "A guided tour of the change"),
+    accent: ACCENTS.coral,
+    tilt: 1,
+    captions: chapter("03 · Review & Tours", "Guided code walkthroughs, updated in place", ACCENTS.coral),
     shots: [
-      { from: ["reviewShown", -0.2], to: "flow", speed: 1.8 },
-      { from: "flow", to: ["flowStep3", -0.2], speed: 2.4 },
-      { from: ["findings", -0.1], to: ["askOpened", 0.8], speed: 1.2 },
+      { from: ["reviewShown", -0.1], to: "flow", speed: 1.7 },
+      { from: "flow", to: ["findings", -0.1], speed: 2.4 },
+      { from: ["findings", -0.1], to: ["asked", 0.2], speed: 2.8 },
+      { from: ["asked", 0.2], to: ["answered", 1.4], speed: 1.5 },
     ],
     camera: [
-      { at: ["reviewShown", -0.2], look: "canvas", zoom: 1.12 },
-      { at: ["flowStep", 0.2], look: FLOW, zoom: 1.2 },
-      { at: ["findings", 0.2], look: "blocker", zoom: 1.2 },
+      { at: ["reviewShown", -0.1], look: "canvas", zoom: 1.08 },
+      { at: ["flowStep", 0.1], look: FLOW, zoom: 1.18 },
+      { at: ["findings", 0.1], look: "blocker", zoom: 1.24 },
+      { at: ["rewritten", 0.0], look: "rewrittenBlocker", zoom: 1.22 },
     ],
     slam: true,
     narration: [{ line: "review", at: NARRATION_AT, musicDipsTo: FEATURE_DIP }],
-    seconds: beats(16),
+    seconds: beats(20),
   },
   {
     kind: "clip",
-    id: "plugins",
-    clip: "plugins",
-    captions: featureTag("Plugins", "Installed when you say so"),
+    id: "sideChat",
+    clip: "sideChat",
+    accent: ACCENTS.emerald,
+    tilt: -1,
+    captions: chapter("04 · Side Chat & Changes", "Ask /btw without interrupting · diff & commit inline", ACCENTS.emerald),
     shots: [
-      { from: "sent", to: ["asked", -0.2], speed: 3 },
-      { from: ["asked", -0.2], to: ["picked", 0.3], speed: 1.8 },
-      { from: ["picked", 0.3], to: ["submitted", 0.6], speed: 1.8 },
+      { from: "typing", to: ["sideAnswered", 0.75], speed: 1.95 },
+      { from: ["changesOpened", 0.5], to: ["diffOpened", 1.8], speed: 1.35, fadeInFrames: 6 },
     ],
     camera: [
-      { at: "sent", look: "timeline", zoom: 1.4 },
-      { at: ["asked", -0.3], look: INSTALL_QUESTION, zoom: 1.3 },
+      { at: "typing", look: "app" },
+      { at: ["sideOpened", 0.2], look: "sideArea", zoom: 1.15 },
+      { at: ["changesOpened", 0.5], look: "changes", zoom: 1.18 },
     ],
     slam: true,
-    narration: [{ line: "plugins", at: NARRATION_AT, musicDipsTo: FEATURE_DIP }],
-    seconds: beats(10),
+    narration: [{ line: "sideChat", at: NARRATION_AT, musicDipsTo: FEATURE_DIP }],
+    seconds: beats(16),
   },
   {
     kind: "clip",
     id: "media",
     clip: "media",
-    captions: featureTag("Media", "Mark the frame, it cuts the video"),
+    accent: ACCENTS.pink,
+    tilt: 1,
+    captions: chapter("05 · Plugins & Media", "Mark what drags on the frame — your agent cuts it", ACCENTS.pink),
     shots: [
-      { from: ["seeked", -0.3], to: "boxed", speed: 3 },
-      { from: "boxed", to: "markSent", speed: 4 },
-      { from: "cut", to: "rendered", speed: 4 },
-      { from: "rendered", to: ["playing", 1], speed: 5 },
+      { from: ["galleryOpened", 0.1], to: ["galleryOpened", 3.1], speed: 1.4 },
+      { from: ["seeked", -0.15], to: "boxed", speed: 3.2, fadeInFrames: 8 },
+      { from: "boxed", to: "markSent", speed: 3.8 },
+      { from: "cut", to: "rendered", speed: 3.8 },
+      { from: "rendered", to: ["playing", 2.8], speed: 3.0 },
     ],
     camera: [
-      { at: ["seeked", -0.3], look: MEDIA_EDITOR, zoom: 1.4 },
-      { at: ["cut", 0], look: "canvas", zoom: 1.3 },
+      { at: ["galleryOpened", 0.1], look: "gallery", zoom: 1.1 },
+      { at: ["seeked", -0.15], look: MEDIA_EDITOR, zoom: 1.34 },
+      { at: ["cut", 0.0], look: "canvas", zoom: 1.24 },
     ],
     slam: true,
     narration: [{ line: "media", at: NARRATION_AT, musicDipsTo: FEATURE_DIP }],
-    seconds: beats(11),
+    seconds: beats(18),
   },
   {
     kind: "clip",
     id: "delegate",
     clip: "delegate",
-    captions: featureTag("Delegate", "Hand work to any other agent"),
+    accent: ACCENTS.amber,
+    tilt: -1,
+    captions: chapter("06 · Multi-Agent", "Claude Code delegates a sweep to local opencode", ACCENTS.amber),
     shots: [
-      { from: "sent", to: ["delegated", 0.4], speed: 2.5 },
-      { from: ["delegated", 0.4], to: ["unfolded", 0.6], speed: 1.4 },
-      { from: ["unfolded", 0.6], to: ["replied", -0.3], speed: 3 },
-      { from: ["replied", -0.3], to: ["checked", 1.6], speed: 1.3 },
+      { from: ["typing", -0.1], to: ["delegated", 0.3], speed: 1.8 },
+      { from: ["delegated", 0.3], to: ["unfolded", 0.4], speed: 1.2 },
+      { from: ["unfolded", 0.4], to: ["replied", -0.1], speed: 1.9 },
+      { from: ["replied", -0.1], to: ["checked", 1.6], speed: 1.15 },
     ],
     camera: [
-      { at: "sent", look: "timeline", zoom: 1.4 },
-      { at: ["delegated", 0.1], look: DELEGATED_TASK, zoom: 1.3 },
-      { at: ["replied", 0.1], look: "timeline", zoom: 1.4 },
+      { at: ["typing", -0.1], look: "timeline", zoom: 1.24 },
+      { at: ["delegated", 0.1], look: DELEGATED_TASK, zoom: 1.22 },
+      { at: ["replied", 0.1], look: "app" },
     ],
     slam: true,
     narration: [{ line: "delegate", at: NARRATION_AT, musicDipsTo: FEATURE_DIP }],
-    seconds: beats(19),
+    seconds: beats(22),
   },
   {
     kind: "clip",
     id: "jobs",
     clip: "jobs",
-    captions: featureTag("Jobs", "Wakes your agent when it ends"),
+    accent: ACCENTS.cyan,
+    tilt: 1,
+    captions: chapter("07 · Background Jobs", "Watches remote builds & wakes your agent when green", ACCENTS.cyan),
     shots: [
-      { from: "sent", to: ["waiting", 0.3], speed: 3.5 },
-      { from: ["waiting", 0.3], to: ["following", 0.5], speed: 2.2 },
-      { from: ["following", 0.5], to: ["passed", 0.6], speed: 10 },
-      { from: ["passed", 0.6], to: ["woken", -0.2], speed: 8 },
-      { from: ["woken", -0.2], to: ["reported", 1.4], speed: 1.2 },
+      { from: "sent", to: ["waiting", 0.3], speed: 3.3 },
+      { from: ["waiting", 0.3], to: ["following", 0.4], speed: 2.3 },
+      { from: ["following", 0.4], to: ["passed", 0.5], speed: 10 },
+      { from: ["passed", 0.5], to: ["woken", -0.1], speed: 7 },
+      { from: ["woken", -0.1], to: ["reported", 1.5], speed: 1.4 },
     ],
     camera: [
-      { at: "sent", look: "timeline", zoom: 1.4 },
-      { at: ["waiting", 0.1], look: "jobWait", zoom: 1.6 },
-      { at: ["following", -0.2], look: "terminals" },
-      { at: ["woken", -0.3], look: "timeline", zoom: 1.4 },
+      { at: "sent", look: "timeline", zoom: 1.26 },
+      { at: ["waiting", 0.1], look: "jobWait", zoom: 1.45 },
+      { at: ["following", -0.1], look: "terminals", zoom: 1.12 },
+      { at: ["woken", -0.2], look: "app" },
     ],
     slam: true,
     narration: [{ line: "jobs", at: NARRATION_AT, musicDipsTo: FEATURE_DIP }],
-    seconds: beats(16),
+    seconds: beats(14),
   },
-  { kind: "backdrop", id: "backdrop", seconds: beats(2) },
+  {
+    kind: "clip",
+    id: "p2p",
+    clip: "p2p",
+    accent: ACCENTS.violet,
+    tilt: -1,
+    captions: chapter("08 · New in 0.15.5", "Zero-setup peer-to-peer for phone & other computers", ACCENTS.violet),
+    shots: [
+      { from: 0.6, to: ["computerShown", 2.2], speed: 1.12 },
+    ],
+    camera: [
+      { at: 0.6, look: "app" },
+      { at: ["opened", 0.0], look: "devicesDialog", zoom: 1.1 },
+      { at: ["phoneInvite", 0.1], look: { x: 420, y: 210, width: 760, height: 590 }, zoom: 1.25 },
+      { at: ["computerShown", 0.0], look: { x: 420, y: 210, width: 760, height: 590 }, zoom: 1.25 },
+    ],
+    slam: true,
+    narration: [{ line: "p2p", at: NARRATION_AT, musicDipsTo: FEATURE_DIP }],
+    seconds: beats(22),
+  },
+  { kind: "backdrop", id: "backdrop", accent: BRAND.violet, seconds: beats(2) },
   {
     kind: "end",
     id: "end",
-    seconds: 8,
+    accent: BRAND.violet,
+    seconds: beats(16),
     narration: [
-      { line: "mirador", at: 0.1, musicDipsTo: 0.8 },
-      { line: "end", at: 1.05 },
-      { line: "glance", at: 2.95 },
+      { line: "mirador", at: 0.15, musicDipsTo: 0.8 },
+      { line: "end", at: 1.1 },
+      { line: "openSource", at: 3.1 },
     ],
     fadeInFrames: 0,
   },
 ];
 
-/** Where the end card sends people: the public repository. */
+/** Where the end card sends people. */
+export const WEBSITE = "mirador.sodre90.com";
 export const WHERE_TO_GET_IT = "github.com/sodre90/mirador";
 
-/** The official plugins' catalog, which the end card names under it. */
-export const PLUGIN_CATALOG = "github.com/sodre90/mirador-plugins";
-
-/** The music bed; bun run music writes this one. To use another track, put it in public/music and name it here. */
+/** The music bed; bun run music writes this one. */
 export const MUSIC = "music/score.wav";

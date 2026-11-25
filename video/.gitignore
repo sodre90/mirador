@@ -1,4 +1,5 @@
 out/
 node_modules/
 public/clips/
+public/gif-clips/
 public/music/

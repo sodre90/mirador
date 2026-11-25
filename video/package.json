@@ -3,8 +3,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "capture": "cd .. && bunx playwright test -c video/playwright.config.ts",
+    "capture": "cd .. && bunx playwright test -c video/playwright.config.ts video/capture/trailer.spec.ts",
     "encode": "bun capture/encode.ts",
+    "gifs:capture": "cd .. && bunx playwright test -c video/playwright.config.ts video/capture/readme-gifs.spec.ts",
+    "gifs:encode": "bun capture/encode-gifs.ts",
+    "gifs": "bun run gifs:capture && bun run gifs:encode",
     "narrate": "bun narration/narrate.ts",
     "music": "bun audio/compose.ts",
     "studio": "remotion studio src/index.ts",

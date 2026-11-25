@@ -534,3 +534,31 @@ export function subsonic(mix: Stereo, cutoff = 28) {
   mix.right.set(highpass(highpass(mix.right, cutoff), cutoff));
   return mix;
 }
+
+/** A silky stereo transition whoosh that sweeps across the filter spectrum into a chapter cut. */
+export function whoosh(seconds = 0.55, panFrom = -0.55, panTo = 0.55): Stereo {
+  const raw = render(seconds, (t) => {
+    const u = t / seconds;
+    const bell = Math.sin(Math.PI * u) ** 1.6;
+    return noise() * bell;
+  });
+  const swept = bandpass(raw, (t) => 280 * 14 ** Math.sin((Math.PI * t) / seconds), 1.4);
+  const left = new Float32Array(swept.length);
+  const right = new Float32Array(swept.length);
+  for (let index = 0; index < swept.length; index++) {
+    const pan = panFrom + (panTo - panFrom) * (index / swept.length);
+    const [lg, rg] = panGains(pan);
+    left[index] = swept[index]! * lg;
+    right[index] = swept[index]! * rg;
+  }
+  return { left, right };
+}
+
+/** A crystalline two-note harmonic chime for clean UI reveals (diagram draw, P2P QR reveal). */
+export function sparkle(notes: number[], spacing = 0.08, seconds = 1.4): Stereo {
+  const mix = new Mix(seconds + notes.length * spacing + 0.2);
+  notes.forEach((note, index) => {
+    mix.add(index * spacing, pluck(note, seconds, 1.8), 0.26, index % 2 ? 0.3 : -0.3);
+  });
+  return mix;
+}

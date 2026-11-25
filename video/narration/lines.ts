@@ -1,35 +1,33 @@
-/** Whose voice a line is in: the narrator's, or one of the people heard in the voice scene. */
+/** The narrator's Kokoro voice (hear options with bun run narrate --samples). */
 export const VOICE = process.env.MIRADOR_VIDEO_VOICE ?? "am_fenrir";
-const USER_VOICE = "am_puck";
-const AGENT_VOICE = "af_heart";
 
 /** A line in a voice other than the narrator's. */
 type Voiced = { text: string; voice: string };
 
 /**
- * What is said; the storyboard puts each line in a scene, at a second. Change a line here, run bun run narrate, and only
- * that line is spoken again. A line given with its voice is said by someone other than the narrator.
+ * The flagship 0.15.5 trailer script: one cohesive story from wall-of-text problem to visual canvas, guided code
+ * reviews, side chats, official plugins, multi-agent delegation, remote jobs, and zero-setup peer-to-peer.
+ * Change a line here, run bun run narrate, and only changed lines are spoken again.
  */
 export const LINES = {
-  hook: "Coding agents explain everything in a wall of text. Mirador gives them a canvas, so they can show you.",
-  show: "Flows, mockups and charts, drawn right beside your chat.",
-  ask: "When it's your call, it asks with pictures.",
-  review: "Reviews become a guided tour of the change, with findings pinned to the lines.",
-  plugins: "Your agent installs official plugins when you say so.",
-  media: "Mark what's wrong on the frame, and the agent cuts the video.",
-  delegate: "It runs the agents you already have. Here, Claude Code hands a long read to a local model on opencode.",
-  jobs: "Long jobs? Mirador keeps watch, and wakes your agent when they're done.",
-  voiceAsk: { text: "How long will the switch-over take, and what could go wrong?", voice: USER_VOICE },
-  voiceReply: { text: "About ten minutes, read-only. It waits for replication to catch up before it switches.", voice: AGENT_VOICE },
+  hook: "Coding agents explain everything in walls of text. Mirador gives them a canvas, so they can show you.",
+  showPoint: "Architecture, flows, and mockups, right beside your chat. Point at anything they drew, and watch it update live.",
+  ask: "When it's your call, skip numbered lists — pick from real previews with a click.",
+  review: "Code reviews and tours walk you through changes in execution order, with findings pinned to exact lines, updated in place when you push back.",
+  sideChat: "Ask a quick side question without interrupting the turn, and inspect or commit every change right from the canvas.",
+  media: "Install official plugins on demand — like Media: mark what drags on the frame, and your agent cuts and renders the video.",
+  delegate: "Mirador runs the agents you already have — Claude Code, opencode, pi, Codex, Copilot, and Antigravity — and lets them delegate work to each other.",
+  jobs: "Long builds on another server? Mirador watches the job and wakes your agent the moment it finishes.",
+  p2p: "And now in Mirador zero point fifteen point five, connect your phone or another computer peer to peer — encrypted end to end, with nothing to configure.",
   mirador: "Mirador.",
   end: "See what your coding agent means.",
-  glance: "Understand it at a glance.",
+  openSource: "Free and open source.",
 } as const satisfies Record<string, string | Voiced>;
 
 export type LineName = keyof typeof LINES;
 
-/** Lines the capture plays in the voice clip, which the trailer no longer shows; they go once that filming does (vcs-tk89). */
-export const CAPTURE_ONLY_LINES: LineName[] = ["voiceAsk", "voiceReply"];
+/** Capture-only lines that the trailer itself does not speak. */
+export const CAPTURE_ONLY_LINES: LineName[] = [];
 
 const voiced = (name: LineName): Voiced => {
   const line: string | Voiced = LINES[name];
@@ -38,8 +36,8 @@ const voiced = (name: LineName): Voiced => {
 export const textOf = (name: LineName) => voiced(name).text;
 export const voiceOf = (name: LineName) => voiced(name).voice;
 
-/** Kokoro's pace. Hear the narrator's other voices with bun run narrate --samples. */
-export const SPEED = 1;
+/** Slightly brisker pace than 1.0 for confident, modern product-launch energy. */
+export const SPEED = 1.05;
 
 /** The voices bun run narrate --samples speaks a line in, to pick from. */
 export const SAMPLE_VOICES = ["af_heart", "af_bella", "af_nicole", "bf_emma", "am_michael", "am_fenrir", "bm_george", "bm_fable"];

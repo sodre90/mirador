@@ -12,36 +12,28 @@ export const prompts = {
   review: "Review the retry-payments branch against main.",
   questionAboutBlocker: "Is the cart id enough if the customer changes the cart?",
   fix: "Fix the blocker from the review: a retried capture must not charge the card twice.",
+  fixWithTour: "Fix the double-charge blocker and walk me through the change.",
+  sideChatQuestion: "How long does the bank deduplicate an idempotency key?",
   reproduce: "Reproduce the double charge: a failing test, and a script that replays a capture that timed out.",
   emailAfterResponse: "Send the email after the response, from a queue. How does the flow change?",
-  tightenVideo: "The checkout demo video drags in the middle. Can you tighten it?",
   openVideo: `Open ${DEMO_VIDEO.file} in Media.`,
   spinnerNote: "The spinner drags on here. Keep a second of it.",
-  switchOverTime: "How long will the switch-over take, and what could go wrong?",
   deadFlags: "Which of our feature flags can we delete? Check every screen.",
   e2eOnBuildServer: "Run the whole e2e suite on build-01, and tell me when it's green.",
 };
 
-/** What Mirador tells the agent once the user answers Install; the agent's next turn answers to it. */
-export const MEDIA_INSTALLED = "installed the Media plugin";
-export const MEDIA_INSTALLED_REPLY = "Media is installed. Once Mirador restarts, I'll open the video in it.";
-
-/** The profile the agent delegates to: a local model, on opencode rather than Claude Code. */
 export const LOCAL_PROFILE = "opencode · Qwen";
-/** The task the agent hands to the local model, whose first line titles the conversation it starts. */
 const DEAD_FLAGS_TASK = "Find the feature flags in src/flags.ts that nothing reads.";
-/** How Mirador starts the message that brings the local model's reply back to the agent. */
 const LOCAL_MODEL_REPLIED = `The task delegated to ${LOCAL_PROFILE}`;
 const DEAD_FLAGS = ["legacyPushTokens", "holidayBanner", "oldSettingsMenu"];
 export const DEAD_FLAGS_ANSWER = "Checked: three flags are dead";
 
-/** The build server the e2e suite runs on; the capture's ssh stand-in reaches it on this machine. */
 export const BUILD_SERVER = "build-01";
-/** What the agent asks Mirador to tell it once the e2e run ends; its next turn answers to it. */
 const E2E_ENDED = "The e2e run on build-01 ended. Read the end of shop-api/e2e.log there and tell the user the result.";
 export const E2E_ANSWER = "Green: all 214 e2e tests pass on build-01";
 
 export const CAR_MODE_CHOICE = "Whole screen is the button";
+export const SIDE_CHAT_ANSWER = "24 hours";
 
 type Risk = { title: string; detail: string; slow: boolean; fixed?: boolean };
 
@@ -74,7 +66,6 @@ const MIC = (colour: string) => `<svg viewBox="0 0 24 24" width="100%" height="1
 
 const STATUS_ICONS = `<span class="icons"><svg viewBox="0 0 18 12" width="12" height="8"><rect x="0" y="8" width="3" height="4" rx="1"/><rect x="5" y="5.5" width="3" height="6.5" rx="1"/><rect x="10" y="3" width="3" height="9" rx="1"/><rect x="15" y="0" width="3" height="12" rx="1"/></svg><svg viewBox="0 0 16 12" width="11" height="8.5"><path d="M8 11.5 5.6 8.9a3.4 3.4 0 0 1 4.8 0zM3.6 6.9a6.2 6.2 0 0 1 8.8 0l-1.3 1.3a4.4 4.4 0 0 0-6.2 0zM1.3 4.6a9.5 9.5 0 0 1 13.4 0l-1.3 1.3a7.6 7.6 0 0 0-10.8 0z"/></svg><svg viewBox="0 0 26 12" width="19" height="9"><rect x="0.5" y="0.5" width="22" height="11" rx="3.2" fill="none" stroke="currentColor" opacity=".45"/><rect x="2.5" y="2.5" width="16" height="7" rx="1.8"/><rect x="23.8" y="4" width="1.7" height="4" rx=".8" opacity=".45"/></svg></span>`;
 
-/** An iPhone showing one look of car mode: titanium edge, side buttons, Dynamic Island, status bar and home bar. */
 const iPhone = (screen: string, { background, ink }: { background: string; ink: string }) => `<style>
   body { margin: 0; padding: 8px 6px 12px; background: transparent; font: 11px -apple-system, "SF Pro Text", system-ui, sans-serif; }
   .iphone { position: relative; width: 158px; height: 336px; margin: 0 auto; padding: 4px; box-sizing: border-box; border-radius: 34px; background: linear-gradient(150deg, #9a9ca3 0%, #46474d 16%, #1d1e22 50%, #46474d 84%, #9a9ca3 100%); box-shadow: 0 16px 30px rgba(0, 0, 0, 0.5), 0 2px 5px rgba(0, 0, 0, 0.45), inset 0 0 0 1px rgba(255, 255, 255, 0.22); }
@@ -160,7 +151,6 @@ const carModeQuestion = {
   ],
 };
 
-/** The pull request the review is of. Only the capture's stand-in for gh ever hears of it, never GitHub. */
 export const PULL_REQUEST = { url: "https://github.com/acme/shop-api/pull/42", number: 42 };
 
 const review = (shopApi: string) => ({
@@ -207,6 +197,17 @@ const review = (shopApi: string) => ({
   ],
 });
 
+const fixTour = (shopApi: string) => ({
+  title: "What the fix changed",
+  folder: shopApi,
+  since: "HEAD",
+  summary: "A retried capture now carries the cart's id as its **idempotency key**, so the bank charges a card once however often checkout retries.",
+  flow: [
+    { title: "The capture carries the cart's id", at: "src/checkout.ts:7-9", say: "Checkout still retries a failed capture up to three times, and every attempt now sends the cart's id as the idempotency key." },
+    { title: "The key reaches the bank", at: "src/services/payments.ts:5-9", say: "The payments client forwards it as the `Idempotency-Key` header. For 24 hours the bank answers a repeated key with the first capture." },
+  ],
+});
+
 /** The director's scripts, for the projects of the demo world. */
 export function scripts({ projects, assetsOrigin }: { projects: { shopApi: string; mobileApp: string; storefront: string; infra: string }; assetsOrigin: string }): Script[] {
   const { shopApi, mobileApp, infra } = projects;
@@ -214,23 +215,20 @@ export function scripts({ projects, assetsOrigin }: { projects: { shopApi: strin
     {
       prompt: prompts.explainCheckout,
       steps: [
-        { thinkMs: 1100, say: "I'll trace the request through the code first.", call: { tool: "Read", input: { file_path: join(shopApi, "src/checkout.ts") } } },
-        { thinkMs: 700, call: { tool: "Bash", input: { command: 'grep -rn "reserve\\|capture\\|release" src', description: "Find where stock and payments are handled" } } },
+        { thinkMs: 650, say: "I'll trace checkout through the code first.", call: { tool: "Read", input: { file_path: join(shopApi, "src/checkout.ts") } } },
         {
-          thinkMs: 900,
-          say: "Checkout touches four services in one request. I drew the whole path on the canvas, with the three places an order can get stuck.",
+          thinkMs: 600,
+          say: "Checkout touches four services in one request. I drew the full path on the canvas, with the three places an order can get stuck.",
           call: { tool: "canvas.show", input: { title: CHECKOUT_TITLE, html: checkoutDiagram(assetsOrigin) } },
         },
         {
-          thinkMs: 600,
+          thinkMs: 400,
           say: [
             "**Where an order can get stuck**",
             "",
             "1. **Stock is reserved before the payment.** A declined card leaves it reserved until the nightly job.",
             "2. **The capture has no idempotency key.** A retried request can charge the card twice.",
             "3. **The confirmation email is sent inside the request.** A slow mail server holds the order open.",
-            "",
-            "Want me to fix the first two? Both are small and covered by `checkout.test.ts`.",
           ].join("\n"),
         },
       ],
@@ -238,39 +236,38 @@ export function scripts({ projects, assetsOrigin }: { projects: { shopApi: strin
     {
       prompt: prompts.carMode,
       steps: [
-        { thinkMs: 7500, say: "Three looks for car mode, each on an iPhone. Pick one and I'll build it.", call: { tool: "canvas.ask", input: carModeQuestion } },
-        { thinkMs: 800, say: "The whole screen it is. Each state gets its own colour, so you can tell listening from working at a glance." },
+        { thinkMs: 700, say: "Three looks for car mode, each on an iPhone. Pick one and I'll build it.", call: { tool: "canvas.ask", input: carModeQuestion } },
+        { thinkMs: 600, say: "The whole screen it is. Each state gets its own colour, so you can tell listening from working at a glance." },
       ],
     },
     {
       prompt: prompts.translate,
       steps: [
-        { thinkMs: 2200, say: "I'll start with the strings on each page.", call: { tool: "Bash", input: { command: "ls pages", description: "List the checkout pages" } } },
-        { thinkMs: 3200, call: { tool: "Bash", input: { command: 'grep -rn "Checkout" pages', description: "Find the strings to translate" } } },
-        { thinkMs: 2600, say: "Both translations are in, with each country's currency format." },
+        { thinkMs: 1400, say: "Translating the checkout strings to German and French.", call: { tool: "Bash", input: { command: "ls pages", description: "List the checkout pages" } } },
+        { thinkMs: 1200, say: "Both translations are in, with each country's currency format." },
       ],
     },
     {
       prompt: prompts.runbook,
       steps: [
-        { thinkMs: 3800, say: "Reading the cluster setup first.", call: { tool: "Read", input: { file_path: join(infra, "postgres/cluster.tf") } } },
-        { thinkMs: 5200, say: "The runbook is ready: replicate to a new 18 cluster, switch over in the maintenance window, and keep 16 as the fallback for a day." },
+        { thinkMs: 1600, say: "Reading the cluster setup first.", call: { tool: "Read", input: { file_path: join(infra, "postgres/cluster.tf") } } },
+        { thinkMs: 1200, say: "The runbook is ready: replicate to a new 18 cluster, switch over in the maintenance window, and keep 16 as fallback." },
       ],
     },
     {
       prompt: prompts.review,
       steps: [
-        { thinkMs: 900, say: "Reading the branch's changes against main.", call: { tool: "Bash", input: { command: "git diff --stat main", description: "See what the branch changes" } } },
-        { thinkMs: 1000, call: { tool: "canvas.review", input: review(shopApi) } },
-        { thinkMs: 500, say: "The review is on the canvas: one blocker, one issue and a nit. Start with the flow tour, it is four steps." },
+        { thinkMs: 700, say: "Reading the branch's changes against main.", call: { tool: "Bash", input: { command: "git diff --stat main", description: "See what the branch changes" } } },
+        { thinkMs: 700, call: { tool: "canvas.review", input: review(shopApi) } },
+        { thinkMs: 400, say: "The review is on the canvas: one blocker, one issue and a nit. Start with the flow tour." },
       ],
     },
     {
       prompt: prompts.questionAboutBlocker,
       steps: [
         {
-          thinkMs: 1300,
-          say: "No. The cart id stays the same when the customer changes the cart, so the bank would take the new total for a retry and drop it. I reworded the blocker to key on the id and the total.",
+          thinkMs: 900,
+          say: "Good catch — the cart id stays the same when items change, so the bank would drop the new total as a retry. Updating the blocker to key on cart id and total.",
           call: {
             tool: "canvas.update_review",
             input: {
@@ -283,126 +280,112 @@ export function scripts({ projects, assetsOrigin }: { projects: { shopApi: strin
             },
           },
         },
-        { thinkMs: 400, say: "Updated: the blocker now keys the capture on the cart's id and total." },
+        { thinkMs: 350, say: "Updated in place: the blocker now keys the capture on cart id and total." },
       ],
     },
     {
       prompt: prompts.fix,
       steps: [
-        { thinkMs: 900, say: "The capture needs an idempotency key, so the bank can tell a retry from a new charge.", call: { tool: "Read", input: { file_path: join(shopApi, "src/checkout.ts") } } },
+        { thinkMs: 650, say: "Adding the cart id as the capture's idempotency key.", call: { tool: "Read", input: { file_path: join(shopApi, "src/checkout.ts") } } },
         {
-          thinkMs: 700,
+          thinkMs: 550,
           call: { tool: "Edit", input: { file_path: join(shopApi, "src/checkout.ts"), old_string: "payments.capture(card, cart.total)", new_string: "payments.capture(card, cart.total, { idempotencyKey: cart.id })" } },
         },
-        { thinkMs: 500, say: "Done: the capture sends the cart's id as its idempotency key, so a retry the bank already took no longer charges the card twice." },
+        { thinkMs: 450, say: "Done: every retry now carries the cart's id as its idempotency key." },
+      ],
+    },
+    {
+      prompt: prompts.fixWithTour,
+      steps: [
+        { thinkMs: 600, call: { tool: "canvas.tour", input: fixTour(shopApi) } },
+        { thinkMs: 400, say: "I walked through the fix on the canvas — two steps, from `checkout.ts` to the `Idempotency-Key` header in `payments.ts`." },
+      ],
+    },
+    {
+      prompt: prompts.sideChatQuestion,
+      steps: [
+        {
+          thinkMs: 650,
+          say: `**${SIDE_CHAT_ANSWER}.** \`payments.ts\` forwards \`Idempotency-Key\` directly to the bank's \`/captures\` endpoint, which deduplicates repeated keys for a full day before expiring them.`,
+        },
       ],
     },
     {
       prompt: prompts.emailAfterResponse,
       steps: [
         {
-          thinkMs: 1200,
-          say: "The order answers with 201 first, and a queue sends the email after it, so a slow mail server no longer holds the order open.",
+          thinkMs: 900,
+          say: "The order answers with 201 first, and a queue sends the email asynchronously, so a slow mail server no longer holds checkout open.",
           call: { tool: "canvas.show", input: { title: CHECKOUT_TITLE, html: checkoutDiagram(assetsOrigin, CHECKOUT_FLOW_QUEUED, CHECKOUT_RISKS_QUEUED) } },
         },
-        { thinkMs: 500, say: "The new flow is on the canvas. Want me to make the change? It's the mailer call in `src/checkout.ts` and a job in `src/jobs`." },
+        { thinkMs: 400, say: "Updated flow on the canvas — email now leaves the request path." },
       ],
-    },
-    {
-      prompt: prompts.tightenVideo,
-      steps: [
-        {
-          thinkMs: 1400,
-          say: "Mirador's official Media plugin is made for this: you mark the slow part on the frame, and I cut it and render the video.",
-          call: { tool: "canvas.plugin_install", input: { name: "media", reason: "Mark the part that drags right on the video, and I cut it and render the result." } },
-        },
-        { thinkMs: 300, say: "It installs only once you say so." },
-      ],
-    },
-    {
-      prompt: MEDIA_INSTALLED,
-      steps: [{ thinkMs: 700, say: MEDIA_INSTALLED_REPLY }],
     },
     {
       prompt: prompts.openVideo,
       steps: [
-        { thinkMs: 900, call: { tool: "canvas.app_open", input: { app: "media", file: DEMO_VIDEO.file } } },
-        { thinkMs: 300, say: "It's open. Mark the part that drags, and tell me what to do there." },
+        { thinkMs: 650, call: { tool: "canvas.app_open", input: { app: "media", file: DEMO_VIDEO.file } } },
+        { thinkMs: 250, say: "Opened in Media. Mark the part that drags and tell me what to change." },
       ],
     },
     {
       prompt: prompts.spinnerNote,
       steps: [
-        { thinkMs: 1000, say: "Cutting the spinner down to a second.", call: { tool: "canvas.apply", input: { app: "media", op: { op: "cut", start: DEMO_VIDEO.spinnerStarts + 0.5, end: DEMO_VIDEO.spinnerEnds } } } },
-        { thinkMs: 400, call: { tool: "canvas.apply", input: { app: "media", op: { op: "mark-done", mark: "m1" } } } },
-        { thinkMs: 400, call: { tool: "canvas.app_run", input: { app: "media", task: "render" } } },
-        { thinkMs: 500, say: `Done: the spinner shows for a second instead of six, and the video is ${DEMO_VIDEO.seconds - (DEMO_VIDEO.spinnerEnds - DEMO_VIDEO.spinnerStarts - 0.5)} seconds long. The render is in \`checkout-demo.edited.mp4\`.` },
+        { thinkMs: 800, say: "Cutting the spinner down to a second.", call: { tool: "canvas.apply", input: { app: "media", op: { op: "cut", start: DEMO_VIDEO.spinnerStarts + 0.5, end: DEMO_VIDEO.spinnerEnds } } } },
+        { thinkMs: 350, call: { tool: "canvas.apply", input: { app: "media", op: { op: "mark-done", mark: "m1" } } } },
+        { thinkMs: 350, call: { tool: "canvas.app_run", input: { app: "media", task: "render" } } },
+        { thinkMs: 400, say: `Done: spinner cut to one second, rendered to \`checkout-demo.edited.mp4\`.` },
       ],
     },
     {
       prompt: prompts.deadFlags,
       steps: [
         {
-          thinkMs: 1200,
-          say: "That's a lot of reading for a short answer, so I'm handing the sweep to Qwen, the model on this machine, in opencode.",
+          thinkMs: 900,
+          say: "That's a lot of reading for a short answer — delegating the sweep to Qwen running locally on opencode.",
           call: {
             tool: "canvas.delegate",
             input: { profile: LOCAL_PROFILE, task: `${DEAD_FLAGS_TASK}\n\nRead src/flags.ts for the flags' names, then search src for where each is read. Answer with the flags nothing reads, one per line.` },
           },
         },
-        { thinkMs: 400, say: "Qwen is on it. I'll check what it finds." },
+        { thinkMs: 350, say: "Qwen is on it. I'll verify what it finds." },
       ],
     },
     {
       prompt: DEAD_FLAGS_TASK,
       steps: [
-        { thinkMs: 1800, call: { tool: "read", input: { path: join(mobileApp, "src/flags.ts") } } },
-        { thinkMs: 2400, call: { tool: "grep", input: { pattern: "flags\\.", path: join(mobileApp, "src"), include: "*.tsx" } } },
-        { thinkMs: 2000, say: `Three flags are never read:\n\n${DEAD_FLAGS.map((flag) => `- ${flag}`).join("\n")}` },
+        { thinkMs: 1400, call: { tool: "read", input: { path: join(mobileApp, "src/flags.ts") } } },
+        { thinkMs: 1800, call: { tool: "grep", input: { pattern: "flags\\.", path: join(mobileApp, "src"), include: "*.tsx" } } },
+        { thinkMs: 1400, say: `Three flags are never read:\n\n${DEAD_FLAGS.map((flag) => `- ${flag}`).join("\n")}` },
       ],
     },
     {
       prompt: LOCAL_MODEL_REPLIED,
       steps: [
-        { thinkMs: 900, say: "Checking Qwen's list before we rely on it.", call: { tool: "Bash", input: { command: `grep -rn "${DEAD_FLAGS.join("\\|")}" src`, description: "Check that nothing reads them" } } },
-        { thinkMs: 700, say: `${DEAD_FLAGS_ANSWER}, as only \`src/flags.ts\` names them: ${new Intl.ListFormat("en").format(DEAD_FLAGS.map((flag) => `\`${flag}\``))}. Say the word and I'll delete them.` },
+        { thinkMs: 750, say: "Verifying Qwen's list before we delete anything.", call: { tool: "Bash", input: { command: `grep -rn "${DEAD_FLAGS.join("\\|")}" src`, description: "Check that nothing reads them" } } },
+        { thinkMs: 550, say: `${DEAD_FLAGS_ANSWER}, as only \`src/flags.ts\` names them: ${new Intl.ListFormat("en").format(DEAD_FLAGS.map((flag) => `\`${flag}\``))}.` },
       ],
     },
     {
       prompt: prompts.e2eOnBuildServer,
       steps: [
         {
-          thinkMs: 1000,
-          say: "Starting the suite on build-01. It takes a few minutes, so Mirador will wait for it instead of me.",
+          thinkMs: 800,
+          say: "Starting the suite on build-01 and handing watch duty to Mirador.",
           call: {
             tool: "Bash",
             input: { command: `ssh ${BUILD_SERVER} 'cd shop-api; nohup bunx playwright test > e2e.log 2>&1 & echo $!'`, description: "Start the e2e suite on the build server" },
           },
         },
-        { thinkMs: 600, call: { tool: "canvas.when_done", input: (startedJob) => ({ pid: Number(startedJob.trim()), host: BUILD_SERVER, message: E2E_ENDED }) } },
-        { thinkMs: 400, say: "Mirador is watching the run on build-01, and wakes me when it ends. Get on with something else; I'll tell you the result." },
+        { thinkMs: 500, call: { tool: "canvas.when_done", input: (startedJob) => ({ pid: Number(startedJob.trim()), host: BUILD_SERVER, message: E2E_ENDED }) } },
+        { thinkMs: 350, say: "Mirador is watching build-01 and will wake me when the suite finishes." },
       ],
     },
     {
       prompt: E2E_ENDED,
       steps: [
-        { thinkMs: 900, call: { tool: "Bash", input: { command: `ssh ${BUILD_SERVER} 'tail -n 4 shop-api/e2e.log'`, description: "Read the end of the e2e log" } } },
-        { thinkMs: 700, say: `${E2E_ANSWER}, the new double-charge test among them, in 3.4 minutes. The fix is ready for review.` },
-      ],
-    },
-    {
-      prompt: prompts.switchOverTime,
-      steps: [
-        { thinkMs: 900, call: { tool: "Read", input: { file_path: join(infra, "postgres/cluster.tf") } } },
-        {
-          thinkMs: 700,
-          say: [
-            "**About ten minutes**, and the database is read-only for all of them.",
-            "",
-            "- **The risk is replication lag.** If 18 is behind when we switch, the last writes are lost, so the runbook waits for zero lag first.",
-            "- **The fallback:** 16 keeps running for a day, and switching back takes two minutes.",
-          ].join("\n"),
-        },
+        { thinkMs: 750, call: { tool: "Bash", input: { command: `ssh ${BUILD_SERVER} 'tail -n 4 shop-api/e2e.log'`, description: "Read the end of the e2e log" } } },
+        { thinkMs: 550, say: `${E2E_ANSWER}, including the new double-charge test, in 3.4 minutes.` },
       ],
     },
   ];

@@ -53,14 +53,17 @@ const ZOOM_TO_FILL = 0.3;
 
 /**
  * The transform that frames a view: the whole app sits in its window at rest (`appBox` on screen), and the closer the
- * camera zooms, the more the view grows to fill the frame edge to edge.
+ * camera zooms, the more the view grows to fill the frame below `topInset` (keeping the chapter bar completely clear).
  */
-export function cameraTransform(view: View, appBox: Rect, frame: { width: number; height: number }) {
+export function cameraTransform(view: View, appBox: Rect, frame: { width: number; height: number; topInset?: number }) {
+  const topInset = frame.topInset ?? 0;
+  const usableHeight = frame.height - topInset;
+  const maxFilledWidth = Math.min(frame.width, (usableHeight * APP.width) / APP.height);
   const pointsToPixels = appBox.width / APP.width;
   const filling = Math.min(1, Math.max(0, (APP.width / view.width - 1) / ZOOM_TO_FILL));
-  const targetWidth = interpolate(filling, [0, 1], [appBox.width, frame.width]);
+  const targetWidth = interpolate(filling, [0, 1], [appBox.width, maxFilledWidth]);
   const targetX = interpolate(filling, [0, 1], [appBox.x + appBox.width / 2, frame.width / 2]);
-  const targetY = interpolate(filling, [0, 1], [appBox.y + appBox.height / 2, frame.height / 2]);
+  const targetY = interpolate(filling, [0, 1], [appBox.y + appBox.height / 2, topInset + usableHeight / 2]);
   const scale = targetWidth / (view.width * pointsToPixels);
   const translateX = targetX - (appBox.x + view.centerX * pointsToPixels) * scale;
   const translateY = targetY - (appBox.y + view.centerY * pointsToPixels) * scale;

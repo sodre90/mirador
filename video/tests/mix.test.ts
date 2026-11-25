@@ -5,7 +5,7 @@ import type { PlacedScene } from "../src/timeline.ts";
 const fps = 10;
 const narration = { hello: { text: "Hello.", file: "hello.wav", seconds: 2 } };
 const placedWith = (spoken: { line: string; at: number; musicDipsTo?: number }[]): PlacedScene[] => [
-  { scene: { kind: "logo", id: "logo", seconds: 10, narration: spoken }, from: 20, frames: 100, fadeInFrames: 0, lines: spoken },
+  { scene: { kind: "backdrop", id: "intro", seconds: 10, narration: spoken }, from: 20, frames: 100, fadeInFrames: 0, lines: spoken },
 ];
 
 describe("the music", () => {

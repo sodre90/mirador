@@ -16,7 +16,24 @@ type MessagesRequest = {
 type OpencodeTool = "read" | "grep" | "shell";
 
 /** A tool by Claude Code's or opencode's own name, or one of the canvas's by its action, whatever the canvas server is called. */
-export type ToolCall = { tool: "Read" | "Bash" | "Edit" | "Write" | OpencodeTool | "canvas.show" | "canvas.ask" | "canvas.review" | "canvas.update_review" | "canvas.plugin_install" | "canvas.app_open" | "canvas.apply" | "canvas.app_run" | "canvas.delegate" | "canvas.when_done";
+export type ToolCall = {
+  tool:
+    | "Read"
+    | "Bash"
+    | "Edit"
+    | "Write"
+    | OpencodeTool
+    | "canvas.show"
+    | "canvas.ask"
+    | "canvas.review"
+    | "canvas.update_review"
+    | "canvas.tour"
+    | "canvas.plugin_install"
+    | "canvas.app_open"
+    | "canvas.apply"
+    | "canvas.app_run"
+    | "canvas.delegate"
+    | "canvas.when_done";
   /** A function of the last tool's output, for a call that names what the tool before it started. */
   input: Record<string, unknown> | ((lastToolOutput: string) => Record<string, unknown>);
 };
@@ -52,17 +69,13 @@ function chunksOf(text: string) {
 }
 
 /**
- * Claude's Messages API, played from scripts instead of a model, for the real Claude Code to drive: Claude Code runs
- * the tools a script calls, Mirador shows them, and the trailer films it. A step is found from the conversation
- * itself, by counting the tool results since the user's message, so a retried request gets the same answer.
+ * Claude's Messages API, played from scripts instead of a model, for the real Claude Code and opencode to drive.
+ * Automatically adapts on-demand plugin tools (like review, tour, delegate) to canvas `use_tool` when not exposed directly.
  */
 export class Director {
-  /** Every request, so a capture can prove no conversation reached anything but this director. */
   readonly requests: { typed: string; mainLoop: boolean; scripted: boolean }[] = [];
   private server?: Server;
   private readonly random = seededRandom(7);
-
-  /** The scripts are given once the host has started, as the pages they show load the host's canvas assets. */
   scripts: Script[] = [];
 
   async start() {
@@ -87,7 +100,6 @@ export class Director {
     this.server?.close();
   }
 
-  /** Claude Code signs in with a made-up subscription token, never with the person's own account. */
   get environment() {
     return [
       "-u ANTHROPIC_API_KEY",
@@ -104,7 +116,6 @@ export class Director {
     ].join("\n");
   }
 
-  /** opencode reaches the director through its built-in Anthropic provider, with a model named as a local one would be. */
   get opencodeEnvironment() {
     const config = {
       model: `anthropic/${LOCAL_MODEL}`,
@@ -119,7 +130,6 @@ export class Director {
 
   private async reply(body: MessagesRequest, response: ServerResponse) {
     const mainLoop = (body.tools ?? []).length > 0;
-    // A message sent while a turn runs reaches the model in the same user message as a tool's result.
     const typedIndex = body.messages.findLastIndex(({ role, content }) => role === "user" && typedText(content) !== "");
     const typed = typedIndex < 0 ? "" : typedText(body.messages[typedIndex]!.content);
     const asksForATitle = body.output_config?.format?.schema?.properties?.title !== undefined;
@@ -135,20 +145,24 @@ export class Director {
     await this.send(body, response, step, true);
   }
 
-  private toolName(body: MessagesRequest, call: ToolCall) {
+  /** Resolves a canvas tool natively if offered, or wraps on-demand plugin tools through `use_tool`. */
+  private resolveTool(body: MessagesRequest, call: ToolCall, resolvedInput: Record<string, unknown>): { name: string; input: Record<string, unknown> } {
     const names = (body.tools ?? []).map(({ name }) => name);
-    if (!call.tool.startsWith("canvas.")) return call.tool;
+    if (!call.tool.startsWith("canvas.")) return { name: call.tool, input: resolvedInput };
     const action = call.tool.slice("canvas.".length);
-    const name = names.find((each) => each.includes("canvas") && each.endsWith(`__${action}`));
-    if (!name) throw new Error(`Claude Code offers no canvas ${action} tool: ${names.join(", ")}`);
-    return name;
+    const direct = names.find((each) => each.includes("canvas") && each.endsWith(`__${action}`));
+    if (direct) return { name: direct, input: resolvedInput };
+    const useTool = names.find((each) => each.includes("canvas") && each.endsWith("__use_tool"));
+    if (useTool) return { name: useTool, input: { tool: action, input: resolvedInput } };
+    throw new Error(`Claude Code offers no canvas ${action} or use_tool: ${names.join(", ")}`);
   }
 
   private async send(body: MessagesRequest, response: ServerResponse, step: Step, paced: boolean) {
     const id = `msg_video_${this.requests.length}`;
     const usage = { input_tokens: 1200, output_tokens: 80 };
-    const input = typeof step.call?.input === "function" ? step.call.input(lastToolOutput(body.messages)) : step.call?.input;
-    const call = step.call && { type: "tool_use", id: `toolu_video_${this.requests.length}`, name: this.toolName(body, step.call), input };
+    const resolvedInput = typeof step.call?.input === "function" ? step.call.input(lastToolOutput(body.messages)) : step.call?.input;
+    const resolved = step.call && resolvedInput ? this.resolveTool(body, step.call, resolvedInput) : undefined;
+    const call = resolved && { type: "tool_use", id: `toolu_video_${this.requests.length}`, name: resolved.name, input: resolved.input };
     const stopReason = call ? "tool_use" : "end_turn";
     const content = [...(step.say ? [{ type: "text", text: step.say }] : []), ...(call ? [call] : [])];
     if (!body.stream) {

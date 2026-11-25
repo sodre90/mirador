@@ -6,7 +6,7 @@ import { FRAME } from "./frame.ts";
 /** A frame the browser presented, by its file and when it was presented, in epoch milliseconds. */
 export type ShotFrame = { file: string; at: number };
 
-/** A box on the page, in the page's own points (1536 x 864). */
+/** A box on the page, in the page's own CSS points. */
 export type Rect = { x: number; y: number; width: number; height: number };
 
 /**
@@ -16,7 +16,7 @@ export type Rect = { x: number; y: number; width: number; height: number };
 export type ClipInfo = { name: string; seconds: number; moments: Record<string, number>; rects: Record<string, Rect>; frames: number; medianGapMs: number; p95GapMs: number };
 
 /** A scene that runs longer than this is stuck; its frames would fill the disk at about 40 MB a second. */
-const LONGEST_CLIP_SECONDS = 60;
+const LONGEST_CLIP_SECONDS = 75;
 
 /** Width and height from a JPEG's start-of-frame header. */
 function jpegSize(data: Buffer) {
@@ -29,9 +29,8 @@ function jpegSize(data: Buffer) {
 }
 
 /**
- * Records the page as the 4K frames the browser hands over whenever the picture changes, each with the moment it was
- * presented, and names moments as they happen ("canvas shown"), so the edit can key zooms and captions to them.
- * Encoding is a later step: it would slow the browser down while it is being filmed.
+ * Records the page as frames the browser hands over whenever the picture changes, each with the moment it was
+ * presented, and names moments as they happen ("canvas shown"), so the edit can key zooms and GIF cuts to them.
  */
 export class ClipRecorder {
   private frames: ShotFrame[] = [];
@@ -45,6 +44,7 @@ export class ClipRecorder {
   constructor(
     private readonly page: Page,
     private readonly clipsDirectory: string,
+    private readonly size: { width: number; height: number; quality?: number } = { width: FRAME.width, height: FRAME.height, quality: 94 },
   ) {}
 
   async start(name: string) {
@@ -66,9 +66,9 @@ export class ClipRecorder {
       writeFileSync(join(this.directory, file), image);
       this.frames.push({ file, at: metadata.timestamp! * 1000 });
       const { width, height } = jpegSize(image);
-      if (width !== FRAME.width || height !== FRAME.height) this.wrongSizes += 1;
+      if (width !== this.size.width || height !== this.size.height) this.wrongSizes += 1;
     });
-    await devtools.send("Page.startScreencast", { format: "jpeg", quality: 94, maxWidth: FRAME.width, maxHeight: FRAME.height });
+    await devtools.send("Page.startScreencast", { format: "jpeg", quality: this.size.quality ?? 94, maxWidth: this.size.width, maxHeight: this.size.height });
   }
 
   /** Names this moment of the clip. */
@@ -83,6 +83,11 @@ export class ClipRecorder {
     this.rects[name] = box;
   }
 
+  /** Remembers a custom bounding box directly. */
+  markCustomRect(name: string, box: Rect) {
+    this.rects[name] = box;
+  }
+
   /** Stops filming; the last frame lasts until now, so a still ending keeps its length. */
   async stop(): Promise<ClipInfo> {
     const stoppedAt = Date.now();
@@ -91,7 +96,7 @@ export class ClipRecorder {
     const frames = this.frames;
     if (frames.length === 0) throw new Error(`${this.name}: the browser handed over no frames`);
     if (stoppedAt - frames[0]!.at > LONGEST_CLIP_SECONDS * 1000) throw new Error(`${this.name}: ran over ${LONGEST_CLIP_SECONDS} s, so the scene is stuck`);
-    if (this.wrongSizes > 0) throw new Error(`${this.name}: ${this.wrongSizes} frames were not ${FRAME.width}x${FRAME.height}`);
+    if (this.wrongSizes > 0) throw new Error(`${this.name}: ${this.wrongSizes} frames were not ${this.size.width}x${this.size.height}`);
     const startedAt = frames[0]!.at;
     writeFileSync(join(this.directory, "frames.json"), JSON.stringify({ frames, endsAt: stoppedAt }));
     const gaps = frames.slice(1).map((frame, index) => frame.at - frames[index]!.at).sort((a, b) => a - b);

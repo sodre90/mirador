@@ -61,18 +61,18 @@ describe("a scene's length", () => {
 
   test("is its footage's, held until its narration ends", () => {
     expect(sceneSeconds(scene, { demo: clip }, {})).toBe(2);
-    expect(sceneSeconds({ ...scene, narration: [{ line: "intro", at: 1.5 }] }, { demo: clip }, narration)).toBeCloseTo(5.1);
+    expect(sceneSeconds({ ...scene, narration: [{ line: "intro", at: 1.5 }] }, { demo: clip }, narration)).toBeCloseTo(5.05);
   });
 
   test("can be set shorter than the footage, but still waits for its narration", () => {
     expect(sceneSeconds({ ...scene, seconds: 1.5 }, { demo: clip }, {})).toBe(1.5);
-    expect(sceneSeconds({ ...scene, seconds: 1.5, narration: [{ line: "intro", at: 1 }] }, { demo: clip }, narration)).toBeCloseTo(4.6);
+    expect(sceneSeconds({ ...scene, seconds: 1.5, narration: [{ line: "intro", at: 1 }] }, { demo: clip }, narration)).toBeCloseTo(4.55);
   });
 
   test("waits for a line timed from a point of the clip, wherever the shots put that point", () => {
     const fromShown = { ...scene, narration: [{ line: "intro", at: 0.2, from: "shown" }] };
     expect(linesOf(fromShown, { demo: clip })).toEqual([{ line: "intro", at: 2.2, musicDipsTo: undefined }]);
-    expect(sceneSeconds(fromShown, { demo: clip }, narration)).toBeCloseTo(5.8);
+    expect(sceneSeconds(fromShown, { demo: clip }, narration)).toBeCloseTo(5.75);
   });
 
   test("asks for the narration to be made when a line is missing", () => {
@@ -82,8 +82,8 @@ describe("a scene's length", () => {
 
 test("scenes overlap by the transition, and the last one ends the trailer", () => {
   const cards: Scene[] = [
-    { kind: "logo", id: "a", seconds: 1 },
-    { kind: "logo", id: "b", seconds: 2 },
+    { kind: "backdrop", id: "a", seconds: 1 },
+    { kind: "backdrop", id: "b", seconds: 2 },
     { kind: "end", id: "c", seconds: 1 },
   ];
   const placed = placeScenes(cards, {}, {}, 10, 3).map(({ scene, from, frames }) => ({ id: scene.id, from, frames }));
@@ -96,8 +96,8 @@ test("scenes overlap by the transition, and the last one ends the trailer", () =
 
 test("a scene that cuts straight in doesn't overlap the one before it", () => {
   const cards: Scene[] = [
-    { kind: "logo", id: "a", seconds: 1 },
-    { kind: "logo", id: "b", seconds: 2, fadeInFrames: 0 },
+    { kind: "backdrop", id: "a", seconds: 1 },
+    { kind: "backdrop", id: "b", seconds: 2, fadeInFrames: 0 },
     { kind: "end", id: "c", seconds: 1 },
   ];
   expect(placeScenes(cards, {}, {}, 10, 3).map(({ scene, from, frames, fadeInFrames }) => ({ id: scene.id, from, frames, fadeInFrames }))).toEqual([
@@ -117,22 +117,19 @@ test("a shot's trim covers its last frame however its times round", () => {
 });
 
 const video = join(import.meta.dirname, "..");
-const filmed = existsSync(join(video, "public", "clips"));
+const clipNames = [...new Set(STORYBOARD.flatMap((scene) => (scene.kind === "clip" ? [scene.clip] : [])))];
+const filmed = clipNames.every((name) => existsSync(join(video, "public", "clips", `${name}.json`)));
 
 describe.skipIf(!filmed)("the storyboard, with the clips filmed", () => {
-  const clipNames = [...new Set(STORYBOARD.flatMap((scene) => (scene.kind === "clip" ? [scene.clip] : [])))];
   const clips = filmed ? Object.fromEntries(clipNames.map((name) => [name, JSON.parse(readFileSync(join(video, "public", "clips", `${name}.json`), "utf8")) as ClipInfo])) : {};
   const { lines } = JSON.parse(readFileSync(join(video, "public", "narration", "manifest.json"), "utf8"));
   const wholeBeats = (seconds: number) => (seconds * TEMPO) / 60;
   const isWhole = (count: number) => Math.abs(count - Math.round(count)) < 1e-6;
 
-  test("opens with cuts that last whole bars of the score, so its hits stay on the cuts", () => {
-    const coldOpen = STORYBOARD.slice(0, STORYBOARD.findIndex(({ id }) => id === "hook"));
-    expect(coldOpen.length).toBeGreaterThan(0);
-    expect(isWhole(wholeBeats(coldOpen.reduce((seconds, scene) => seconds + sceneSeconds(scene, clips, lines), 0)) / 4)).toBe(true);
-  });
-
-  test("gives every slammed scene whole beats, with room for its narration", () => {
+  test("gives the hook and every slammed scene whole beats, with room for its narration", () => {
+    const hook = STORYBOARD.find(({ id }) => id === "hook")!;
+    expect(sceneSeconds(hook, clips, lines)).toBe(hook.seconds!);
+    expect(isWhole(wholeBeats(hook.seconds!) / 4)).toBe(true);
     const slammed = STORYBOARD.filter((scene): scene is ClipScene => scene.kind === "clip" && Boolean(scene.slam));
     for (const scene of slammed) {
       expect({ id: scene.id, seconds: sceneSeconds(scene, clips, lines) }).toEqual({ id: scene.id, seconds: scene.seconds! });
@@ -141,8 +138,8 @@ describe.skipIf(!filmed)("the storyboard, with the clips filmed", () => {
   });
 
   test("gives each of the score's sections whole bars, so none bends its tempo", () => {
-    const sectionStarts = ["show", "review", "plugins", "jobs", "backdrop"];
-    const placed = placeScenes(STORYBOARD, clips, lines, 60, 18);
+    const sectionStarts = ["showPoint", "review", "media", "jobs", "backdrop"];
+    const placed = placeScenes(STORYBOARD, clips, lines, 60, 14);
     const startOf = (id: string) => placed.find(({ scene }) => scene.id === id)!.from / 60;
     for (const [from, to] of sectionStarts.slice(0, -1).map((id, index) => [id, sectionStarts[index + 1]!])) {
       expect({ from, bars: isWhole(wholeBeats(startOf(to!) - startOf(from!)) / 4) }).toEqual({ from, bars: true });
@@ -150,7 +147,7 @@ describe.skipIf(!filmed)("the storyboard, with the clips filmed", () => {
   });
 
   test("cuts straight into a slammed scene", () => {
-    const placed = placeScenes(STORYBOARD, clips, lines, 60, 18);
+    const placed = placeScenes(STORYBOARD, clips, lines, 60, 14);
     for (const { scene, fadeInFrames } of placed.filter(({ scene }) => scene.kind === "clip" && scene.slam)) expect({ id: scene.id, fadeInFrames }).toEqual({ id: scene.id, fadeInFrames: 0 });
   });
 });

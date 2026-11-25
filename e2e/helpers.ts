@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { loadavg } from "node:os";
 import { expect, test, type Frame, type FrameLocator, type Locator, type Page } from "@playwright/test";
 import type { DesktopMenu, DesktopMenuMessage } from "../shared/desktop-menu.ts";
+import type {} from "../web/desktop-bridge.ts";
 import type { TestHost } from "./test-host.ts";
 
 /** A path as the agent's Bash takes it: Git Bash reads a backslash as an escape, so on Windows the path is written with slashes. */

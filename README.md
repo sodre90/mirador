@@ -37,25 +37,25 @@ Understanding gets faster. Reviewing gets far, far faster. And you stay the one 
 
 ### Show: the agent draws what it means
 
-![A conversation about a checkout flow, with the agent's sequence diagram on the canvas beside it](docs/screenshots/canvas.png)
+![The agent draws a checkout sequence diagram on the canvas beside the conversation; the user clicks Point and ask on a bottleneck card and asks to move email to a queue, and the diagram updates live](docs/gifs/show-and-point.gif)
 
-The agent renders a page on the canvas: a diagram, a mockup, a chart, a comparison, a 3D scene. Pages are self-contained HTML in a sandbox, with Mermaid, D3 and three.js built in and working offline. If a page throws a script error, the agent is told and fixes it. Every page stays in the conversation's canvas history.
+The agent renders a page on the canvas: a diagram, a mockup, a chart, a comparison, a 3D scene. Pages are self-contained HTML in a sandbox, with Mermaid, D3 and three.js built in and working offline. Click **Point and ask** on anything the agent drew to ask about it or have it changed in place. If a page throws a script error, the agent is told and fixes it. Every page stays in the conversation's canvas history.
 
 ### Ask: questions you answer with a click
 
-![The agent asks which settings layout to build, with a phone mockup preview for each option](docs/screenshots/ask.png)
+![The agent asks how car mode should look on a phone with three visual iPhone mockups; the user compares them, picks one and clicks Submit](docs/gifs/ask.gif)
 
 Instead of a numbered list of options in text, the agent asks on the canvas: a question, an optional page explaining it, and up to eight options with a preview each. You click one, or type your own answer when the agent allows it, and add a note if you like. Several questions come at once, a page each, with a review before you send. The answer goes back to the agent, either as the tool's result or as your next message.
 
 ### Tour: the agent walks you through code
 
-![The agent's tour of its fix: the steps on the left, the changed line of src/checkout.ts marked on the right](docs/screenshots/tour.png)
+![The agent publishes a guided code tour of its fix; the user steps through the Flow in execution order with changed lines marked, then opens the Files tab](docs/gifs/tour.gif)
 
 Instead of a long summary in text, the agent walks you through the code on the canvas: how something works, or what it just changed. A tour is a short summary and steps in the order the code runs, each with its lines. When it shows a change, the changed lines are marked and a *Files* tab holds the diff. Ask the agent about any lines, or open them in IntelliJ IDEA.
 
 ### Review: a guided tour of the change
 
-![A code review open on its flow tour: the steps beside the current step's explanation, and the diff below them with the step's lines marked](docs/screenshots/review-flow.png)
+![A full-screen code review: overview, guided Flow tour, Findings tab with a blocker pinned to its line, and asking a question that updates the blocker in place](docs/gifs/review.gif)
 
 The agent publishes its code review as a page you work through, not a wall of comments:
 
@@ -64,9 +64,7 @@ The agent publishes its code review as a page you work through, not a wall of co
 - **Files**: every diff, with syntax colours.
 - **Findings**: pinned to their lines. Each shows its severity and whether the agent confirmed it or only suspects it.
 
-Keep or drop each finding, reword it, ask the agent about any lines, and open them in IntelliJ IDEA. Then post the findings you kept to the GitHub pull request as your pending review.
-
-![The review's findings tab: a blocker, an issue and a nit, each with its lines](docs/screenshots/review-findings.png)
+Keep or drop each finding, reword it, ask the agent about any lines, and open them in IntelliJ IDEA. When you ask about a finding, the agent updates only what changed in place. Then post the findings you kept to the GitHub pull request as your pending review.
 
 ## Get it
 
@@ -177,7 +175,7 @@ Windows support is new and experimental: expect rough edges, and please report w
 
 ### The canvas
 
-![The Changes view on the canvas: the uncommitted files of shop-api, the agent's edit of src/checkout.ts marked and open under its row](docs/screenshots/changes.png)
+![Approving an agent edit right on the canvas with its diff, then inspecting the uncommitted changes and inline diff in Changes](docs/gifs/changes.gif)
 
 - **`show`**: the agent renders a page next to the conversation: diagrams, mockups, charts, comparisons, 3D scenes.
 - **Libraries built in**: three.js (with OrbitControls), D3 v7 and Mermaid load from Mirador itself, so pages work offline.
@@ -243,6 +241,10 @@ Windows support is new and experimental: expect rough edges, and please report w
 - **Keys**: `1`–`5` tabs, `j`/`k` changes, `n`/`p` findings, `f` files, `a` ask, `o` open in IDEA.
 
 ### Conversations and agents
+
+![Asking a side question with /btw opens a read-only side chat beside the conversation without disturbing the main thread](docs/gifs/side-chat.gif)
+
+- **Side chats (`/btw` or `⌥B`)**: ask a quick question about the conversation in a panel beside it without interrupting the active turn, with the conversation's context carried over and read-only by default. Quote an answer back into the main chat with one click, or promote it to a conversation of its own.
 
 - **Claude Code, opencode, pi, Codex, Copilot and Antigravity** over ACP, in the workspace's folder, with your normal settings: Claude Code with `~/.claude` (settings, hooks, MCP servers; claude-notifier is muted for Mirador's sessions), opencode with `~/.config/opencode` (providers, agents, plugins, MCP servers, and its permission settings: Mirador forces nothing, so with opencode's defaults most tools run without asking). opencode is found on `PATH`, else in `/opt/homebrew/bin`, `/usr/local/bin` or `~/.opencode/bin`. pi with `~/.pi/agent` (settings, models, extensions, skills), through [pi-acp](https://github.com/svkozak/pi-acp), which Mirador carries; pi is found on `PATH`. Codex with `~/.codex` (config, sign-in, MCP servers), through [codex-acp](https://github.com/agentclientprotocol/codex-acp), which Mirador carries; Codex is found on `PATH`, else in `~/.local/bin`, `/opt/homebrew/bin` or `/usr/local/bin`. In Codex's Plan mode (*Collaboration mode* at the top of the conversation), its questions show as canvas questions. Copilot with `~/.copilot` (config, sign-in via `copilot login` or `COPILOT_GITHUB_TOKEN`, MCP servers), through `copilot --acp`; Copilot is found on `PATH`, else in `~/.local/bin`, `/opt/homebrew/bin` or `/usr/local/bin`; Mirador lets it read every MCP server's instructions (`--allow-all-mcp-server-instructions`), as that is how the canvas server's reach it. With every agent, the canvas tools that only show things in Mirador (`show`, `ask`, `when_done`, and the plugins' tools such as `tour` and `checklist`) run without asking. Antigravity with `~/.gemini` (sign-in, settings, MCP servers), through `agy acp`; `agy` is found on `PATH`, else in `~/.local/bin`, `/opt/homebrew/bin` or `/usr/local/bin`; the canvas server's instructions go into its system prompt, since Antigravity keeps MCP servers' instructions from its model. Support for pi, Codex, Copilot and Antigravity is new and experimental.
 - **Antigravity on a personal Google account**: Google's [terms](https://antigravity.google/terms) rule out third-party software, while its [docs](https://antigravity.google/docs/ide/extensions/acp) let any ACP client run `agy acp`. A maintainer of its CLI [answered](https://github.com/google-antigravity/antigravity-cli/issues/1493) in November 2026 that conversations where you write the prompts are fine, and that prompts other agents write are not. So with a personal sign-in, keep Antigravity out of rooms and of the plugins that have agents prompt each other (delegate, race and Spectra Council): Google may suspend the account's Antigravity access. For those, use a Gemini API key. The same maintainer [says](https://github.com/google-antigravity/antigravity-cli/issues/1542) `GEMINI_API_KEY` alone doesn't replace a Google sign-in `agy` already has, and to set `"modelProvider": "gemini"` in `~/.gemini/antigravity-cli/settings.json`. That file is for every `agy` on the computer, so your own conversations move to the key and its billing too. Check Google's current terms yourself.
@@ -383,6 +385,8 @@ Windows support is new and experimental: expect rough edges, and please report w
 
 ### Plugins
 
+![Claude Code delegates a codebase sweep to a local model on opencode through the Delegate plugin, tracking the nested task until it finishes and verifying the answer](docs/gifs/delegate.gif)
+
 *Plugins…* in the sidebar opens a gallery of the plugins: *Installed*, and *Discover* for the official ones you don't have yet, from the [mirador-plugins](https://github.com/sodre90/mirador-plugins) catalog fetched when the page opens. Each tile shows what the plugin does, whether it brings canvas tools or an app, and its state (*Official*, *Update available*, *Didn't load*, used from the next start), and *Install* or *Update* when there is one; clicking the tile opens the plugin's page. A plugin's icon comes from the `icon` SVG its `plugin.json` names, or else from the catalog, and a coloured letter stands in for one without. Its page shows pictures of it at work from the catalog, which open large and step with the arrow keys, the tools it gives the agent, its own settings (such as where reviews open, kept on the host), its updates, and under *Details* its name, version, source and *Remove*. An agent recommends an official plugin when it would help, and installs it only once you answer *Install* to its question; Mirador uses a new plugin from its next start. At its first start Mirador installs the checklist and code review plugins by itself; remove either and it stays removed. One added from git (*Add from git…*) without a branch installs at its newest release that runs on this Mirador, and Mirador looks for a newer one, or for one that follows a branch, new commits, when it starts and every six hours; a release for a newer plugin API than this Mirador speaks isn't shown. An official plugin installs and updates only to the release the catalog pins for this Mirador's plugin API, and one whose releases all need a newer Mirador isn't under *Discover*. It goes in only at the commit its tag pointed at when the catalog's maintainer read it: a newer tag waits until the catalog pins it, and one moved since is refused. The catalog can also revoke a release, with a reason: Mirador never installs or updates to one, doesn't load one from its next start and says why in *Plugins…*, and while one runs, a banner in the main window names it with *Restart host*. Mirador reads the catalog when it starts, when *Plugins…* opens, and before each look for updates. A count on *Plugins…* shows how many plugins have an update, each plugin lists it ("1.2.0 → 1.3.0" and its commits), and *Update all* installs them for the next start; *Check for updates* looks right away. *Plugin updates* at the top of the gallery decides when they install without asking: *Ask me* (the default) leaves each to you, *With Mirador updates* puts them in at the first start of a newer Mirador, and *At any restart* at every start. Only a plugin's new releases install that way, and only for the plugins whose *Update by itself* is on, which official plugins (by name and repo) have unless you turn it off. Mirador clones and builds such a release as soon as it finds it, so its build runs before it installs; one whose `build` command or host module paths in `plugin.json` differ from the installed plugin's (what those files contain isn't compared), that gives the plugin another name, that comes from another repo than the official one, or that didn't load before, waits for your approval with the reason shown, and a failed build is tried again at the next look. For a Mirador run from a git checkout, a new commit counts as a Mirador update. After a start that installed updates, a notice lists them with *Undo*, which puts the replaced version back from the next restart; one that doesn't load goes back by itself.
 
 ### Settings
@@ -505,7 +509,8 @@ bun run app             # builds the desktop app that runs this checkout and ins
 bunx playwright test    # e2e: a real Claude Code on haiku against your model server, opencode and pi (and Codex with `MIRADOR_E2E_CODEX=1`) against a scripted fake model (installed Google Chrome on macOS, Playwright's Chromium elsewhere)
 MIRADOR_E2E_MINIMAL_ENV=1 bunx playwright test e2e/agent-flow.spec.ts   # host started with a bare environment
 MIRADOR_EXPERIMENT=1 MIRADOR_TEST_MODEL=default MIRADOR_TEST_EFFORT=default bunx playwright test e2e/experiment-unprompted.spec.ts
-MIRADOR_SCREENSHOTS=1 bunx playwright test e2e/readme-screenshots.spec.ts   # retakes this README's screenshots from a demo
+MIRADOR_SCREENSHOTS=1 bunx playwright test e2e/readme-screenshots.spec.ts   # retakes the website's screenshots from a demo
+(cd video && bun run gifs)   # retakes this README's feature GIFs from a scripted demo (no API key needed)
 ```
 
 The e2e specs' Claude Code never uses your Claude login, and keeps its settings and sessions in each test host's own folder, out of your `~/.claude`. Specs that wait for a real reply need a model server that speaks the Anthropic API: export `LLM_SERVER_URL` and `LLM_SERVER_KEY`, or write them to `~/.config/mirador/e2e-model-server.env`. Without one, those specs fail. The experiment and the screenshots above are the exceptions: they run on your login and `~/.claude`.

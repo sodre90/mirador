@@ -16,8 +16,15 @@ export type Shot = { from: ClipTime; to: ClipTime; speed?: number; fadeInFrames?
 /** Where the camera looks from a point of the clip on: the whole app, one of the clip's boxes, or a box given here, at a zoom. */
 export type CameraKey = { at: ClipTime; look: "app" | string | Rect; zoom?: number };
 
-/** A scene's feature in a few words, in a bottom corner of the frame. */
-export type Caption = { kicker: string; title: string; at?: number; seconds?: number; side?: "left" | "right" };
+/** A scene's feature in a few words, shown in the floating chapter bar above (or below) the app window. */
+export type Caption = {
+  kicker: string;
+  title: string;
+  at?: number;
+  seconds?: number;
+  position?: "top" | "bottom";
+  accent?: string;
+};
 
 /**
  * A line of narration (narration/lines.ts) and when in its scene it starts, in seconds. In a clip scene, `from` names
@@ -35,11 +42,30 @@ type Transition = { fadeInFrames?: number };
 
 /**
  * A clip scene lasts as long as its shots, or `seconds` when given: shorter cuts the footage, longer holds its last frame.
- * A scene that slams comes in on a hit: a flash and a punch of zoom.
+ * A scene that slams comes in on a beat with a subtle 3D entrance settle and tinted light sweep.
  */
-export type ClipScene = Transition & { kind: "clip"; id: string; clip: string; shots: Shot[]; camera: CameraKey[]; captions?: Caption[]; narration?: Spoken[]; seconds?: number; slam?: true };
-/** The checkout picture drawing itself, the logo, the end card, or the backdrop alone, for a breath before the end card. */
-export type CardScene = Transition & { kind: "picture" | "logo" | "end" | "backdrop"; id: string; seconds: number; narration?: Spoken[] };
+export type ClipScene = Transition & {
+  kind: "clip";
+  id: string;
+  clip: string;
+  shots: Shot[];
+  camera: CameraKey[];
+  captions?: Caption[];
+  narration?: Spoken[];
+  seconds?: number;
+  slam?: true;
+  accent?: string;
+  tilt?: -1 | 1;
+};
+
+/** The opening hook, the end card, or the backdrop alone, for a breath before the end card. */
+export type CardScene = Transition & {
+  kind: "picture" | "end" | "backdrop";
+  id: string;
+  seconds: number;
+  narration?: Spoken[];
+  accent?: string;
+};
 export type Scene = ClipScene | CardScene;
 
 export type NarrationLine = { text: string; file: string; seconds: number };
@@ -51,7 +77,7 @@ export type NarrationLine = { text: string; file: string; seconds: number };
 export type PlacedScene = { scene: Scene; from: number; frames: number; fadeInFrames: number; lines: PlacedLine[] };
 
 /** How long after a scene's narration ends before the next scene starts, in seconds. */
-const NARRATION_TAIL = 0.6;
+const NARRATION_TAIL = 0.55;
 
 export function clipSeconds(clip: ClipInfo, time: ClipTime): number {
   if (typeof time === "number") return time;

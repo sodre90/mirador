@@ -2,95 +2,88 @@
   "voice": "am_fenrir",
   "lines": {
     "hook": {
-      "text": "Coding agents explain everything in a wall of text. Mirador gives them a canvas, so they can show you.",
+      "text": "Coding agents explain everything in walls of text. Mirador gives them a canvas, so they can show you.",
       "file": "hook.wav",
-      "seconds": 6.4,
+      "seconds": 6.229333333333333,
       "voice": "am_fenrir",
-      "speed": 1
+      "speed": 1.05
     },
-    "show": {
-      "text": "Flows, mockups and charts, drawn right beside your chat.",
-      "file": "show.wav",
-      "seconds": 3.1573333333333333,
+    "showPoint": {
+      "text": "Architecture, flows, and mockups, right beside your chat. Point at anything they drew, and watch it update live.",
+      "file": "showPoint.wav",
+      "seconds": 6.549333333333333,
       "voice": "am_fenrir",
-      "speed": 1
+      "speed": 1.05
     },
     "ask": {
-      "text": "When it's your call, it asks with pictures.",
+      "text": "When it's your call, skip numbered lists — pick from real previews with a click.",
       "file": "ask.wav",
-      "seconds": 2.0906666666666665,
+      "seconds": 4.117333333333334,
       "voice": "am_fenrir",
-      "speed": 1
+      "speed": 1.05
     },
     "review": {
-      "text": "Reviews become a guided tour of the change, with findings pinned to the lines.",
+      "text": "Code reviews and tours walk you through changes in execution order, with findings pinned to exact lines, updated in place when you push back.",
       "file": "review.wav",
-      "seconds": 4.522666666666667,
+      "seconds": 8.490666666666666,
       "voice": "am_fenrir",
-      "speed": 1
+      "speed": 1.05
     },
-    "plugins": {
-      "text": "Your agent installs official plugins when you say so.",
-      "file": "plugins.wav",
-      "seconds": 3.050666666666667,
+    "sideChat": {
+      "text": "Ask a quick side question without interrupting the turn, and inspect or commit every change right from the canvas.",
+      "file": "sideChat.wav",
+      "seconds": 6.485333333333333,
       "voice": "am_fenrir",
-      "speed": 1
+      "speed": 1.05
     },
     "media": {
-      "text": "Mark what's wrong on the frame, and the agent cuts the video.",
+      "text": "Install official plugins on demand — like Media: mark what drags on the frame, and your agent cuts and renders the video.",
       "file": "media.wav",
-      "seconds": 3.1573333333333333,
+      "seconds": 7.381333333333333,
       "voice": "am_fenrir",
-      "speed": 1
+      "speed": 1.05
     },
     "delegate": {
-      "text": "It runs the agents you already have. Here, Claude Code hands a long read to a local model on opencode.",
+      "text": "Mirador runs the agents you already have — Claude Code, opencode, pi, Codex, Copilot, and Antigravity — and lets them delegate work to each other.",
       "file": "delegate.wav",
-      "seconds": 6.848,
+      "seconds": 9.6,
       "voice": "am_fenrir",
-      "speed": 1
+      "speed": 1.05
     },
     "jobs": {
-      "text": "Long jobs? Mirador keeps watch, and wakes your agent when they're done.",
+      "text": "Long builds on another server? Mirador watches the job and wakes your agent the moment it finishes.",
       "file": "jobs.wav",
-      "seconds": 3.7546666666666666,
+      "seconds": 5.717333333333333,
       "voice": "am_fenrir",
-      "speed": 1
+      "speed": 1.05
     },
-    "voiceAsk": {
-      "text": "How long will the switch-over take, and what could go wrong?",
-      "file": "voiceAsk.wav",
-      "seconds": 2.88,
-      "voice": "am_puck",
-      "speed": 1
-    },
-    "voiceReply": {
-      "text": "About ten minutes, read-only. It waits for replication to catch up before it switches.",
-      "file": "voiceReply.wav",
-      "seconds": 5.141333333333334,
-      "voice": "af_heart",
-      "speed": 1
+    "p2p": {
+      "text": "And now in Mirador zero point fifteen point five, connect your phone or another computer peer to peer — encrypted end to end, with nothing to configure.",
+      "file": "p2p.wav",
+      "seconds": 9.642666666666667,
+      "voice": "am_fenrir",
+      "speed": 1.05
     },
     "mirador": {
       "text": "Mirador.",
       "file": "mirador.wav",
-      "seconds": 0.768,
+      "seconds": 0.7253333333333334,
       "voice": "am_fenrir",
-      "speed": 1
+      "speed": 1.05
     },
     "end": {
       "text": "See what your coding agent means.",
       "file": "end.wav",
       "seconds": 1.6853333333333333,
       "voice": "am_fenrir",
-      "speed": 1
+      "speed": 1.05
     },
-    "glance": {
-      "text": "Understand it at a glance.",
-      "file": "glance.wav",
-      "seconds": 1.3013333333333332,
+    "openSource": {
+      "text": "Free and open source.",
+      "file": "openSource.wav",
+      "seconds": 1.1306666666666667,
       "voice": "am_fenrir",
-      "speed": 1
+      "speed": 1.05
     }
   }
 }
