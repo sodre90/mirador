@@ -196,16 +196,24 @@ describe("what the box writes", () => {
   });
 });
 
-/** The cheapest of a few reads in this process's own CPU time, so a pause of the machine doesn't count. */
-function cheapestRead(line: string) {
-  const times = [1, 2, 3].map(() => {
-    const before = process.cpuUsage();
+/** CPU time is told in ticks of up to 16 ms on Windows: a read is repeated until its time is many of them. */
+const MANY_TICKS_MS = 100;
+
+/** What a read takes of this process's own CPU time, so a pause of the machine doesn't count. */
+function timePerRead(line: string) {
+  const before = process.cpuUsage();
+  let reads = 0;
+  let spentMs = 0;
+  while (spentMs < MANY_TICKS_MS) {
     expect(markdownOf(parseMessage(line))).toBe(line);
+    reads += 1;
     const { user, system } = process.cpuUsage(before);
-    return (user + system) / 1000;
-  });
-  return Math.min(...times);
+    spentMs = (user + system) / 1000;
+  }
+  return spentMs / reads;
 }
+
+const cheapestRead = (line: string) => Math.min(...[1, 2, 3].map(() => timePerRead(line)));
 
 /** Eight times the text in under four times what eight times its time per character would be: quadratic reading would be 64. */
 const ONE_PASS_RATIO = 32;

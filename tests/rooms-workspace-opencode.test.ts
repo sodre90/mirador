@@ -339,6 +339,13 @@ describe("a brought opencode agent working in a room's workspace", () => {
         const created = await harness.newSession({ cwd: workDir, mcpServers });
         expect(() => assertOpencodeModelAvailable(lockedEnv[OPENCODE_EXPECTED_MODEL_ENV], created)).not.toThrow();
 
+        // opencode connects to the canvas only a moment after its session starts.
+        const untilCanvasToolsAreOffered = async (marker: string) => {
+          do await harness.prompt(created.sessionId, [{ type: "text", text: `${marker}\nhello` }]);
+          while (!model.toolsOfferedWith(marker).some((name) => name.includes("canvas")));
+        };
+        await untilCanvasToolsAreOffered("MARKER_NEW");
+
         // 1. Call an allowed room-workspace tool: room_read executes through Mirador's canvas MCP server,
         // and the disallowed 6th canvas tool (`when_done`) is not offered.
         await harness.prompt(created.sessionId, [{ type: "text", text: 'MARKER_READ\nCALL room_read {"path":"notes.txt"}' }]);
@@ -360,6 +367,7 @@ describe("a brought opencode agent working in a room's workspace", () => {
         // 3. Resumed/loaded session stays locked down too.
         const loaded = await harness.loadSession({ sessionId: created.sessionId, cwd: workDir, mcpServers });
         expect(() => assertOpencodeModelAvailable(lockedEnv[OPENCODE_EXPECTED_MODEL_ENV], loaded)).not.toThrow();
+        await untilCanvasToolsAreOffered("MARKER_LOADED");
         await harness.prompt(created.sessionId, [{ type: "text", text: "MARKER_RESUMED\nhello" }]);
         const offeredOnResume = model.toolsOfferedWith("MARKER_RESUMED");
         expect(offeredOnResume.filter((name) => name.includes("canvas")).toSorted()).toEqual([
