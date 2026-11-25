@@ -322,7 +322,7 @@ describe("a VM that starts beside another, which may swap what it finds for a li
     await sandboxes.stopAll();
   });
 
-  test("in a folder of the workspace the room left has the one still there stopped first", async () => {
+  test.skipIf(!RUNS_SANDBOXES)("in a folder of the workspace the room left has the one still there stopped first", async () => {
     const { workspaces, workspace, cli, sandboxes } = sandboxedRoom();
     await sandboxes.launchForBrought(brought(workspace));
     workspaces.current = join(workspace, "inner");
@@ -382,7 +382,7 @@ describe("a VM that starts beside another, which may swap what it finds for a li
     await sandboxes.stopAll();
   });
 
-  test("that did not stop when it was to is stopped first, and nothing starts there until it is", async () => {
+  test.skipIf(!RUNS_SANDBOXES)("that did not stop when it was to is stopped first, and nothing starts there until it is", async () => {
     const launcher = new FakeVmLauncher();
     const { workspace, sandboxes } = sandboxedRoom({ launcher });
     await sandboxes.launchForBrought(brought(workspace));
@@ -422,7 +422,7 @@ test.skipIf(!RUNS_SANDBOXES)("a VM refused before it was launched holds up no ot
   expect(launcher.running()).toEqual([]);
 });
 
-test("the own agents' VM doesn't start anew where a folder was replaced while a brought agent's that mounted it did not stop", async () => {
+test.skipIf(!RUNS_SANDBOXES)("the own agents' VM doesn't start anew where a folder was replaced while a brought agent's that mounted it did not stop", async () => {
   const launcher = new FakeVmLauncher();
   const { workspace, sandboxes } = sandboxedRoom({ launcher });
   const module = join(workspace, ".git", "modules", "a");
