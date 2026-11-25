@@ -539,6 +539,25 @@ describe("what an approver is asked", () => {
     expect((await strict.answerTo(asked)).done).toBe(true);
   });
 
+  test("under ask everything, edits and writes never read the workspace or reveal matches before an approver allows them", async () => {
+    const { rooms, room, ownerId, taskId, call, answerTo, waits, inWorkspace } = allowed({ permissions: "ask-everything" });
+    writeFileSync(inWorkspace("secret.txt"), "API_KEY=alpha\n");
+    for (const probe of [
+      { kind: "edit", path: "secret.txt", old: "API_KEY=alpha", new: "x" },
+      { kind: "edit", path: "secret.txt", old: "NOT_THERE", new: "x" },
+      { kind: "edit", path: "missing.txt", old: "anything", new: "x" },
+      { kind: "write", path: "secret.txt", content: "API_KEY=alpha\n" },
+    ] as WorkspaceCall[]) {
+      const callId = call(taskId, probe);
+      const asked = await waits();
+      rooms.answerWorkspaceCall(room.id, asked.callId, "deny", ownerId);
+      expect(await answerTo(callId)).toEqual({ done: false, text: "Whoever approves in the room said no." });
+    }
+    const allowedMiss = call(taskId, { kind: "edit", path: "secret.txt", old: "NOT_THERE", new: "x" });
+    rooms.answerWorkspaceCall(room.id, (await waits()).callId, "allow", ownerId);
+    expect((await answerTo(allowedMiss)).text).toContain("not in secret.txt");
+  });
+
   test("nobody but the owner and approvers answers, and a call is answered once, by the room it is of", async () => {
     const { rooms, room, ownerId, taskId, call, answerTo, waits, inWorkspace } = allowed();
     const ran = call(taskId, run("echo ran >> ran.txt"));

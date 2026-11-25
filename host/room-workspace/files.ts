@@ -53,6 +53,15 @@ export function diffOf({ within, before, after }: FileChange) {
   return patch.trimEnd();
 }
 
+/** A diff built solely from what the caller sent, without reading the workspace, used where reading itself requires approval. */
+export function proposedDiffOf(call: Extract<WorkspaceCall, { kind: "edit" | "write" }>) {
+  if (holdsClaudeSetup(call.path)) throw refused("What Claude Code's own sessions load is changed on the room's machine alone.");
+  const asLines = (text: string) => (text === "" || text.endsWith("\n") ? text : `${text}\n`);
+  return call.kind === "write"
+    ? diffOf({ path: call.path, within: call.path, before: null, after: call.content })
+    : diffOf({ path: call.path, within: call.path, before: asLines(call.old), after: asLines(call.new) });
+}
+
 export async function changeMade(change: FileChange, place: WorkspacePlace, stopped: AbortSignal): Promise<WorkspaceCallResult> {
   await place.makeChange(change, stopped);
   return { done: true, text: change.before === null ? `Wrote ${change.path}.` : `Changed ${change.path}.` };

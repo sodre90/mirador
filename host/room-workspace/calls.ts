@@ -18,7 +18,7 @@ import { SenderLimit } from "../join-requests.ts";
 import type { RoomBroughtTask, Store } from "../store.ts";
 import { WorkspaceCallRefused, type FileChange } from "../sandbox/in-vm/workspace-files.ts";
 import { commandRun } from "./commands.ts";
-import { changeAskedFor, changeMade, diffOf, readInWorkspace } from "./files.ts";
+import { changeAskedFor, changeMade, diffOf, proposedDiffOf, readInWorkspace } from "./files.ts";
 import type { WorkspacePlace } from "./workspace-place.ts";
 
 /** A call as a person's Mirador sent it: which of its agents makes it, for which task. */
@@ -70,6 +70,8 @@ const namedIn = (call: WorkspaceCall): WorkspaceCallNamed => ({ kind: call.kind,
  * only where everything does. In the room's sandbox nothing asks where its owner lets agents work freely there.
  */
 const asksFirst = (call: WorkspaceCall, { permissions, sandbox }: Room) => !(sandbox.on && sandbox.workFreely) && (call.kind !== "read" || permissions === "ask-everything");
+
+const readsAskFirst = ({ permissions, sandbox }: Room) => !(sandbox.on && sandbox.workFreely) && permissions === "ask-everything";
 
 const kept = (text: string, most = WORKSPACE_CALL_KEPT_CHARACTERS) => (text.length <= most ? text : `${text.slice(0, most / 2)}\n…\n${text.slice(-most / 2)}`);
 
@@ -145,8 +147,9 @@ export class RoomWorkspaceCalls {
     if (this.madeBy(sent) >= MOST_WORKSPACE_CALLS_AT_ONCE) throw new WorkspaceCallRefused(`Only ${MOST_WORKSPACE_CALLS_AT_ONCE} calls of yours wait or run at a time; let one of them end first.`);
     const place = this.room.placeOf(openRoom, sent.agentId);
     if (!place) throw new WorkspaceCallRefused("The room's workspace is not there.");
-    const change = call.kind === "edit" || call.kind === "write" ? await this.prepared(sent, (stopped) => changeAskedFor(call, place, stopped)) : null;
-    const diff = change && everyCharacterShown(diffOf(change));
+    const preparesBeforeAsking = (call.kind === "edit" || call.kind === "write") && !readsAskFirst(openRoom);
+    const change = preparesBeforeAsking ? await this.prepared(sent, (stopped) => changeAskedFor(call, place, stopped)) : null;
+    const diff = change ? everyCharacterShown(diffOf(change)) : call.kind === "edit" || call.kind === "write" ? everyCharacterShown(proposedDiffOf(call)) : null;
     const { room, asked, thread, until } = this.assertOpen(sent);
     const asks = asksFirst(call, room);
     const named = namedIn(call);
@@ -179,7 +182,8 @@ export class RoomWorkspaceCalls {
     if (asked) this.room.waitingChanged(call.shown.roomId);
     try {
       const result = await this.resultOf(call);
-      if (call.stopping.signal.aborted && call.change === null) this.end(call, "stopped", refusal(STOPPED), result.text);
+      const isChange = call.sent.call.kind === "edit" || call.sent.call.kind === "write";
+      if (call.stopping.signal.aborted && !isChange) this.end(call, "stopped", refusal(STOPPED), result.text);
       else this.end(call, result.done ? "done" : "refused", result);
     } catch (error) {
       this.end(call, call.stopping.signal.aborted ? "stopped" : "refused", refusal(this.whyRefused(error)));
@@ -192,10 +196,11 @@ export class RoomWorkspaceCalls {
     else call.stopping.abort();
   }
 
-  private resultOf({ sent: { call }, change, place, stopping }: WorkspaceCallUnderWay): Promise<WorkspaceCallResult> {
+  private async resultOf({ sent: { call }, change, place, stopping }: WorkspaceCallUnderWay): Promise<WorkspaceCallResult> {
     if (call.kind === "read") return readInWorkspace(call, place, stopping.signal);
     if (call.kind === "run") return commandRun(call.command, place, stopping.signal);
-    return changeMade(change!, place, stopping.signal);
+    const ready = change ?? (await changeAskedFor(call, place, stopping.signal));
+    return changeMade(ready, place, stopping.signal);
   }
 
   /** The call is of an agent the person brought and an approver let into the workspace, for a task that is open to it there, until when. */
