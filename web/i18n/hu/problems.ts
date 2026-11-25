@@ -11,7 +11,7 @@ export const problems: Messages["problems"] = {
     "workspace-sandbox-turned-off": "A munkaterület sandboxát kikapcsolták, miközben az ágense indult: küldd el újra az üzeneted, hogy ezen a gépen induljon.",
     "sandboxed-agent-here": "A Claude Code saját paneljei és bejelentkezése nem nyílnak meg sandboxban futó beszélgetésben: ezen a gépen futtatnák a Claude Code-ot, abban a mappában, amelyet az ágensei módosítanak.",
     "brought-agent-in-sandboxed-workspace": "Szobába hozott ágens nem dolgozhat olyan munkaterületen, amelynek ágensei sandboxban futnak: osztozna velük a sandboxon. Válassz neki másik munkaterületet, vagy kapcsold ki ennek a munkaterületnek a sandboxát.",
-    "agent-cannot-work-in-rooms-workspace": "Egyelőre csak Claude Code-ágensek dolgozhatnak a szoba saját munkaterületén: válassz Claude-profilt, vagy a saját munkaterületeid egyikét.",
+    "agent-cannot-work-in-rooms-workspace": "Egyelőre csak Claude Code- és pi-ágensek dolgozhatnak a szoba saját munkaterületén: válassz Claude Code- vagy pi-profilt, vagy a saját munkaterületeid egyikét.",
     "usage-limit-reached": "Elérted a Claude használati korlátját.",
     "conversation-has-no-profile": "Ennek a beszélgetésnek nincs profilja, vagy a profilját törölték. Válassz profilt a beszélgetés tetején.",
     "workspace-gone": "A munkaterület már nem létezik.",

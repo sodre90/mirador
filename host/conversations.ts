@@ -1,6 +1,8 @@
 import { realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { worksInRoomsWorkspaces } from "../shared/brought-agents.ts";
+import { piRoomsWorkspaceEnvironment } from "./acp/rooms-workspace-pi.ts";
 import type { PluginActivity } from "../shared/canvas-plugins.ts";
 import { activityOf, turnEndedAs } from "../shared/plugin-activity.ts";
 import { canvasToolName, toolNameOf } from "../shared/tool-title.ts";
@@ -3660,7 +3662,10 @@ export class ConversationService {
     const existing = this.agentProcesses.get(key);
     if (existing) return existing;
     const spec = harnessSpec(profile, this.store.claudeProgramSetting(), this.environmentGivenTo(launch, profile));
-    const onThisComputer = withEnvironment(spec, (environment) => ({ ...environment, ...this.scriptEnvironmentFor(launch, environment.PATH), ...this.testModelEnvironment(launch) }));
+    const lockForRoomsWorkspace = this.roomsWorkspaceEnvironment(launch, profile);
+    const onThisComputer = withEnvironment(spec, (environment) =>
+      lockForRoomsWorkspace({ ...environment, ...this.scriptEnvironmentFor(launch, environment.PATH), ...this.testModelEnvironment(launch) }),
+    );
     const mayBeSandboxed = launch.roomId !== undefined || this.inSandboxedWorkspace(launch);
     const harness: HarnessProcess = new HarnessProcess(
       mayBeSandboxed
@@ -3731,6 +3736,16 @@ export class ConversationService {
       route: model.route,
       agent: [BUN_IN_VM, ...command.slice(1)],
     };
+  }
+
+  /** Locks an agent process down when its conversation works in a room's workspace on another machine. */
+  private roomsWorkspaceEnvironment(launch: ProcessLaunch, profile: Profile): (environment: Record<string, string>) => Record<string, string> {
+    if (!launch.worksInRoomsWorkspace) return (environment) => environment;
+    if (profile.harness === "pi") {
+      const isolatedDir = join(this.config.dataDir, "brought-agents-config", "pi", launch.id ?? profile.id);
+      return (environment) => piRoomsWorkspaceEnvironment(environment, isolatedDir, profile.model);
+    }
+    return (environment) => environment;
   }
 
   /** A test host's Claude Code starts its sessions on the test model, rather than switching to it once a session runs. */

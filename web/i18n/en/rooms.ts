@@ -456,7 +456,7 @@ export const rooms = {
     "The room's machine says who wrote each task. Its owner could pass a task off as yours, and it would start without your OK; your permission settings still ask before its tools.",
   ],
   roomsWorkspaceOf: (machine: string) => `The room's workspace, on ${machine}`,
-  onlyClaudeInRoomsWorkspace: "Only Claude Code profiles can work in the room's workspace so far.",
+  onlyClaudeInRoomsWorkspace: "Only Claude Code and pi profiles can work in the room's workspace so far.",
   bringIntoWorkspaceMeaning: [
     "The agent runs on this computer, on its profile's model and account, and has nothing else of this computer: no files, no commands, and none of your Claude Code settings, hooks, MCP servers, CLAUDE.md or memory. Its conversation shows with your others, in a workspace named after the room, whose folder stays empty.",
     "Claude Code itself tells the agent your account's email address, which system this computer runs and where that folder is, with your user name in its path, so the room may learn these.",

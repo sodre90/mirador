@@ -8,7 +8,7 @@ export type OthersTasks = "after-ok" | "any-time";
  * The agents that can be held to the canvas alone, as one that works in a room's workspace is: nothing of this computer is
  * theirs to read, change or run, whatever the room says.
  */
-export const worksInRoomsWorkspaces = (harness: HarnessId) => harness === "claude";
+export const worksInRoomsWorkspaces = (harness: HarnessId) => harness === "claude" || harness === "pi";
 
 export const OTHERS_TASKS: OthersTasks[] = ["after-ok", "any-time"];
 

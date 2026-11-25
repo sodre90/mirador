@@ -113,10 +113,10 @@ test("Mia brings her Claude agent to work in the room's workspace, and nothing o
 
   await test.step("the dialog offers it for Claude Code alone, and says what it means", async () => {
     const dialog = await bringDialog("Other");
-    await expect(dialog).toContainText("Only Claude Code profiles can work in the room's workspace so far.");
+    await expect(dialog).toContainText("Only Claude Code and pi profiles can work in the room's workspace so far.");
     await expect(dialog.getByRole("button", { name: "Bring", exact: true })).toBeDisabled();
     await dialog.getByRole("combobox", { name: /^Agent/ }).selectOption({ label: "Coder" });
-    await expect(dialog).not.toContainText("Only Claude Code profiles");
+    await expect(dialog).not.toContainText("Only Claude Code and pi profiles");
     const meaning = (await whatItMeans(mia, dialog)).join("\n");
     expect(meaning).toContain("has nothing else of this computer: no files, no commands");
     expect(meaning).toContain("tells the agent your account's email address");

@@ -443,7 +443,7 @@ export const rooms: Messages["rooms"] = {
     "Der Rechner des Raums sagt, wer jede Aufgabe geschrieben hat. Sein Besitzer könnte eine Aufgabe als deine ausgeben, und sie würde ohne dein OK starten; deine Berechtigungseinstellungen fragen trotzdem, bevor er Tools nutzt.",
   ],
   roomsWorkspaceOf: (machine) => `Der Arbeitsbereich des Raums, auf ${machine}`,
-  onlyClaudeInRoomsWorkspace: "Bisher können nur Claude-Code-Profile im Arbeitsbereich des Raums arbeiten.",
+  onlyClaudeInRoomsWorkspace: "Bisher können nur Claude-Code- und pi-Profile im Arbeitsbereich des Raums arbeiten.",
   bringIntoWorkspaceMeaning: [
     "Der Agent läuft auf diesem Computer, mit dem Modell und dem Konto seines Profils, und hat sonst nichts von diesem Computer: keine Dateien, keine Befehle und nichts von deinen Claude-Code-Einstellungen, Hooks, MCP-Servern, CLAUDE.md oder deinem Memory. Seine Unterhaltung steht bei deinen anderen, in einem nach dem Raum benannten Arbeitsbereich, dessen Ordner leer bleibt.",
     "Claude Code selbst teilt dem Agenten die E-Mail-Adresse deines Kontos mit, welches System auf diesem Computer läuft und wo dieser Ordner liegt, mit deinem Benutzernamen im Pfad; der Raum kann das also erfahren.",

@@ -11,7 +11,7 @@ export const problems = {
     "workspace-sandbox-turned-off": "This workspace's sandbox was turned off as its agent started: send your message again to start it on this computer.",
     "sandboxed-agent-here": "Claude Code's own panels and sign-in don't open in a sandboxed conversation: they would run Claude Code on this computer, in the folder its agents change.",
     "brought-agent-in-sandboxed-workspace": "An agent you bring into a room can't work in a workspace whose agents run in a sandbox: it would share that sandbox with them. Pick another workspace for it, or turn this workspace's sandbox off.",
-    "agent-cannot-work-in-rooms-workspace": "Only Claude Code agents can work in a room's own workspace so far: pick a Claude profile, or one of your workspaces.",
+    "agent-cannot-work-in-rooms-workspace": "Only Claude Code and pi agents can work in a room's own workspace so far: pick a Claude Code or pi profile, or one of your workspaces.",
     "usage-limit-reached": "Claude's usage limit is reached.",
     "conversation-has-no-profile": "This conversation has no profile, or its profile was deleted. Pick a profile at the top of the conversation.",
     "workspace-gone": "The workspace no longer exists.",
