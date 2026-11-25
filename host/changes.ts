@@ -383,7 +383,8 @@ export class Changes {
 
   /** The file compared with `revision`, or the agent's own edits to it where it is as it was then. */
   private async filesDiff(workspace: Workspace, path: string, revision: string, agentDiffs: (() => FileChanges) | null): Promise<FileChanges> {
-    const [before, after] = await Promise.all([fileAtRevision(workspace.path, revision, path), workspaceFileAt(workspace, path)]);
+    const after = await workspaceFileAt(workspace, path);
+    const before = await fileAtRevision(workspace.path, revision, path);
     const unchanged = before.kind === after.kind && (before.kind !== "text" || (after.kind === "text" && before.text === after.text));
     if (unchanged && agentDiffs) return agentDiffs();
     return { path, source: "files", diffs: unchanged ? [] : [fileChangeDiff(path, before, after)] };

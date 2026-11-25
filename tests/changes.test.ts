@@ -707,12 +707,24 @@ test("a link added in the turn to a file outside the workspace shows its target 
   expect(diff.diffs[0]!.hunks.flatMap((hunk) => hunk.rows).filter(({ kind }) => kind !== "context")).toEqual([{ kind: "added", oldLine: null, newLine: 1, text: outside }]);
 });
 
-test("a file reached through a linked folder that leads outside the workspace is refused", async () => {
+test("a file reached through a linked folder that leads outside the workspace is refused, before git is asked what it was as the turn started", async () => {
   await writeFile(join(outsideDir, "secret.txt"), "secret\n");
   await startTurn();
   await symlink(outsideDir, join(projectDir, "linked"));
+  const gitCalls: string[][] = [];
+  const realSpawn = Bun.spawn;
+  Bun.spawn = ((command: string[], options: object) => {
+    gitCalls.push(command);
+    return (realSpawn as (...args: unknown[]) => unknown)(command, options);
+  }) as typeof Bun.spawn;
 
-  await expect(changes.diff("c1", "turn", "linked/secret.txt")).rejects.toThrow("linked/secret.txt leads outside this workspace, so Mirador does not show it.");
+  try {
+    await expect(changes.diff("c1", "turn", "linked/secret.txt")).rejects.toThrow("linked/secret.txt leads outside this workspace, so Mirador does not show it.");
+  } finally {
+    Bun.spawn = realSpawn;
+  }
+
+  expect(gitCalls.flat().filter((part) => part.includes("secret.txt"))).toEqual([]);
 });
 
 test("a file whose folder was replaced by a file shows as deleted", async () => {
