@@ -120,6 +120,7 @@ export const rooms: Messages["rooms"] = {
     "work-freely": "Frei arbeiten im Arbeitsbereich",
     "never-asks": "Nie nachfragen, überall auf diesem Computer",
   },
+  workFreelyUnsandboxed: "Ohne Sandbox können Agenten ohne Nachfrage auch Git-Hooks und Agent-Einstellungsdateien ändern, von denen manche außerhalb des Raums laufen; eine Sandbox lässt das nicht zu.",
   presetsAsideInSandbox: "Agenten in der Sandbox arbeiten darin frei, egal was du hier wählst.",
   permissionsHint:
     "Außer wenn die Agenten nie nachfragen, fragen Lesen außerhalb des Arbeitsbereichs, Lesen oder Suchen ohne genannte Datei und Miradors eigene Daten immer nach. Gilt ab der nächsten Anfrage der Agenten, auch wenn ein Profil auf YOLO steht. Ein Agent, der seine Tools ohne Nachfrage ausführt, wie pi und standardmäßig opencode oder Codex beim Lesen, ist nicht daran gebunden.",

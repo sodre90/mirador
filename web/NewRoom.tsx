@@ -8,6 +8,7 @@ import { t } from "./i18n/index.ts";
 import { Modal } from "./Palette.tsx";
 import { AgentSearch, ModelChoice } from "./RoomAgents.tsx";
 import { UnconfinedMark } from "./RoomAgentSetup.tsx";
+import { PresetChoice } from "./RoomPresetChoice.tsx";
 import type { AppAction } from "./state.ts";
 import { NAME_FIELD_ATTRIBUTES } from "./typing-aids.ts";
 
@@ -154,10 +155,7 @@ export function NewRoomDialog({
           <fieldset className="room-field room-permissions-field">
             <legend>{words.permissions}</legend>
             {PERMISSION_PRESETS.map((preset) => (
-              <label key={preset} className="room-agent-choice">
-                <input type="radio" name="room-permissions" checked={permissions === preset} onChange={() => setPermissions(preset)} />
-                {words.presets[preset]}
-              </label>
+              <PresetChoice key={preset} className="room-agent-choice" preset={preset} sandboxed={false} checked={permissions === preset} onChoose={() => setPermissions(preset)} />
             ))}
           </fieldset>
         </details>

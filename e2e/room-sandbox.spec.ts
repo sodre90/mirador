@@ -83,6 +83,7 @@ const textStart = (shown: Locator) =>
 const network = (dialog: Locator) => dialog.getByRole("radiogroup", { name: "Network" });
 const networkChoice = (dialog: Locator, name: string) => network(dialog).getByRole("radio", { name, exact: true });
 const PRESETS_ASIDE = "Agents in the sandbox work freely there, whatever is chosen here.";
+const REACHED_UNSANDBOXED = "Without a sandbox, agents can also change git hooks and agent config files unasked, some of which run outside the room; a sandbox keeps them from it.";
 const presets = (dialog: Locator) => dialog.getByRole("radiogroup", { name: "What the agents may do without asking" });
 const heldCard = (page: Page) => page.getByRole("region", { name: "Agent config change held for you" });
 
@@ -144,7 +145,9 @@ test("turned on, the sandbox is set up on this Mac with its progress shown, and 
   const dialog = await openRoomSettings(page, "Sandboxed", "Permissions");
   await expect(dialog.getByText("Checking whether this room can have a sandbox…")).toBeHidden();
   await expect(dialog.locator(".room-sandbox-kind")).toHaveText("Runs in a light VM of its own on this Mac, made with Apple's container tool.");
+  await expect(dialog.getByText(REACHED_UNSANDBOXED)).toBeVisible();
   await sandboxSwitch(dialog).check();
+  await expect(dialog.getByText(REACHED_UNSANDBOXED)).toBeHidden();
 
   await expect(networkChoice(dialog, "Only the model and Mirador")).toBeChecked();
   await expect(dialog.getByRole("radio", { name: "Agents work freely inside" })).toBeChecked();

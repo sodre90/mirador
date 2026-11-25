@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type Locator, type Page } from "@playwright/test";
-import { addWorkspace, allowNotifications, clickNotification, createProfile, createRoom, notificationsShown, openProfileTab, openRoomSettings, roomCard, signIn, whatItMeans } from "./helpers.ts";
+import { addWorkspace, allowNotifications, clickNotification, createProfile, createRoom, notificationsShown, openNewRoom as openNewRoomDialog, openProfileTab, openRoomSettings, roomCard, signIn, whatItMeans } from "./helpers.ts";
 import { TestHost, writeBunProgram } from "./test-host.ts";
 
 const host = new TestHost({ fakePrograms: true });
@@ -48,6 +48,7 @@ const workingLine = (page: Page, text: string) => page.locator(".room-timeline >
 const answer = (strip: Locator, button: "Allow" | "Allow for this task" | "Deny") => strip.getByRole("button", { name: button, exact: true }).click();
 
 const openNewRoom = (page: Page, room: string, agents: string[], preset?: string) => createRoom(page, room, agents, { preset });
+const REACHED_UNSANDBOXED = "Without a sandbox, agents can also change git hooks and agent config files unasked, some of which run outside the room; a sandbox keeps them from it.";
 
 /** Tags the agent from the @ menu, then writes the rest of the message after the tag. */
 async function tag(page: Page, room: string, agent: string, rest: string) {
@@ -56,6 +57,21 @@ async function tag(page: Page, room: string, agent: string, rest: string) {
   await roomComposer(page, room).fill(`@${agent} ${rest}`);
   await roomComposer(page, room).press("Enter");
 }
+
+test("working freely says what it also lets agents change without a sandbox, in a new room and in its settings", async ({ page }) => {
+  await signIn(page, host);
+  const newRoom = await openNewRoomDialog(page);
+  await newRoom.getByText("More options").click();
+  await expect(newRoom.getByRole("radio", { name: "Work freely inside the workspace", exact: true })).toHaveAccessibleDescription(REACHED_UNSANDBOXED);
+  await expect(newRoom.getByRole("radio", { name: "Ask for everything", exact: true })).toHaveAccessibleDescription("");
+  await newRoom.getByRole("button", { name: "Cancel" }).click();
+
+  await openNewRoom(page, "Told", ["Builder"]);
+  const settings = await openRoomSettings(page, "Told", "Permissions");
+  await expect(settings.getByRole("radio", { name: "Work freely inside the workspace", exact: true })).toHaveAccessibleDescription(REACHED_UNSANDBOXED);
+  await expect(settings.getByText(REACHED_UNSANDBOXED)).toBeVisible();
+  await settings.getByRole("button", { name: "Close" }).click();
+});
 
 test("each permission preset lets through by itself what it names, and asks for the rest", async ({ page }) => {
   await signIn(page, host);

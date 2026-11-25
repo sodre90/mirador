@@ -119,6 +119,7 @@ export const rooms: Messages["rooms"] = {
     "work-freely": "Szabadon dolgozhatnak a munkaterületen belül",
     "never-asks": "Soha nem kérnek engedélyt, sehol ezen a számítógépen",
   },
+  workFreelyUnsandboxed: "Sandbox nélkül az ágensek a git-hookokat és az ágensbeállítás-fájlokat is kérdezés nélkül módosíthatják, és ezek egy része a szobán kívül is lefut; a sandbox ezt nem engedi.",
   presetsAsideInSandbox: "A sandboxban lévő ágensek szabadon dolgoznak benne, bármit választasz itt.",
   permissionsHint:
     "Hacsak nem az van kiválasztva, hogy soha ne kérjenek, a munkaterületen kívüli olvasás, a fájlt nem megnevező olvasás vagy keresés, és a Mirador saját adatai mindig engedélyt kérnek. Az ágensek következő kérésétől érvényes, akkor is, ha egy profilban YOLO van beállítva. Arra az ágensre, amely kérdezés nélkül futtatja az eszközeit, ahogy a pi és alapból az opencode, vagy olvasáskor a Codex, nem vonatkozik.",

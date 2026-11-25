@@ -11013,6 +11013,10 @@ button.link.more-rows {
   gap: 6px;
 }
 
+.room-agent-choice:has(.room-row-words) {
+  align-items: baseline;
+}
+
 .room-person-name-clash {
   display: block;
 }

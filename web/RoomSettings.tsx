@@ -12,6 +12,7 @@ import { formatNumber, locale, t } from "./i18n/index.ts";
 import type { RoomSettingsTab } from "./i18n/en/rooms.ts";
 import { Modal } from "./Palette.tsx";
 import { AgentsTab } from "./RoomAgentsSettings.tsx";
+import { PresetChoice } from "./RoomPresetChoice.tsx";
 import { ControlRow, RoomSection, SwitchRow } from "./RoomSection.tsx";
 import { SandboxField } from "./Sandbox.tsx";
 import { useSentChoice } from "./sent-choice.ts";
@@ -299,10 +300,7 @@ function PermissionsTab({
         <ul className="settings-rows" role="radiogroup" aria-label={words.permissions} aria-describedby={setAside ? setAsideId : undefined}>
           {PERMISSION_PRESETS.map((preset) => (
             <li key={preset} role="none">
-              <label className="room-switch">
-                <input type="radio" name="room-permissions" checked={permissions === preset} onChange={() => choose(preset)} />
-                {words.presets[preset]}
-              </label>
+              <PresetChoice className="room-switch" preset={preset} sandboxed={room.sandbox.on} checked={permissions === preset} onChoose={() => choose(preset)} />
             </li>
           ))}
         </ul>

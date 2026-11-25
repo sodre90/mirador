@@ -130,6 +130,7 @@ export const rooms = {
     "work-freely": "Work freely inside the workspace",
     "never-asks": "Never ask, anywhere on this computer",
   } satisfies Record<PermissionPreset, string>,
+  workFreelyUnsandboxed: "Without a sandbox, agents can also change git hooks and agent config files unasked, some of which run outside the room; a sandbox keeps them from it.",
   presetsAsideInSandbox: "Agents in the sandbox work freely there, whatever is chosen here.",
   permissionsHint:
     "Reading outside the workspace, a read or search that names no file, and Mirador's own data always ask, except under “Never ask”. Applies from the agents' next request on, even where a profile is set to YOLO. An agent that runs its tools without asking, as pi and opencode do by default and Codex does when it reads, isn't held to it.",
