@@ -85,8 +85,13 @@ function program(socketPath: string) {
   const socket = connect(socketPath);
   opened.sockets.push(socket);
   const heard = { text: "", over: false };
+  let isFirstChunk = true;
   socket.on("error", () => {});
-  socket.on("data", (chunk) => void (heard.text = pastTaken(heard.text + chunk.toString("latin1"))));
+  socket.on("data", (chunk) => {
+    const text = chunk.toString("latin1");
+    heard.text += isFirstChunk ? pastTaken(text) : text;
+    isFirstChunk = false;
+  });
   socket.on("close", () => void (heard.over = true));
   return {
     socket,
