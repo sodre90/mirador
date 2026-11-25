@@ -1,8 +1,10 @@
 import { randomBytes } from "node:crypto";
+import { isIP } from "node:net";
 import { askToJoin as askToJoinThere } from "../shared/join-requests.ts";
 import { isRoomId, SOMEONE_ELSES_MACHINE_SANDBOX } from "../shared/machines.ts";
 import type { Machine } from "../shared/model.ts";
 import { CANVAS_ASSETS_ORIGIN_HEADER, TOKEN_COOKIE } from "../shared/protocol.ts";
+import { namesThisComputer } from "../shared/this-computer.ts";
 import { HERE_PATH } from "./addresses.ts";
 import { authorityFingerprint } from "./certificates.ts";
 import { inviteKey, isRoomInviteCode } from "./devices.ts";
@@ -196,13 +198,30 @@ export function forwardedCanvasHeaders(incoming: Headers, relayOrigin: string) {
   return headers;
 }
 
-/** The machine's canvas origin, as it answers at its address; null from a machine too old to say. */
+const CANVAS_RELAY_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
+
+/**
+ * Whether a canvas origin reported by `machine` may be relayed: HTTP(S) only, never downgrading HTTPS to HTTP; for
+ * someone else's machine, strictly its own host; for an owner's machine, another host never names this computer or a raw IP.
+ */
+export function allowedCanvasOrigin(machine: Pick<Machine, "origin" | "asPerson">, canvasOrigin: unknown): string | null {
+  if (typeof canvasOrigin !== "string" || !URL.canParse(canvasOrigin) || !URL.canParse(machine.origin)) return null;
+  const url = new URL(canvasOrigin);
+  if (url.protocol !== "https:" && url.protocol !== "http:") return null;
+  const machineUrl = new URL(machine.origin);
+  if (machineUrl.protocol === "https:" && url.protocol !== "https:") return null;
+  if (url.hostname === machineUrl.hostname) return url.origin;
+  if (machine.asPerson) return null;
+  const host = url.hostname.startsWith("[") && url.hostname.endsWith("]") ? url.hostname.slice(1, -1) : url.hostname;
+  if (namesThisComputer(url.hostname) || isIP(host) !== 0) return null;
+  return url.origin;
+}
+
+/** The machine's canvas origin, as it answers at its address; null from a machine too old to say or pointing elsewhere. */
 async function canvasOriginOf(machine: Machine, authority: string | null) {
   const response = await fetch(`${machine.origin}${HERE_PATH}`, { signal: AbortSignal.timeout(CANVAS_ORIGIN_ASK_TIMEOUT_MS), ...trusting(authority) }).catch(() => null);
   const { canvasOrigin } = ((await response?.json().catch(() => null)) ?? {}) as { canvasOrigin?: unknown };
-  if (typeof canvasOrigin !== "string" || !URL.canParse(canvasOrigin)) return null;
-  const url = new URL(canvasOrigin);
-  return url.protocol === "https:" || url.protocol === "http:" ? url.origin : null;
+  return allowedCanvasOrigin(machine, canvasOrigin);
 }
 
 /** Redirects stay on the relay, under its key for a machine joined as a person: `keyPath` is "/" and the key, or empty. */
@@ -518,6 +537,7 @@ export class MachineRelays {
     if (!known) return new Response("unknown machine", { status: 404 });
     const relayOrigin = `http://127.0.0.1:${port}`;
     if (request.headers.get("host") !== new URL(relayOrigin).host) return new Response("forbidden host", { status: 403 });
+    if (!CANVAS_RELAY_METHODS.has(request.method)) return new Response("method not allowed", { status: 405 });
     if (asksForServiceWorker(request)) return noServiceWorker();
     const machine = await this.tunnels.reached(known);
     if (!machine) return didNotAnswer(known);

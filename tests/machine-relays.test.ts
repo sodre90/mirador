@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { authorityFingerprint, ownServingCertificate } from "../host/certificates.ts";
 import { DeviceService, inviteKey } from "../host/devices.ts";
 import { JoinRequestService } from "../host/join-requests.ts";
-import { fetchAnswered, forwardedCanvasHeaders, forwardedHeaders, joinRefusalIn, machineClosedSocket, MachineRelays, pageSocketOpened, pathPastKey, relayedHeaders } from "../host/machine-relays.ts";
+import { allowedCanvasOrigin, fetchAnswered, forwardedCanvasHeaders, forwardedHeaders, joinRefusalIn, machineClosedSocket, MachineRelays, pageSocketOpened, pathPastKey, relayedHeaders } from "../host/machine-relays.ts";
 import type { MachineReach } from "../host/machine-tunnels.ts";
 import { atAddress, DIALS_THROUGH_SOCKETS, tunnelOriginsOf, type Forward } from "../host/p2p/dial.ts";
 import type { Machine } from "../shared/model.ts";
@@ -150,6 +150,28 @@ describe("a machine's canvas assets", () => {
 
   test("come from this computer's own canvas server for a machine too old to say where its are", async () => {
     expect(await canvasAssetsOriginTold(relaysFor(machineThatSays("nothing about it")))).toBe("http://127.0.0.1:4601");
+  });
+
+  test("only relay GET, HEAD, and OPTIONS requests on the canvas relay", async () => {
+    const canvasRelay = await canvasAssetsOriginTold(relaysFor(machineThatSays("its canvas origin")));
+    expect((await fetch(`${canvasRelay}/d3.min.js`, { method: "POST", body: "x" })).status).toBe(405);
+    expect((await fetch(`${canvasRelay}/d3.min.js`, { method: "DELETE" })).status).toBe(405);
+    expect((await fetch(`${canvasRelay}/d3.min.js`, { method: "HEAD" })).status).toBe(200);
+  });
+
+  test("never let an address-joined machine steer the canvas relay to another host, loopback, or metadata IP", () => {
+    const personMachine = { origin: "https://theirs.example:4610", asPerson: true };
+    expect(allowedCanvasOrigin(personMachine, "https://theirs.example:4611")).toBe("https://theirs.example:4611");
+    expect(allowedCanvasOrigin(personMachine, "http://theirs.example:4611")).toBeNull();
+    expect(allowedCanvasOrigin(personMachine, "http://127.0.0.1:4600")).toBeNull();
+    expect(allowedCanvasOrigin(personMachine, "http://169.254.169.254")).toBeNull();
+    expect(allowedCanvasOrigin(personMachine, "https://canvas.theirs.example")).toBeNull();
+
+    const ownMachine = { origin: "https://mirador.example.com", asPerson: false };
+    expect(allowedCanvasOrigin(ownMachine, "https://canvas.example.com")).toBe("https://canvas.example.com");
+    expect(allowedCanvasOrigin(ownMachine, "https://127.0.0.1:4601")).toBeNull();
+    expect(allowedCanvasOrigin(ownMachine, "https://169.254.169.254")).toBeNull();
+    expect(allowedCanvasOrigin(ownMachine, "http://canvas.example.com")).toBeNull();
   });
 });
 
