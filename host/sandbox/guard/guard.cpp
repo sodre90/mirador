@@ -380,7 +380,7 @@ void onSymlink(fuse_req_t req, const char* target, fuse_ino_t parentIno, const c
 void onLink(fuse_req_t req, fuse_ino_t ino, fuse_ino_t parentIno, const char* name) {
   Node& node = nodeOf(req, ino);
   Node& parent = nodeOf(req, parentIno);
-  if (node.isProtected() || !guard::isFree(parent.place(), name)) return answer(req, REFUSED);
+  if (node.isProtected() || !guard::mayTake(parent.place(), name)) return answer(req, REFUSED);
   const auto reached = node.reached();
   const auto in = parent.reached();
   if (!reached || !in) return answer(req, errno);
@@ -405,7 +405,9 @@ void onRename(fuse_req_t req, fuse_ino_t fromIno, const char* name, fuse_ino_t t
   Node& from = nodeOf(req, fromIno);
   Node& to = nodeOf(req, toIno);
   if (!guard::isFree(from.place(), name) || !guard::isFree(to.place(), newName)) return answer(req, REFUSED);
-  if (!guard::sameArea(from.place(), to.place())) return answer(req, EXDEV);
+  const bool takesBoth = (flags & RENAME_EXCHANGE) != 0;
+  const bool mayMove = guard::mayTake(to.place(), newName) && (!takesBoth || guard::mayTake(from.place(), name));
+  if (!mayMove || !guard::sameArea(from.place(), to.place())) return answer(req, EXDEV);
   if (flags & ~static_cast<unsigned>(RENAME_NOREPLACE | RENAME_EXCHANGE)) return answer(req, EINVAL);
   const auto outOf = from.reached();
   const auto into = to.reached();
@@ -413,7 +415,7 @@ void onRename(fuse_req_t req, fuse_ino_t fromIno, const char* name, fuse_ino_t t
   if (isLinkOfGits(from, outOf->get(), name) || isLinkOfGits(to, into->get(), newName)) return answer(req, REFUSED);
   if (syscall(SYS_renameat2, outOf->get(), name, into->get(), newName, flags) != 0) return answer(req, errno);
   folderOf(req).moved(to, newName);
-  if (flags & RENAME_EXCHANGE) folderOf(req).moved(from, name);
+  if (takesBoth) folderOf(req).moved(from, name);
   answer(req, 0);
 }
 

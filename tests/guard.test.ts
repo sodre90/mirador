@@ -102,6 +102,23 @@ describe.skipIf(CXX === null)("what the guard lets agents do, by the rules it is
     expect(await mayBeDone([guarded("/w")], ["src/.gitignore", ".gitmodules", "src/git"])).toEqual(all(["src/.gitignore", ".gitmodules", "src/git"], DOES_ANYTHING));
   });
 
+  test("no file or link called HEAD, which would make a repository of its folder, is made, put or changed outside git's folders, only removed; a folder is made so", async () => {
+    const heads = ["HEAD", "head", "src/HEAD", "src/deep/Head", "node_modules/pkg/HEAD", "HEAD/HEAD"];
+    expect(await mayBeDone([guarded("/w")], heads)).toEqual(all(heads, "remove make-folder"));
+    const others = ["src/HEAD.md", "src/HEADS", "src/head/a.txt", "src/ORIG_HEAD"];
+    expect(await mayBeDone([guarded("/w")], others)).toEqual(all(others, DOES_ANYTHING));
+    expect(await mayBeDone([guarded("/w", { onTheWay: ["head"] })], ["head", "head/x"])).toEqual({ head: "make-folder", "head/x": DOES_ANYTHING });
+  });
+
+  test("a bare repository is as any git folder, its HEAD for git to change, and stays where it is", async () => {
+    const folders = [guarded("/w", { gitFolders: [".git", "fixtures/remote.git"] })];
+    const writable = ["HEAD", "HEAD.lock", "refs/heads/main", "objects/ab/cdef"].map((name) => `fixtures/remote.git/${name}`);
+    const kept = ["config", "hooks/pre-receive", "worktrees/w", "commondir", ".git"].map((name) => `fixtures/remote.git/${name}`);
+    expect(await mayBeDone(folders, writable)).toEqual(all(writable, "change move make-file make-folder"));
+    expect(await mayBeDone(folders, kept)).toEqual(all(kept, NOTHING));
+    expect(await mayBeDone(folders, ["fixtures/remote.git", "fixtures", "fixtures/HEAD"])).toEqual({ "fixtures/remote.git": NOTHING, fixtures: "make-folder", "fixtures/HEAD": "remove make-folder" });
+  });
+
   test("submodules' git folders are as the repository's own, and nothing else of them is made", async () => {
     const folders = [guarded("/w", { gitFolders: [".git", ".git/modules/lib", ".git/modules/deep/er", ".git/modules/lib/modules/sub"] })];
     const git = (names: string[], modules: string) => names.map((name) => `.git/modules/${modules}/${name}`);

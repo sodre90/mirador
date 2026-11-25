@@ -82,6 +82,8 @@ struct Named {
   bool fixed = false;
   /** It is fixed, but may be made as a folder: one on the way to a path Mirador named. */
   bool mayBeMadeAsFolder = false;
+  /** It is there as a folder made there, or not at all: nothing is made there as anything else, nor moved or linked there. */
+  bool isMadeAsFolderAlone = false;
 };
 
 namespace names {
@@ -111,6 +113,9 @@ inline bool isMadeOfAProtectedName(const Paths& here, const std::string& folded)
   });
 }
 
+/** Without a file or link of this name no folder that isn't called `.git` is a repository to git, whatever is made in it. */
+inline bool makesRepositoryOfItsFolder(std::string_view folded) { return folded == "head"; }
+
 }  // namespace names
 
 inline Named protectedName() { return {{Area::Protected, nullptr}, Area::Protected, true, false}; }
@@ -126,6 +131,7 @@ inline Named nameIn(const Place& folder, std::string_view name) {
     case Area::Tree:
       if (isGitFolder) return {{Area::GitFolder, below}, Area::Protected, true, false};
       if (below) return {{Area::Tree, below}, Area::Protected, true, true};
+      if (names::makesRepositoryOfItsFolder(folded)) return {{Area::Tree, nullptr}, Area::Protected, false, false, true};
       return {};
     case Area::GitFolder:
       if (folded == ".git" || names::isProtectedInGitFolder(folded)) return protectedName();
@@ -153,11 +159,18 @@ enum class Making : uint8_t { Folder, File, Link, Special };
 inline bool mayMake(const Place& folder, std::string_view name, Making what) {
   const auto named = nameIn(folder, name);
   if (named.fixed) return named.mayBeMadeAsFolder && what == Making::Folder;
+  if (named.isMadeAsFolderAlone) return what == Making::Folder;
   return !isGits(folder.area) || what == Making::Folder || what == Making::File;
 }
 
-/** Whether the name may be removed from the folder, moved away, linked elsewhere, or have something moved or linked in its place. */
+/** Whether the name may be removed from the folder, or moved away. */
 inline bool isFree(const Place& folder, std::string_view name) { return !nameIn(folder, name).fixed; }
+
+/** Whether something may be moved or linked to the name, in place of what is there if anything is. */
+inline bool mayTake(const Place& folder, std::string_view name) {
+  const auto named = nameIn(folder, name);
+  return !named.fixed && !named.isMadeAsFolderAlone;
+}
 
 /** What is moved or linked stays in its area: no link or folder made in one is put in another, where other names are protected. */
 inline bool sameArea(const Place& from, const Place& to) { return from.area == to.area; }

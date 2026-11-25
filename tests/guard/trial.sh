@@ -26,8 +26,10 @@ works() {
   if ! (eval "$1") >/dev/null 2>"$said"; then went_wrong "DOES NOT WORK: $1"; fi
 }
 as_someone="-c user.name=agent -c user.email=agent@example.com"
+RENAME_EXCHANGE=2
+exchanged() { perl -e '$! = 0; syscall($ARGV[0] + 0, -100, $ARGV[2], -100, $ARGV[3], $ARGV[1] + 0) == 0 or die "$!\n"' "$(test "$(uname -m)" = x86_64 && echo 316 || echo 276)" "$RENAME_EXCHANGE" "$1" "$2"; }
 
-for file in CLAUDE.md pkg/CLAUDE.md .team/gitconfig .claude/settings.json .git/config vendor/lib/.git/config .git/modules/mods/refs/config mods/refs/.git; do
+for file in CLAUDE.md pkg/CLAUDE.md .team/gitconfig .claude/settings.json .git/config vendor/lib/.git/config vendor/lib/githooks/pre-commit .git/modules/mods/refs/config mods/refs/.git fixtures/remote.git/config; do
   works "cat $file"
   refused "echo x >> $file"
   refused "echo x > $file"
@@ -42,6 +44,7 @@ for file in CLAUDE.md pkg/CLAUDE.md .team/gitconfig .claude/settings.json .git/c
   refused "mv src/a.txt $file"
   refused "ln -sf /etc/passwd $file"
   refused "sed -i s/o/x/ $file"
+  refused "exchanged src/a.txt $file"
 done
 refused "node -e 'fs.accessSync(\"CLAUDE.md\", fs.constants.W_OK)'"
 refused "node -e 'fs.openSync(\"CLAUDE.md\", \"r+\")'"
@@ -52,6 +55,7 @@ refused "rmdir pkg"
 refused "rm -rf .claude"
 refused "mkdir .claude/commands"
 refused "touch .claude/new"
+refused "touch vendor/lib/githooks/post-checkout"
 refused "mkdir .claude/x && touch .claude/x/y"
 
 # The same names as the disk of a Mac, or git, takes them for.
@@ -77,6 +81,39 @@ refused "git init src/repo"
 refused "git clone -q vendor/lib src/clone"
 refused "mv .git git2"
 refused "mv vendor/lib/.git vendor/lib/git2"
+
+# One without a .git, which git takes any folder with a HEAD for.
+for head in HEAD src/HEAD src/head vendor/lib/HEAD "\$'src/H\\xe2\\x80\\x8cEAD'"; do
+  refused "echo 'ref: refs/heads/main' > $head"
+  refused "ln -s refs/heads/main $head"
+  refused "ln src/a.txt $head"
+  refused "mkfifo $head"
+  refused "mv src/a.txt $head"
+done
+works "mkdir src/HEAD"
+refused "exchanged src/a.txt src/HEAD"
+refused "exchanged src/HEAD src/a.txt"
+works "rmdir src/HEAD"
+refused "exchanged src/a.txt node_modules/pkg/HEAD"
+refused "node -e 'fs.renameSync(\"src/a.txt\", \"src/HEAD\")'"
+refused "git init -q --bare src/bare"
+refused "git clone -q --bare . src/clone.git"
+refused "cp -r fixtures/remote.git src/remote.git"
+refused "mv fixtures/remote.git fixtures/aside.git"
+refused "git -C fixtures/remote.git config core.fsmonitor planted"
+refused "echo x > fixtures/remote.git/hooks/post-receive"
+works "echo x >> docs/HEAD"
+refused "echo x > docs/config"
+refused "mkdir docs/hooks"
+refused "ln docs/HEAD src/linked"
+refused "echo x >> node_modules/pkg/HEAD"
+refused "ln node_modules/pkg/HEAD src/linked"
+works "mv node_modules/pkg/HEAD node_modules/pkg/headline"
+refused "mv node_modules/pkg/headline node_modules/pkg/HEAD"
+works "rm -rf src/bare src/clone.git src/remote.git"
+works "mkdir -p src/HEAD/deep && echo x > src/HEAD/deep/x && mv src/HEAD src/headless && mv src/headless src/HEAD && cat src/HEAD/deep/x && rm -r src/HEAD"
+works "git push -q fixtures/remote.git HEAD:refs/heads/pushed"
+works "git -C fixtures/remote.git log -1 pushed"
 
 # What git runs or is led elsewhere by.
 refused "mkdir .git/hooks/x"

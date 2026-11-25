@@ -19,7 +19,7 @@ void answerAll(const char* manifest) {
     const Named named = nameIn(folder, name);
     std::cout << path << ":";
     if (named.asFile != Area::Protected) std::cout << " change";
-    if (isFree(folder, name)) std::cout << " move";
+    if (isFree(folder, name)) std::cout << (mayTake(folder, name) ? " move" : " remove");
     if (mayMake(folder, name, Making::File)) std::cout << " make-file";
     if (mayMake(folder, name, Making::Folder)) std::cout << " make-folder";
     if (mayMake(folder, name, Making::Link)) std::cout << " make-link";

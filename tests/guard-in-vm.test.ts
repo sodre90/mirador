@@ -35,14 +35,17 @@ function repository(folder: string, files: Record<string, string>) {
   git(folder, "commit", "-q", "-m", "first");
 }
 
-/** The workspace of a sandbox: a repository with a submodule, another one inside it, and files agents load; and a repository added to it read and write. */
+/** The workspace of a sandbox: a repository with a submodule, two others inside it, one of them bare, and files agents load; and a repository added to it read and write. */
 function makeFolders() {
   const scratch = realpathSync(mkdtempSync(join(tmpdir(), "guard-in-vm-")));
   const [workspace, library] = [join(scratch, "workspace"), join(scratch, "library")];
   repository(join(scratch, "submodule"), { s: "s\n" });
   repository(library, { "lib.txt": "lib\n" });
-  repository(workspace, { "CLAUDE.md": "the owner's\n", "pkg/CLAUDE.md": "the owner's for pkg\n", ".claude/settings.json": "{}\n", ".team/gitconfig": "[mirador]\n\tteam = shared\n", "src/a.txt": "a\n" });
-  repository(join(workspace, "vendor/lib"), { x: "x\n" });
+  repository(workspace, { ".gitignore": "/docs/\n/fixtures/\n/node_modules/\n", "CLAUDE.md": "the owner's\n", "pkg/CLAUDE.md": "the owner's for pkg\n", ".claude/settings.json": "{}\n", ".team/gitconfig": "[mirador]\n\tteam = shared\n", "src/a.txt": "a\n" });
+  repository(join(workspace, "vendor/lib"), { x: "x\n", "githooks/pre-commit": "#!/bin/sh\n" });
+  git(join(workspace, "vendor/lib"), "config", "core.hooksPath", "githooks");
+  git(workspace, "clone", "-q", "--bare", join(scratch, "submodule"), "fixtures/remote.git");
+  for (const head of ["docs/HEAD", "node_modules/pkg/HEAD"]) write(join(workspace, head), "a headline\n");
   git(workspace, "submodule", "add", "-q", join(scratch, "submodule"), "mods/refs");
   git(workspace, "config", "include.path", "../.team/gitconfig");
   git(workspace, "commit", "-q", "-m", "submodule");
