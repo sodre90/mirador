@@ -1,10 +1,9 @@
 import type { SandboxAvailability, SandboxSetup } from "../../shared/sandbox.ts";
 import { appleContainerRuntime } from "./availability.ts";
 import { containerCli, lastLineOf, type ContainerCli } from "./container-cli.ts";
-import { environmentFlags, execProcessEnvironment, readByTool } from "./exec-environment.ts";
+import { droppedTo, environmentFlags, execProcessEnvironment, readByTool } from "./exec-environment.ts";
 import { buildImage, imageExists, imageTag, serviceRuns, startService, type AgentImage } from "./image.ts";
-import { HOST_LABEL, SandboxNotReady, VM_READY_LINE, type AgentInVm, type VmPlan, type VmLauncher } from "./vm-launcher.ts";
-import type { Mount } from "./workspace-mounts.ts";
+import { HOST_LABEL, SandboxNotReady, VM_READY_LINE, type AgentInVm, type Mount, type VmPlan, type VmLauncher } from "./vm-launcher.ts";
 
 const READY_WITHIN_S = 30;
 
@@ -14,8 +13,8 @@ export const CONTAINER_READS = readByTool(["PATH", "HOME", "TMPDIR", "USER", "LO
 const mountFlags = ({ source, target, readOnly }: Mount) => ["-v", `${source}:${target}${readOnly ? ":ro" : ""}`];
 
 /**
- * `container run` of a room's VM: detached, removed once stopped, its first process, as root, under an init that passes
- * signals on, with no network at all.
+ * `container run` of a room's VM: detached, removed once stopped, its first process, as root that may mount, under an
+ * init that passes signals on, with no network at all.
  */
 export const runArguments = ({ name, labels, image, memory, mounts, entry }: VmPlan) => [
   "run",
@@ -25,6 +24,8 @@ export const runArguments = ({ name, labels, image, memory, mounts, entry }: VmP
   "--name",
   name,
   ...Object.entries(labels).flatMap(([label, value]) => ["--label", `${label}=${value}`]),
+  "--cap-add",
+  "CAP_SYS_ADMIN",
   "--memory",
   memory,
   "--network",
@@ -38,15 +39,6 @@ export const runArguments = ({ name, labels, image, memory, mounts, entry }: VmP
 
 /** The most a command run as the agent user may print: what a put-back of held files tells, with room to spare. */
 const AGENT_RUN_MOST_BYTES = 16 * 1024 * 1024;
-
-/**
- * A command started as root and dropped to the agent user at once, with no capabilities, none it could gain, and none
- * left for regaining root: it can't lift a read-only mount.
- */
-export function droppedTo(user: string, command: string[]) {
-  const [uid, gid] = user.split(":");
-  return ["setpriv", `--reuid=${uid}`, `--regid=${gid}`, "--clear-groups", "--inh-caps=-all", "--bounding-set=-all", "--no-new-privs", "--", ...command];
-}
 
 /** `container exec` of an agent, as its user, in its folder, its values by name. */
 export const execArguments = ({ vm, user, workingDirectory, environment, command }: AgentInVm) => [
@@ -82,8 +74,6 @@ export const vmIdsLabelled = (listed: string, label: string, value: string): str
 
 /** Rooms' VMs on Apple's `container`, macOS 26 on Apple silicon: its service started and the image built on first use. */
 export class AppleContainer implements VmLauncher {
-  readonly firstProcessUser = "root";
-
   constructor(
     private readonly cli: ContainerCli | null,
     private readonly available: SandboxAvailability,

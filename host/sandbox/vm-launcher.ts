@@ -2,7 +2,13 @@ import { HostProblemError } from "../../shared/host-problems.ts";
 import type { SandboxAvailability, SandboxNotReadyWhy, SandboxSetup } from "../../shared/sandbox.ts";
 import type { AgentLaunch } from "../acp/harness.ts";
 import type { AgentImage } from "./image.ts";
-import type { Mount } from "./workspace-mounts.ts";
+
+/** A folder or file of this computer shown in the VM at `target`, read-only or not. */
+export interface Mount {
+  source: string;
+  target: string;
+  readOnly: boolean;
+}
 
 /** Why a sandboxed agent can't run in its sandbox: the turn fails with it, and never runs on this computer instead. */
 export class SandboxNotReady extends HostProblemError {
@@ -18,7 +24,10 @@ export const OWNER_LABEL = "mirador.owner";
 /** What a VM's first process prints once its agents can reach Mirador's sockets. */
 export const VM_READY_LINE = "relays ready";
 
-/** A sandbox's VM: its name, labels and image, its memory, what of this computer it sees, and its first process, run as the launcher's first process user. */
+/**
+ * A sandbox's VM: its name, labels and image, its memory, what of this computer is mounted in it, and its first process,
+ * which is root there, able to mount the folders it guards.
+ */
 export interface VmPlan {
   name: string;
   labels: Record<string, string>;
@@ -42,11 +51,6 @@ export interface AgentInVm {
  * containers on Linux. A launcher for another computer takes its place without anything else of the sandboxes changing.
  */
 export interface VmLauncher {
-  /**
-   * Whom a VM's first process starts as: root, which lets the agent user reach Mirador's sockets and then runs the
-   * relays as nobody, or nobody from the start, where Mirador lets nobody reach its sockets itself.
-   */
-  readonly firstProcessUser: "root" | "nobody";
   /** Whether VMs run here, and why not where they don't. */
   availability(): SandboxAvailability;
   /** The runtime runs and the image of this agent kind and version is there, built where it was not, its progress told; the image. */

@@ -3,6 +3,7 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, realpathSync, writeFile
 import { release } from "node:os";
 import { dirname, join } from "node:path";
 import { expect, test, type Locator, type Page } from "@playwright/test";
+import { guardedIn, mountsOfRun } from "../tests/guard-told.ts";
 import { addWorkspace, addWorkspaceFromSidebar, clickWorkspaceButton, createProfile, createRoom, lastAgentMessage, openRoomAgent, openRoomSettings, roomCard, sendMessage, signIn, waitForTurnToEnd, workspaceCard } from "./helpers.ts";
 import { bunProgramPath, TestHost, writeBunProgram } from "./test-host.ts";
 
@@ -276,14 +277,14 @@ test("a change to an agent config file is put back at once and held in the room,
     expect(readFileSync(at(".mcp.json"), "utf8")).toBe(`{"mcpServers":{"tunnel":{"command":"curl"}}}\n`);
   });
 
-  await test.step("a file there as the VM started is read-only in it, so the owner's own edit on this Mac stays", async () => {
+  await test.step("a file there as the VM started is protected by its guard, so the owner's own edit on this Mac stays", async () => {
     writeFileSync(at("CLAUDE.md"), "Be careful, says the owner.\n");
     await tag(page, "Sandboxed", "Builder", "SAY Looked.");
     await expect(answerSaying(page, "Looked.")).toBeVisible();
     await expect(card).toBeHidden();
     expect(readFileSync(at("CLAUDE.md"), "utf8")).toBe("Be careful, says the owner.\n");
     const run = containerCalls().findLast(([command]) => command === "run")!;
-    expect(run).toContain(`${realpathSync(at("CLAUDE.md"))}:${realpathSync(at("CLAUDE.md"))}:ro`);
+    expect(guardedIn(mountsOfRun(run))[0]!.parts.files).toContain("CLAUDE.md");
   });
 });
 

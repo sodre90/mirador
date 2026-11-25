@@ -1,7 +1,7 @@
 import { afterAll, expect, test } from "bun:test";
-import { existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { environmentInVm, KEY_PLACEHOLDER } from "../host/sandbox/agent-environment.ts";
 import { CONTAINER_READS, execArguments, vmIdsLabelled } from "../host/sandbox/apple-container.ts";
 import { appleContainerAvailability, appleContainerRuntime, podmanAvailability, podmanStorageIn, selinuxEnforcingAt } from "../host/sandbox/availability.ts";
@@ -9,7 +9,7 @@ import { execProcessEnvironment } from "../host/sandbox/exec-environment.ts";
 import { versionSaidIn } from "../host/sandbox/agent-version.ts";
 import { baseImageOf, buildArguments, buildStepIn, imageReferencesIn, imageTag, RECIPE } from "../host/sandbox/image.ts";
 import { PODMAN_READS } from "../host/sandbox/podman.ts";
-import { gitFoldersOf, sandboxRefusalOf, workspaceMounts, type MiradorPlaces } from "../host/sandbox/workspace-mounts.ts";
+import { protectedPartsOf, sandboxRefusalOf, type MiradorPlaces, type ProtectedParts } from "../host/sandbox/guarded-workspace.ts";
 import { keepingNetworkOf, narrowsSandbox, NO_SANDBOX, reachesMoreThan, SANDBOX_NETWORKS, sandboxSettingIn, sameSandbox, sharesKernel, signInElsewhere, type SandboxNetwork, type SandboxSetting } from "../shared/sandbox.ts";
 import { RUNS_SANDBOXES } from "./sandbox-computer.ts";
 
@@ -24,6 +24,14 @@ function repositoryIn(name: string) {
   Bun.spawnSync(["git", "init", "-q", workspace]);
   return workspace;
 }
+
+async function partsOf(workspace: string, held: string[] = []): Promise<ProtectedParts> {
+  const found = await protectedPartsOf(workspace, ELSEWHERE, held);
+  if ("refused" in found) throw new Error(`refused: ${found.refused.kind}`);
+  return found.parts;
+}
+
+const NOTHING_OF_ITS_OWN: ProtectedParts = { files: [], folders: [], onTheWay: [], gitFolders: [".git"] };
 
 const MAC_26 = { platform: "darwin" as const, arch: "arm64", darwinMajor: 25 };
 
@@ -107,7 +115,7 @@ test("an agent that signs in with a key works in a sandbox; one on a subscriptio
   expect(signInElsewhere({ ANTHROPIC_API_KEY: "k", CLAUDE_CODE_USE_FOUNDRY: "on" })).toBe("foundry");
 });
 
-test("the image is told apart by its agent's kind and version, Bun's and the recipe's, installs that agent, and its build says which step it is on", async () => {
+test("the image is told apart by its agent's kind and version, Bun's, the recipe's and the guard's, installs that agent, and its build says which step it is on", async () => {
   expect(versionSaidIn("2.1.330 (Claude Code)")).toBe("2.1.330");
   expect(versionSaidIn("2.2.0-beta.1 (Claude Code)")).toBe("2.2.0-beta.1");
   expect(versionSaidIn("1.6.0")).toBe("1.6.0");
@@ -115,13 +123,14 @@ test("the image is told apart by its agent's kind and version, Bun's and the rec
   expect(versionSaidIn(null)).toBeNull();
   expect(await imageTag({ harness: "claude", version: "2.1.330" }, "1.4.4")).toMatch(/^mirador-room-agent:claude-2\.1\.330-bun-1\.4\.4-[0-9a-f]{10}$/);
   expect(await imageTag({ harness: "pi", version: "1.6.0" }, "1.4.4")).toMatch(/^mirador-room-agent:pi-1\.6\.0-bun-1\.4\.4-[0-9a-f]{10}$/);
-  const piBuild = buildArguments({ harness: "pi", version: "1.6.0" });
-  expect(valuesAfterFlag(piBuild, "--build-arg")).toEqual([`BUN_VERSION=${Bun.version}`, "AGENT_PACKAGE=@earendil-works/pi-coding-agent@1.6.0", "AGENT_PROGRAM=pi"]);
-  expect(valuesAfterFlag(buildArguments({ harness: "claude", version: "2.1.330" }), "--build-arg")).toContain("AGENT_PACKAGE=@anthropic-ai/claude-code@2.1.330");
+  const piBuild = await buildArguments({ harness: "pi", version: "1.6.0" });
+  expect(valuesAfterFlag(piBuild, "--build-arg")).toEqual([`BUN_VERSION=${Bun.version}`, "AGENT_PACKAGE=@earendil-works/pi-coding-agent@1.6.0", "AGENT_PROGRAM=pi", expect.stringMatching(/^GUARD_SOURCE=[A-Za-z0-9+/]+=*$/)]);
+  expect(valuesAfterFlag(await buildArguments({ harness: "claude", version: "2.1.330" }), "--build-arg")).toContain("AGENT_PACKAGE=@anthropic-ai/claude-code@2.1.330");
   expect(buildStepIn("#7 [stage-1 3/6] RUN npm install -g @anthropic-ai/claude-code@2.1.330")).toEqual({ at: 3, of: 6 });
   expect(buildStepIn("#5 [2/4] RUN apt-get update")).toEqual({ at: 2, of: 4 });
   expect(buildStepIn("#7 DONE 12.3s")).toBeNull();
   expect(buildStepIn("STEP 5/8: RUN npm install -g bun@1.4.4 @anthropic-ai/claude-code@2.1.330")).toEqual({ at: 5, of: 8 });
+  expect(buildStepIn("[1/2] STEP 2/5: RUN apt-get update")).toEqual({ at: 2, of: 5 });
   expect(buildStepIn("--> 3f2a1b")).toBeNull();
   expect(baseImageOf(await Bun.file(RECIPE).text())).toBe("docker.io/library/node:22-bookworm-slim");
   const listed = `[{"descriptor":{"digest":"sha256:abc"},"fullSize":"79,9 MB","reference":"docker.io/library/node:22"},{"descriptor":{"annotations":{"io.containerd.image.name":"docker.io/library/mirador-room-agent:claude-2"}},"reference":"mirador-room-agent:claude-2"}]`;
@@ -139,17 +148,18 @@ test("the VMs left behind are found by this host's label alone", () => {
   expect(vmIdsLabelled("garbage", "mirador.host", "abc")).toEqual([]);
 });
 
-test("the agent's environment in the VM keeps the key and this Mac's own places out, and passes its values by name", () => {
-  const given = { ANTHROPIC_AUTH_TOKEN: "token-of-the-profile", ANTHROPIC_API_KEY: "another-key", CLAUDE_CODE_OAUTH_TOKEN: "subscription-token", ANTHROPIC_BASE_URL: "https://gateway.example", CLAUDE_CONFIG_DIR: "/Users/me/.claude", SSH_AUTH_SOCK: "/tmp/ssh", MIRADOR_SCRIPT_TOKEN: "s", HOME: "/Users/me", DEPLOY: "staging" };
+test("the agent's environment in the VM keeps the key, this Mac's own places and what has programs load code out, and passes its values by name", () => {
+  const given = { ANTHROPIC_AUTH_TOKEN: "token-of-the-profile", ANTHROPIC_API_KEY: "another-key", CLAUDE_CODE_OAUTH_TOKEN: "subscription-token", ANTHROPIC_BASE_URL: "https://gateway.example", CLAUDE_CONFIG_DIR: "/Users/me/.claude", SSH_AUTH_SOCK: "/tmp/ssh", MIRADOR_SCRIPT_TOKEN: "s", HOME: "/Users/me", LD_PRELOAD: "/work/lib.so", LD_LIBRARY_PATH: "/work", GCONV_PATH: "/work", DEPLOY: "staging" };
   const inVm = environmentInVm(given, { harness: "claude", keyVariable: "ANTHROPIC_AUTH_TOKEN" }, { configFolder: "/data/sandbox/r/claude", modelBaseUrl: "http://127.0.0.1:7702/p/p1" }, ["token-of-the-profile"]);
   expect(inVm).toMatchObject({ ANTHROPIC_AUTH_TOKEN: KEY_PLACEHOLDER, ANTHROPIC_BASE_URL: "http://127.0.0.1:7702/p/p1", CLAUDE_CONFIG_DIR: "/data/sandbox/r/claude", HOME: "/home/node", DEPLOY: "staging" });
   expect(inVm.ANTHROPIC_API_KEY).toBeUndefined();
   expect(inVm.CLAUDE_CODE_OAUTH_TOKEN).toBeUndefined();
   expect(inVm.SSH_AUTH_SOCK).toBeUndefined();
   expect(inVm.MIRADOR_SCRIPT_TOKEN).toBeUndefined();
+  expect(Object.keys(inVm).filter((name) => name.startsWith("LD_") || name === "GCONV_PATH")).toEqual([]);
   const args = execArguments({ vm: "vm-1", user: "1000:1000", workingDirectory: "/work", environment: inVm, command: ["bun", "agent.js"] });
   expect(args.slice(0, 6)).toEqual(["exec", "-i", "--user", "0:0", "-w", "/work"]);
-  expect(args.slice(args.indexOf("vm-1"))).toEqual(["vm-1", "setpriv", "--reuid=1000", "--regid=1000", "--clear-groups", "--inh-caps=-all", "--bounding-set=-all", "--no-new-privs", "--", "bun", "agent.js"]);
+  expect(args.slice(args.indexOf("vm-1"))).toEqual(["vm-1", "/usr/bin/setpriv", "--reuid=1000", "--regid=1000", "--clear-groups", "--inh-caps=-all", "--bounding-set=-all", "--no-new-privs", "--", "bun", "agent.js"]);
   expect(args).toContain("DEPLOY");
   expect(args).toContain("HOME=/home/node");
   expect(args.join(" ")).not.toContain("staging");
@@ -164,110 +174,41 @@ test("podman's exec process reads only this computer's own of the variables Podm
   expect(execProcessEnvironment(agents, here, PODMAN_READS)).toEqual({ DEPLOY: "staging", PATH: "/usr/bin", XDG_RUNTIME_DIR: "/run/user/1000", CONTAINERS_STORAGE_CONF: "/home/me/storage.conf" });
 });
 
-test.skipIf(!RUNS_SANDBOXES)("a workspace's repository and its submodules keep copies of their config, and their hooks and worktrees read-only, in folders that can't be moved aside, and a hooks folder its config names in the workspace too", async () => {
+test.skipIf(!RUNS_SANDBOXES)("of a workspace the guard protects its repository's and its submodules' git folders, and a hooks folder its config names there, there or not, and nothing is made in it", async () => {
   const workspace = repositoryIn("workspace");
-  Bun.spawnSync(["git", "-C", workspace, "config", "core.hooksPath", ".husky"]);
-  const submodule = join(workspace, ".git/modules/lib");
-  mkdirSync(submodule, { recursive: true });
-  Bun.spawnSync(["git", "init", "-q", "--bare", submodule]);
-  const copies = join(scratch, `copies-${crypto.randomUUID()}`);
+  Bun.spawnSync(["git", "-C", workspace, "config", "core.hooksPath", ".husky/_"]);
+  Bun.spawnSync(["git", "init", "-q", "--bare", join(workspace, ".git/modules/lib")]);
+  Bun.spawnSync(["git", "init", "-q", "--bare", join(workspace, ".git/modules/lib/modules/deep/er")]);
 
-  const planned = await workspaceMounts(workspace, copies, ELSEWHERE);
+  expect(await partsOf(workspace)).toEqual({ ...NOTHING_OF_ITS_OWN, folders: [".husky/_"], gitFolders: [".git", ".git/modules/lib", ".git/modules/lib/modules/deep/er"] });
+  expect(readdirSync(workspace)).toEqual([".git"]);
+  expect(existsSync(join(workspace, ".git/worktrees"))).toBe(false);
 
-  if ("refused" in planned) throw new Error(`refused: ${planned.refused.kind}`);
-  const configCopy = (gitFolder: string) => planned.mounts.find(({ target }) => target === join(gitFolder, "config"))!.source;
-  expect(planned.mounts).toEqual([
-    { source: workspace, target: workspace, readOnly: false },
-    { source: join(workspace, ".git"), target: join(workspace, ".git"), readOnly: false },
-    { source: configCopy(join(workspace, ".git")), target: join(workspace, ".git/config"), readOnly: true },
-    { source: join(workspace, ".git/hooks"), target: join(workspace, ".git/hooks"), readOnly: true },
-    { source: join(workspace, ".git/modules"), target: join(workspace, ".git/modules"), readOnly: false },
-    { source: submodule, target: submodule, readOnly: false },
-    { source: configCopy(submodule), target: join(submodule, "config"), readOnly: true },
-    { source: join(submodule, "hooks"), target: join(submodule, "hooks"), readOnly: true },
-    { source: join(workspace, ".git/worktrees"), target: join(workspace, ".git/worktrees"), readOnly: true },
-    { source: join(workspace, ".husky"), target: join(workspace, ".husky"), readOnly: true },
-  ]);
-  expect(await gitFoldersOf(workspace)).toEqual([".git", ".git/modules/lib"]);
-  for (const gitFolder of [join(workspace, ".git"), submodule]) {
-    expect(configCopy(gitFolder).startsWith(`${copies}/`)).toBe(true);
-    expect(readFileSync(configCopy(gitFolder), "utf8")).toBe(readFileSync(join(gitFolder, "config"), "utf8"));
-  }
-  expect(statSync(join(workspace, ".husky")).isDirectory()).toBe(true);
-  expect(statSync(join(workspace, ".git/worktrees")).isDirectory()).toBe(true);
-
-  await workspaceMounts(workspace, copies, ELSEWHERE);
-  expect(readdirSync(copies)).toHaveLength(2);
+  mkdirSync(join(workspace, ".husky/_"), { recursive: true });
+  expect((await partsOf(workspace)).folders).toEqual([".husky/_"]);
 });
 
-test.skipIf(!RUNS_SANDBOXES)("a repository that reads per-worktree config gets an empty one, read-only in the VM, where it has none yet", async () => {
-  const workspace = repositoryIn("worktree-config");
-  Bun.spawnSync(["git", "-C", workspace, "config", "extensions.worktreeConfig", "true"]);
-  const plain = repositoryIn("no-worktree-config");
-
-  const planned = await workspaceMounts(workspace, join(scratch, `copies-${crypto.randomUUID()}`), ELSEWHERE);
-  await workspaceMounts(plain, join(scratch, `copies-${crypto.randomUUID()}`), ELSEWHERE);
-
-  if ("refused" in planned) throw new Error(`refused: ${planned.refused.kind}`);
-  expect(readFileSync(join(workspace, ".git/config.worktree"), "utf8")).toBe("");
-  expect(planned.mounts.find(({ target }) => target === join(workspace, ".git/config.worktree"))?.readOnly).toBe(true);
-  expect(existsSync(join(plain, ".git/config.worktree"))).toBe(false);
-});
-
-test.skipIf(!RUNS_SANDBOXES)("held files and folders are read-only in the VM, outermost only, with each folder holding them mounted so it can't be moved aside", async () => {
+test.skipIf(!RUNS_SANDBOXES)("of a workspace the guard protects the held files and folders, a link in place of one as itself", async () => {
   const workspace = repositoryIn("held");
   mkdirSync(join(workspace, "pkg/app/.vscode"), { recursive: true });
-  mkdirSync(join(workspace, ".claude/commands"), { recursive: true });
-  const heldFiles = { "CLAUDE.md": "The owner's.\n", "pkg/AGENTS.md": "The owner's here.\n" };
-  for (const [path, text] of Object.entries(heldFiles)) writeFileSync(join(workspace, path), text);
-  const copies = join(scratch, `copies-${crypto.randomUUID()}`);
+  mkdirSync(join(workspace, ".claude"));
+  for (const path of ["CLAUDE.md", "pkg/AGENTS.md"]) writeFileSync(join(workspace, path), "The owner's.\n");
+  symlinkSync(secretsOfThisComputer(), join(workspace, ".codex"));
 
-  const planned = await workspaceMounts(workspace, copies, ELSEWHERE, ["CLAUDE.md", "pkg/AGENTS.md", "pkg/app/.vscode", ".claude", ".claude/commands"]);
-
-  if ("refused" in planned) throw new Error(`refused: ${planned.refused.kind}`);
-  const outsideGit = planned.mounts.filter(({ target }) => !target.startsWith(join(workspace, ".git")));
-  const aCopy = expect.stringMatching(new RegExp(`^${RegExp.escape(copies)}/[^/]+/[^/]+$`));
-  expect(outsideGit).toEqual([
-    { source: workspace, target: workspace, readOnly: false },
-    { source: join(workspace, ".claude"), target: join(workspace, ".claude"), readOnly: true },
-    { source: aCopy, target: join(workspace, "CLAUDE.md"), readOnly: true },
-    { source: join(workspace, "pkg"), target: join(workspace, "pkg"), readOnly: false },
-    { source: aCopy, target: join(workspace, "pkg/AGENTS.md"), readOnly: true },
-    { source: join(workspace, "pkg/app"), target: join(workspace, "pkg/app"), readOnly: false },
-    { source: join(workspace, "pkg/app/.vscode"), target: join(workspace, "pkg/app/.vscode"), readOnly: true },
-  ]);
-  const copyOf = (path: string) => outsideGit.find(({ target }) => target === join(workspace, path))!.source;
-  for (const [path, text] of Object.entries(heldFiles)) expect(readFileSync(copyOf(path), "utf8")).toBe(text);
-});
-
-test.skipIf(!RUNS_SANDBOXES)("no file the VM sees is mounted from a folder mounted too, whose mount Apple's container would leave out for it", async () => {
-  const workspace = repositoryIn("files-in-folders");
-  mkdirSync(join(workspace, "pkg"));
-  for (const path of ["CLAUDE.md", "pkg/AGENTS.md", ".gitconfig"]) writeFileSync(join(workspace, path), "");
-  for (const [name, value] of [["include.path", "../.gitconfig"], ["extensions.worktreeConfig", "true"]]) Bun.spawnSync(["git", "-C", workspace, "config", name!, value!]);
-
-  const planned = await workspaceMounts(workspace, join(scratch, `copies-${crypto.randomUUID()}`), ELSEWHERE, ["CLAUDE.md", "pkg/AGENTS.md"]);
-
-  if ("refused" in planned) throw new Error(`refused: ${planned.refused.kind}`);
-  const sources = planned.mounts.map(({ source }) => source);
-  const files = sources.filter((source) => lstatSync(source).isFile());
-  expect(files).toHaveLength(5);
-  expect(files.filter((file) => sources.includes(dirname(file)))).toEqual([]);
-  expect(new Set(files.map((file) => dirname(file))).size).toBe(files.length);
+  expect(await partsOf(workspace, ["CLAUDE.md", "pkg/AGENTS.md", "pkg/app/.vscode", ".claude", ".codex"])).toEqual({ ...NOTHING_OF_ITS_OWN, files: ["CLAUDE.md", "pkg/AGENTS.md", ".codex"], folders: ["pkg/app/.vscode", ".claude"] });
 });
 
 test("a workspace that isn't a repository of its own, a git worktree, or a git folder taking another's config is refused", async () => {
   const plain = join(scratch, `plain-${crypto.randomUUID()}`);
   mkdirSync(plain);
-  expect(await workspaceMounts(plain, join(scratch, "unused"), ELSEWHERE)).toEqual({ refused: { kind: "workspace-not-a-repository" } });
+  expect(await protectedPartsOf(plain, ELSEWHERE)).toEqual({ refused: { kind: "workspace-not-a-repository" } });
   const worktree = join(scratch, `worktree-${crypto.randomUUID()}`);
   mkdirSync(worktree);
   writeFileSync(join(worktree, ".git"), "gitdir: /elsewhere/.git/worktrees/w\n");
-  expect(await workspaceMounts(worktree, join(scratch, "unused"), ELSEWHERE)).toEqual({ refused: { kind: "workspace-is-worktree" } });
+  expect(await protectedPartsOf(worktree, ELSEWHERE)).toEqual({ refused: { kind: "workspace-is-worktree" } });
   const pointing = repositoryIn("pointing");
   writeFileSync(join(pointing, ".git/commondir"), "/elsewhere/.git\n");
-  expect(await workspaceMounts(pointing, join(scratch, "unused"), ELSEWHERE)).toEqual({ refused: { kind: "workspace-has-commondir" } });
-  expect(existsSync(join(scratch, "unused"))).toBe(false);
+  expect(await protectedPartsOf(pointing, ELSEWHERE)).toEqual({ refused: { kind: "workspace-has-commondir" } });
 });
 
 test("a repository whose worktrees' folders point git elsewhere, or whose hooks or worktrees folder is a link, is refused, and one with worktrees of its own is not", async () => {
@@ -290,10 +231,8 @@ test("a repository whose worktrees' folders point git elsewhere, or whose hooks 
   expect(await sandboxRefusalOf(linkedHooks, ELSEWHERE)).toEqual({ kind: "part-is-link", part: ".git/hooks" });
 });
 
-test("a submodule's git folder an agent made with its config or hooks a link to this computer's files is refused, and nothing outside is copied or mounted", async () => {
-  const secrets = join(scratch, `secrets-${crypto.randomUUID()}`);
-  mkdirSync(secrets);
-  writeFileSync(join(secrets, "id_ed25519"), "PRIVATE KEY\n");
+test("a submodule's git folder with its config or hooks a link to this computer's files is refused", async () => {
+  const secrets = secretsOfThisComputer();
   for (const [part, target] of [
     ["config", join(secrets, "id_ed25519")],
     ["hooks", secrets],
@@ -303,60 +242,27 @@ test("a submodule's git folder an agent made with its config or hooks a link to 
     mkdirSync(planted, { recursive: true });
     writeFileSync(join(planted, "HEAD"), "ref: refs/heads/main\n");
     symlinkSync(target, join(planted, part));
-    const copies = join(scratch, `copies-${crypto.randomUUID()}`);
 
-    expect(await workspaceMounts(workspace, copies, ELSEWHERE)).toEqual({ refused: { kind: "part-is-link", part: `.git/modules/x/${part}` } });
-    expect(existsSync(copies)).toBe(false);
+    expect(await protectedPartsOf(workspace, ELSEWHERE)).toEqual({ refused: { kind: "part-is-link", part: `.git/modules/x/${part}` } });
   }
-});
-
-test("a held folder an agent turned into a link to this computer's files is never mounted", async () => {
-  const secrets = join(scratch, `secrets-${crypto.randomUUID()}`);
-  mkdirSync(secrets);
-  const workspace = repositoryIn("held-link");
-  symlinkSync(secrets, join(workspace, ".claude"));
-
-  expect(await workspaceMounts(workspace, join(scratch, `copies-${crypto.randomUUID()}`), ELSEWHERE, [".claude"])).toEqual({ refused: { kind: "part-is-link", part: ".claude" } });
 });
 
 const includes = (repository: string, path: string, key = "include.path") => Bun.spawnSync(["git", "-C", repository, "config", "--add", key, path]);
 
-test.skipIf(!RUNS_SANDBOXES)("files of the workspace the config includes, at its root, through a chain of includes and on a condition, are read-only in the VM from copies, each folder on git's way to them mounted, while Mirador's git reads the files themselves", async () => {
+test.skipIf(!RUNS_SANDBOXES)("of a workspace the guard protects the files its config includes, at its root, through a chain of includes and on a condition, and keeps each folder on git's way to them in place", async () => {
   const workspace = repositoryIn("include");
-  mkdirSync(join(workspace, "config"));
-  mkdirSync(join(workspace, "tools"));
-  writeFileSync(join(workspace, ".gitconfig"), "[include]\n\tpath = config/team.gitconfig\n[mirador]\n\tseen = at-the-root\n");
+  for (const folder of ["config", "tools", "past"]) mkdirSync(join(workspace, folder));
+  writeFileSync(join(workspace, ".gitconfig"), "[include]\n\tpath = past/../config/team.gitconfig\n");
   writeFileSync(join(workspace, "config/team.gitconfig"), '[includeIf "onbranch:never"]\n\tpath = ../tools/git.cfg\n');
   writeFileSync(join(workspace, "tools/git.cfg"), "[user]\n\tname = Team\n");
   includes(workspace, "../.gitconfig");
-  const copies = join(scratch, `copies-${crypto.randomUUID()}`);
 
   expect(await sandboxRefusalOf(workspace, ELSEWHERE)).toBeNull();
-  const planned = await workspaceMounts(workspace, copies, ELSEWHERE);
+  const parts = await partsOf(workspace);
 
-  if ("refused" in planned) throw new Error(`refused: ${planned.refused.kind}`);
-  const copyAt = (path: string) => planned.mounts.find(({ target }) => target === join(workspace, path))!.source;
-  expect(planned.mounts).toEqual([
-    { source: workspace, target: workspace, readOnly: false },
-    { source: join(workspace, ".git"), target: join(workspace, ".git"), readOnly: false },
-    { source: copyAt(".git/config"), target: join(workspace, ".git/config"), readOnly: true },
-    { source: join(workspace, ".git/hooks"), target: join(workspace, ".git/hooks"), readOnly: true },
-    { source: join(workspace, ".git/worktrees"), target: join(workspace, ".git/worktrees"), readOnly: true },
-    { source: copyAt(".gitconfig"), target: join(workspace, ".gitconfig"), readOnly: true },
-    { source: join(workspace, "config"), target: join(workspace, "config"), readOnly: false },
-    { source: copyAt("config/team.gitconfig"), target: join(workspace, "config/team.gitconfig"), readOnly: true },
-    { source: join(workspace, "tools"), target: join(workspace, "tools"), readOnly: false },
-    { source: copyAt("tools/git.cfg"), target: join(workspace, "tools/git.cfg"), readOnly: true },
-  ]);
-  for (const path of [".gitconfig", "config/team.gitconfig", "tools/git.cfg"]) {
-    expect(copyAt(path).startsWith(`${copies}/`)).toBe(true);
-    expect(copyAt(path).endsWith(`/${path.split("/").at(-1)}`)).toBe(true);
-    expect(readFileSync(copyAt(path), "utf8")).toBe(readFileSync(join(workspace, path), "utf8"));
-  }
-
-  writeFileSync(join(workspace, ".gitconfig"), "[mirador]\n\tseen = changed-on-this-computer\n");
-  expect(Bun.spawnSync(["git", "-C", workspace, "config", "mirador.seen"]).stdout.toString().trim()).toBe("changed-on-this-computer");
-  expect(readFileSync(copyAt(".gitconfig"), "utf8")).toContain("at-the-root");
+  expect(new Set(parts.files)).toEqual(new Set([".gitconfig", "config/team.gitconfig", "tools/git.cfg"]));
+  expect(new Set(parts.onTheWay)).toEqual(new Set([".git", "past", "config", "tools"]));
+  expect({ folders: parts.folders, gitFolders: parts.gitFolders }).toEqual({ folders: [], gitFolders: [".git"] });
 });
 
 function secretsOfThisComputer() {
@@ -376,7 +282,7 @@ test.skipIf(!RUNS_SANDBOXES)("a file of the workspace the config includes that i
   expect(await sandboxRefusalOf(missingFolder, ELSEWHERE)).toEqual({ kind: "config-includes-missing-file", file: "shared/team.cfg" });
 });
 
-test.skipIf(!RUNS_SANDBOXES)("a file of the workspace a config git reads includes, reached through a link anywhere on the way, is refused with nothing copied, as the VM could change where git finds it", async () => {
+test.skipIf(!RUNS_SANDBOXES)("a file of the workspace a config git reads includes, reached through a link anywhere on the way, is refused, as the VM could change where git finds it", async () => {
   const secrets = secretsOfThisComputer();
 
   const linkedFolder = repositoryIn("include-linked-folder");
@@ -389,9 +295,7 @@ test.skipIf(!RUNS_SANDBOXES)("a file of the workspace a config git reads include
   const linkedFile = repositoryIn("include-linked-file");
   symlinkSync(join(secrets, "id_ed25519"), join(linkedFile, ".gitconfig"));
   includes(linkedFile, "../.gitconfig");
-  const copies = join(scratch, `copies-${crypto.randomUUID()}`);
-  expect(await workspaceMounts(linkedFile, copies, ELSEWHERE)).toEqual({ refused: { kind: "config-read-through-link", file: ".gitconfig", link: ".gitconfig" } });
-  expect(existsSync(copies)).toBe(false);
+  expect(await protectedPartsOf(linkedFile, ELSEWHERE)).toEqual({ refused: { kind: "config-read-through-link", file: ".gitconfig", link: ".gitconfig" } });
 
   const steppingBack = repositoryIn("include-stepping-back");
   mkdirSync(join(steppingBack, "deep/er"), { recursive: true });
@@ -453,47 +357,42 @@ test.skipIf(!RUNS_SANDBOXES)("the home folder, a folder holding or within Mirado
   expect(await sandboxRefusalOf(workspace, { ...ELSEWHERE, computersOwn: [join(scratch, "elsewhere", ".local")] })).toBeNull();
 });
 
-test.skipIf(!RUNS_SANDBOXES)("a relative hooks folder this Mac's own config names is read-only in the VM, taken from the workspace", async () => {
+test.skipIf(!RUNS_SANDBOXES)("a relative hooks folder this Mac's own config names is protected, taken from the workspace", async () => {
   const workspace = repositoryIn("global-hooks");
   const globalConfig = join(scratch, `global-${crypto.randomUUID()}.gitconfig`);
   writeFileSync(globalConfig, "[core]\n\thooksPath = .githooks\n");
   const before = process.env.GIT_CONFIG_GLOBAL;
   process.env.GIT_CONFIG_GLOBAL = globalConfig;
   try {
-    const planned = await workspaceMounts(workspace, join(scratch, `copies-${crypto.randomUUID()}`), ELSEWHERE);
-    if ("refused" in planned) throw new Error(`refused: ${planned.refused.kind}`);
-    expect(planned.mounts).toContainEqual({ source: join(workspace, ".githooks"), target: join(workspace, ".githooks"), readOnly: true });
+    expect((await partsOf(workspace)).folders).toEqual([".githooks"]);
   } finally {
     if (before === undefined) delete process.env.GIT_CONFIG_GLOBAL;
     else process.env.GIT_CONFIG_GLOBAL = before;
   }
 });
 
-test.skipIf(!RUNS_SANDBOXES)("a configured hooksPath through a symlink or at a non-folder is refused without creating folders outside, and included worktreeConfig is mounted read-only", async () => {
+test.skipIf(!RUNS_SANDBOXES)("a configured hooksPath through a symlink or at a non-folder is refused without creating folders outside", async () => {
   const outside = join(scratch, `outside-hooks-${crypto.randomUUID()}`);
   mkdirSync(outside);
   const linkedOut = repositoryIn("hooks-linked-out");
   symlinkSync(outside, join(linkedOut, "scripts"));
   Bun.spawnSync(["git", "-C", linkedOut, "config", "core.hooksPath", "scripts/git-hooks"]);
-  expect(await workspaceMounts(linkedOut, join(scratch, `copies-${crypto.randomUUID()}`), ELSEWHERE)).toEqual({ refused: { kind: "part-is-link", part: "scripts" } });
+  expect(await protectedPartsOf(linkedOut, ELSEWHERE)).toEqual({ refused: { kind: "part-is-link", part: "scripts" } });
   expect(existsSync(join(outside, "git-hooks"))).toBe(false);
 
   const linkedIn = repositoryIn("hooks-linked-in");
   mkdirSync(join(linkedIn, "tools/git-hooks"), { recursive: true });
   symlinkSync("tools", join(linkedIn, "scripts"));
   Bun.spawnSync(["git", "-C", linkedIn, "config", "core.hooksPath", "scripts/git-hooks"]);
-  expect(await workspaceMounts(linkedIn, join(scratch, `copies-${crypto.randomUUID()}`), ELSEWHERE)).toEqual({ refused: { kind: "part-is-link", part: "scripts" } });
+  expect(await protectedPartsOf(linkedIn, ELSEWHERE)).toEqual({ refused: { kind: "part-is-link", part: "scripts" } });
 
   const fileHooks = repositoryIn("hooks-file");
   writeFileSync(join(fileHooks, "hooks"), "not a folder");
   Bun.spawnSync(["git", "-C", fileHooks, "config", "core.hooksPath", "hooks"]);
-  expect(await workspaceMounts(fileHooks, join(scratch, `copies-${crypto.randomUUID()}`), ELSEWHERE)).toEqual({ refused: { kind: "part-is-link", part: "hooks" } });
+  expect(await protectedPartsOf(fileHooks, ELSEWHERE)).toEqual({ refused: { kind: "part-is-link", part: "hooks" } });
 
-  const withInclude = repositoryIn("included-worktree-config");
-  const extraConfig = join(scratch, `worktree-inc-${crypto.randomUUID()}.gitconfig`);
-  writeFileSync(extraConfig, "[extensions]\n\tworktreeConfig = true\n");
-  Bun.spawnSync(["git", "-C", withInclude, "config", "include.path", extraConfig]);
-  const planned = await workspaceMounts(withInclude, join(scratch, `copies-${crypto.randomUUID()}`), ELSEWHERE);
-  if ("refused" in planned) throw new Error(`refused: ${planned.refused.kind}`);
-  expect(planned.mounts).toContainEqual(expect.objectContaining({ target: join(withInclude, ".git/config.worktree"), readOnly: true }));
+  const underFile = repositoryIn("hooks-under-file");
+  writeFileSync(join(underFile, "tools"), "not a folder");
+  Bun.spawnSync(["git", "-C", underFile, "config", "core.hooksPath", "tools/hooks"]);
+  expect(await protectedPartsOf(underFile, ELSEWHERE)).toEqual({ refused: { kind: "part-is-link", part: "tools" } });
 });

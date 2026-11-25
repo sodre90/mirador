@@ -5,6 +5,7 @@ import type { AddressInfo } from "node:net";
 import { release } from "node:os";
 import { dirname, join } from "node:path";
 import { expect, test, type Locator, type Page } from "@playwright/test";
+import { guardedIn, mountsOfRun } from "../tests/guard-told.ts";
 import { addWorkspace, addWorkspaceFromSidebar, clickWorkspaceButton, createProfile, lastAgentMessage, openProfiles, sendMessage, signIn, waitForTurnToEnd, workspaceCard } from "./helpers.ts";
 import { bunProgramPath, TestHost, writeBunProgram } from "./test-host.ts";
 
@@ -102,11 +103,10 @@ const openConversation = (page: Page, conversationId: string) => page.locator(`l
 let builderConversation = "";
 
 /** Each call the fake `container` got, by its arguments. */
-const containerCalls = (): string[][] =>
-  readFileSync(join(containerState(), "calls.log"), "utf8")
-    .trim()
-    .split("\n")
-    .map((line) => JSON.parse(line));
+const containerCalls = (): string[][] => {
+  const log = join(containerState(), "calls.log");
+  return existsSync(log) ? readFileSync(log, "utf8").trim().split("\n").map((line) => JSON.parse(line)) : [];
+};
 
 test("the workspace's sandbox switch stays off, with the reason under it, where the workspace can't have one", async ({ page }) => {
   await signIn(page, host);
@@ -226,11 +226,10 @@ test("turned on, the workspace's sandbox is set up with its progress shown, mark
   expect(JSON.stringify(run)).not.toContain(realpathSync(worktree()));
   expect(JSON.stringify(calls)).not.toContain(KEY);
 
-  await test.step("the project's .gitconfig, which its git config includes, is read-only in the VM, from a copy", () => {
-    const includedMount = run.find((argument) => argument.endsWith(`:${realpathSync(inProject(".gitconfig"))}:ro`));
-    const copy = includedMount!.split(":")[0]!;
-    expect(copy.startsWith(`${join(host.dataDir, "sandbox", "plans")}/`)).toBe(true);
-    expect(readFileSync(copy, "utf8")).toBe("[mirador]\n\tteam = shared\n");
+  await test.step("the VM's guard protects the project's .gitconfig, which its git config includes", () => {
+    const [project, ...others] = guardedIn(mountsOfRun(run));
+    expect(others).toEqual([]);
+    expect(project).toMatchObject({ folder: realpathSync(host.projectDir), parts: { files: expect.arrayContaining([".gitconfig"]), gitFolders: expect.arrayContaining([".git"]) } });
   });
 
   await test.step("the conversation's mark opens the workspace's sandbox", async () => {

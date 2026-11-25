@@ -1,8 +1,7 @@
 import { watch, type FSWatcher } from "node:fs";
 import { lstat, readdir, readlink } from "node:fs/promises";
 import { join, sep } from "node:path";
-import { asDisksCompare } from "../../shared/disk-names.ts";
-import { GIT_CONFIG_REDIRECTS, HELD_CHANGES_MOST, HELD_TEXT_SHOWN, holdsAllInside, isHeldConfigPath, isNeverHeldFolder, type HeldChange, type HeldChangeAnswer, type HeldChangeText, ownerKey, type SandboxOwner } from "../../shared/sandbox.ts";
+import { HELD_CHANGES_MOST, HELD_TEXT_SHOWN, holdsAllInside, isHeldConfigPath, isNeverHeldFolder, type HeldChange, type HeldChangeAnswer, type HeldChangeText, ownerKey, type SandboxOwner } from "../../shared/sandbox.ts";
 import { bytesAtMost, putPlacesBack, type FoundEntry, type PlaceEntry, type PlacesPutBack, type PlacesRequest } from "./in-vm/held-places.ts";
 
 const NONE: PlaceEntry = { kind: "none" };
@@ -11,9 +10,6 @@ const NONE: PlaceEntry = { kind: "none" };
 export const HELD_FILE_MOST_BYTES = 1024 * 1024;
 const PUT_BACK_MOST_BYTES = 4 * 1024 * 1024;
 const PUT_BACK_MOST_FOUND = 200;
-
-/** The most held files and folders of a workspace mounted read-only into its VM. */
-export const HELD_MOUNTS_MOST = 100;
 
 export class HeldFilesRefused extends Error {}
 
@@ -54,12 +50,6 @@ const ancestorsOf = (path: string) =>
 
 const isUnder = (path: string, folder: string) => folder === "" || path === folder || path.startsWith(`${folder}/`);
 
-const sameDiskPath = (a: string, b: string) => {
-  const partsA = a.split("/");
-  const partsB = b.split("/");
-  return partsA.length === partsB.length && partsA.every((part, index) => asDisksCompare(part) === asDisksCompare(partsB[index]!));
-};
-
 /** A path the VM told of, as one of the places asked about or within one, with no step out of them. */
 const isPathUnderAny = (path: string, places: string[]) => !path.split("/").some((part) => part === "" || part === "." || part === "..") && places.some((place) => isUnder(path, place));
 
@@ -91,10 +81,10 @@ interface Held {
 /**
  * While a sandbox's VM runs, its agents may write any file of the workspace but the held ones: those agents load their
  * settings, instructions or MCP servers from, and those that run by themselves. The ones there as the VM starts are
- * mounted read-only into it. Each one written where there was none is put back at once, inside the VM while it runs,
+ * protected by its guard. Each one written where there was none is put back at once, inside the VM while it runs,
  * and what was written is kept aside for the owner to allow or discard; a folder, link or anything else standing at a
- * held path goes too. Files git would read config from elsewhere never stay. This computer checks each put-back
- * itself, and stops the VM when one did not hold. A link is never followed on the way to a held path.
+ * held path goes too. This computer checks each put-back itself, and stops the VM when one did not hold. A link is never
+ * followed on the way to a held path.
  */
 export class HeldFiles {
   private readonly expected = new Map<string, PlaceEntry>();
@@ -104,15 +94,13 @@ export class HeldFiles {
   private readonly allowedOver = new Map<string, PlaceEntry>();
   private draining?: Promise<void>;
   private watcher?: FSWatcher;
-  private readOnly: string[] = [];
-  private gitRedirects: string[] = [];
+  private protectedByGuard: string[] = [];
   /** Whose sandboxes work there or did while these were held, each told of every change of it, by `ownerKey`. */
   private readonly working = new Map<string, WorksThere>();
 
   /** `workspace` is the folder whose files it holds: the workspace of each sandbox that works there, or a folder added to one read and write. */
   constructor(
     readonly workspace: string,
-    private readonly gitFolders: string[],
     private readonly sandbox: HeldSandbox,
   ) {}
 
@@ -129,26 +117,23 @@ export class HeldFiles {
   }
 
   /**
-   * Takes in the held paths as they are, and watches from then on: the held files and folders there are, which the VM is
-   * to see read-only, by path from the workspace; a link stays and is watched. Throws HeldFilesRefused for anything else.
+   * Takes in the held paths as they are, and watches from then on: the held files and folders there are, which the VM's
+   * guard is to protect, by path from the workspace; a link stays and is watched. Throws HeldFilesRefused for anything else.
    */
   async start(): Promise<string[]> {
-    const readOnly: string[] = [];
+    const toProtect: string[] = [];
     for (const path of await this.placesAt("")) {
       const stats = await lstat(join(this.workspace, path));
       if (stats.isSymbolicLink()) this.expected.set(path, { kind: "link", target: await readlink(join(this.workspace, path)) });
-      else if (stats.isFile() || stats.isDirectory()) readOnly.push(path);
+      else if (stats.isFile() || stats.isDirectory()) toProtect.push(path);
       else throw new HeldFilesRefused(`${path} is neither a file, a folder nor a link`);
     }
-    if (readOnly.length > HELD_MOUNTS_MOST) throw new HeldFilesRefused(`more than ${HELD_MOUNTS_MOST} agent config files and folders`);
-    this.readOnly = readOnly;
-    const redirects = this.gitFolders.flatMap((folder) => GIT_CONFIG_REDIRECTS.map((name) => `${folder}/${name}`));
-    this.gitRedirects = (await Promise.all(redirects.map(async (path) => ((await lstat(join(this.workspace, path)).catch(() => null)) ? [] : [path])))).flat();
+    this.protectedByGuard = toProtect;
     this.watcher = watch(this.workspace, { recursive: true }, (_event, name) => {
       if (name) void this.heard(name.toString().split(sep).join("/"));
     });
     this.watcher.on("error", () => void this.check());
-    return readOnly;
+    return toProtect;
   }
 
   /** Looks at every held path again, in case a watch event was missed; whether nothing stands at one after but what is expected. */
@@ -230,8 +215,6 @@ export class HeldFiles {
   }
 
   private async heard(path: string) {
-    const redirect = this.gitRedirects.find((each) => sameDiskPath(path, each));
-    if (redirect) return this.queue(redirect);
     if (this.untouched(path)) return;
     if (isHeldConfigPath(path) || (await lstat(join(this.workspace, path)).catch(() => null))?.isDirectory()) await this.queue(path);
   }
@@ -292,7 +275,7 @@ export class HeldFiles {
 
   private async keepAside(found: FoundEntry[]): Promise<boolean> {
     const byBrought = this.sandbox.broughtAtWork();
-    const proposals = found.filter(({ path, found }) => !this.gitRedirects.some((redirect) => sameDiskPath(path, redirect)) && !this.isAsLeft(path, found));
+    const proposals = found.filter(({ path, found }) => !this.isAsLeft(path, found));
     const overflowing = proposals.filter(({ path, found }) => !this.hold(path, found, byBrought));
     if (proposals.length > overflowing.length) this.sandbox.changed();
     if (overflowing.length === 0) return false;
@@ -328,9 +311,9 @@ export class HeldFiles {
     return true;
   }
 
-  /** Paths the agents can't write, or that are never held: what is read-only in the VM, and git's and the packages' folders. */
+  /** Paths the agents can't write, or that are never held: what the guard protects, and git's and the packages' folders. */
   private untouched(path: string) {
-    return path.split("/").some(isNeverHeldFolder) || this.readOnly.some((folder) => isUnder(path, folder));
+    return path.split("/").some(isNeverHeldFolder) || this.protectedByGuard.some((folder) => isUnder(path, folder));
   }
 
   /** The folders that hold a file or link the owner allowed: looked into, rather than held as a whole. */
@@ -358,8 +341,7 @@ export class HeldFiles {
     const heldRoots = roots.map((root) => this.heldRootOf(root));
     const listed = (await Promise.all(heldRoots.map((root) => this.placesAt(root)))).flat();
     const expected = [...this.expected.keys()].filter((path) => heldRoots.some((root) => isUnder(path, root)));
-    const redirects = this.gitRedirects.filter((path) => roots.some((root) => isUnder(path, root)));
-    return [...new Set([...listed, ...expected, ...redirects])];
+    return [...new Set([...listed, ...expected])];
   }
 
   private async differingAmong(paths: string[]) {

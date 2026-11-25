@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { networkInterfaces, tmpdir } from "node:os";
 import { join } from "node:path";
 import { HELD_CHANGES_MOST, roomSandbox, type HeldChange, type SandboxAvailability, type SandboxFolder, type SandboxNetwork, type SandboxNotReadyWhy } from "../shared/sandbox.ts";
@@ -10,6 +10,7 @@ import { ANTHROPIC_API } from "../host/sandbox/model-proxy.ts";
 import { Sandboxes, type AgentInSandbox, type BroughtAgentInSandbox, type SandboxHost } from "../host/sandbox/sandboxes.ts";
 import { FakeContainerCli } from "./fake-container-cli.ts";
 import { FakeVmLauncher } from "./fake-vm-launcher.ts";
+import { guardedIn, mountsOfRun } from "./guard-told.ts";
 import { RUNS_SANDBOXES } from "./sandbox-computer.ts";
 
 const scratch = mkdtempSync(join(tmpdir(), "brought-sandboxes-"));
@@ -121,29 +122,25 @@ describe("the VM of an agent someone brought into a sandboxed room", () => {
     const [ownRun, run] = cli.callsOf("run");
     expect(nameIn(run!)).not.toBe(nameIn(ownRun!));
     expect(run![run!.indexOf("--network") + 1]).toBe("none");
-    const copies = join(host.dataDir, "sandbox", "plans");
-    const ofWorkspace = (mounts: string[]) => mounts.filter((mount) => mount.split(":")[1]!.startsWith(workspace));
-    expect(ofWorkspace(mountsIn(run!))).toEqual(ofWorkspace(mountsIn(ownRun!)));
-    expect(mountsIn(run!).some((mount) => mount.startsWith(`${copies}/`) && mount.endsWith(`:${workspace}/.git/config:ro`))).toBe(true);
-    expect(mountsIn(run!).some((mount) => mount.startsWith(`${copies}/`) && mount.endsWith(`:${workspace}/CLAUDE.md:ro`))).toBe(true);
-    const others = mountsIn(run!).filter((mount) => !mount.split(":")[1]!.startsWith(workspace));
-    expect(others.map((mount) => mount.split(":")[1])).toEqual(["/mirador/sandbox", "/run/mirador/network.sock"]);
-    expect(run!.slice(-4)).toEqual(["sh", "/mirador/sandbox/room-vm.sh", "root", "7703=/run/mirador/network.sock"]);
+    const mounts = mountsOfRun(run!);
+    expect(mounts.map(({ target }) => target)).toEqual(["/mirador/raw/0", "/mirador/guard", "/mirador/sandbox", "/run/mirador/network.sock"]);
+    expect(guardedIn(mounts)).toEqual([{ folder: workspace, parts: { files: ["CLAUDE.md"], folders: [], onTheWay: [], gitFolders: [".git"] } }]);
+    expect(guardedIn(mountsOfRun(ownRun!))).toEqual(guardedIn(mounts));
+    const manifests = readdirSync(join(host.dataDir, "sandbox", "room-1", "guard")).toSorted();
+    expect(manifests).toEqual([nameIn(ownRun!), nameIn(run!)].toSorted());
+    expect(run!.slice(-4)).toEqual(["--", "sh", "/mirador/sandbox/room-vm.sh", "7703=/run/mirador/network.sock"]);
     expect(run).toContain("mirador.owner=room:room-1");
 
     const [program, ...exec] = launched.command;
     expect(program).toBe(cli.program);
     expect(exec).toContain(nameIn(run!));
-    expect(exec).toEqual(expect.arrayContaining(["setpriv", "--reuid=1000", "--no-new-privs"]));
+    expect(exec).toEqual(expect.arrayContaining(["/usr/bin/setpriv", "--reuid=1000", "--no-new-privs"]));
     expect(Object.keys(launched.environment).filter((name) => /^(ANTHROPIC|CLAUDE|DEPLOY)/.test(name))).toEqual([]);
     expect(exec.flatMap((arg, index) => (exec[index - 1] === "-e" ? [arg.split("=")[0]!] : [])).toSorted()).toEqual(Object.keys(IN_VM).toSorted());
-    expect(readdirSync(copies)).toHaveLength(1);
     own.gone!();
     launched.gone!();
     await sandboxes.stopAll();
-    (await sandboxes.launchForBrought(brought(workspace))).gone!();
-    expect(readdirSync(copies)).toHaveLength(1);
-    await sandboxes.stopAll();
+    expect(readdirSync(join(host.dataDir, "sandbox", "room-1", "guard"))).toEqual([]);
   });
 
   test.skipIf(!RUNS_SANDBOXES)("has the sandbox's way out alone, which reaches what the owner has the sandbox reach, and is gone with it", async () => {
@@ -227,7 +224,7 @@ describe("the VM of an agent someone brought into a sandboxed room", () => {
     workspaces.current = repository();
     await sandboxes.launchForBrought(brought(workspaces.current));
     expect(cli.vms.size).toBe(1);
-    expect(mountsIn(cli.callsOf("run")[1]!)).toContain(`${workspaces.current}:${workspaces.current}`);
+    expect(guardedIn(mountsOfRun(cli.callsOf("run")[1]!)).map(({ folder }) => folder)).toEqual([workspaces.current]);
     await sandboxes.stopAll();
   });
 
@@ -271,52 +268,66 @@ const gitFolder = (folder: string) => {
   writeFileSync(join(folder, "config"), "[core]\n");
 };
 
-describe("a VM that starts beside another, which may swap what it finds for a link to elsewhere", () => {
-  const module = (workspace: string, name = "a") => join(workspace, ".git", "modules", name);
-  const ofWorkspace = (run: string[], workspace: string) => mountsIn(run).filter((mount) => mount.split(":")[1]!.startsWith(workspace));
+/** The workspace moved aside, with a repository made anew in its place. */
+function replaced(workspace: string) {
+  renameSync(workspace, `${workspace}-moved`);
+  Bun.spawnSync(["git", "init", "-q", workspace]);
+}
 
-  test.skipIf(!RUNS_SANDBOXES)("mounts what that one did, each of it a mount point nothing in that one can move, and nothing made there since", async () => {
+describe("a VM that starts beside another, which may swap what it finds for a link to elsewhere", () => {
+  const module = (workspace: string, name: string) => join(workspace, ".git", "modules", name);
+  const guardedByRun = (run: string[]) => guardedIn(mountsOfRun(run));
+
+  test.skipIf(!RUNS_SANDBOXES)("guards the workspace as that one does, and mounts nothing made there since", async () => {
     const { workspace, cli, sandboxes } = sandboxedRoom();
-    gitFolder(module(workspace));
+    gitFolder(module(workspace, "a"));
     await sandboxes.launchForBrought(brought(workspace));
     gitFolder(module(workspace, "b"));
     mkdirSync(join(workspace, ".claude"));
     await sandboxes.launch(ownAgent(workspace));
     await sandboxes.launchForBrought(brought(workspace, { agentId: "bobs-coder" }));
-    const [mias, own, bobs] = cli.callsOf("run").map((run) => ofWorkspace(run, workspace));
-    expect(mias).toContain(`${module(workspace)}:${module(workspace)}`);
-    expect([own, bobs]).toEqual([mias, mias]);
+    const [mias, own, bobs] = cli.callsOf("run").map(guardedByRun);
+    expect(mias!.map(({ parts }) => parts.gitFolders)).toEqual([[".git", ".git/modules/a"]]);
+    expect([own!, bobs!]).toEqual([mias!, mias!]);
+    for (const run of cli.callsOf("run")) expect(mountsOfRun(run).filter(({ source }) => source.startsWith(workspace)).map(({ source }) => source)).toEqual([workspace]);
     await sandboxes.stopAll();
     await sandboxes.launch(ownAgent(workspace));
-    expect(ofWorkspace(cli.callsOf("run").at(-1)!, workspace)).toContain(`${module(workspace, "b")}/hooks:${module(workspace, "b")}/hooks:ro`);
+    expect(guardedByRun(cli.callsOf("run").at(-1)!)[0]!.parts.gitFolders).toEqual([".git", ".git/modules/a", ".git/modules/b"]);
     await sandboxes.stopAll();
   });
 
-  test.skipIf(!RUNS_SANDBOXES).each([
-    ["a link out of the workspace", (folder: string) => symlinkSync(scratch, folder)],
-    ["a folder made anew", gitFolder],
-    ["nothing", () => {}],
-  ])("is refused as a brought agent's where %s took the place of what that one mounted", async (_, replacing) => {
+  test.skipIf(!RUNS_SANDBOXES)("is refused as a brought agent's where the workspace was moved and another made in its place", async () => {
     const { workspace, cli, sandboxes } = sandboxedRoom();
-    gitFolder(module(workspace));
     await sandboxes.launch(ownAgent(workspace));
-    renameSync(module(workspace), join(workspace, "moved"));
-    replacing(module(workspace));
-    await expect(sandboxes.launchForBrought(brought(workspace))).rejects.toMatchObject(notReady({ kind: "could-not-start", cause: expect.stringMatching(/^\.git\/modules\/a(\/hooks)? was moved or replaced$/) as unknown as string }));
+    replaced(workspace);
+    await expect(sandboxes.launchForBrought(brought(workspace))).rejects.toMatchObject(notReady({ kind: "could-not-start", cause: "the workspace was moved or replaced" }));
     expect(cli.callsOf("run")).toHaveLength(1);
+    await sandboxes.stopAll();
+  });
+
+  test.skipIf(!RUNS_SANDBOXES)("starts where something in the workspace was replaced meanwhile, which its guard protects whatever stands there", async () => {
+    const { workspace, cli, sandboxes } = sandboxedRoom();
+    writeFileSync(join(workspace, "CLAUDE.md"), "The owner's.\n");
+    gitFolder(module(workspace, "a"));
+    await sandboxes.launch(ownAgent(workspace));
+    renameSync(module(workspace, "a"), join(workspace, "moved"));
+    renameSync(join(workspace, "CLAUDE.md"), join(scratch, `moved-${crypto.randomUUID()}.md`));
+    await sandboxes.launchForBrought(brought(workspace));
+    const [own, mias] = cli.callsOf("run").map(guardedByRun);
+    expect(own![0]!.parts).toMatchObject({ files: ["CLAUDE.md"], gitFolders: [".git", ".git/modules/a"] });
+    expect(mias).toEqual(own!);
     await sandboxes.stopAll();
   });
 
   test("and as the room's own stops the brought agents' first, and looks at it all anew", async () => {
     const { workspace, cli, sandboxes } = sandboxedRoom();
-    gitFolder(module(workspace));
     await sandboxes.launchForBrought(brought(workspace));
-    renameSync(module(workspace), join(workspace, "moved"));
-    symlinkSync(scratch, module(workspace));
+    replaced(workspace);
+    gitFolder(module(workspace, "made-anew"));
     await sandboxes.launch(ownAgent(workspace));
     const own = cli.callsOf("run").at(-1)!;
     expect([...cli.vms.keys()]).toEqual([nameIn(own)]);
-    expect(mountsIn(own).filter((mount) => mount.includes("/modules/a"))).toEqual([]);
+    expect(guardedByRun(own)[0]!.parts.gitFolders).toEqual([".git", ".git/modules/made-anew"]);
     await sandboxes.launchForBrought(brought(workspace));
     expect(cli.vms.size).toBe(2);
     await sandboxes.stopAll();
@@ -332,18 +343,6 @@ describe("a VM that starts beside another, which may swap what it finds for a li
     await sandboxes.stopAll();
   });
 
-  test.skipIf(!RUNS_SANDBOXES)("in another workspace leaves that one the copies of git's config it mounted", async () => {
-    const { workspaces, workspace, cli, sandboxes } = sandboxedRoom();
-    const copyOfConfig = (run: string[]) => mountsIn(run).find((mount) => mount.endsWith("/.git/config:ro"))!.split(":")[0]!;
-    await sandboxes.launchForBrought(brought(workspace));
-    workspaces.current = repository();
-    await sandboxes.launch(ownAgent(workspaces.current));
-    const [mias, own] = cli.callsOf("run").map(copyOfConfig);
-    expect(own).not.toBe(mias);
-    expect([existsSync(mias!), existsSync(own!)]).toEqual([true, true]);
-    await sandboxes.stopAll();
-  });
-
   const OTHER_ROOM = roomSandbox("room-2");
 
   test.skipIf(!RUNS_SANDBOXES)("of another room or workspace: a brought agent's runs beside it in the same folder on the same plan, and stays out of a nested one", async () => {
@@ -352,7 +351,7 @@ describe("a VM that starts beside another, which may swap what it finds for a li
     await sandboxes.launch(ownAgent(workspace));
     await sandboxes.launchForBrought(others);
     const [ownRun, zoesRun] = cli.callsOf("run");
-    expect(ofWorkspace(zoesRun!, workspace)).toEqual(ofWorkspace(ownRun!, workspace));
+    expect(guardedByRun(zoesRun!)).toEqual(guardedByRun(ownRun!));
     expect(cli.vms.size).toBe(2);
     await sandboxes.stop(ROOM);
     await sandboxes.launchForBrought(brought(workspace));
@@ -375,7 +374,7 @@ describe("a VM that starts beside another, which may swap what it finds for a li
     await Promise.all([sandboxes.launch(ownAgent(workspace)), sandboxes.launchForBrought(brought(workspace, { owner: OTHER_ROOM, agentId: "zoes-coder" }))]);
     expect(cli.vms.size).toBe(2);
     const [first, second] = cli.callsOf("run").slice(-2);
-    expect(ofWorkspace(second!, workspace)).toEqual(ofWorkspace(first!, workspace));
+    expect(guardedByRun(second!)).toEqual(guardedByRun(first!));
     await sandboxes.stopAll();
     await Promise.all([sandboxes.launchForBrought(brought(workspace)), sandboxes.launchForBrought(brought(workspace, { owner: OTHER_ROOM, agentId: "zoes-coder" }))]);
     expect(cli.vms.size).toBe(2);
@@ -422,14 +421,11 @@ test.skipIf(!RUNS_SANDBOXES)("a VM refused before it was launched holds up no ot
   expect(launcher.running()).toEqual([]);
 });
 
-test.skipIf(!RUNS_SANDBOXES)("the own agents' VM doesn't start anew where a folder was replaced while a brought agent's that mounted it did not stop", async () => {
+test.skipIf(!RUNS_SANDBOXES)("the own agents' VM doesn't start anew where the workspace was replaced while a brought agent's that works there did not stop", async () => {
   const launcher = new FakeVmLauncher();
   const { workspace, sandboxes } = sandboxedRoom({ launcher });
-  const module = join(workspace, ".git", "modules", "a");
-  gitFolder(module);
   await sandboxes.launchForBrought(brought(workspace));
-  renameSync(module, join(workspace, "moved"));
-  symlinkSync(scratch, module);
+  replaced(workspace);
   const stop = launcher.stop.bind(launcher);
   launcher.stop = () => Promise.reject(new Error("the VM is busy"));
   await expect(sandboxes.launch(ownAgent(workspace))).rejects.toMatchObject(notReady({ kind: "could-not-start", cause: "another VM that worked there did not stop" }));
@@ -595,18 +591,6 @@ describe("the held files several VMs of one sandbox work among", () => {
     plant(workspace, "AGENTS.md");
     expect(await putBack(workspace, "AGENTS.md")).toBe(true);
     launched.gone!();
-    await sandboxes.stopAll();
-  });
-
-  test("let no VM start beside another where a file it sees read-only is gone, as that one could be written there", async () => {
-    const { workspace, cli, sandboxes } = sandboxedRoom();
-    plant(workspace, "CLAUDE.md");
-    await sandboxes.launch(ownAgent(workspace));
-    renameSync(join(workspace, "CLAUDE.md"), join(scratch, "moved.md"));
-    await expect(sandboxes.launchForBrought(brought(workspace))).rejects.toMatchObject(notReady({ kind: "could-not-start", cause: "CLAUDE.md was moved or replaced" }));
-    expect(cli.vms.size).toBe(1);
-    await sandboxes.stop(ROOM);
-    (await sandboxes.launchForBrought(brought(workspace))).gone!();
     await sandboxes.stopAll();
   });
 

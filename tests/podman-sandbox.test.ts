@@ -9,6 +9,7 @@ import { ANTHROPIC_API } from "../host/sandbox/model-proxy.ts";
 import { computersOwnOnLinux, containersLabelled, imageNamesIn, Podman } from "../host/sandbox/podman.ts";
 import { Sandboxes, type AgentInSandbox, type SandboxHost } from "../host/sandbox/sandboxes.ts";
 import { FakePodmanCli, NODE_IMAGE } from "./fake-podman-cli.ts";
+import { guardedIn, mountsOfRun } from "./guard-told.ts";
 import { RUNS_SANDBOXES } from "./sandbox-computer.ts";
 
 const scratch = mkdtempSync(join(tmpdir(), "podman-sandbox-"));
@@ -65,7 +66,7 @@ const mountedAt = (run: string[], target: string) => valuesAfter(run, "-v").find
 const modeOf = (path: string) => statSync(path).mode & 0o777;
 
 describe("a room's sandbox on rootless Podman", () => {
-  test.skipIf(!RUNS_SANDBOXES)("runs its relays as nobody and its agents as the agent user, who is this computer's user there, with no capability nor any to gain, no network, limits, a capped log, and the repository's config and hooks read-only; the key is nowhere in it", async () => {
+  test.skipIf(!RUNS_SANDBOXES)("starts as a root that is nobody on this computer and may only guard the workspace, and its agents as the agent user, who is this computer's user there, with no capability nor any to gain, no network, limits, and a capped log; the key is nowhere in it", async () => {
     const workspace = repository();
     const { host, setups } = hostFor(workspace);
     const cli = new FakePodmanCli();
@@ -77,28 +78,29 @@ describe("a room's sandbox on rootless Podman", () => {
     expect(cli.calls.find((args) => args.includes("run"))![0]).toBe("run");
     expect(run).toEqual(expect.arrayContaining(["--detach", "--rm", "--init"]));
     expect(valueAfter(run!, "--userns")).toBe("keep-id:uid=1000,gid=1000");
-    expect(valueAfter(run!, "--user")).toBe("65534:65534");
+    expect(valueAfter(run!, "--user")).toBe("0:0");
     expect(valueAfter(run!, "--cap-drop")).toBe("all");
+    expect(valueAfter(run!, "--cap-add")).toBe("SYS_ADMIN,DAC_OVERRIDE,FOWNER,SETUID,SETGID,SETPCAP");
+    expect(valuesAfter(run!, "--device")).toEqual(["/dev/fuse"]);
     expect(valuesAfter(run!, "--security-opt")).toEqual(["no-new-privileges", "label=disable"]);
     expect(valueAfter(run!, "--network")).toBe("none");
     expect(run).toContain("--http-proxy=false");
     expect([valueAfter(run!, "--memory"), valueAfter(run!, "--memory-swap"), valueAfter(run!, "--cpus"), valueAfter(run!, "--pids-limit")]).toEqual(["3G", "3G", "4", "4096"]);
     expect([valueAfter(run!, "--log-driver"), valueAfter(run!, "--log-opt")]).toEqual(["k8s-file", "max-size=1mb"]);
     expect(valuesAfter(run!, "--label")).toContain("mirador.owner=room:room-1");
-    const mounts = valuesAfter(run!, "-v");
-    expect(mounts).toContain(`${workspace}:${workspace}`);
-    expect(mounts).toContain(`${workspace}/.git/hooks:${workspace}/.git/hooks:ro`);
-    expect(mounts.some((mount) => mount.endsWith(`:${workspace}/.git/config:ro`))).toBe(true);
-    expect(run!.slice(-6)).toEqual(["sh", "/mirador/sandbox/room-vm.sh", "nobody", "7701=/run/mirador/canvas.sock", "7702=/run/mirador/model.sock", "7703=/run/mirador/network.sock"]);
+    const mounts = mountsOfRun(run!);
+    expect(mounts.filter(({ source }) => source === workspace || source.startsWith(`${workspace}/`))).toEqual([{ source: workspace, target: "/mirador/raw/0", readOnly: false }]);
+    expect(guardedIn(mounts)).toEqual([{ folder: workspace, parts: { files: [], folders: [], onTheWay: [], gitFolders: [".git"] } }]);
+    expect(run!.slice(-9)).toEqual(["mirador-guard", "/mirador/guard/folders", "1000:1000", "--", "sh", "/mirador/sandbox/room-vm.sh", "7701=/run/mirador/canvas.sock", "7702=/run/mirador/model.sock", "7703=/run/mirador/network.sock"]);
     const sockets = ["canvas", "model", "network"].map((name) => mountedAt(run!, `/run/mirador/${name}.sock`));
-    expect(sockets.map(modeOf)).toEqual([0o666, 0o666, 0o666]);
+    expect(sockets.map(modeOf)).toEqual([0o600, 0o600, 0o600]);
     expect(modeOf(dirname(sockets[0]!))).toBe(0o700);
     expect(new Set(sockets.map(dirname)).size).toBe(1);
 
     const [program, ...exec] = launched.command;
     expect(program).toBe(cli.program);
-    expect(exec.slice(0, 6)).toEqual(["exec", "-i", "--user", "1000:1000", "-w", workspace]);
-    expect(exec).not.toContain("setpriv");
+    expect(exec.slice(0, 6)).toEqual(["exec", "-i", "--user", "0:0", "-w", workspace]);
+    expect(exec).toEqual(expect.arrayContaining(["/usr/bin/setpriv", "--reuid=1000", "--regid=1000", "--clear-groups", "--inh-caps=-all", "--bounding-set=-all", "--no-new-privs"]));
     expect(exec.slice(-2)).toEqual(agentIn(workspace).agent);
     expect(exec).toContain("HOME=/home/node");
     expect(exec).toContain("XDG_RUNTIME_DIR=/run/user/given");
@@ -228,7 +230,7 @@ describe("a room's sandbox on rootless Podman", () => {
     cli.containers.set("mirador-vm", {});
     const ran = await new Podman(cli, PLAIN).runAsAgent("mirador-vm", "1000:1000", [process.execPath, "-e", "process.stdin.pipe(process.stdout)"], "held", 5_000);
     expect(ran).toEqual({ exitCode: 0, stdout: "held" });
-    expect(cli.callsOf("exec")[0]!.slice(0, 5)).toEqual(["exec", "-i", "--user", "1000:1000", "mirador-vm"]);
+    expect(cli.callsOf("exec")[0]!.slice(0, 7)).toEqual(["exec", "-i", "--user", "0:0", "mirador-vm", "/usr/bin/setpriv", "--reuid=1000"]);
   });
 
   test("runs nothing where Podman can't run sandboxes, and tells why", async () => {
@@ -276,30 +278,14 @@ test("Podman's lists are read for what the sandboxes need of them, and nothing e
   expect(imageNamesIn("{}")).toEqual([]);
 });
 
-describe.skipIf(!runsShellScripts)("a room's VM's first process, started as nobody as on Podman", () => {
-  const roomVm = join(import.meta.dir, "../host/sandbox/in-vm/room-vm.sh");
-  const programs = (uid: number) => {
-    const bin = join(scratch, `bin-${crypto.randomUUID()}`);
-    mkdirSync(bin);
-    writeFileSync(join(bin, "bun"), `#!/bin/sh\necho "bun $*"\n`, { mode: 0o755 });
-    writeFileSync(join(bin, "id"), `#!/bin/sh\necho ${uid}\n`, { mode: 0o755 });
-    return bin;
-  };
-  const started = (uid: number, ...args: string[]) => Bun.spawnSync(["sh", roomVm, ...args], { env: { PATH: `${programs(uid)}:/usr/bin:/bin` } });
-
-  test("runs the relays as nobody", () => {
-    const ran = started(65534, "nobody", "7701=/run/mirador/canvas.sock");
-    expect(ran.stdout.toString().trim()).toBe("bun /mirador/sandbox/relays.mjs 7701=/run/mirador/canvas.sock");
-    expect(ran.exitCode).toBe(0);
-  });
-
-  test("runs no relay as the agents' user, nor as anyone else, nor where it isn't told whom it started as", () => {
-    const asAgent = started(1000, "nobody", "7701=/run/mirador/canvas.sock");
-    expect(asAgent.stdout.toString()).toBe("");
-    expect(asAgent.stderr.toString()).toContain("the relays run only as nobody");
-    expect(asAgent.exitCode).toBe(1);
-    const untold = started(65534, "7701=/run/mirador/canvas.sock");
-    expect(untold.stdout.toString()).toBe("");
-    expect(untold.exitCode).toBe(2);
-  });
+test.skipIf(!runsShellScripts)("a room's VM lets the agents' user reach Mirador's sockets, then runs the relays as nobody, with no capability nor any to gain", () => {
+  const bin = join(scratch, `bin-${crypto.randomUUID()}`);
+  mkdirSync(bin);
+  for (const program of ["chmod", "setpriv"]) writeFileSync(join(bin, program), `#!/bin/sh\necho "${program} $*"\n`, { mode: 0o755 });
+  const ran = Bun.spawnSync(["sh", join(import.meta.dir, "../host/sandbox/in-vm/room-vm.sh"), "7701=/run/mirador/canvas.sock"], { env: { PATH: `${bin}:/usr/bin:/bin` } });
+  expect(ran.stdout.toString().trim().split("\n")).toEqual([
+    "chmod 666 /run/mirador/*.sock",
+    "setpriv --reuid=65534 --regid=65534 --clear-groups --inh-caps=-all --bounding-set=-all --no-new-privs -- bun /mirador/sandbox/relays.mjs 7701=/run/mirador/canvas.sock",
+  ]);
+  expect(ran.exitCode).toBe(0);
 });

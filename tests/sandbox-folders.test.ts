@@ -18,6 +18,7 @@ import { ALL_OF_CLAUDE_SETUP } from "../shared/room-agent-setup.ts";
 import { DEFAULT_PERMISSION_PRESET } from "../shared/room-permissions.ts";
 import { NO_SANDBOX, roomSandbox, workspaceSandbox, type HeldChange, type SandboxFolder, type SandboxOwner, type SandboxSetting } from "../shared/sandbox.ts";
 import { FakeContainerCli } from "./fake-container-cli.ts";
+import { guardedIn, mountsOfRun } from "./guard-told.ts";
 import { RUNS_SANDBOXES } from "./sandbox-computer.ts";
 
 setDefaultTimeout(20_000);
@@ -262,7 +263,7 @@ describe("the sandbox's VM", () => {
     const setFolders = (...given: (string | MountedFolder)[]) => (folders = given.map((folder, index) => ({ ...(typeof folder === "string" ? { path: folder, writable: false } : folder), addedAt: index })));
     const setOthers = (otherSandboxes: OtherSandboxes) => (others = otherSandboxes);
     const mounts = (run: string[]) => run.filter((_, index) => run[index - 1] === "-v");
-    return { home, workspace: surroundings.workspace!, dataDir: host.dataDir, cli, sandboxes, launch, setFolders, setOthers, started, held, mounts };
+    return { home, workspace: surroundings.workspace!, cli, sandboxes, launch, setFolders, setOthers, started, held, mounts };
   }
 
   test.skipIf(!RUNS_SANDBOXES)("keeps a sandbox from turning on in a workspace another sandbox that is on has read and write, in or around it, but says nothing of it to one on already", async () => {
@@ -316,8 +317,8 @@ describe("the sandbox's VM", () => {
     expect(sandboxes.mountedFolders(ROOM)).toEqual([]);
   });
 
-  test.skipIf(!RUNS_SANDBOXES)("mounts a folder read and write as it does the workspace: its git config and hooks read-only, from copies of its own, and its agent config files too", async () => {
-    const { home, workspace, dataDir, cli, sandboxes, launch, setFolders, mounts } = sandboxWithFolders();
+  test.skipIf(!RUNS_SANDBOXES)("guards a folder read and write as it does the workspace: its repository, what its git config includes, and its agent config files", async () => {
+    const { home, workspace, cli, sandboxes, launch, setFolders } = sandboxWithFolders();
     const library = repositoryIn(home, "library");
     writeFileSync(join(library, "AGENTS.md"), "Be kind.\n");
     writeFileSync(join(library, ".gitconfig"), "[user]\n\tname = Team\n");
@@ -326,19 +327,14 @@ describe("the sandbox's VM", () => {
 
     await launch();
 
-    const run = mounts(cli.callsOf("run")[0]!);
-    expect(run).toContain(`${library}:${library}`);
-    expect(run).toContain(`${library}/.git/hooks:${library}/.git/hooks:ro`);
-    const copyOf = (repository: string) => run.find((mount) => mount.endsWith(`:${repository}/.git/config:ro`))?.split(":")[0];
-    expect(copyOf(library)?.startsWith(`${join(dataDir, "sandbox", "room-1", "folder-git-config")}/`)).toBe(true);
-    expect(copyOf(workspace)?.startsWith(`${join(dataDir, "sandbox", "plans")}/`)).toBe(true);
-    expect(readFileSync(copyOf(library)!, "utf8")).toBe(readFileSync(join(library, ".git", "config"), "utf8"));
-    const heldCopy = run.find((mount) => mount.endsWith(`:${library}/AGENTS.md:ro`))?.split(":")[0];
-    expect(heldCopy?.startsWith(`${join(dataDir, "sandbox", "room-1", "folder-git-config")}/`)).toBe(true);
-    expect(readFileSync(heldCopy!, "utf8")).toBe("Be kind.\n");
-    const includedCopy = run.find((mount) => mount.endsWith(`:${library}/.gitconfig:ro`))?.split(":")[0];
-    expect(includedCopy?.startsWith(`${join(dataDir, "sandbox", "room-1", "folder-git-config")}/`)).toBe(true);
-    expect(readFileSync(includedCopy!, "utf8")).toBe("[user]\n\tname = Team\n");
+    const mounts = mountsOfRun(cli.callsOf("run")[0]!);
+    const repositories = [workspace, library];
+    expect(mounts.filter(({ source }) => repositories.some((folder) => source.startsWith(folder)))).toEqual(repositories.map((source, index) => ({ source, target: `/mirador/raw/${index}`, readOnly: false })));
+    const nothing = { files: [], folders: [], onTheWay: [], gitFolders: [".git"] };
+    expect(guardedIn(mounts)).toEqual([
+      { folder: workspace, parts: nothing },
+      { folder: library, parts: { ...nothing, files: [".gitconfig", "AGENTS.md"], onTheWay: [".git"] } },
+    ]);
     expect(sandboxes.mountedFolders(ROOM)).toEqual([readAndWrite(library)]);
     expect(sandboxes.folderStateOf(ROOM, readAndWrite(library))).toEqual({ kind: "in-sandbox" });
     expect(sandboxes.folderStateOf(ROOM, readOnly(library))).toEqual({ kind: "waiting" });
@@ -380,8 +376,8 @@ describe("the sandbox's VM", () => {
     await sandboxes.stopAll();
   });
 
-  test.skipIf(!RUNS_SANDBOXES)("leaves out whole, as the VM starts, a folder read and write that is no repository now, holds what it can't keep read-only, or that another sandbox writes in, and starts without it", async () => {
-    const { home, cli, sandboxes, launch, setFolders, setOthers, mounts } = sandboxWithFolders();
+  test.skipIf(!RUNS_SANDBOXES)("leaves out whole, as the VM starts, a folder read and write that is no repository now, holds what it can't protect, or that another sandbox writes in, and starts without it", async () => {
+    const { home, workspace, cli, sandboxes, launch, setFolders, setOthers } = sandboxWithFolders();
     const notes = folderIn(home, "notes");
     const piped = repositoryIn(home, "piped");
     Bun.spawnSync(["mkfifo", join(piped, "CLAUDE.md")]);
@@ -394,9 +390,9 @@ describe("the sandbox's VM", () => {
 
     await launch();
 
-    const run = mounts(cli.callsOf("run")[0]!);
-    expect([notes, piped, shared, includingMissing].filter((folder) => run.some((mount) => mount.includes(folder)))).toEqual([]);
-    expect(run).toContain(`${library}:${library}`);
+    const mounts = mountsOfRun(cli.callsOf("run")[0]!);
+    expect([notes, piped, shared, includingMissing].filter((folder) => mounts.some(({ source }) => source.startsWith(folder)))).toEqual([]);
+    expect(guardedIn(mounts).map(({ folder }) => folder)).toEqual([workspace, library]);
     expect(sandboxes.mountedFolders(ROOM)).toEqual([readAndWrite(library)]);
     expect(sandboxes.folderStateOf(ROOM, readAndWrite(notes))).toEqual({ kind: "refused", refusal: { kind: "needs-repository" } });
     expect(sandboxes.folderStateOf(ROOM, readAndWrite(piped))).toEqual({ kind: "refused", refusal: { kind: "held-files-refused" } });
@@ -664,7 +660,7 @@ describe("the folders added to a sandbox", () => {
     const guidance = "# Folders from the owner's computer";
     const folders = [readOnly("/home/me/notes"), readAndWrite("/home/me/library")];
     expect(claudeSessionMeta("often", { sandbox: { folders } }).systemPrompt.append).toContain(`${guidance}\n`);
-    expect(claudeRoomSessionMeta("as-needed", { sandbox: { folders } }).systemPrompt.append).toMatch(/git config and hooks stay read-only[\s\S]*- \/home\/me\/notes \(read-only\)\n- \/home\/me\/library \(read and write\)$/);
+    expect(claudeRoomSessionMeta("as-needed", { sandbox: { folders } }).systemPrompt.append).toMatch(/the same writes are refused there\.\n- \/home\/me\/notes \(read-only\)\n- \/home\/me\/library \(read and write\)$/);
     expect(claudeSessionMeta("often").systemPrompt.append).not.toContain(guidance);
     expect(claudeSessionMeta("often", { sandbox: { folders: [] } }).systemPrompt.append).not.toContain(guidance);
     expect(claudeRoomSessionMeta("as-needed").systemPrompt.append).toBe("");

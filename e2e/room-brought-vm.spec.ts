@@ -165,7 +165,7 @@ test("the VM sees the workspace alone, reaches nothing but a web proxy that lets
     .flatMap((address) => (address && address.family === "IPv4" && !address.internal ? [address.address] : []));
   const outside = ["example.com 443", "1.1.1.1 443", "192.168.64.1 22", ...["127.0.0.1", "192.168.64.1", ...macAddresses].map((address) => `${address} ${owners.port}`)];
   const agentsOwn = ["127.0.0.1 7701", "127.0.0.1 7702"];
-  const folders = ["/Users", "/run/mirador", realpathSync(owners.dataDir), join(realpathSync(owners.dataDir), "sandbox"), "/mirador"];
+  const folders = ["/Users", "/run/mirador", realpathSync(owners.dataDir), join(realpathSync(owners.dataDir), "sandbox"), "/mirador", "/mirador/raw", "/mirador/guard"];
   const looked = JSON.stringify({ targets: [...outside, ...agentsOwn, "127.0.0.1 7703"], folders });
   await taskDone("LOOK AROUND", "room_run", { command: `node look-around.cjs '${looked}' > looked-around.json` });
   const { uid, noNewPrivs, capabilities, variables, folders: found, reached, processes } = JSON.parse(textThere("looked-around.json")!) as LookedAround;
@@ -173,7 +173,7 @@ test("the VM sees the workspace alone, reaches nothing but a web proxy that lets
   expect([uid, noNewPrivs, capabilities]).toEqual([1000, "1", "0000000000000000"]);
   const throughTheProxy = ["HTTPS_PROXY", "HTTP_PROXY", "NO_PROXY", "http_proxy", "https_proxy", "no_proxy"];
   expect(variables.filter((name) => !["PATH", "HOME", "SHELL", "USER", "LOGNAME", "TMPDIR", "PWD", "OLDPWD", "SHLVL", "_"].includes(name)).toSorted()).toEqual(throughTheProxy);
-  expect(found).toEqual({ "/Users": "ENOENT", "/run/mirador": ["network.sock"], [folders[2]!]: "ENOENT", [folders[3]!]: "ENOENT", "/mirador": ["sandbox"] });
+  expect(found).toEqual({ "/Users": "ENOENT", "/run/mirador": ["network.sock"], [folders[2]!]: "ENOENT", [folders[3]!]: "ENOENT", "/mirador": ["guard", "raw", "sandbox"], "/mirador/raw": "EACCES", "/mirador/guard": ["folders"] });
   expect(Object.keys(reached).filter((target) => reached[target] === "reached")).toEqual(["127.0.0.1 7703"]);
   expect(processes).not.toContain(BUILDERS_KEY);
   await expect(callCard()).toHaveCount(0);

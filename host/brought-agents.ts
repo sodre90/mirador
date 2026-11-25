@@ -22,7 +22,7 @@ import { broughtTaskPrompt, isRoomAuthorRole, MOST_AGENTS_BROUGHT, ROOM_MESSAGE_
 import { shownAsWritten } from "../shared/written-text.ts";
 import type { Hub } from "./hub.ts";
 import { SenderLimit } from "./join-requests.ts";
-import { isInside, realOrAsIs } from "./sandbox/workspace-mounts.ts";
+import { isInside, realOrAsIs } from "./sandbox/guarded-workspace.ts";
 import type { BroughtTask, Store } from "./store.ts";
 import type { SystemNotifications } from "./system-notifications.ts";
 

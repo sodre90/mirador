@@ -70,20 +70,20 @@ async function heldWorkspace(files: Record<string, string> = {}, before: (at: (p
   });
   before(at);
   const room = new FakeRoom();
-  const held = new HeldFiles(workspace, [".git"], room);
+  const held = new HeldFiles(workspace, room);
   held.worksThere(ROOM);
-  const readOnly = await held.start();
+  const toProtect = await held.start();
   await Bun.sleep(WATCH_STARTS_MS);
   const textAt = (path: string) => (existsSync(at(path)) ? readFileSync(at(path), "utf8") : null);
   const changeAt = (path: string) => held.changesFor(ROOM).find((change) => change.path === path)!;
-  return { workspace, held, room, readOnly, at, textAt, changeAt };
+  return { workspace, held, room, toProtect, at, textAt, changeAt };
 }
 
 describe("the held files of a sandboxed room", () => {
-  test("there as the VM starts are to be read-only in it, outermost folder by folder, and a link among them is watched instead", async () => {
+  test("there as the VM starts are for its guard to protect, outermost folder by folder, and a link among them is watched instead", async () => {
     const files = { "CLAUDE.md": "Be careful.\n", ".claude/settings.json": "{}\n", ".claude/commands/x.md": "x", "pkg/.vscode/tasks.json": "{}", ".husky/pre-commit": "npm test", "src/index.ts": "" };
-    const { held, room, readOnly, at, changeAt } = await heldWorkspace(files, (at) => symlinkSync("CLAUDE.md", at("AGENTS.md")));
-    expect(readOnly.toSorted()).toEqual([".claude", ".husky", "CLAUDE.md", "pkg/.vscode"]);
+    const { held, room, toProtect, at, changeAt } = await heldWorkspace(files, (at) => symlinkSync("CLAUDE.md", at("AGENTS.md")));
+    expect(toProtect.toSorted()).toEqual([".claude", ".husky", "CLAUDE.md", "pkg/.vscode"]);
 
     room.running = false;
     rmSync(at("AGENTS.md"));
@@ -276,18 +276,6 @@ describe("the held files of a sandboxed room", () => {
     await held.stop();
   });
 
-  test("let nothing point git at config of the sandbox's making, and hold no card for it", async () => {
-    const { held, at } = await heldWorkspace();
-    writeFileSync(at(".git/commondir"), "/elsewhere\n");
-    writeFileSync(at(".git/config.worktree"), "[core]\n\tfsmonitor = /tmp/x\n");
-    await Bun.sleep(WATCH_SETTLES_MS);
-    await held.check();
-    expect(existsSync(at(".git/commondir"))).toBe(false);
-    expect(existsSync(at(".git/config.worktree"))).toBe(false);
-    expect(held.changesFor(ROOM)).toEqual([]);
-    await held.stop();
-  });
-
   test("look at many writes to one file together, rather than once per write", async () => {
     const { held, room, at } = await heldWorkspace();
     for (let write = 0; write < 50; write++) writeFileSync(at(".mcp.json"), `{"write":${write}}`);
@@ -365,17 +353,6 @@ describe("the held files of a sandboxed room", () => {
     expect(existsSync(at(".claude"))).toBe(false);
     expect(held.textOf(changeAt(".claude/settings.json").id)).toEqual({ before: null, after: `{"hooks":"evil"}` });
     expect(changeAt(".claude/unreadable")).toMatchObject({ kind: "add", unshown: true });
-    await held.stop();
-  });
-
-  test.skipIf(process.platform !== "darwin")("catch git redirects written with alternate casing on macOS", async () => {
-    const { held, at } = await heldWorkspace();
-    writeFileSync(at(".git/COMMONDIR"), "/elsewhere\n");
-    await eventually(() => {
-      expect(existsSync(at(".git/commondir"))).toBe(false);
-      expect(existsSync(at(".git/COMMONDIR"))).toBe(false);
-    });
-    expect(held.changesFor(ROOM)).toEqual([]);
     await held.stop();
   });
 });

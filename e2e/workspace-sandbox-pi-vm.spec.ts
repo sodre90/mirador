@@ -112,10 +112,10 @@ test("a sandboxed workspace's pi agent answers from its VM, on a model of its mo
   const [vm] = ourVms();
   expect(vm).toBeDefined();
   const sandboxFiles = filesUnder(join(host.dataDir, "sandbox"));
-  const piModelsInVm = sandboxFiles.find((path) => path.endsWith("/pi/models.json"));
+  const piModelsInVm = sandboxFiles.find((path) => /\/pi\/[^/]+\/models\.json$/.test(path));
 
   await test.step("pi in the VM kept its session in the sandbox's own pi folder, its models.json there reaching the model through the relay with a key that is none", () => {
-    expect(sandboxFiles.some((path) => /\/pi\/sessions\/.+\.jsonl$/.test(path))).toBe(true);
+    expect(sandboxFiles.some((path) => /\/pi\/[^/]+\/sessions\/.+\.jsonl$/.test(path))).toBe(true);
     const { providers } = JSON.parse(readFileSync(piModelsInVm!, "utf8")) as { providers: Record<string, { baseUrl: string; apiKey: string }> };
     expect(Object.keys(providers)).toEqual(["e2e-server"]);
     expect(providers["e2e-server"]).toMatchObject({ baseUrl: expect.stringMatching(/^http:\/\/127\.0\.0\.1:7702\/p\/[A-Za-z0-9-]+$/), apiKey: "kept-by-mirador" });

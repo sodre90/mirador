@@ -3,6 +3,7 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, realpathSync, writeFile
 import { release } from "node:os";
 import { dirname, join } from "node:path";
 import { expect, test, type Locator, type Page } from "@playwright/test";
+import { guardedIn, mountsOfRun } from "../tests/guard-told.ts";
 import { addWorkspace, addWorkspaceFromSidebar, clickWorkspaceButton, createProfile, createRoom, openRoomSettings, roomCard, sendMessage, signIn, workspaceCard } from "./helpers.ts";
 import { bunProgramPath, TestHost, writeBunProgram } from "./test-host.ts";
 
@@ -61,9 +62,7 @@ const vmsStarted = () =>
     .map((line) => JSON.parse(line) as string[])
     .filter(([command]) => command === "run");
 
-const mountsOfProject = (run: string[]) => run.filter((argument, index) => run[index - 1] === "-v" && argument.split(":")[1]!.startsWith(realpathSync(host.projectDir)));
-
-test("a workspace's sandbox and a room's in the same folder mount the same of it, and what an agent changes there is held in both until it is answered in one", async ({ page }) => {
+test("a workspace's sandbox and a room's in the same folder protect the same of it, and what an agent changes there is held in both until it is answered in one", async ({ page }) => {
   test.skip(!sandboxesRunHere, "Sandboxes run on macOS 26 on Apple silicon only.");
   await signIn(page, host);
   await projectCard(page).getByLabel("Agent", { exact: true }).selectOption({ label: "Builder · Claude Code" });
@@ -88,8 +87,8 @@ test("a workspace's sandbox and a room's in the same folder mount the same of it
   await roomComposer(page).press("Enter");
   await expect.poll(() => promptsSoFar().split(turnsMayEnd()).length).toBe(3);
 
-  const [ofWorkspace, ofRoom] = vmsStarted().map(mountsOfProject);
-  expect(ofWorkspace!.length).toBeGreaterThan(2);
+  const [ofWorkspace, ofRoom] = vmsStarted().map((run) => guardedIn(mountsOfRun(run)));
+  expect(ofWorkspace!.map(({ folder, parts }) => [folder, parts.gitFolders])).toEqual([[realpathSync(host.projectDir), [".git"]]]);
   expect(ofRoom).toEqual(ofWorkspace);
 
   writeFileSync(inProject(".mcp.json"), `{"mcpServers":{"tunnel":{"command":"curl"}}}\n`);

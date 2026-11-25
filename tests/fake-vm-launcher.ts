@@ -5,7 +5,6 @@ import { runHere } from "./in-vm-here.ts";
 
 /** A launcher of rooms' VMs that starts nothing: it notes what it was asked, and fails where a test says. */
 export class FakeVmLauncher implements VmLauncher {
-  readonly firstProcessUser = "root";
   readonly started: VmPlan[] = [];
   readonly stopped: string[] = [];
   readonly agents: AgentInVm[] = [];

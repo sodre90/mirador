@@ -6,7 +6,7 @@ const SCRIPTS_HERE = join(import.meta.dir, "../host/sandbox/in-vm/");
 
 /** The command an agent user would run in a room's VM after setpriv, as this computer runs it: with its own Bun and scripts. */
 export function commandHere(command: string[]) {
-  const dropped = command[0] === "setpriv" ? command.slice(command.indexOf("--") + 1) : command;
+  const dropped = command[0] === "/usr/bin/setpriv" ? command.slice(command.indexOf("--") + 1) : command;
   return dropped.map((arg) => (arg === BUN_IN_VM ? process.execPath : arg.replace(SCRIPTS_IN_VM, SCRIPTS_HERE)));
 }
 

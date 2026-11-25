@@ -4,6 +4,7 @@ import { release } from "node:os";
 import { dirname, join } from "node:path";
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import type { ServerMessage } from "../shared/protocol.ts";
+import { guardedIn, mountsOfRun } from "../tests/guard-told.ts";
 import { addWorkspace, clickWorkspaceButton, createProfile, lastAgentMessage, sendMessage, signIn, waitForTurnToEnd, workspaceCard } from "./helpers.ts";
 import { bunProgramPath, scratchPath, TestHost, writeBunProgram } from "./test-host.ts";
 
@@ -73,6 +74,7 @@ const containerCalls = (): string[][] =>
     .map((line) => JSON.parse(line));
 const containerRuns = () => containerCalls().filter(([command]) => command === "run");
 const mountsOf = (run: string[]) => run.filter((_, index) => run[index - 1] === "-v");
+const guardedOf = (run: string[]) => guardedIn(mountsOfRun(run));
 
 const agentLogLines = () => (existsSync(agentLog()) ? readFileSync(agentLog(), "utf8").trim().split("\n") : []);
 
@@ -288,7 +290,7 @@ test("the owner picks each folder's access: read and write takes only a reposito
     await closeSandbox(dialog);
   });
 
-  await test.step("a repository goes in read and write, and the VM mounts it as it does the workspace: its git config and hooks read-only", async () => {
+  await test.step("a repository goes in read and write, and the VM's guard shows it as it does the workspace: its git folder protected", async () => {
     const dialog = await openSandbox(page);
     const list = folderList(dialog);
     await list.getByRole("button", { name: "Add a folder" }).click();
@@ -299,9 +301,10 @@ test("the owner picks each folder's access: read and write takes only a reposito
     await closeSandbox(dialog);
     await askAddedFolders(page);
     await expect(lastAgentMessage(page)).toHaveText(`Added folders: ${docs}, ${plain}, ${library}`);
-    const mounts = mountsOf(containerRuns().at(-1)!);
-    expect(mounts).toEqual(expect.arrayContaining([`${plain}:${plain}:ro`, `${library}:${library}`, `${library}/.git/hooks:${library}/.git/hooks:ro`]));
-    expect(mounts.some((mount) => mount.endsWith(`:${library}/.git/config:ro`))).toBe(true);
+    const run = containerRuns().at(-1)!;
+    expect(mountsOf(run)).toContain(`${plain}:${plain}:ro`);
+    expect(guardedOf(run).map(({ folder }) => folder)).toEqual([realpathSync(host.projectDir), library]);
+    expect(guardedOf(run)[1]!.parts.gitFolders).toEqual([".git"]);
   });
 
   await test.step("a row's access changes with its select: a plain folder is refused read and write there too, and the repository goes read only and back, the sandbox restarting each time", async () => {
@@ -314,13 +317,14 @@ test("the owner picks each folder's access: read and write takes only a reposito
     await closeSandbox(dialog);
     await askAddedFolders(page);
     expect(mountsOf(containerRuns().at(-1)!)).toContain(`${library}:${library}:ro`);
+    expect(guardedOf(containerRuns().at(-1)!)).toHaveLength(1);
 
     const again = await openSandbox(page);
     await accessOf(again, library, "~/library").selectOption("read-and-write");
     await expect(accessOf(again, library, "~/library")).toHaveValue("read-and-write");
     await closeSandbox(again);
     await askAddedFolders(page);
-    expect(mountsOf(containerRuns().at(-1)!)).toContain(`${library}:${library}`);
+    expect(guardedOf(containerRuns().at(-1)!).map(({ folder }) => folder)).toContain(library);
   });
 
   await test.step("a file planted in the folder while a turn is under way is put back and held in the conversation, saying its folder, and written once allowed", async () => {

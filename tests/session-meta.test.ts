@@ -54,13 +54,14 @@ test("pi, which publishes no title, is asked to name its conversation once the f
   expect(claudeSessionMeta("often").systemPrompt.append).not.toContain(titleGuidance());
 });
 
-test("an agent in a sandbox is told of its way out, in and out of rooms, and one on this computer is not", () => {
+test("an agent in a sandbox is told of its way out and of the files it can't change, in and out of rooms, and one on this computer is not", () => {
   const toldTo = (harness: "claude" | "pi", inRoom: boolean, sandbox: SessionInSandbox | null) => (sessionMeta(harness, "often", { canvasAssetsOrigin: ASSETS_ORIGIN, inRoom, sandbox }) as { systemPrompt: { append: string } }).systemPrompt.append;
   for (const harness of ["claude", "pi"] as const) {
     for (const inRoom of [true, false]) {
       const told = toldTo(harness, inRoom, { folders: [{ path: "/home/me/notes", writable: false }] });
       expect(told).toContain("# Network\nYou work in a sandbox that has no network of its own.");
       expect(told).toContain("HTTPS_PROXY");
+      expect(told).toContain("# Files you can't change\nIn the folder you work in, your sandbox refuses some writes");
       expect(told).toContain("- /home/me/notes (read-only)");
       expect(toldTo(harness, inRoom, null)).not.toContain("HTTPS_PROXY");
       expect(toldTo(harness, inRoom, null)).toBe(told.slice(0, told.indexOf("\n\n# Network")));

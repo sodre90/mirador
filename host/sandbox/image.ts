@@ -2,8 +2,10 @@ import { createHash } from "node:crypto";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
+import { gzipSync } from "node:zlib";
 import type { SandboxedHarness, SandboxSetup } from "../../shared/sandbox.ts";
 import { lastLineOf, type ContainerCli } from "./container-cli.ts";
+import { guardSource } from "./guard.ts";
 
 export const RECIPE = join(import.meta.dir, "room-agent.Containerfile");
 
@@ -28,26 +30,28 @@ const AGENT_PACKAGES: Record<SandboxedHarness, { npmPackage: string; program: st
 /** The images of an agent kind, whatever their version, as their tags begin. */
 export const imagesOfKind = (harness: SandboxedHarness) => `${IMAGE_NAME}:${harness}-`;
 
-/** The image of one agent kind and version, Bun version and recipe: another of any of them is another image. */
+/** The image of one agent kind and version, Bun version, recipe and guard: another of any of them is another image. */
 export async function imageTag({ harness, version }: AgentImage, bunVersion = Bun.version) {
-  const recipe = await readFile(RECIPE, "utf8");
-  const recipeHash = createHash("sha256").update(recipe).digest("hex").slice(0, 10);
-  return `${imagesOfKind(harness)}${version}-bun-${bunVersion}-${recipeHash}`;
+  const madeOf = [await readFile(RECIPE, "utf8"), JSON.stringify(await guardSource())];
+  const hash = createHash("sha256").update(madeOf.join("\0")).digest("hex").slice(0, 10);
+  return `${imagesOfKind(harness)}${version}-bun-${bunVersion}-${hash}`;
 }
 
-/** What the recipe builds the image of this agent with. */
-export const buildArguments = ({ harness, version }: AgentImage) => {
+/** What the recipe builds the image of this agent with, the guard's source as the recipe unpacks it. */
+export async function buildArguments({ harness, version }: AgentImage) {
   const { npmPackage, program } = AGENT_PACKAGES[harness];
-  return ["--build-arg", `BUN_VERSION=${Bun.version}`, "--build-arg", `AGENT_PACKAGE=${npmPackage}@${version}`, "--build-arg", `AGENT_PROGRAM=${program}`];
-};
+  const source = gzipSync(JSON.stringify(await guardSource())).toString("base64");
+  const given = [`BUN_VERSION=${Bun.version}`, `AGENT_PACKAGE=${npmPackage}@${version}`, `AGENT_PROGRAM=${program}`, `GUARD_SOURCE=${source}`];
+  return given.flatMap((argument) => ["--build-arg", argument]);
+}
 
-/** The step a build is on, as `container build --progress plain` says it, `#7 [3/6] RUN …`, or `podman build`, `STEP 3/6: RUN …`. */
+/** The step a build is on, as `container build --progress plain` says it, `#7 [stage 3/6] RUN …`, or `podman build`, `[1/2] STEP 3/6: RUN …`. */
 export function buildStepIn(line: string): SandboxSetup["step"] | null {
-  const match = /^#\d+ \[(?:[^\]\s]+ )?(\d+)\/(\d+)\]/.exec(line) ?? /^STEP (\d+)\/(\d+): /.exec(line);
+  const match = /^#\d+ \[(?:[^\]\s]+ )?(\d+)\/(\d+)\]/.exec(line) ?? /^(?:\[\d+\/\d+\] )?STEP (\d+)\/(\d+): /.exec(line);
   return match ? { at: Number(match[1]), of: Number(match[2]) } : null;
 }
 
-/** The image the recipe builds on, as its FROM line names it. */
+/** The image each of the recipe's stages builds on, as its FROM lines name it. */
 export const baseImageOf = (recipe: string) => /^FROM\s+(\S+)/m.exec(recipe)?.[1] ?? null;
 
 /** The images `container image list --format json` lists, `[{ reference, descriptor, fullSize }]`, by their references. */
@@ -103,7 +107,7 @@ export async function buildImage(cli: ContainerCli, tag: string, agent: AgentIma
   const emptyContext = await mkdtemp(join(tmpdir(), "mirador-image-"));
   try {
     if (!builderRanBefore) await mustRun(cli, ["builder", "start"], { timeoutMs: SERVICE_START_TIMEOUT_MS });
-    const build = ["build", "--platform", "linux/arm64", "--progress", "plain", "-f", RECIPE, ...buildArguments(agent), "-t", tag, emptyContext];
+    const build = ["build", "--platform", "linux/arm64", "--progress", "plain", "-f", RECIPE, ...(await buildArguments(agent)), "-t", tag, emptyContext];
     await mustRun(cli, build, {
       timeoutMs: BUILD_TIMEOUT_MS,
       onLine: (line) => {

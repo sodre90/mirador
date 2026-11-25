@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { HELD_CHANGES_MOST, ownerKey, roomSandbox, workspaceSandbox, type HeldChange, type SandboxFolder, type SandboxNotReadyWhy, type SandboxOwner } from "../shared/sandbox.ts";
@@ -8,6 +8,7 @@ import { ANTHROPIC_API } from "../host/sandbox/model-proxy.ts";
 import { Sandboxes, type SandboxHost } from "../host/sandbox/sandboxes.ts";
 import type { VmPlan } from "../host/sandbox/vm-launcher.ts";
 import { FakeVmLauncher } from "./fake-vm-launcher.ts";
+import { guardedIn } from "./guard-told.ts";
 import { RUNS_SANDBOXES } from "./sandbox-computer.ts";
 
 const scratch = realpathSync(mkdtempSync(join(tmpdir(), "one-folder-")));
@@ -101,15 +102,14 @@ function computer() {
   return { dataDir, launcher, sandboxes, launch, launchBrought, set, told, heldBy, planted };
 }
 
-const ofWorkspace = ({ mounts }: VmPlan, workspace: string) => mounts.filter(({ target }) => target === workspace || target.startsWith(`${workspace}/`));
-const copyOfConfig = ({ mounts }: VmPlan) => mounts.find(({ target }) => target.endsWith("/.git/config"))!.source;
+const guardedByPlan = ({ mounts }: VmPlan) => guardedIn(mounts);
 const settled = async (holds: () => boolean) => {
   for (const started = Date.now(); Date.now() - started < 10_000 && !holds(); ) await Bun.sleep(20);
   return holds();
 };
 
 describe("the VMs of sandboxes that work in one folder", () => {
-  test.skipIf(!RUNS_SANDBOXES)("mount what the first of them did, whoever's they are: each of it a mount point nothing in that one can move, and nothing made there since", async () => {
+  test.skipIf(!RUNS_SANDBOXES)("guard it as the first of them does, whoever's they are, and mount nothing made there since", async () => {
     const { launcher, sandboxes, launch } = computer();
     const workspace = repository();
     gitFolder(moduleOf(workspace, "a"));
@@ -118,18 +118,19 @@ describe("the VMs of sandboxes that work in one folder", () => {
     writeFileSync(join(workspace, "AGENTS.md"), "Made since.\n");
     await launch(ROOM, workspace);
     await launch(OTHER_ROOM, workspace);
-    const [first, ...others] = launcher.started.map((plan) => ofWorkspace(plan, workspace));
-    expect(first!.map(({ target }) => target)).toContain(moduleOf(workspace, "a"));
+    const [first, ...others] = launcher.started.map(guardedByPlan);
+    expect(first!.map(({ parts }) => parts.gitFolders)).toEqual([[".git", ".git/modules/a"]]);
     expect(others).toEqual([first!, first!]);
+    for (const { mounts } of launcher.started) expect(mounts.filter(({ source }) => source.startsWith(workspace)).map(({ source }) => source)).toEqual([workspace]);
     expect(launcher.running()).toHaveLength(3);
 
     await sandboxes.stopAll();
     await launch(ROOM, workspace);
-    expect(ofWorkspace(launcher.started.at(-1)!, workspace).map(({ target }) => target)).toContain(moduleOf(workspace, "b"));
+    expect(guardedByPlan(launcher.started.at(-1)!)[0]!.parts.gitFolders).toEqual([".git", ".git/modules/a", ".git/modules/b"]);
     await sandboxes.stopAll();
   });
 
-  test.skipIf(!RUNS_SANDBOXES)("start one at a time: what the second one mounts is planned once the first one runs, as that one's plan then is", async () => {
+  test.skipIf(!RUNS_SANDBOXES)("start one at a time: what the second one guards is planned once the first one runs, as that one's plan then is", async () => {
     const { launcher, sandboxes, launch } = computer();
     const workspace = repository();
     const firstStarts = Promise.withResolvers<void>();
@@ -147,9 +148,9 @@ describe("the VMs of sandboxes that work in one folder", () => {
     expect(asked).toBe(1);
     firstStarts.resolve();
     await both;
-    const [first, second] = launcher.started.map((plan) => ofWorkspace(plan, workspace));
+    const [first, second] = launcher.started.map(guardedByPlan);
     expect(second).toEqual(first!);
-    expect(second!.map(({ target }) => target).filter((target) => target.includes("made-as"))).toEqual([]);
+    expect(second![0]!.parts.gitFolders).toEqual([".git"]);
     await sandboxes.stopAll();
   });
 
@@ -182,45 +183,26 @@ describe("the VMs of sandboxes that work in one folder", () => {
     symlinkSync(workspace, link);
     await launch(WORKSPACE, workspace);
     await launch(ROOM, link);
-    const [first, second] = launcher.started.map((plan) => ofWorkspace(plan, workspace));
+    const [first, second] = launcher.started.map(guardedByPlan);
     expect(second).toEqual(first!);
     await sandboxes.stopAll();
   });
 
-  test.skipIf(!RUNS_SANDBOXES)("keep the copies of git's config they mounted until the last of them stopped, whatever the others start elsewhere", async () => {
-    const { dataDir, launcher, sandboxes, launch } = computer();
-    const [workspace, elsewhere] = [repository(), repository()];
-    await launch(WORKSPACE, workspace);
-    await launch(ROOM, workspace);
-    const copy = copyOfConfig(launcher.started[0]!);
-    await sandboxes.stop(WORKSPACE);
-    await launch(WORKSPACE, elsewhere);
-    expect(existsSync(copy)).toBe(true);
-    const inUse = readdirSync(join(dataDir, "sandbox", "plans"));
-    mkdirSync(join(dataDir, "sandbox", "plans", "left-by-a-crash"));
-    await sandboxes.reapLeftovers();
-    expect(readdirSync(join(dataDir, "sandbox", "plans")).toSorted()).toEqual(inUse.toSorted());
-    await sandboxes.stop(ROOM);
-    expect(existsSync(copy)).toBe(false);
-    await sandboxes.stopAll();
-    expect(readdirSync(join(dataDir, "sandbox", "plans"))).toEqual([]);
-  });
-
-  test.skipIf(!RUNS_SANDBOXES)("where something they mounted was replaced: the next one waits for agents at work in another sandbox there, and stops the rest to plan it anew", async () => {
+  test.skipIf(!RUNS_SANDBOXES)("where it was moved and another made in its place: the next one waits for agents at work in another sandbox there, and stops the rest to plan it anew", async () => {
     const { launcher, sandboxes, launch, set } = computer();
     const workspace = repository();
-    writeFileSync(join(workspace, "CLAUDE.md"), "The owner's.\n");
     await launch(WORKSPACE, workspace);
-    renameSync(join(workspace, "CLAUDE.md"), join(scratch, `moved-${crypto.randomUUID()}`));
-    writeFileSync(join(workspace, "CLAUDE.md"), "Checked out anew.\n");
+    renameSync(workspace, `${workspace}-moved`);
+    repositoryAt(workspace);
+    gitFolder(moduleOf(workspace, "checked-out-anew"));
     set.atWork(WORKSPACE, "builder");
-    await expect(launch(ROOM, workspace)).rejects.toMatchObject(notReady({ kind: "could-not-start", cause: "CLAUDE.md was moved or replaced" }));
+    await expect(launch(ROOM, workspace)).rejects.toMatchObject(notReady({ kind: "could-not-start", cause: "the workspace was moved or replaced" }));
     expect(launcher.started).toHaveLength(1);
     expect(launcher.running()).toHaveLength(1);
     set.atWork(WORKSPACE);
     await launch(ROOM, workspace);
     expect(launcher.running()).toEqual([launcher.started[1]!.name]);
-    expect(ofWorkspace(launcher.started[1]!, workspace).map(({ target }) => target)).toContain(join(workspace, "CLAUDE.md"));
+    expect(guardedByPlan(launcher.started[1]!)[0]!.parts.gitFolders).toEqual([".git", ".git/modules/checked-out-anew"]);
     await sandboxes.stopAll();
   });
 
@@ -325,7 +307,7 @@ describe("a sandbox whose workspace lies in or around where another one's agents
     const { outer, inner } = nested();
     set.folders(ROOM, { path: outer, writable: true });
     await launch(ROOM, repository());
-    expect(launcher.started[0]!.mounts.map(({ target }) => target)).toContain(outer);
+    expect(launcher.started[0]!.mounts.map(({ source }) => source)).toContain(outer);
     await expect(launch(WORKSPACE, inner)).rejects.toMatchObject(notReady({ kind: "blocked", blocker: { kind: "workspace-overlaps-sandbox-folder", folder: outer } }));
     await expect(launch(WORKSPACE, outer)).rejects.toMatchObject(notReady({ kind: "blocked", blocker: { kind: "workspace-overlaps-sandbox-folder", folder: outer } }));
     await sandboxes.stopAll();

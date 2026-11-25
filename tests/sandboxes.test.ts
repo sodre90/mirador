@@ -9,6 +9,7 @@ import { ANTHROPIC_API } from "../host/sandbox/model-proxy.ts";
 import { AppleContainer } from "../host/sandbox/apple-container.ts";
 import { Sandboxes, type AgentInSandbox, type SandboxHost } from "../host/sandbox/sandboxes.ts";
 import { FakeContainerCli } from "./fake-container-cli.ts";
+import { guardedIn, mountsOfRun } from "./guard-told.ts";
 import { RUNS_SANDBOXES } from "./sandbox-computer.ts";
 
 const scratch = mkdtempSync(join(tmpdir(), "room-sandboxes-"));
@@ -61,11 +62,10 @@ const agentIn = (workspace: string, changes: Partial<AgentInSandbox> = {}): Agen
 
 const notReady = (why: Partial<SandboxNotReadyWhy>) => ({ problem: { code: "sandbox-not-ready", why } });
 
-const mountOf = (run: string[], source: string) => run.find((arg, index) => run[index - 1] === "-v" && arg.startsWith(`${source}:`));
 const socketsFolderOf = (run: string[]) => dirname(run.find((arg, index) => run[index - 1] === "-v" && arg.endsWith(":/run/mirador/canvas.sock"))!.split(":")[0]!);
 
 describe("a room's sandbox", () => {
-  test.skipIf(!RUNS_SANDBOXES)("starts an agent in the room's VM as the agent user, never root, with no network, the repository's config and hooks read-only, and the key nowhere in it", async () => {
+  test.skipIf(!RUNS_SANDBOXES)("starts an agent in the room's VM as the agent user, never root, with no network, the workspace through the guard alone, and the key nowhere in it", async () => {
     const workspace = repository();
     const { host, setups } = hostFor(workspace);
     const cli = new FakeContainerCli();
@@ -76,18 +76,20 @@ describe("a room's sandbox", () => {
     const [run] = cli.callsOf("run");
     expect(run).toEqual(expect.arrayContaining(["--detach", "--rm", "--init", "--memory", "3G"]));
     expect(run![run!.indexOf("--network") + 1]).toBe("none");
-    expect(mountOf(run!, workspace)).toBe(`${workspace}:${workspace}`);
-    const configMount = run!.find((arg, index) => run![index - 1] === "-v" && arg.endsWith(`:${workspace}/.git/config:ro`));
-    expect(configMount?.startsWith(`${join(host.dataDir, "sandbox", "plans")}/`)).toBe(true);
-    expect(mountOf(run!, join(workspace, ".git"))).toBe(`${workspace}/.git:${workspace}/.git`);
-    expect(mountOf(run!, join(workspace, ".git/hooks"))).toBe(`${workspace}/.git/hooks:${workspace}/.git/hooks:ro`);
+    expect(run![run!.indexOf("--cap-add") + 1]).toBe("CAP_SYS_ADMIN");
+    const mounts = mountsOfRun(run!);
+    expect(mounts.filter(({ source }) => source === workspace || source.startsWith(`${workspace}/`))).toEqual([{ source: workspace, target: "/mirador/raw/0", readOnly: false }]);
+    expect(guardedIn(mounts)).toEqual([{ folder: workspace, parts: { files: [], folders: [], onTheWay: [], gitFolders: [".git"] } }]);
+    const manifestFolder = mounts.find(({ target }) => target === "/mirador/guard")!.source;
+    expect(manifestFolder.startsWith(`${join(host.dataDir, "sandbox", "room-1", "guard")}/`)).toBe(true);
+    expect(mounts.filter(({ source }) => source.startsWith(`${manifestFolder}/`))).toEqual([]);
     expect(run).toContain("mirador.owner=room:room-1");
-    expect(run!.slice(-6)).toEqual(["sh", "/mirador/sandbox/room-vm.sh", "root", "7701=/run/mirador/canvas.sock", "7702=/run/mirador/model.sock", "7703=/run/mirador/network.sock"]);
+    expect(run!.slice(-9)).toEqual(["mirador-guard", "/mirador/guard/folders", "1000:1000", "--", "sh", "/mirador/sandbox/room-vm.sh", "7701=/run/mirador/canvas.sock", "7702=/run/mirador/model.sock", "7703=/run/mirador/network.sock"]);
     expect(["canvas.sock", "model.sock", "network.sock"].map((socket) => statSync(join(socketsFolderOf(run!), socket)).mode & 0o777)).toEqual([0o600, 0o600, 0o600]);
     const [program, ...exec] = launched.command;
     expect(program).toBe(cli.program);
     expect(exec.slice(0, 6)).toEqual(["exec", "-i", "--user", "0:0", "-w", workspace]);
-    expect(exec).toEqual(expect.arrayContaining(["setpriv", "--reuid=1000", "--regid=1000", "--no-new-privs", "--bounding-set=-all"]));
+    expect(exec).toEqual(expect.arrayContaining(["/usr/bin/setpriv", "--reuid=1000", "--regid=1000", "--no-new-privs", "--bounding-set=-all"]));
     expect(exec.slice(-2)).toEqual(agentIn(workspace).agent);
     expect(exec).toContain("PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin");
     expect(JSON.stringify([run, launched.command, launched.environment])).not.toContain(KEY);
@@ -103,6 +105,7 @@ describe("a room's sandbox", () => {
     await Bun.sleep(IDLE_STOP_MS * 4);
     expect(cli.vms.size).toBe(0);
     expect(sandboxes.confirmedRunning(ROOM)).toBe(false);
+    expect(existsSync(manifestFolder)).toBe(false);
     await sandboxes.stopAll();
   });
 

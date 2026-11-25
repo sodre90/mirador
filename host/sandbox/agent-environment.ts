@@ -62,6 +62,9 @@ export interface AgentPlacesInVm {
 /** Values of this computer's that mean nothing in the VM, or that the model proxy keeps on this computer. */
 const KEPT_ON_THIS_COMPUTER = [...MODEL_KEY_VARIABLES, "CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_BASE_URL", "ANTHROPIC_CUSTOM_HEADERS", "CLAUDE_CONFIG_DIR", "SSH_AUTH_SOCK", "ALL_PROXY", "all_proxy", "MIRADOR_URL", "MIRADOR_SCRIPT_TOKEN"];
 
+/** What has a program load code from where it says, as the one would that drops from root to the agent user, before it has. */
+const loadsCode = (name: string) => name.startsWith("LD_") || name === "GCONV_PATH" || name === "LOCPATH";
+
 /** pi's places on this computer, which its VM has none of. */
 const PI_PLACES_HERE = ["PI_CODING_AGENT_DIR", "PI_ACP_PI_COMMAND", "PI_CODING_AGENT_SESSION_DIR", "PI_PACKAGE_DIR"];
 
@@ -97,6 +100,6 @@ export const holdsASecret = (secrets: string[]) => (text: string) => secrets.som
 export function environmentInVm(given: Record<string, string>, kind: SandboxedKind, places: AgentPlacesInVm, secrets: string[]): Record<string, string> {
   const kept = keptFrom(kind);
   const holdsOne = holdsASecret(secrets);
-  const passedOn = Object.entries(given).filter(([name, value]) => !KEPT_ON_THIS_COMPUTER.includes(name) && !Object.hasOwn(IN_VM, name) && !kept(name) && !holdsOne(value));
+  const passedOn = Object.entries(given).filter(([name, value]) => !KEPT_ON_THIS_COMPUTER.includes(name) && !loadsCode(name) && !Object.hasOwn(IN_VM, name) && !kept(name) && !holdsOne(value));
   return { ...Object.fromEntries(passedOn), ...IN_VM, ...ownValuesInVm(kind, places) };
 }

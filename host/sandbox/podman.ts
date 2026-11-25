@@ -5,10 +5,9 @@ import type { SandboxAvailability, SandboxSetup } from "../../shared/sandbox.ts"
 import { AGENT_USER } from "./agent-environment.ts";
 import { askPodman, podmanAvailability, podmanProgram, podmanStorageIn, SELINUX_ENFORCE } from "./availability.ts";
 import { containerCli, lastLineOf, type ContainerCli } from "./container-cli.ts";
-import { environmentFlags, execProcessEnvironment, readByTool } from "./exec-environment.ts";
+import { droppedTo, environmentFlags, execProcessEnvironment, readByTool } from "./exec-environment.ts";
 import { baseImageOf, buildArguments, buildStepIn, imagesOfKind, imageTag, mustRun, RECIPE, type AgentImage } from "./image.ts";
-import { HOST_LABEL, SandboxNotReady, VM_READY_LINE, type AgentInVm, type VmPlan, type VmLauncher } from "./vm-launcher.ts";
-import type { Mount } from "./workspace-mounts.ts";
+import { HOST_LABEL, SandboxNotReady, VM_READY_LINE, type AgentInVm, type Mount, type VmPlan, type VmLauncher } from "./vm-launcher.ts";
 
 const READY_WITHIN_S = 30;
 const BUILD_TIMEOUT_MS = 30 * 60_000;
@@ -19,8 +18,11 @@ const RUN_TIMEOUT_MS = 10 * 60_000;
 const CPUS = "4";
 const MOST_PROCESSES = "4096";
 
-/** Nobody, whom the relays run as: the agent user can neither signal nor trace them, nor take their ports. */
-const RELAYS_USER = "65534:65534";
+/**
+ * What the container's first process may do as its root, who is nobody on this computer: mount the folders it guards and
+ * keep the agents out of what it mounts them from, let the relays reach Mirador's sockets, and then give all of it up.
+ */
+const FIRST_PROCESS_MAY = ["SYS_ADMIN", "DAC_OVERRIDE", "FOWNER", "SETUID", "SETGID", "SETPCAP"];
 
 /** The most of the container's log Podman keeps: its relays say a few lines. */
 const LOG_MOST = "1mb";
@@ -38,10 +40,10 @@ const mountFlags = ({ source, target, readOnly }: Mount) => ["-v", `${source}:${
 
 /**
  * `podman run` of a room's sandbox, a plain container: detached, removed once stopped, its first process under an init
- * that passes signals on. That process runs the relays as nobody; the agents start in it as the agent user, who is this
- * computer's user there, so the workspace's files stay theirs. It has no capability and none to gain, no network at
- * all, and a log of its own that keeps only so much. SELinux labels are left off, so the workspace is shown as it is
- * rather than relabelled.
+ * that passes signals on. That process is the container's root, which guards the folders through FUSE; the agents start
+ * as the agent user, who is this computer's user there, so the workspace's files stay theirs, and have no capability,
+ * nor any to gain. The container has no network at all, and a log of its own that keeps only so much. SELinux labels are
+ * left off, so the workspace is shown as it is rather than relabelled.
  */
 export function runArguments({ name, labels, image, memory, mounts, entry }: VmPlan) {
   const [uid, gid] = AGENT_USER.split(":");
@@ -56,9 +58,13 @@ export function runArguments({ name, labels, image, memory, mounts, entry }: VmP
     "--userns",
     `keep-id:uid=${uid},gid=${gid}`,
     "--user",
-    RELAYS_USER,
+    "0:0",
     "--cap-drop",
     "all",
+    "--cap-add",
+    FIRST_PROCESS_MAY.join(","),
+    "--device",
+    "/dev/fuse",
     "--security-opt",
     "no-new-privileges",
     "--security-opt",
@@ -84,17 +90,17 @@ export function runArguments({ name, labels, image, memory, mounts, entry }: VmP
   ];
 }
 
-/** `podman exec` of an agent, as its user, in its folder, its values by name; the sandbox gives it no capability, nor any to gain. */
+/** `podman exec` of an agent, as its user, in its folder, its values by name. */
 export const execArguments = ({ vm, user, workingDirectory, environment, command }: AgentInVm) => [
   "exec",
   "-i",
   "--user",
-  user,
+  "0:0",
   "-w",
   workingDirectory,
   ...environmentFlags(environment, PODMAN_READS),
   vm,
-  ...command,
+  ...droppedTo(user, command),
 ];
 
 /** The most a command run as the agent user may print: what a put-back of held files tells, with room to spare. */
@@ -138,7 +144,7 @@ async function buildImage(cli: ContainerCli, tag: string, agent: AgentImage, pro
   const baseWasThere = base !== null && (await imageExists(cli, base));
   const emptyContext = await mkdtemp(join(tmpdir(), "mirador-image-"));
   try {
-    const build = ["build", "--layers=false", "-f", RECIPE, ...buildArguments(agent), "-t", tag, emptyContext];
+    const build = ["build", "--layers=false", "-f", RECIPE, ...(await buildArguments(agent)), "-t", tag, emptyContext];
     await mustRun(cli, build, {
       timeoutMs: BUILD_TIMEOUT_MS,
       onLine: (line) => {
@@ -164,8 +170,6 @@ async function removeOtherVersions(cli: ContainerCli, kept: string, { harness }:
  * image is built on first use.
  */
 export class Podman implements VmLauncher {
-  readonly firstProcessUser = "nobody";
-
   constructor(
     private readonly cli: ContainerCli | null,
     private readonly available: SandboxAvailability,
@@ -206,7 +210,7 @@ export class Podman implements VmLauncher {
   }
 
   async runAsAgent(vm: string, user: string, command: string[], input: string, timeoutMs: number) {
-    const ran = await this.usable().run(["exec", "-i", "--user", user, vm, ...command], { input, timeoutMs, stdoutMostBytes: AGENT_RUN_MOST_BYTES });
+    const ran = await this.usable().run(["exec", "-i", "--user", "0:0", vm, ...droppedTo(user, command)], { input, timeoutMs, stdoutMostBytes: AGENT_RUN_MOST_BYTES });
     return { exitCode: ran.exitCode, stdout: ran.stdout };
   }
 

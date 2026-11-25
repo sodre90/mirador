@@ -309,6 +309,3 @@ export function isHeldConfigPath(path: string): boolean {
 
 /** Whether everything in a folder of the workspace is held, as in a held folder, each file of it on its own. */
 export const holdsAllInside = (path: string) => isHeldConfigPath(`${path}/_`);
-
-/** Files in the repository's own folder that bring in config of the sandbox's making: they never stay. */
-export const GIT_CONFIG_REDIRECTS = ["commondir", "config.worktree"];
