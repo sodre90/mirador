@@ -1,5 +1,17 @@
 import { expect, test } from "bun:test";
-import { authorityFingerprintIn, deviceTunnelInviteLink, inviteIn, inviteLink, isHidden, joinCodeIn, machineAddress, machinesSeen, tunnelIn } from "../shared/machines.ts";
+import {
+  authorityFingerprintIn,
+  deviceTunnelInviteLink,
+  inviteIn,
+  inviteLink,
+  isHidden,
+  isInviteCodeAlone,
+  joinCodeIn,
+  machineAddress,
+  machinesSeen,
+  networkAddressFor,
+  tunnelIn,
+} from "../shared/machines.ts";
 import type { Machine, MachineSeen } from "../shared/model.ts";
 import type { InviteTunnel } from "../shared/tunnel.ts";
 
@@ -141,4 +153,24 @@ test("a hidden machine is the one at its address, or with its id at another", ()
   expect(isHidden(seen("NAS on the LAN", "https://192.168.1.30:4700", "nas-id"), hidden)).toBe(true);
   expect(isHidden(seen("Build box", "https://build.example.ts.net"), hidden)).toBe(false);
   expect(isHidden(seen("Unknown", "https://other.example.ts.net", null), [seen("Other", "https://another.example.ts.net", null)])).toBe(false);
+});
+
+test("an invite code alone names no machine, whatever its case, and still joins as a code", () => {
+  expect(isInviteCodeAlone(" 7K4M-2PQX-9WZB ")).toBe(true);
+  expect(isInviteCodeAlone("7k4m-2pqx-9wzb")).toBe(true);
+  expect(machineAddress("7K4M-2PQX-9WZB")).toBeNull();
+  expect(inviteIn("7K4M-2PQX-9WZB")).toEqual({ code: "7K4M-2PQX-9WZB", authorityFingerprint: null, tunnel: null });
+  expect(machineAddress("https://7k4m-2pqx-9wzb"), "typed with a scheme, it is an address").toMatchObject({ origin: "https://7k4m-2pqx-9wzb" });
+  expect(isInviteCodeAlone("mac1-mini-home"), "a host name with letters no code has").toBe(false);
+  expect(isInviteCodeAlone("7K4M-2PQX")).toBe(false);
+});
+
+test("an address on the local network given without a port points at Mirador's network port", () => {
+  expect(networkAddressFor("https://192.0.2.10")).toBe("https://192.0.2.10:4602");
+  expect(networkAddressFor("http://box.local")).toBe("https://box.local:4602");
+  expect(networkAddressFor("https://[fd12:3456:789a:1::1]")).toBe("https://[fd12:3456:789a:1::1]:4602");
+  expect(networkAddressFor("https://192.0.2.10:4602")).toBeNull();
+  expect(networkAddressFor("http://[fd12:3456:789a:1::1]:4600")).toBeNull();
+  expect(networkAddressFor("https://home-server.tailnet.ts.net")).toBeNull();
+  expect(networkAddressFor("https://main")).toBeNull();
 });

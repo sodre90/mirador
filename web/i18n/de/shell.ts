@@ -281,6 +281,9 @@ export const shell: Messages["shell"] = {
     addAndJoin: "Hinzufügen und beitreten",
     add: "Hinzufügen",
     alreadyListed: "Dieser Rechner ist schon in der Liste.",
+    inviteCodeAlone:
+      "Das ist nur ein Einladungscode. Füge den ganzen Einladungslink ein (wähle in der Einladung „Anderer Computer“), oder gib hier die Adresse des Rechners ein und den Code, wenn du ihn öffnest.",
+    noPortGiven: (port, address) => `Kein Port angegeben. Im Netzwerk antwortet Mirador auf Port ${port}, sofern nicht anders eingestellt, etwa unter ${address}.`,
     colour: "Farbe des Rechners",
     colourOf: (machine) => `Farbe von ${machine}`,
     open: "Öffnen",

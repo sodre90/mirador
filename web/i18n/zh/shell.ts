@@ -253,6 +253,8 @@ export const shell: Messages["shell"] = {
     addAndJoin: "添加并加入",
     add: "添加",
     alreadyListed: "这台机器已经在列表里了。",
+    inviteCodeAlone: "这只是邀请码。请粘贴完整的邀请链接（在邀请中选择“另一台电脑”），或在这里输入机器的地址，打开它时再填写邀请码。",
+    noPortGiven: (port, address) => `没有填写端口。在网络上，Mirador 默认在端口 ${port} 应答，例如 ${address}。`,
     colour: "机器颜色",
     colourOf: (machine) => `${machine} 的颜色`,
     open: "打开",

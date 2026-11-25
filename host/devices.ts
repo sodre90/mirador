@@ -1,10 +1,9 @@
 import { createHash, randomBytes, randomInt } from "node:crypto";
+import { INVITE_ALPHABET } from "../shared/machines.ts";
 import type { Device } from "../shared/model.ts";
 import type { Store } from "./store.ts";
 
 const INVITE_LIFETIME_MILLISECONDS = 15 * 60_000;
-/** Letters and digits nobody mistakes for one another when reading a code out or typing it. */
-const INVITE_ALPHABET = "ABCDEFGHJKMNPQRSTVWXYZ23456789";
 const INVITE_LENGTH = 12;
 const DEVICE_NAME_LENGTH = 80;
 

@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { LONGEST_MACHINE_NAME, machineAddress, type MachineToJoin } from "../shared/machines.ts";
+import { isInviteCodeAlone, LONGEST_MACHINE_NAME, machineAddress, networkAddressFor, USUAL_NETWORK_PORT, type MachineToJoin } from "../shared/machines.ts";
 import { markInitials } from "../shared/marks.ts";
 import type { Machine, Pastel } from "../shared/model.ts";
 import { tunnelOrigin } from "../shared/tunnel.ts";
@@ -26,6 +26,7 @@ function AddMachine({ machines }: { machines: Machine[] }) {
   const parsed = machineAddress(address);
   const origins = parsed ? [parsed.origin, ...(parsed.tunnel ? [tunnelOrigin(parsed.tunnel)] : [])] : [];
   const known = machines.some(({ origin }) => origins.includes(origin));
+  const likelyNetworkAddress = parsed && networkAddressFor(parsed.origin);
 
   const add = async (event: FormEvent) => {
     event.preventDefault();
@@ -77,6 +78,12 @@ function AddMachine({ machines }: { machines: Machine[] }) {
         {adding && parsed?.joinCode ? words.joining : parsed?.joinCode ? words.addAndJoin : words.add}
       </button>
       {known && <p className="hint">{words.alreadyListed}</p>}
+      {isInviteCodeAlone(address) && (
+        <p className="join-problem" role="alert">
+          {words.inviteCodeAlone}
+        </p>
+      )}
+      {likelyNetworkAddress && <p className="hint">{words.noPortGiven(USUAL_NETWORK_PORT, likelyNetworkAddress)}</p>}
       {problem && (
         <p className="join-problem" role="alert">
           {problem}
