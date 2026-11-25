@@ -2,6 +2,7 @@ import { realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { worksInRoomsWorkspaces } from "../shared/brought-agents.ts";
+import { assertOpencodeModelAvailable, OPENCODE_EXPECTED_MODEL_ENV, opencodeRoomsWorkspaceEnvironment } from "./acp/rooms-workspace-opencode.ts";
 import { piRoomsWorkspaceEnvironment } from "./acp/rooms-workspace-pi.ts";
 import type { PluginActivity } from "../shared/canvas-plugins.ts";
 import { activityOf, turnEndedAs } from "../shared/plugin-activity.ts";
@@ -3262,6 +3263,7 @@ export class ConversationService {
         const resumed = canResume
           ? await harness.resumeSession({ ...sessionRequest, sessionId: conversation.acpSessionId })
           : await this.loadWithoutReplay(harness, conversation.acpSessionId, sessionRequest, replay);
+        this.assertRoomsWorkspaceModel(conversation, harness, conversation.acpSessionId, resumed);
         this.bindSession(conversationId, conversation.acpSessionId, resumed.configOptions);
         replay.filter(({ update }) => SESSION_STATE_UPDATES.has(update.sessionUpdate)).forEach((notification) => this.handleSessionUpdate(notification));
         await this.restoreConfigChoices(conversationId, conversation.acpSessionId, conversation.configOptions);
@@ -3279,6 +3281,7 @@ export class ConversationService {
     this.forgetContextUsage(conversationId);
     const created = await harness.newSession(sessionRequest);
     this.closeSessionIfConversationDeleted(conversationId, harness, created.sessionId);
+    this.assertRoomsWorkspaceModel(conversation, harness, created.sessionId, created);
     this.muteNotifier(conversation, created.sessionId);
     this.bindSession(conversationId, created.sessionId, created.configOptions);
     runtime.roomContextLost = Boolean(conversation.roomId) && (!isFirstSession || this.contextClearedBefore(conversationId));
@@ -3327,6 +3330,22 @@ export class ConversationService {
     throw new HostProblemError({ code: "conversation-deleted-while-opening" });
   }
 
+  /** Refuses an isolated opencode session that fell back to another provider's model. */
+  private assertRoomsWorkspaceModel(
+    conversation: Conversation,
+    harness: HarnessProcess,
+    sessionId: string,
+    session: { configOptions?: acp.SessionConfigOption[] | null; models?: { currentModelId?: string; availableModels?: { modelId: string }[] } | null },
+  ) {
+    if (!conversation.worksInRoomsWorkspace || conversation.harness !== "opencode") return;
+    try {
+      assertOpencodeModelAvailable(harness.spec.environment[OPENCODE_EXPECTED_MODEL_ENV], session);
+    } catch (error) {
+      harness.closeSession(sessionId).catch(() => {});
+      throw error;
+    }
+  }
+
   /** Replayed history arrives as session updates before the load request returns, so the session is bound first. */
   private async loadExternalSession(conversationId: string, sessionId: string, mode: AdoptMode, forkPoint: SessionForkPoint | null): Promise<string> {
     const conversation = this.get(conversationId);
@@ -3351,6 +3370,7 @@ export class ConversationService {
       throw problem;
     });
     this.closeSessionIfConversationDeleted(conversationId, harness, loadedId);
+    this.assertRoomsWorkspaceModel(conversation, harness, loadedId, loaded);
     this.bindSession(conversationId, loadedId, loaded.configOptions);
     if (conversation.harness === "claude") await this.restoreTranscriptModel(conversationId, loadedId, sessionId);
     await this.applyProfileChoices(conversationId, loadedId);
@@ -3373,6 +3393,7 @@ export class ConversationService {
     this.replaysBeingRead.set(sessionId, replay);
     try {
       const loaded = await harness.loadSession({ ...(await this.sessionRequest(conversationId)), sessionId });
+      this.assertRoomsWorkspaceModel(conversation, harness, sessionId, loaded);
       this.bindSession(conversationId, sessionId, loaded.configOptions);
     } finally {
       this.replaysBeingRead.delete(sessionId);
@@ -3744,6 +3765,10 @@ export class ConversationService {
     if (profile.harness === "pi") {
       const isolatedDir = join(this.config.dataDir, "brought-agents-config", "pi", launch.id ?? profile.id);
       return (environment) => piRoomsWorkspaceEnvironment(environment, isolatedDir, profile.model);
+    }
+    if (profile.harness === "opencode") {
+      const isolatedDir = join(this.config.dataDir, "brought-agents-config", "opencode", launch.id ?? profile.id);
+      return (environment) => opencodeRoomsWorkspaceEnvironment(environment, isolatedDir, profile.model);
     }
     return (environment) => environment;
   }

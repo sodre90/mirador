@@ -213,7 +213,7 @@ export class ScriptedModel {
     if (last?.role === "tool") return { text: `Tool result: ${toolResultOf(last)}` };
     const text = withoutAntigravityWrapping(textOf(last)).trim();
     const canvasTool = (action: string) => tools.find((name) => name.includes("canvas") && name.endsWith(action))!;
-    const script = text.split("\n").at(-1)!.trim().replace(/^> ?/, ""); // opencode 2 puts its own lines before a subagent's prompt; a room quotes each line of its messages
+    const script = text.split("\n").at(-1)!.trim().replace(/^(?:> ?)+/, ""); // opencode 2 puts its own lines before a subagent's prompt; a room and a brought task each quote each line of their messages
 
     const [directive, ...rest] = script.split(" ");
     const argument = rest.join(" ");

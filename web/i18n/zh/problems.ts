@@ -11,7 +11,7 @@ export const problems: Messages["problems"] = {
     "workspace-sandbox-turned-off": "这个工作区的沙箱在其 Agent 启动时被关闭了：请再次发送你的消息，让它在这台电脑上启动。",
     "sandboxed-agent-here": "Claude Code 自己的面板和登录不会在沙箱中的对话里打开：它们会在这台电脑上、在其 Agent 修改的文件夹里运行 Claude Code。",
     "brought-agent-in-sandboxed-workspace": "带入房间的 Agent 不能在其 Agent 运行于沙箱中的工作区里工作：它会与它们共用那个沙箱。请为它另选一个工作区，或关闭这个工作区的沙箱。",
-    "agent-cannot-work-in-rooms-workspace": "目前只有 Claude Code 和 pi 的 Agent 能在房间自己的工作区里工作：请选择一个 Claude Code 或 pi 配置，或你自己的某个工作区。",
+    "agent-cannot-work-in-rooms-workspace": "目前只有 Claude Code、pi 和 opencode 的 Agent 能在房间自己的工作区里工作：请选择一个 Claude Code、pi 或 opencode 配置，或你自己的某个工作区。",
     "usage-limit-reached": "已达到 Claude 的用量上限。",
     "conversation-has-no-profile": "此对话没有配置，或其配置已被删除。请在对话顶部选择一个配置。",
     "workspace-gone": "该工作区已不存在。",

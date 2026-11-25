@@ -27,7 +27,7 @@ const claudeAgentEntry = join(
 /** Where opencode's installers put it, for hosts started without a login shell's PATH (e.g. by launchd). */
 const opencodeInstallDirectories = ["/opt/homebrew/bin", "/usr/local/bin", join(homedir(), ".opencode", "bin")];
 
-const findOpencode = () => Bun.which("opencode", { PATH: currentPath() }) ?? Bun.which("opencode", { PATH: opencodeInstallDirectories.join(delimiter) });
+export const findOpencode = (path = currentPath()) => Bun.which("opencode", { PATH: path }) ?? Bun.which("opencode", { PATH: opencodeInstallDirectories.join(delimiter) });
 
 /**
  * pi-acp is the ACP side of pi: it starts one `pi --mode rpc` per session. Looked up when pi starts, so a checkout whose
@@ -163,7 +163,7 @@ const hasCommandValues = ({ environment }: Profile) => Object.keys(parseEnvironm
 
 export const CANVAS_SERVER_NAME = "canvas";
 
-const opencodeCanvasPlugin = { package: join(import.meta.dir, "opencode-canvas-plugin"), options: { server: CANVAS_SERVER_NAME } };
+export const opencodeCanvasPlugin = { package: join(import.meta.dir, "opencode-canvas-plugin"), options: { server: CANVAS_SERVER_NAME } };
 
 /**
  * opencode 2 loads the plugin that gives the agent the canvas tools themselves, after the profile's own plugins; opencode 1

@@ -25,7 +25,7 @@ let mia: Page;
 let admitted: Record<"Pat" | "Gus" | "Max", ReturnType<TestHost["admitPerson"]>>;
 
 test.beforeAll(async ({ browser }) => {
-  writeBunProgram(mias.fakeProgramsDir, "opencode", join(import.meta.dirname, "fake-acp-agent.ts"));
+  writeBunProgram(mias.fakeProgramsDir, "codex", join(import.meta.dirname, "fake-acp-agent.ts"));
   api.limited = false;
   await api.start();
   await Promise.all([owners.start(), mias.start()]);
@@ -108,15 +108,15 @@ test("Mia brings her Claude agent to work in the room's workspace, and nothing o
   await nameOwnProfile(mia, "Mia");
   await addWorkspace(mia, mias.projectDir);
   await makeProfile(mia, "Coder");
-  await makeProfile(mia, "Other", "opencode");
+  await makeProfile(mia, "Other", "Codex");
   await expect(await joinRoom(mia, invite)).toHaveCount(0);
 
   await test.step("the dialog offers it for Claude Code alone, and says what it means", async () => {
     const dialog = await bringDialog("Other");
-    await expect(dialog).toContainText("Only Claude Code and pi profiles can work in the room's workspace so far.");
+    await expect(dialog).toContainText("Only Claude Code, pi and opencode profiles can work in the room's workspace so far.");
     await expect(dialog.getByRole("button", { name: "Bring", exact: true })).toBeDisabled();
     await dialog.getByRole("combobox", { name: /^Agent/ }).selectOption({ label: "Coder" });
-    await expect(dialog).not.toContainText("Only Claude Code and pi profiles");
+    await expect(dialog).not.toContainText("Only Claude Code, pi and opencode profiles");
     const meaning = (await whatItMeans(mia, dialog)).join("\n");
     expect(meaning).toContain("has nothing else of this computer: no files, no commands");
     expect(meaning).toContain("tells the agent your account's email address");

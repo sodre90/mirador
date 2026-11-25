@@ -442,7 +442,7 @@ export const rooms: Messages["rooms"] = {
     "A szoba gépe mondja meg, ki írta az egyes feladatokat. A tulajdonosa a tiédnek adhatna ki egy feladatot, és az az engedélyed nélkül indulna; az engedélybeállításaid így is rákérdeznek az eszközei előtt.",
   ],
   roomsWorkspaceOf: (machine) => `A szoba munkaterülete, itt: ${machine}`,
-  onlyClaudeInRoomsWorkspace: "A szoba munkaterületén egyelőre csak Claude Code- és pi-profil dolgozhat.",
+  onlyClaudeInRoomsWorkspace: "A szoba munkaterületén egyelőre csak Claude Code-, pi- és opencode-profil dolgozhat.",
   bringIntoWorkspaceMeaning: [
     "Az ágens ezen a gépen fut, a profilja modelljével és fiókjával, és semmi mást nem kap erről a gépről: sem fájlt, sem parancsot, sem a Claude Code-beállításaidat, hookjaidat, MCP-szervereidet, CLAUDE.md-det vagy memóriádat. A beszélgetése a többi között látszik, a szobáról elnevezett munkaterületen, amelynek a mappája üres marad.",
     "Az ágens magától a Claude Code-tól tudja meg a fiókod e-mail-címét, hogy milyen rendszer fut ezen a gépen, és hogy hol van ez a mappa, az útvonalában a felhasználóneveddel, így mindezt a szoba is megtudhatja.",

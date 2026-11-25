@@ -73,7 +73,7 @@ function miasMirador({ lettingInMs = 1_000 } = {}) {
   store.setMachineJoinedAs("ann", { asPerson: true, relayKey: null });
   store.setMachineRooms("ann", [{ id: "r1", name: "Launch", unread: 0, mentions: 0, toConfirm: 0, toApprove: 0, muted: false }]);
   store.saveProfile(profile("p1", "Coder"));
-  store.saveProfile({ ...profile("p2", "Opener"), harness: "opencode" });
+  store.saveProfile({ ...profile("p2", "Codexer"), harness: "codex" });
   const emptyFolders = join(scratch, crypto.randomUUID());
   store.insertWorkspace({ id: "w1", name: "mine", path: "/tmp/mine", defaultLaunch: { harness: "claude", profileId: "p1" }, createdAt: 1 });
   const toAnn: ClientMessage[] = [];
