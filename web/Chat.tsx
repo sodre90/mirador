@@ -991,14 +991,16 @@ const TimestampedEntry = memo(function TimestampedEntry({
   );
 });
 
+const tellsOfMode = (block: TimelineBlock) => block.kind === "notice" && block.about.kind === "mode";
+
 /**
  * Events of a conversation drawn as its timeline draws them, with its approvals, but without its bars or message box: a
- * room's thread shows its agent's work so, its replies headed with the agent's name in the room. Its turns cannot be
- * undone from there.
+ * room's thread shows its agent's work so, its replies headed with the agent's name in the room, and not the mode it
+ * works in, which the room sets. Its turns cannot be undone from there.
  */
 export function TimelineOfEvents({ conversation, events, agentName, onlyReads }: { conversation: Conversation; events: StoredEvent[]; agentName: string; onlyReads: boolean }) {
   const built = useTimeline(events);
-  const timeline = useMemo(() => built.map((block) => (block.kind === "user" ? { ...block, turnSeq: undefined } : block)), [built]);
+  const timeline = useMemo(() => built.filter((block) => !tellsOfMode(block)).map((block) => (block.kind === "user" ? { ...block, turnSeq: undefined } : block)), [built]);
   const timelineNow = useRef(timeline);
   timelineNow.current = timeline;
   const awaitingPermission = useMemo(() => toolCallsAwaitingPermission(timeline), [timeline]);

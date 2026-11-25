@@ -384,6 +384,14 @@ test("with a long model, the room's bar keeps to one line by cutting the agent's
   });
 });
 
+test("a thread leaves out the mode its agent's session works in, which the room sets", async ({ page }) => {
+  await openNewRoom(page, "Modes");
+  await tag(page, "Modes", "Builder", "MODE manual SAY Weeded by hand");
+  await answerSaying(page, "Weeded by hand").getByRole("button", { name: "Open thread" }).click();
+  await expect(thread(page, "Builder").locator(".message.agent")).toHaveText("Weeded by hand");
+  await expect(thread(page, "Builder").getByText("Mode:")).toHaveCount(0);
+});
+
 test("the divider beside a thread drags it wider, and under it higher, and the room keeps both after a reload", async ({ page }) => {
   await openNewRoom(page, "Widths");
   await tag(page, "Widths", "Builder", "SAY Measured");

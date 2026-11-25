@@ -58,7 +58,7 @@ import { END_OF_OTHERS_WORDS, ROOM_MESSAGES_HEADING } from "../shared/rooms.ts";
  * `"path"` it would read or change (an edit's comes with its diff), or `{"waitFor": path}`, which holds the turn until
  * that file exists; `{{folder}}` in them is the session's folder. It answers with what each request got, or "Done."
  * when none asked. `ENV ` and a variable's name there answers with its value in the agent's environment, or that it is
- * not set. Ending in `FOLDER`, the message is answered with the folder the session works in; in `CHOICES`, with what the session is on. `WAIT ` and a path there holds the turn until that file exists before it does the rest.
+ * not set. Ending in `FOLDER`, the message is answered with the folder the session works in; in `CHOICES`, with what the session is on. `WAIT ` and a path there holds the turn until that file exists before it does the rest, and `MODE ` and a mode's id says the session works in that mode now.
  * `TOKENS ` there with input and output tokens and, if given, a cost in US dollars ends the turn with those tokens as
  * its own, after reporting that cost as the session's so far, as a turn's spend reaches the host. `My answer
  * to your question`, or a room person's `[member] Name answered your question`, is answered with "Going with " and the
@@ -454,6 +454,8 @@ async function answerAsked(client: acp.AgentContext, sessionId: string, asked: s
   await runTools(client, sessionId, [{ title: "Read the room", kind: "read", rawInput: {} }]);
   const waitFor = /\bWAIT (\S+) /.exec(asked)?.[1];
   while (waitFor && !existsSync(waitFor)) await Bun.sleep(50);
+  const mode = /\bMODE (\S+) /.exec(asked)?.[1];
+  if (mode) await client.notify(acp.methods.client.session.update, { sessionId, update: { sessionUpdate: "current_mode_update", currentModeId: mode } });
   const after = (word: string) => (asked.includes(word) ? asked.slice(asked.lastIndexOf(word) + word.length) : null);
   const canvasCall = after("CANVAS ");
   if (canvasCall !== null) return sayCanvasAnswer(client, sessionId, canvasCall);
