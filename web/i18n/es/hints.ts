@@ -81,11 +81,11 @@ export const hints: Messages["hints"] = {
   networkReachability:
     "Mirador sirve HTTPS él mismo en este puerto, con una autoridad de certificación que genera, así que los dispositivos de la misma red no necesitan proxy ni dirección. Cada navegador avisa una vez del certificado (o confía en él para siempre cuando instala mirador-ca.pem).",
   useThisNetwork:
-    "Permite que los dispositivos de la misma red lleguen a este Mirador por HTTPS, como la opción de abajo. El host lo usa desde su próximo inicio.",
+    "Permite que los dispositivos de la misma red lleguen a este Mirador por HTTPS, como Esta red en Conexión. El host lo usa desde su próximo inicio.",
   inviteDevice:
     "Genera un código de un solo uso con el que otro navegador o aplicación se une a este Mirador, durante 15 minutos. Un dispositivo unido puede hacer de todo aquí, incluso ejecutar comandos en las terminales.",
-  inviteRoute:
-    "De igual a igual llega a este Mac desde cualquier lugar, sin VPN, mediante la aplicación Mirador en un teléfono; un navegador solo puede unirse en la dirección. El código QR y el enlace cambian con la elección.",
+  inviteJoins:
+    "Un teléfono u otro equipo con Mirador se une de igual a igual donde funciona: desde la mayoría de las redes, sin VPN. Un navegador se une en la dirección de esta máquina. El código QR y el enlace cambian con la elección.",
   removeMachineArmed:
     "Haz clic de nuevo para quitar esta máquina de la lista. Sigue funcionando, y este equipo permanece entre sus dispositivos hasta que lo revoques allí.",
   thisComputer: "Los espacios de trabajo y conversaciones de este equipo",

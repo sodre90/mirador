@@ -77,11 +77,11 @@ export const hints: Messages["hints"] = {
   networkReachability:
     "A Mirador maga szolgál ki HTTPS-t ezen a porton, egy általa készített tanúsítványkiadóval, így az ugyanazon a hálózaton lévő készülékeknek nem kell sem proxy, sem cím. Minden böngésző egyszer figyelmeztet a tanúsítványra (vagy végleg megbízik benne, ha telepíti a mirador-ca.pem-et).",
   useThisNetwork:
-    "Az ugyanazon a hálózaton lévő eszközök HTTPS-en érik el ezt a Miradort, ahogy a lenti választás is. A host a következő indulásától használja.",
+    "Az ugyanazon a hálózaton lévő készülékek HTTPS-en érik el ezt a Miradort, ahogy a Kapcsolat alatti Ez a hálózat lehetőséggel. A host a következő indulásától használja.",
   inviteDevice:
     "Egyszer használható kódot készít, amellyel egy másik böngésző vagy alkalmazás 15 percen belül csatlakozhat ehhez a Miradorhoz. Egy csatlakozott készülék itt mindent megtehet, terminálokban parancsokat is futtathat.",
-  inviteRoute:
-    "Az egyenrangú (peer to peer) kapcsolat bárhonnan eléri ezt a Macet VPN nélkül, egy telefonon futó Mirador alkalmazáson keresztül; böngésző csak a címen csatlakozhat. A QR-kód és a link a választással együtt változik.",
+  inviteJoins:
+    "Telefon vagy másik, Miradort futtató számítógép egyenrangú (peer to peer) kapcsolattal csatlakozik, ahol az működik: a legtöbb hálózatról, VPN nélkül. Böngésző ennek a gépnek a címén csatlakozik. A QR-kód és a link a választással együtt változik.",
   removeMachineArmed: "Kattints újra, hogy eltávolítsd ezt a gépet a listáról. Tovább fut, és ez a számítógép a készülékei között marad, amíg ott vissza nem vonod.",
   thisComputer: "Ennek a számítógépnek a saját munkaterületei és beszélgetései",
   manageMachines: "Gépek hozzáadása vagy eltávolítása",

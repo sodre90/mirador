@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { Hub, socketData, type BrowserSocket, type SocketData } from "../host/hub.ts";
-import { connectedFrom, deviceStatus, otherConnectedDevices } from "../shared/devices.ts";
+import { connectedFirst, connectedFrom, deviceStatus, otherConnectedDevices } from "../shared/devices.ts";
 import type { ClientAddress, DeviceConnection, ListedDevice } from "../shared/model.ts";
 import { connectedDevicesLabel } from "../web/connected-devices.ts";
 
@@ -51,6 +51,12 @@ describe("device wording", () => {
   test("where it connects from names the Tailscale login when there is one", () => {
     expect(connectedFrom({ ...phoneAddress, pages: 1 })).toBe("from 100.101.5.7 (someone@github)");
     expect(connectedFrom({ ...laptopAddress, pages: 1 })).toBe("from 192.168.1.23");
+  });
+
+  test("the devices connected come first, as they joined, then the one seen last", () => {
+    const away = (id: string, lastSeenAt: number) => ({ ...device(id, null), lastSeenAt });
+    const devices = [away("long gone", 1), device("phone", { ...phoneAddress, pages: 1 }), away("just left", 9), device("laptop", { ...laptopAddress, pages: 1 })];
+    expect(connectedFirst(devices).map(({ id }) => id)).toEqual(["phone", "laptop", "just left", "long gone"]);
   });
 
   test("the sidebar counts the connected devices besides the one looking, and says other on a device that is one of them", () => {

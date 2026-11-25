@@ -15,3 +15,7 @@ export const connectedFrom = ({ fromAddress, tailscaleUser }: DeviceConnection) 
 /** The devices connected now, besides the one looking. */
 export const otherConnectedDevices = (devices: ListedDevice[], thisDeviceId: string | null) =>
   devices.filter(({ id, connection }) => connection !== null && id !== thisDeviceId);
+
+/** Connected devices first, as they joined, then the others by when they were last seen. */
+export const connectedFirst = (devices: ListedDevice[]) =>
+  devices.toSorted((one, other) => Number(other.connection !== null) - Number(one.connection !== null) || (one.connection === null ? other.lastSeenAt - one.lastSeenAt : 0));

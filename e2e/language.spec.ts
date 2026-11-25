@@ -136,7 +136,7 @@ test("Español in Settings shows Mirador in Spanish", async ({ page }) => {
   await expect(configuracion.getByRole("radiogroup", { name: "Tema" }).getByRole("radio")).toHaveText(["Claro", "Oscuro", "Igual que el sistema"]);
 
   await configuracion.getByRole("tab", { name: "Dispositivos" }).click();
-  await expect(configuracion.getByRole("heading", { name: "Cómo llegan otros dispositivos a Mirador" })).toBeVisible();
+  await expect(configuracion.getByRole("heading", { name: "Conexión", exact: true })).toBeVisible();
   await configuracion.getByRole("tab", { name: "Apariencia" }).click();
   await Promise.all([page.waitForEvent("load"), configuracion.getByLabel("Idioma").selectOption("en")]);
   await expect(page.locator("html")).toHaveAttribute("lang", "en");

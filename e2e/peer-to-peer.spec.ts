@@ -4,7 +4,7 @@ import { createServer } from "node:net";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "@playwright/test";
-import { tunnelIn } from "../shared/machines.ts";
+import { joinCodeIn, tunnelIn } from "../shared/machines.ts";
 import type { DeviceTunnel, InviteTunnel } from "../shared/tunnel.ts";
 import { TOKEN_COOKIE } from "../shared/protocol.ts";
 import { addWorkspace, callCanvasTool, openSettings, signIn, startConversation } from "./helpers.ts";
@@ -109,15 +109,23 @@ test("a device joins through the tunnel with an invite's one-time key, then reac
   await signIn(page, host);
   const settings = await openSettings(page, "Devices");
   await settings.getByRole("button", { name: "Invite a device" }).click();
-  const code = (await settings.locator(".invite-code").textContent())!;
-  const link = (await settings.locator(".invite-link").textContent())!;
+  const inviteCard = settings.getByRole("region", { name: "Invite" });
+  const link = (await inviteCard.locator(".invite-link").textContent())!;
+  const code = joinCodeIn(new URL(link).hash)!;
   const invite = tunnelIn(new URL(link).hash)!;
 
-  await test.step("with no public address, the invite link points at the host's own address in the tunnel", async () => {
-    await expect(settings.getByRole("radiogroup", { name: "How the device joins" })).toHaveCount(0);
-    await expect(settings.getByLabel("Invite")).toContainText("The app connects straight to this Mac from most networks");
+  await test.step("with no public address, phone and computer invites join peer to peer, while a browser says it needs an address", async () => {
+    await expect(inviteCard).toContainText("Scan with the Mirador app");
+    await expect(inviteCard).toContainText("from most networks, over mobile data or another Wi-Fi, with no VPN");
     expect(new URL(link).origin).toBe(`http://[${invite.hostAddress}]:4600`);
     expect(invite.broker).toEqual({ address: `localhost:${brokerPort}`, key: brokerKey });
+
+    await inviteCard.getByRole("radio", { name: "Another computer" }).check();
+    await expect(inviteCard.locator(".invite-link")).toHaveText(/^mirador:\/\/join\/[A-Z2-9]{4}-[A-Z2-9]{4}-[A-Z2-9]{4}\?tunnel=/);
+
+    await inviteCard.getByRole("radio", { name: "Browser" }).check();
+    await expect(inviteCard.getByRole("alert")).toContainText("Browsers need an address");
+    await inviteCard.getByRole("radio", { name: "Phone" }).check();
   });
 
   const joinKeyFile = join(host.root, "p2p-test", "join.key");
@@ -189,8 +197,9 @@ test("a device joins through the tunnel with an invite's one-time key, then reac
 
   await test.step("a device that joined over the network takes its place in the tunnel with its token, and no other device's token works through it", async () => {
     await settings.getByRole("button", { name: "Invite a device" }).click();
-    await expect(settings.locator(".invite-code")).not.toHaveText(code);
-    const laptopCode = (await settings.locator(".invite-code").textContent())!;
+    const laptopLink = (await inviteCard.locator(".invite-link").textContent())!;
+    const laptopCode = joinCodeIn(new URL(laptopLink).hash)!;
+    expect(laptopCode).not.toBe(code);
     const overNetwork = await fetch(`${host.origin}/join`, { method: "POST", body: JSON.stringify({ code: laptopCode, name: "Laptop" }) });
     const { token: laptopToken } = (await overNetwork.json()) as { token: string };
     const laptop = keyPair("laptop");
@@ -208,20 +217,63 @@ test("a device joins through the tunnel with an invite's one-time key, then reac
     expect(stolenKey.status).toBe(409);
   });
 
-  await test.step("once revoked, the device reaches nothing through the tunnel", async () => {
+  await test.step("once revoked, the device hears 401 and reaches nothing else through the tunnel", async () => {
     const phoneRow = settings.locator(".device-list li", { hasText: "Phone" });
     await phoneRow.getByRole("button", { name: "Revoke Phone" }).click();
-    await phoneRow.getByRole("button", { name: "Revoke Phone" }).click();
+    await phoneRow.getByRole("button", { name: "Confirm: Revoke Phone" }).click();
     await expect(phoneRow).toHaveCount(0);
-    const afterRevoking = await fetch(`${device.origin}/mirador-here`, { signal: AbortSignal.timeout(5000) }).then(
-      (response) => response.status,
+    const answerTo = (path: string) =>
+      fetch(`${device.origin}${path}`, { signal: AbortSignal.timeout(5000) }).then(
+        async (response) => `${response.status} ${await response.text()}`,
+        () => "no answer",
+      );
+    await expect.poll(() => Promise.all(["/mirador-here", "/"].map(answerTo))).toEqual(["401 unauthorized", "401 unauthorized"]);
+    const canvasAnswers = await fetch(`http://127.0.0.1:${Number(new URL(device.origin).port) + 1}/d3.min.js`, { signal: AbortSignal.timeout(5000) }).then(
+      (response) => `${response.status}`,
       () => "no answer",
     );
-    expect(afterRevoking).toBe("no answer");
+    expect(canvasAnswers).not.toBe("200");
   });
 });
 
-test("with an address of its own as well, an invite joins peer to peer unless the address is chosen", async ({ page }) => {
+test("another computer joins this Mirador peer to peer with a pasted mirador:// invite link, with no address to set up", async ({ page, browser }) => {
+  const peer = new TestHost({ environment: () => ({ MIRADOR_P2P_BINARY: binary, MIRADOR_P2P_BROKER: `localhost:${brokerPort}`, MIRADOR_P2P_BROKER_KEY: brokerKey }) });
+  await peer.start();
+  const peerContext = await browser.newContext();
+  const peerPage = await peerContext.newPage();
+  try {
+    await signIn(page, host);
+    const settings = await openSettings(page, "Devices");
+    await settings.getByRole("button", { name: "Invite a device" }).click();
+    const invite = settings.getByRole("region", { name: "Invite" });
+    await invite.getByRole("radio", { name: "Another computer" }).check();
+    const link = (await invite.locator(".invite-link").textContent())!;
+    expect(link).toMatch(/^mirador:\/\/join\/[A-Z2-9]{4}-[A-Z2-9]{4}-[A-Z2-9]{4}\?tunnel=/);
+
+    await signIn(peerPage, peer);
+    await peerPage.getByRole("button", { name: "Machines…" }).click();
+    const machines = peerPage.getByRole("dialog", { name: "Machines" });
+    await machines.getByLabel("Name").fill("Studio");
+    await machines.getByLabel("Address or invite link").fill(link);
+    await machines.getByRole("button", { name: "Add and join" }).click();
+
+    const row = machines.locator(".machine-list li", { hasText: "Studio" });
+    await expect(row).toBeVisible({ timeout: 25_000 });
+    await expect(row.locator(".machine-origin")).toHaveText("peer to peer");
+    await expect(row.locator(".machine-not-joined")).toHaveCount(0);
+    await expect(invite).toContainText(/Mirador on .+ joined/);
+
+    await row.getByRole("button", { name: "Open" }).click();
+    const frame = peerPage.frameLocator('iframe.machine-frame[title="Studio"]');
+    await expect(frame.getByRole("button", { name: "Settings…" })).toBeVisible({ timeout: 20_000 });
+  } finally {
+    await peerContext.close();
+    await peer.stop();
+    await peer.cleanUp();
+  }
+});
+
+test("with an address of its own as well, phone and computer invites join peer to peer, and a browser's at the address", async ({ page }) => {
   const addressed = new TestHost({
     environment: () => ({
       MIRADOR_P2P_BINARY: binary,
@@ -236,13 +288,13 @@ test("with an address of its own as well, an invite joins peer to peer unless th
     await signIn(page, addressed);
     const settings = await openSettings(page, "Devices");
     await settings.getByRole("button", { name: "Invite a device" }).click();
-    const invite = settings.getByLabel("Invite");
+    const invite = settings.getByRole("region", { name: "Invite" });
     const link = invite.locator(".invite-link");
-    const routes = invite.getByRole("radiogroup", { name: "How the device joins" });
+    const joins = invite.getByRole("radiogroup", { name: "What joins" });
 
-    await expect(routes.getByRole("radio", { name: "Peer to peer, with the Mirador app" })).toBeChecked();
+    await expect(joins.getByRole("radio", { name: "Phone" })).toBeChecked();
     await expect(invite).toContainText("from most networks, over mobile data or another Wi-Fi, with no VPN");
-    await expect(invite).toContainText("Scan this with the Mirador app on a phone.");
+    await expect(invite).toContainText("Scan with the Mirador app");
     await expect(link).toBeHidden();
     await invite.getByText("Show the link").click();
     await expect(link).toBeVisible();
@@ -250,11 +302,17 @@ test("with an address of its own as well, an invite joins peer to peer unless th
     const tunnel = tunnelIn(new URL((await link.textContent())!).hash)!;
     expect(new URL((await link.textContent())!).origin).toBe(`http://[${tunnel.hostAddress}]:4600`);
 
-    await routes.getByRole("radio", { name: "At mirador.example.ts.net" }).check();
+    await joins.getByRole("radio", { name: "Another computer" }).check();
+    await expect(link).toHaveText(/^mirador:\/\/join\//);
+    await expect(link).toBeVisible();
+    await expect(invite).toContainText("Open Machines… in the other computer's Mirador and paste this link.");
+
+    await joins.getByRole("radio", { name: "Browser" }).check();
     await expect(link).toHaveText(/^https:\/\/mirador\.example\.ts\.net\//);
+    await expect(link).toBeVisible();
     expect(tunnelIn(new URL((await link.textContent())!).hash)).toBeNull();
-    await expect(invite).toContainText("A browser or the app joins at mirador.example.ts.net");
-    await expect(invite).toContainText("or open");
+    await expect(invite).toContainText("The browser has to reach mirador.example.ts.net");
+    await expect(invite.locator(".invite-code")).toBeVisible();
   } finally {
     await addressed.stop();
     await addressed.cleanUp();
@@ -269,13 +327,12 @@ test("when the broker doesn't answer, an invite offers no tunnel, and Settings s
     await signIn(page, unanswered);
     const settings = await openSettings(page, "Devices");
     await settings.getByRole("button", { name: "Invite a device" }).click();
-    const invite = settings.getByLabel("Invite");
+    const invite = settings.getByRole("region", { name: "Invite" });
+    const why = "Peer to peer can't reach its server, so invites don't offer it. A firewall or this network may be blocking UDP.";
     await expect(invite.getByRole("alert"), "with no tunnel and no address, the invite reaches no one").toContainText("No other device can reach this Mirador");
-    await expect(invite.getByRole("radiogroup", { name: "How the device joins" })).toHaveCount(0);
-    await expect(settings.locator(".peer-to-peer-problem"), "once the broker has been silent a while").toHaveText(
-      "Peer to peer can't reach its server, so invites don't offer it. A firewall or this network may be blocking UDP.",
-      { timeout: 25_000 },
-    );
+    await expect(settings.locator(".peer-to-peer-problem"), "once the broker has been silent a while").toHaveText(why, { timeout: 25_000 });
+    await expect(settings.locator(".peer-to-peer-status")).toHaveText("Not working");
+    await expect(invite, "the invite for a phone says so too").toContainText(why);
   } finally {
     await unanswered.stop();
     await unanswered.cleanUp();

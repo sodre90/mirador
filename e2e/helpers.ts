@@ -546,3 +546,6 @@ export async function actAsDesktopApp(page: Page, menu: DesktopMenu) {
 
 /** ⌘W as the macOS desktop app passes it to the page. */
 export const pressCommandWInTheApp = (page: Page) => page.evaluate(() => window.dispatchEvent(new CustomEvent("mirador:desktop-close")));
+
+/** A host's address for the machines that join it: its own port and the one after for its canvas, as a proxy in front of it would give. */
+export const reachedAtOwnPort = (port: number) => ({ MIRADOR_PUBLIC_ORIGIN: `http://127.0.0.1:${port}`, MIRADOR_PUBLIC_CANVAS_ORIGIN: `http://127.0.0.1:${port + 1}` });
