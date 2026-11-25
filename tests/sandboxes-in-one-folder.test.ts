@@ -88,6 +88,7 @@ function computer() {
     });
   };
   const set = {
+    workspace: (owner: SandboxOwner, path: string) => workspaces.set(ownerKey(owner), path),
     folders: (owner: SandboxOwner, ...paths: { path: string; writable: boolean }[]) => folders.set(ownerKey(owner), paths.map((folder, addedAt) => ({ ...folder, addedAt }))),
     others: (owner: SandboxOwner, given: Partial<OtherSandboxes>) => others.set(ownerKey(owner), { ...NO_OTHERS, ...given }),
     atWork: (owner: SandboxOwner, ...agents: string[]) => atWork.set(ownerKey(owner), agents),
@@ -495,6 +496,35 @@ describe("the held files of a folder several sandboxes work in", () => {
     await launch(WORKSPACE, folder);
     expect(heldBy(WORKSPACE)).toMatchObject([{ path: "CLAUDE.md", folder: null }]);
     expect(heldBy(ROOM)).toMatchObject([{ path: "CLAUDE.md", folder }]);
+    await sandboxes.stopAll();
+  });
+
+  test.skipIf(!RUNS_SANDBOXES)("give each pi profile in a sandbox its own PI_CODING_AGENT_DIR so models.json does not collide", async () => {
+    const { launcher, sandboxes, set } = computer();
+    const workspace = repository();
+    set.workspace(WORKSPACE, workspace);
+    const launchPi = (profileId: string) =>
+      sandboxes.launch({
+        owner: WORKSPACE,
+        allowsSharedKernel: false,
+        profileId,
+        kind: {
+          harness: "pi",
+          model: { providerId: "gateway", provider: { api: "openai-responses", models: [{ id: "m1" }] }, settings: { defaultProvider: "gateway", defaultModel: "m1" } },
+          keyVariables: [],
+        },
+        version: "1.6.0",
+        workingDirectory: workspace,
+        given: {},
+        route: { upstream: ANTHROPIC_API, api: "anthropic-messages", key: "k", keyHeader: "x-api-key", headers: [] },
+        agent: ["/usr/local/bin/bun", "pi-acp.js"],
+      });
+    await launchPi("pi-one");
+    await launchPi("pi-two");
+    const [first, second] = launcher.agents.map(({ environment }) => environment.PI_CODING_AGENT_DIR);
+    expect(first).toBeDefined();
+    expect(second).toBeDefined();
+    expect(first).not.toBe(second);
     await sandboxes.stopAll();
   });
 });

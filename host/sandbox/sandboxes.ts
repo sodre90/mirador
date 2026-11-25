@@ -57,7 +57,8 @@ const messageOf = (error: unknown) => (error instanceof Error ? error.message : 
 const sandboxFolder = (dataDir: string, { kind, id }: SandboxOwner) => (kind === "room" ? join(dataDir, "sandbox", id) : join(dataDir, "sandbox", "workspaces", id));
 
 /** Where a sandbox's agents of a kind keep their config and sessions: in Mirador's data, and at the same path in the VM. */
-export const sandboxConfigFolder = (dataDir: string, owner: SandboxOwner, harness: SandboxedHarness) => join(sandboxFolder(dataDir, owner), harness);
+export const sandboxConfigFolder = (dataDir: string, owner: SandboxOwner, harness: SandboxedHarness, profileId?: string) =>
+  profileId ? join(sandboxFolder(dataDir, owner), harness, shortHash(profileId, 16)) : join(sandboxFolder(dataDir, owner), harness);
 
 const sandboxConfigFolders = (dataDir: string, owner: SandboxOwner) => SANDBOXED_HARNESSES.map((harness) => sandboxConfigFolder(dataDir, owner, harness));
 
@@ -474,7 +475,7 @@ export class Sandboxes {
     this.assertMayLaunch(agent, false);
     const { harness } = agent.kind;
     const vm = await this.oneLaunchAtATime(agent.owner, () => this.startedAgentsVm(agent.owner, { harness, version: agent.version }));
-    const places = { configFolder: sandboxConfigFolder(this.host.dataDir, agent.owner, harness), modelBaseUrl: modelAddress(agent.profileId) };
+    const places = { configFolder: sandboxConfigFolder(this.host.dataDir, agent.owner, harness, harness === "pi" ? agent.profileId : undefined), modelBaseUrl: modelAddress(agent.profileId) };
     const environment = environmentInVm(agent.given, agent.kind, places, secretsOf(agent.route));
     const launched = this.launchedIn(vm, { workingDirectory: agent.workingDirectory, environment, command: agent.agent });
     vm.routes.set(agent.profileId, agent.route);
@@ -728,7 +729,7 @@ export class Sandboxes {
         const agents = [...working.flatMap((atWork) => atWork.agents), ...[...vms].flatMap(({ broughtAgent }) => broughtAgent ?? [])];
         return { agents: [...new Set(agents)], conversationIds: working.flatMap(({ conversationIds }) => conversationIds) };
       },
-      broughtAtWork: () => [...vms].some(isBrought),
+      broughtAtWork: () => [...vms].some((vm) => isBrought(vm) && vm.running && !vm.left && !vm.halted),
       changed: () => owners().forEach((owner) => this.heldChanged(owner)),
       inVm: () => {
         const vm = [...vms].find((candidate) => candidate.running && !isBrought(candidate)) ?? [...vms].find(({ running }) => running);
@@ -744,11 +745,14 @@ export class Sandboxes {
         await Promise.all(working.map((vm) => this.haltOrSay(vm)));
         working.forEach((vm) => void this.stopVm(vm));
       },
-      untilStopped: () =>
-        Promise.all([...vms].map(({ halted }) => halted)).then(
+      untilStopped: () => {
+        const current = [...vms];
+        if (current.some(({ halted }) => halted === undefined)) return Promise.resolve(false);
+        return Promise.all(current.map(({ halted }) => halted)).then(
           () => true,
           () => false,
-        ),
+        );
+      },
     };
   }
 
@@ -820,7 +824,7 @@ export class Sandboxes {
       await this.stopVm(vm);
       throw error instanceof HostProblemError ? error : new SandboxNotReady({ kind: "could-not-start", cause: messageOf(error) });
     });
-    this.lastStart = vm.startOver;
+    this.lastStart = vm.started.catch(() => {});
     await vm.started;
     return vm;
   }
@@ -935,14 +939,13 @@ export class Sandboxes {
     const held = others().flatMap(({ helds }) => helds).find((each) => each.workspace === workspace);
     const plan = held && this.plans.get(held);
     if (!held || !plan) return null;
-    this.worksAmong(held, vm);
     const replaced = await replacedAmong(plan.stood);
-    if (replaced === null) return plan;
+    if (replaced === null) {
+      this.worksAmong(held, vm);
+      return plan;
+    }
     if (isBrought(vm) || others().some((other) => this.isAnothersAtWork(other, vm))) throw new HeldFilesRefused(`${relative(workspace, replaced)} was moved or replaced`);
-    const stopped = Promise.all(others().map((other) => this.stopVm(other)));
-    vm.helds = [];
-    this.vmsAmong.get(held)?.delete(vm);
-    await stopped;
+    await Promise.all(others().map((other) => this.stopVm(other)));
     return this.planShared(workspace, vm);
   }
 
@@ -957,15 +960,19 @@ export class Sandboxes {
 
   private async newPlan(workspace: string, vm: SandboxVm): Promise<WorkspacePlan> {
     const held = await this.newHeldFiles(workspace, vm);
-    this.takeOverStoppedHeld(held);
-    this.worksAmong(held, vm);
     const heldReadOnly = await held.start();
     const copies = join(gitConfigCopies(this.host.dataDir), crypto.randomUUID());
     this.configCopies.set(held, copies);
     const planned = await workspaceMounts(workspace, copies, this.host.places, heldReadOnly);
-    if ("refused" in planned) throw new SandboxNotReady({ kind: "blocked", blocker: planned.refused });
+    if ("refused" in planned) {
+      await held.stop().catch(() => {});
+      await this.removeConfigCopies(held);
+      throw new SandboxNotReady({ kind: "blocked", blocker: planned.refused });
+    }
     const plan = { mounts: planned.mounts, stood: await asTheyStand(planned.mounts) };
     this.plans.set(held, plan);
+    this.takeOverStoppedHeld(held);
+    this.worksAmong(held, vm);
     return plan;
   }
 

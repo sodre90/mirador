@@ -278,13 +278,14 @@ test("a sandboxed workspace's pi conversation starts pi in the VM from its own i
   expect(JSON.stringify(environment)).not.toContain(GATEWAY_KEY);
   expect(JSON.stringify(environment)).not.toContain(pi.agentFolder);
   expect(["LLM_GATEWAY_KEY", "OPENAI_API_KEY"].filter((name) => Object.hasOwn(environment, name))).toEqual([]);
-  expect(environment).toMatchObject({ PI_CODING_AGENT_DIR: sandboxConfigFolder(config.dataDir, workspaceSandbox("w1"), "pi"), PI_ACP_PI_COMMAND: "/mirador/sandbox/pi.sh", PI_OFFLINE: "1" });
+  expect(environment).toMatchObject({ PI_CODING_AGENT_DIR: sandboxConfigFolder(config.dataDir, workspaceSandbox("w1"), "pi", "pier"), PI_ACP_PI_COMMAND: "/mirador/sandbox/pi.sh", PI_OFFLINE: "1" });
   expect(JSON.parse(environment.MIRADOR_PI_MODELS!)).toEqual({ providers: { gateway: { api: "openai-responses", models: [{ id: "gpt-6.1" }], baseUrl: "http://127.0.0.1:7702/p/pier", apiKey: "kept-by-mirador" } } });
   expect(JSON.parse(environment.MIRADOR_PI_SETTINGS!)).toEqual({ defaultProvider: "gateway", defaultModel: "gpt-6.1" });
   const [vm] = vmOf(launcher, workspaceSandbox("w1"));
   expect(vm!.image).toBe("fake-image:pi-1.6.0");
   expect(vm!.mounts.some(({ source }) => source.startsWith(pi.agentFolder))).toBe(false);
-  expect(vm!.mounts).toContainEqual({ source: environment.PI_CODING_AGENT_DIR, target: environment.PI_CODING_AGENT_DIR, readOnly: false });
+  const piFolder = sandboxConfigFolder(config.dataDir, workspaceSandbox("w1"), "pi");
+  expect(vm!.mounts).toContainEqual({ source: piFolder, target: piFolder, readOnly: false });
   expect(pi.ranHere()).toBe(false);
 
   const lost = piLeavingAMark({ defaultProvider: "anthropic", defaultModel: "claude-opus-5" });
