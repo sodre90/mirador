@@ -2136,10 +2136,11 @@ describe("a room's sandbox leaving its workspace", () => {
 
     store.setRoomSandbox(other.id, SANDBOX_ON);
     store.addSandboxFolder(roomSandbox(other.id), { path: "/tmp/tools", writable: true, addedAt: 1 });
-    const beforeDeleting = Date.now();
+    const lastLeft = Math.max(...store.foldersSandboxesLeft().map(({ leftAt }) => leftAt));
+    while (Date.now() <= lastLeft) await Bun.sleep(1);
     rooms.delete(other.id);
     expect(store.listRooms().some(({ sandbox }) => sandbox.on)).toBe(false);
-    const leftLately = store.foldersSandboxesLeft().filter(({ leftAt }) => leftAt >= beforeDeleting);
+    const leftLately = store.foldersSandboxesLeft().filter(({ leftAt }) => leftAt > lastLeft);
     expect(leftLately).toHaveLength(2);
     expect(leftLately.map(({ path }) => path)).toContain("/tmp/tools");
   });
