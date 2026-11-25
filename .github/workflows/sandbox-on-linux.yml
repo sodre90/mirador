@@ -1,0 +1,26 @@
+name: Sandbox on Linux
+
+# Runs the sandbox guard's test in a real rootless Podman container on Ubuntu, whose AppArmor limits what unprivileged users may mount.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
+      - run: bun install --frozen-lockfile
+      - name: Have AppArmor limit unprivileged users, as Ubuntu does by itself
+        run: |
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=1
+          podman info
+      - run: bun test tests/guard-in-vm.test.ts --timeout 60000
+        env:
+          MIRADOR_SANDBOX_VM_E2E: "1"
