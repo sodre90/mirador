@@ -129,6 +129,14 @@ describe("which of its profile's environment values a room's agent gets", () => 
     expect(givenTo("antigravity")).toEqual(["AGY_PATH", "LANG"]);
   });
 
+  test("not by default the keys that manage a whole account, nor the Codex companion's own", () => {
+    const ADMIN_KEYS = "ANTHROPIC_ADMIN_KEY=a\nANTHROPIC_ADMIN_API_KEY=a\nOPENAI_ADMIN_KEY=a\nCODEX_COMPANION_SESSION_ID=s\nANTHROPIC_API_KEY=k\nOPENAI_API_KEY=k\nCODEX_PATH=/codex";
+    expect(givenTo("claude", ADMIN_KEYS)).toEqual(["ANTHROPIC_API_KEY"]);
+    expect(givenTo("codex", ADMIN_KEYS)).toEqual(["OPENAI_API_KEY", "CODEX_PATH"]);
+    for (const harness of ["opencode", "pi"] as const) expect(givenTo(harness, ADMIN_KEYS)).toEqual(["ANTHROPIC_API_KEY", "OPENAI_API_KEY"]);
+    expect(givenTo("claude", ADMIN_KEYS, { ANTHROPIC_ADMIN_KEY: true })).toEqual(["ANTHROPIC_ADMIN_KEY", "ANTHROPIC_API_KEY"]);
+  });
+
   test("gets every value a profile of its kind is set up with in the profile editor's example", () => {
     const examples = {
       claude: "ANTHROPIC_BASE_URL=http://localhost:8080\nANTHROPIC_AUTH_TOKEN=t\nANTHROPIC_MODEL=qwen3-coder\n-u ANTHROPIC_API_KEY",
@@ -202,6 +210,11 @@ describe("a room's agent's process environment", () => {
     expect(Object.keys(inRoom("codex"))).toEqual([...BASICS, "OPENAI_API_KEY"]);
     expect(Object.keys(inRoom("copilot"))).toEqual([...BASICS, "GITHUB_TOKEN"]);
     expect(Object.keys(inRoom("antigravity"))).toEqual(BASICS);
+  });
+
+  test("holds none of this computer's keys that manage a whole account, nor the Codex companion's own", () => {
+    const host = { ...HOST, OPENAI_ADMIN_KEY: "host-admin", ANTHROPIC_ADMIN_KEY: "host-admin", CODEX_COMPANION_SESSION_ID: "host-session" };
+    for (const harness of ["claude", "codex", "opencode", "pi", "copilot", "antigravity"] as const) expect(inRoom(harness, "", NOTHING_CHOSEN, host)).toEqual(inRoom(harness));
   });
 
   test("holds Windows' basics, named in any case", () => {
@@ -291,5 +304,5 @@ describe("a room's agent's process environment", () => {
 });
 
 test("a room's agent of a kind the host can't hold to asking is told apart from one it can", () => {
-  expect((["claude", "antigravity", "codex", "opencode", "pi", "copilot"] as const).filter(heldToAskingInRooms)).toEqual(["claude", "antigravity"]);
+  expect((["claude", "antigravity", "codex", "opencode", "pi", "copilot"] as const).filter(heldToAskingInRooms)).toEqual(["claude"]);
 });

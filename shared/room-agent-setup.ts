@@ -100,7 +100,11 @@ const agentsOwnVariables: Record<HarnessId, (environment: Record<string, string>
 
 const named = (name: string, by: string) => (by.endsWith("_") ? name.startsWith(by) : name === by);
 
-const readByItsKind = (harness: HarnessId, name: string, environment: Record<string, string>) => agentsOwnVariables[harness](environment).some((by) => named(name, by));
+/** Named like those an agent reads, yet no agent runs on them: a key that manages a whole account, and what tells another program's session. */
+const NO_AGENT_RUNS_ON = [/_ADMIN_(API_)?KEY$/, /^CODEX_COMPANION_/];
+
+const readByItsKind = (harness: HarnessId, name: string, environment: Record<string, string>) =>
+  agentsOwnVariables[harness](environment).some((by) => named(name, by)) && !NO_AGENT_RUNS_ON.some((pattern) => pattern.test(name));
 
 const basicOfThisComputer = (name: string) => BASICS_OF_THIS_COMPUTER.some((by) => named(name.toUpperCase(), by));
 
@@ -164,8 +168,9 @@ export const narrowsClaudeSetup = (before: ClaudeSetup, after: ClaudeSetup) => C
 
 /**
  * The agents whose room sessions the host can't hold to asking, as found in November 2026: Codex reads any file in its
- * read-only mode without asking, opencode and pi may run tools without asking, and Copilot is untried in rooms.
+ * read-only mode without asking, opencode and pi may run tools without asking, and Copilot and Antigravity are untried in
+ * rooms.
  */
-const UNCONFINED_IN_ROOMS: HarnessId[] = ["codex", "opencode", "pi", "copilot"];
+const UNCONFINED_IN_ROOMS: HarnessId[] = ["codex", "opencode", "pi", "copilot", "antigravity"];
 
 export const heldToAskingInRooms = (harness: HarnessId) => !UNCONFINED_IN_ROOMS.includes(harness);

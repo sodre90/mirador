@@ -157,7 +157,7 @@ export const rooms: Messages["rooms"] = {
   agentsReadGuestsHint: "访客不能给 Agent 布置任务，但他们写的内容会随下一个任务一起送到 Agent，并标明来自访客。关闭后，无论任务是否在等你批准，都没有 Agent 会读到。",
   actsUnasked: "可能不经询问就行动",
   actsUnaskedHint:
-    "在房间里，并非每个 Agent 都能被约束为先询问：Codex 会不经询问读取这台电脑上的任何文件，opencode 和 pi 可能不经询问就运行工具，Copilot 还没在房间里试过。只让你信任的人给这类 Agent 布置任务。",
+    "在房间里，并非每个 Agent 都能被约束为先询问：Codex 会不经询问读取这台电脑上的任何文件，opencode 和 pi 可能不经询问就运行工具，Copilot 和 Antigravity 还没在房间里试过。只让你信任的人给这类 Agent 布置任务。",
   profileValues: "来自其配置的值",
   profileValuesGiven: (given: number, all: number) => `${given} / ${all} 个配置值`,
   profileSetsNoValues: "其配置未设置任何值",

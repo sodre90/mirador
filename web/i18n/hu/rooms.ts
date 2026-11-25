@@ -160,7 +160,7 @@ export const rooms: Messages["rooms"] = {
     "A vendégek nem adnak feladatot az ágenseknek, de amit írnak, a következő feladattal eljut hozzájuk, vendégként jelölve. Kikapcsolva egy ágens sem olvassa, akár a jóváhagyásodra vár a feladat, akár nem.",
   actsUnasked: "Kérdezés nélkül is cselekedhet",
   actsUnaskedHint:
-    "Nem minden ágenst lehet egy szobában kérdezésre kötelezni: a Codex kérdezés nélkül bármelyik fájlt elolvassa ezen a számítógépen, az opencode és a pi kérdezés nélkül is futtathat eszközöket, a Copilotot pedig még nem próbáltuk ki szobában. Ilyen ágensnek csak olyanok adjanak feladatot, akikben megbízol.",
+    "Nem minden ágenst lehet egy szobában kérdezésre kötelezni: a Codex kérdezés nélkül bármelyik fájlt elolvassa ezen a számítógépen, az opencode és a pi kérdezés nélkül is futtathat eszközöket, a Copilotot és az Antigravityt pedig még nem próbáltuk ki szobában. Ilyen ágensnek csak olyanok adjanak feladatot, akikben megbízol.",
   profileValues: "Értékek a profiljából",
   profileValuesGiven: (given: number, all: number) => `${given}/${all} profilérték`,
   profileSetsNoValues: "A profilja nem állít be értéket",

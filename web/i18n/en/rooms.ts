@@ -171,7 +171,7 @@ export const rooms = {
     "Guests give the agents no tasks, but what they write reaches the agents with the next task, marked as a guest's. Turned off, no agent reads it, whether a task waits for you or not.",
   actsUnasked: "Can act without asking",
   actsUnaskedHint:
-    "Not every agent can be held to asking in a room: Codex reads any file on this computer unasked, opencode and pi may run tools unasked, and Copilot is untried in rooms. Let only people you trust give such an agent tasks.",
+    "Not every agent can be held to asking in a room: Codex reads any file on this computer unasked, opencode and pi may run tools unasked, and Copilot and Antigravity are untried in rooms. Let only people you trust give such an agent tasks.",
   profileValues: "Values from its profile",
   profileValuesGiven: (given: number, all: number) => `${given} of ${all} profile values`,
   profileSetsNoValues: "Its profile sets no values",

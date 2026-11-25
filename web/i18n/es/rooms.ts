@@ -161,7 +161,7 @@ export const rooms: Messages["rooms"] = {
     "Los invitados no dan tareas a los agentes, pero lo que escriben les llega con la siguiente tarea, marcado como de un invitado. Si lo desactivas, ningún agente lo lee, tanto si una tarea espera tu aprobación como si no.",
   actsUnasked: "Puede actuar sin preguntar",
   actsUnaskedHint:
-    "No a todos los agentes se les puede obligar a preguntar en una sala: Codex lee cualquier archivo de este equipo sin preguntar, opencode y pi pueden usar herramientas sin preguntar, y Copilot aún no se ha probado en salas. Deja que solo personas de confianza den tareas a un agente así.",
+    "No a todos los agentes se les puede obligar a preguntar en una sala: Codex lee cualquier archivo de este equipo sin preguntar, opencode y pi pueden usar herramientas sin preguntar, y Copilot y Antigravity aún no se han probado en salas. Deja que solo personas de confianza den tareas a un agente así.",
   profileValues: "Valores de su perfil",
   profileValuesGiven: (given: number, all: number) => `${given} de ${all} valores del perfil`,
   profileSetsNoValues: "Su perfil no define valores",

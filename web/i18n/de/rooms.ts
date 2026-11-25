@@ -161,7 +161,7 @@ export const rooms: Messages["rooms"] = {
     "Gäste geben den Agenten keine Aufgaben, aber was sie schreiben, erreicht die Agenten mit der nächsten Aufgabe, als von einem Gast markiert. Ausgeschaltet liest es kein Agent, ob eine Aufgabe auf dich wartet oder nicht.",
   actsUnasked: "Kann handeln, ohne zu fragen",
   actsUnaskedHint:
-    "Nicht jeder Agent lässt sich in einem Raum ans Fragen binden: Codex liest jede Datei auf diesem Computer, ohne zu fragen, opencode und pi können Tools ohne Nachfrage ausführen, und Copilot ist in Räumen noch nicht erprobt. Lass nur Personen, denen du vertraust, einem solchen Agenten Aufgaben geben.",
+    "Nicht jeder Agent lässt sich in einem Raum ans Fragen binden: Codex liest jede Datei auf diesem Computer, ohne zu fragen, opencode und pi können Tools ohne Nachfrage ausführen, und Copilot und Antigravity sind in Räumen noch nicht erprobt. Lass nur Personen, denen du vertraust, einem solchen Agenten Aufgaben geben.",
   profileValues: "Werte aus seinem Profil",
   profileValuesGiven: (given: number, all: number) => `${given} von ${all} Profilwerten`,
   profileSetsNoValues: "Sein Profil setzt keine Werte",
