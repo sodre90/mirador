@@ -812,6 +812,7 @@ export function startServer(services: HostServices) {
   function removeMachine(machineId: string) {
     const machine = store.findMachine(machineId);
     if (!machine) return;
+    broughtAgents.forgotMachine(machineId);
     forgetMachine({ store, relays, watch, tunnels }, machineId);
     store.hideMachine({ name: machine.name, origin: machine.origin, hostId: machine.hostId });
     broadcastMachines();

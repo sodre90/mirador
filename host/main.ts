@@ -411,6 +411,7 @@ function reportConfigFile({ path, found, added, overwritten, problems }: ConfigF
 }
 
 function machineSignedOut(machineId: string) {
+  broughtAgents.forgotMachine(machineId);
   if (leftEveryRoomAt(store, machineId)) forgetMachine({ store, relays, watch, tunnels }, machineId);
   else {
     forgetSignInAt(store, tunnels, machineId);

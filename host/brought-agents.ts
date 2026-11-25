@@ -220,6 +220,15 @@ export class BroughtAgents {
     this.endWorkspaceCalls((call) => call.machineId === machineId, CONNECTION_LOST);
   }
 
+  /** The machine is gone or signed this computer out: forget every agent brought there and drop their queued tasks. */
+  forgotMachine(machineId: string) {
+    this.you.delete(machineId);
+    this.endWorkspaceCalls((call) => call.machineId === machineId, OUT_OF_THE_ROOM);
+    const here = this.store.listBroughtAgents().filter((brought) => brought.machineId === machineId);
+    here.forEach((brought) => this.forget(brought));
+    if (here.length === 0) this.changed();
+  }
+
   /**
    * Has the room's machine do what the agent of the conversation asks in the room's workspace, only in a turn on a task
    * of the room's, and tells the agent what that machine says came of it. That machine's limits are its own to keep, so

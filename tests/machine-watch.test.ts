@@ -247,6 +247,17 @@ describe("MachineWatch", () => {
     expect(watch.statuses()).toEqual([{ machineId: "m1", reachable: false, waiting: [], joinedThere: [], rooms: [joined("r2", "Ops")], mutedHere: [] }]);
   });
 
+  test("stopping a watched machine emits no stale unreachable status from the closed socket", async () => {
+    const machine = fakeMachine();
+    cleanUp.push(() => machine.server.stop(true));
+    const { watch, statuses } = watching(machine.origin, { asPerson: true });
+    await eventually(() => expect(watch.statuses()[0]!.reachable).toBe(true));
+    const beforeStop = statuses.length;
+    watch.stop("m1");
+    await Bun.sleep(150);
+    expect(statuses.slice(beforeStop)).toEqual([]);
+  });
+
   test("joined as a person, keeps what the machine counts in each of its rooms for the person, cleaned, and only for rooms it lists", async () => {
     const machine = fakeMachine();
     cleanUp.push(() => machine.server.stop(true));

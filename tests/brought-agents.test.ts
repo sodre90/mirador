@@ -455,6 +455,28 @@ describe("following the rooms of a machine you joined as a person", () => {
     brought.connected("ann");
     expect(sentToAnn("room.brought-agents-here")).toEqual([{ type: "room.brought-agents-here" }]);
   });
+
+  test("forgetting a machine removes its brought agents, drops queued tasks, and clears held-task state", async () => {
+    const { bringCoder, brought, store, pages } = miasMirador();
+    await bringCoder();
+    brought.heard("ann", {
+      type: "room.brought-task",
+      roomId: "r1",
+      agentId: "a1",
+      taskId: "t-hold",
+      byName: "Ann",
+      byRole: "owner",
+      fromYou: false,
+      text: "Check it",
+    } as unknown as ServerMessage);
+    expect(brought.list().agents).toHaveLength(1);
+    expect(brought.list().tasks).toHaveLength(1);
+    brought.forgotMachine("ann");
+    expect(store.listBroughtAgents()).toEqual([]);
+    expect(brought.list()).toEqual({ agents: [], tasks: [] });
+    expect(brought.stillToRun("t-hold")).toBe(false);
+    expect(pages.at(-1)).toEqual({ type: "brought-agents.listed", agents: [], tasks: [] });
+  });
 });
 
 describe("bringing an agent to work in the room's own workspace", () => {

@@ -69,22 +69,25 @@ class MachineSocket {
     const givingUp = setTimeout(() => socket.close(), OPEN_TIMEOUT_MS);
     socket.onopen = () => {
       clearTimeout(givingUp);
+      if (this.stopped) return socket.close();
       opened = true;
       this.failures = 0;
       this.events.opened?.();
       this.keepAsking(socket);
     };
     socket.onmessage = ({ data }) => {
+      if (this.stopped) return;
       this.answeredSinceAsked = true;
       this.receive(data);
     };
     socket.onclose = ({ code }) => {
       clearTimeout(givingUp);
       clearInterval(this.heartbeat);
-      this.socket = null;
+      if (this.socket === socket) this.socket = null;
+      if (this.stopped) return;
       this.events.closed?.(code, reached);
-      if (!opened && !this.stopped) this.events.refused?.(reached);
-      if (!this.stopped) this.openLater();
+      if (!opened) this.events.refused?.(reached);
+      this.openLater();
     };
   }
 
