@@ -11,6 +11,7 @@ import { Sandboxes, type AgentInSandbox, type BroughtAgentInSandbox, type Sandbo
 import { FakeContainerCli } from "./fake-container-cli.ts";
 import { FakeVmLauncher } from "./fake-vm-launcher.ts";
 import { guardedIn, mountsOfRun } from "./guard-told.ts";
+import { pastTaken } from "./past-taken.ts";
 import { RUNS_SANDBOXES } from "./sandbox-computer.ts";
 
 const scratch = mkdtempSync(join(tmpdir(), "brought-sandboxes-"));
@@ -97,7 +98,7 @@ const settled = async (holds: () => boolean) => {
 /** A connection to a socket of the VM's: all it said to the request so far, and whether it still runs. */
 function connectionTo(socket: string, request: string) {
   const connection = { said: "", open: true };
-  void Bun.connect({ unix: socket, socket: { open: (to) => void to.write(request), data: (_, data) => void (connection.said += data.toString()), close: () => void (connection.open = false) } });
+  void Bun.connect({ unix: socket, socket: { open: (to) => void to.write(request), data: (_, data) => void (connection.said = pastTaken(connection.said + data.toString())), close: () => void (connection.open = false) } });
   return connection;
 }
 

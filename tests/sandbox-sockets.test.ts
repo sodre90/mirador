@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { startCanvasSocket } from "../host/sandbox/canvas-socket.ts";
 import { modelRouteOf, startModelProxy, type ModelRoute } from "../host/sandbox/model-proxy.ts";
 import type { RunningSocket } from "../host/sandbox/vm-connections.ts";
+import { pastTaken } from "./past-taken.ts";
 import { RUNS_SANDBOXES } from "./sandbox-computer.ts";
 
 const scratch = mkdtempSync(join(tmpdir(), "sbx-sockets-"));
@@ -14,14 +15,14 @@ const GATEWAY_KEY = "gw-the-gateways-own-key-9012";
 const MODEL_PORT = 7702;
 const CANVAS_PORT = 7701;
 
-/** What a client in the VM writes to a relay, byte for byte, and the status line it gets back. */
+/** What a client in the VM writes to a relay, byte for byte, and all it gets back. */
 function rawRequest(socketPath: string, text: string): Promise<string> {
   return new Promise((resolve, reject) => {
     const socket = connect(socketPath);
     let answer = "";
     socket.on("data", (chunk) => (answer += chunk.toString()));
-    socket.on("end", () => resolve(answer));
-    socket.on("close", () => resolve(answer));
+    socket.on("end", () => resolve(pastTaken(answer)));
+    socket.on("close", () => resolve(pastTaken(answer)));
     socket.on("error", reject);
     socket.write(text.replaceAll("\n", "\r\n"));
   });
@@ -298,11 +299,11 @@ describe("a sandbox's VM holds only so many connections", () => {
       while (heard.split("canvas").length <= times) await Bun.sleep(10);
     }
     const saidAll = connect({ path, allowHalfOpen: true });
-    const answered = Promise.withResolvers<string>();
-    saidAll.on("data", (chunk) => answered.resolve(chunk.toString()));
-    saidAll.on("close", () => answered.resolve(""));
+    let toSaidAll = "";
+    saidAll.on("data", (chunk) => (toSaidAll = pastTaken(toSaidAll + chunk.toString())));
     saidAll.end(asked("answers"));
-    expect(statusOf(await answered.promise)).toBe(200);
+    while (!toSaidAll.includes("canvas")) await Bun.sleep(10);
+    expect(statusOf(toSaidAll)).toBe(200);
     saidAll.destroy();
 
     client.write(asked("waits"));
@@ -329,7 +330,13 @@ describe("an answer that falls silent for longer than the ten seconds Bun gives 
     });
     return new Response(body);
   }
-  const wholeAnswer = async (socket: string, address: string, headers: Record<string, string> = {}) => (await fetch(address, { unix: socket, method: "POST", headers, body: "{}" })).text();
+  const chunksIn = (answer: string) =>
+    answer
+      .slice(answer.indexOf("\r\n\r\n") + 4)
+      .split("\r\n")
+      .filter((_, index) => index % 2 === 1);
+  const wholeAnswer = async (socket: string, port: number, path: string, headers = "") =>
+    chunksIn(await rawRequest(socket, `POST ${path} HTTP/1.1\nHost: 127.0.0.1:${port}\n${headers}Content-Length: 2\nConnection: close\n\n{}`)).join("");
 
   test("comes whole, a model's that thinks and a canvas question's that waits for its answer", async () => {
     const thinking = Bun.serve({ port: 0, idleTimeout: 0, fetch: beginsThenEndsAfterSilence });
@@ -340,8 +347,8 @@ describe("an answer that falls silent for longer than the ten seconds Bun gives 
     ]);
     try {
       const answers = await Promise.all([
-        wholeAnswer(model, `http://127.0.0.1:${MODEL_PORT}/p/builder/v1/messages`),
-        wholeAnswer(canvas, `http://127.0.0.1:${CANVAS_PORT}/mcp/conversation-1`, { authorization: "Bearer token" }),
+        wholeAnswer(model, MODEL_PORT, "/p/builder/v1/messages"),
+        wholeAnswer(canvas, CANVAS_PORT, "/mcp/conversation-1", "Authorization: Bearer token\n"),
       ]);
       expect(answers).toEqual(["begun ended", "begun ended"]);
     } finally {

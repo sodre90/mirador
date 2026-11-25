@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { createServer, request as httpRequest, type IncomingHttpHeaders } from "node:http";
-import type { AddressInfo } from "node:net";
+import { connect, type AddressInfo, type Socket } from "node:net";
 import { release } from "node:os";
 import { dirname, join } from "node:path";
 import { expect, test, type Locator, type Page } from "@playwright/test";
@@ -447,10 +447,22 @@ async function modelProviderHere() {
   return { baseUrl: `http://127.0.0.1:${(server.address() as AddressInfo).port}/v1`, requests, close: () => server.close() };
 }
 
+/** A connection as the VM's relays pass a program's on, past the byte Mirador says as it takes it. */
+const takenConnection = (socketPath: string) =>
+  new Promise<Socket>((taken, failed) => {
+    const socket = connect(socketPath);
+    socket.once("error", failed);
+    socket.once("readable", () => {
+      socket.read(1);
+      taken(socket);
+    });
+  });
+
 /** What the model proxy answers a request the VM's model relay passes on, by the socket the VM was given. */
-const askedThroughModelSocket = (socket: string, path: string, headers: Record<string, string>) =>
-  new Promise<string>((answered, failed) => {
-    const asking = httpRequest({ socketPath: socket, path, method: "POST", headers: { host: "127.0.0.1:7702", "content-type": "application/json", ...headers } }, (response) => {
+async function askedThroughModelSocket(socketPath: string, path: string, headers: Record<string, string>) {
+  const socket = await takenConnection(socketPath);
+  return new Promise<string>((answered, failed) => {
+    const asking = httpRequest({ createConnection: () => socket, path, method: "POST", headers: { host: "127.0.0.1:7702", "content-type": "application/json", connection: "close", ...headers } }, (response) => {
       let body = "";
       response.setEncoding("utf8");
       response.on("data", (chunk: string) => (body += chunk));
@@ -459,6 +471,7 @@ const askedThroughModelSocket = (socket: string, path: string, headers: Record<s
     asking.on("error", failed);
     asking.end("{}");
   });
+}
 
 test("a pi profile's agent runs in the sandbox on a pi image, reaching its model through Mirador, which adds its key and headers; one on a model pi knows by itself is refused saying why", async ({ page }) => {
   test.skip(!sandboxesRunHere, "Sandboxes run on macOS 26 on Apple silicon only.");

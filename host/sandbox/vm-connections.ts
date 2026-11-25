@@ -8,6 +8,13 @@ export interface RunningSocket {
 /** Connections past the most at once that are told so before they end; any more end without a word. */
 const MOST_TURNED_AWAY_AT_ONCE = 64;
 
+/**
+ * The byte said on every connection before anything else, for the VM's relays to hear that it was taken: in-vm/relays.mjs
+ * keeps it to itself. Apple's container 0.12 now and then loses the first thing a VM says on a connection that a program
+ * just started there opens, unless this computer has spoken first.
+ */
+export const TAKEN = "\x06";
+
 /** What is done with a connection of the VM's: one of the most it may have at once, or one past them. */
 export interface ConnectionsTaken {
   mostAtOnce: number;
@@ -50,6 +57,7 @@ export async function listenOnSocket(socketPath: string, { mostAtOnce, allowHalf
   const server = createServer({ allowHalfOpen }, (client) => {
     client.on("error", () => client.destroy());
     clients.add(client);
+    client.write(TAKEN);
     client.on("close", () => clients.delete(client));
     if (clients.size > MOST_TURNED_AWAY_AT_ONCE + mostAtOnce) return void client.destroy();
     if (clients.size > mostAtOnce) return turnAway(client);

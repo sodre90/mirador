@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { askedIn, NETWORK_PROXY_LIMITS, startNetworkProxy, type NetworkProxy, type NetworkProxyLimits } from "../host/sandbox/network-proxy.ts";
 import type { SandboxNetwork } from "../shared/sandbox.ts";
+import { pastTaken } from "./past-taken.ts";
 import { RUNS_SANDBOXES } from "./sandbox-computer.ts";
 
 const scratch = mkdtempSync(join(tmpdir(), "np-"));
@@ -85,7 +86,7 @@ function program(socketPath: string) {
   opened.sockets.push(socket);
   const heard = { text: "", over: false };
   socket.on("error", () => {});
-  socket.on("data", (chunk) => void (heard.text += chunk.toString("latin1")));
+  socket.on("data", (chunk) => void (heard.text = pastTaken(heard.text + chunk.toString("latin1"))));
   socket.on("close", () => void (heard.over = true));
   return {
     socket,
