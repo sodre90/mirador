@@ -1586,7 +1586,9 @@ export function startServer(services: HostServices) {
         }
       }
       case "canvas.report":
-        return canvas.reportRender(message.itemId, { errors: message.errors });
+        return message.askPage
+          ? canvas.reportAskPage(message.itemId, message.askPage, { errors: message.errors })
+          : canvas.reportRender(message.itemId, { errors: message.errors });
       case "canvas.item-action":
         return void canvasPlugins.act(message.itemId, message.action).then(
           (answer) => reply({ type: "canvas.item-acted", requestId: message.requestId, reply: answer, problem: null }),

@@ -1,4 +1,4 @@
-import { answersSummary, questionsOf } from "../../shared/ask.ts";
+import { answersSummary, askPageName, pagesOnOpening, questionsOf, type AskPage } from "../../shared/ask.ts";
 import type { PluginOffer } from "../../shared/apps.ts";
 import type {
   AskAnswerEntry,
@@ -17,6 +17,7 @@ import type { PageLibraries } from "../../shared/canvas-export.ts";
 import { standalonePage } from "./export.ts";
 import { saveIntoWorkspace } from "./save-to-project.ts";
 import { noteOfPageErrors, type CanvasNote } from "./notes.ts";
+import { OpeningPages } from "./opening-pages.ts";
 import { HostProblemError } from "../../shared/host-problems.ts";
 import { workingCopyOf } from "../worktrees.ts";
 
@@ -44,10 +45,13 @@ export interface RenderReport {
   errors: string[];
 }
 
-export type RenderOutcome = RenderReport | "no-viewer";
+/** How a page rendered, or why that is not known: nobody is viewing it, or the page took too long to say. */
+export type RenderOutcome = RenderReport | "no-viewer" | "no-report";
 
 /** Why a tool call stopped waiting for its question's answer, whose answer then goes as the user's next message. */
-export type AnswerWaitGivenUp = "turn-ended" | "time-up";
+export type AnswerWaitGivenUp = "turn-ended" | "time-up" | { pageErrors: string[] };
+
+const hasErrorsForAgent = (item: CanvasItem): item is ShowItem | AskItem => item.kind !== "plugin" && item.status !== "cancelled" && (item.errorsForAgent?.length ?? 0) > 0;
 
 interface AnswerWaiter {
   answered(answer: Pick<CanvasAnswer, "label" | "note">): void;
@@ -58,6 +62,8 @@ export class CanvasService {
   private readonly answerWaiters = new Map<string, AnswerWaiter>();
   private readonly askingTurns = new Map<string, { conversationId: string; turnEnded: AbortController }>();
   private readonly renderWaiters = new Map<string, (report: RenderReport) => void>();
+  private readonly openingPages = new Map<string, OpeningPages>();
+  private readonly brokenAsksOfTurn = new Map<string, string[]>();
 
   constructor(
     private readonly store: Store,
@@ -83,7 +89,7 @@ export class CanvasService {
       createdAt: Date.now(),
     });
     const render = await this.waitForRenderReport(item);
-    if (render === "no-viewer") this.awaitFirstView(item.id);
+    if (render === "no-viewer" || render === "no-report") this.awaitFirstView(item.id);
     return { item, render };
   }
 
@@ -166,27 +172,62 @@ export class CanvasService {
   }
 
   /**
-   * The answer, or why the wait gave up first: the turn that asked ended, or `limitMs` passed. The question stays open,
-   * and an answer given later goes to the agent as the user's next message.
+   * The answer, or why the wait gave up first: the pages the question opens with are broken, the turn that asked ended,
+   * or `limitMs` passed. The question stays open, and an answer given later goes to the agent as the user's next message.
    */
   async waitForAnswerDuringTurn(
-    item: CanvasItem,
+    item: AskItem,
     signal: AbortSignal,
     limitMs: number | null = null,
   ): Promise<Pick<CanvasAnswer, "label" | "note" | "answers"> | AnswerWaitGivenUp> {
     const turnEnded = new AbortController();
+    const pagesBroke = new AbortController();
     this.askingTurns.set(item.id, { conversationId: item.conversationId, turnEnded });
     const timeUp = limitMs === null ? [] : [AbortSignal.timeout(limitMs)];
+    this.hearOpeningPages(item, (errors) => {
+      if (errors.length > 0) pagesBroke.abort();
+    });
     try {
-      return await this.waitForAnswer(item, AbortSignal.any([signal, turnEnded.signal, ...timeUp]));
+      return await this.waitForAnswer(item, AbortSignal.any([signal, turnEnded.signal, pagesBroke.signal, ...timeUp]));
     } catch (error) {
       if (signal.aborted) throw error;
+      if (pagesBroke.signal.aborted) return { pageErrors: this.tellOfBrokenPages(item) };
       if (turnEnded.signal.aborted) return "turn-ended";
       if (timeUp.some((time) => time.aborted)) return "time-up";
       throw error;
     } finally {
       this.askingTurns.delete(item.id);
+      this.stopHearingOpeningPages(item);
     }
+  }
+
+  /** The errors the pages a question opens with report to someone viewing it, for an agent that doesn't wait for the answer. */
+  async errorsOfOpeningPages(item: AskItem): Promise<string[]> {
+    if (pagesOnOpening(item).length === 0 || !this.hub.isShown(item.conversationId)) return [];
+    await new Promise<void>((resolve) => {
+      const timer = setTimeout(resolve, RENDER_REPORT_TIMEOUT_MS);
+      this.hearOpeningPages(item, () => {
+        clearTimeout(timer);
+        resolve();
+      });
+    });
+    if (this.store.findCanvasItem(item.id)?.status === "waiting") return this.tellOfBrokenPages(item);
+    this.stopHearingOpeningPages(item);
+    return [];
+  }
+
+  /** An agent that asks again in the turn it heard a question's pages are broken has fixed them: the new question takes the broken one's place. */
+  takeBackBrokenAsks(conversationId: string) {
+    this.brokenAsksOfTurn.get(conversationId)?.forEach((itemId) => this.cancelAsk(itemId));
+    this.brokenAsksOfTurn.delete(conversationId);
+  }
+
+  /** The errors a question's pages reported that the agent has not heard of, for the tool result that tells it of them. */
+  takeAskErrors(itemId: string): string[] {
+    const item = this.store.findCanvasItem(itemId);
+    if (item?.kind !== "ask" || !item.errorsForAgent) return [];
+    this.heardErrorsOf(itemId);
+    return item.errorsForAgent;
   }
 
   /**
@@ -194,6 +235,7 @@ export class CanvasService {
    * script running the ask after 30 s, and the model may end its turn there. Nobody would read that tool call's answer.
    */
   turnEnded(conversationId: string) {
+    this.brokenAsksOfTurn.delete(conversationId);
     this.askingTurns.forEach(({ conversationId: askedIn, turnEnded }) => {
       if (askedIn === conversationId) turnEnded.abort();
     });
@@ -283,11 +325,45 @@ export class CanvasService {
     else this.keepFirstViewForAgent(itemId, report);
   }
 
-  /** The errors pages shown while nobody viewed them reported when the user first opened them. */
+  /** How one of a question's pages rendered; a question no longer open has nothing left to fix. */
+  reportAskPage(itemId: string, page: AskPage, report: RenderReport) {
+    const item = this.store.findCanvasItem(itemId);
+    if (item?.kind !== "ask" || item.status !== "waiting") return;
+    const errors = report.errors.map((error) => `${askPageName(item, page)}: ${error}`);
+    if (!this.openingPages.get(itemId)?.take(page, errors)) this.keepAskErrors(itemId, errors);
+  }
+
+  /** The errors of pages that reported after the agent's call had returned, and of questions still open. */
   pageErrorsNote(conversationId: string): CanvasNote | null {
-    const pages = this.store.listCanvasItems(conversationId).filter((item): item is ShowItem => item.kind === "show" && (item.errorsForAgent?.length ?? 0) > 0);
-    if (pages.length === 0) return null;
-    return { text: noteOfPageErrors(pages), heard: () => pages.forEach(({ id }) => this.heardErrorsOf(id)) };
+    const items = this.store.listCanvasItems(conversationId).filter(hasErrorsForAgent);
+    if (items.length === 0) return null;
+    return { text: noteOfPageErrors(items), heard: () => items.forEach(({ id }) => this.heardErrorsOf(id)) };
+  }
+
+  private hearOpeningPages(item: AskItem, allReported: (errors: string[]) => void) {
+    const pages = pagesOnOpening(item);
+    if (pages.length > 0) this.openingPages.set(item.id, new OpeningPages(pages, allReported));
+  }
+
+  private stopHearingOpeningPages({ id }: AskItem) {
+    this.keepAskErrors(id, this.openingPages.get(id)?.errors ?? []);
+    this.openingPages.delete(id);
+  }
+
+  private tellOfBrokenPages(item: AskItem) {
+    this.stopHearingOpeningPages(item);
+    const errors = this.takeAskErrors(item.id);
+    if (errors.length > 0) this.brokenAsksOfTurn.set(item.conversationId, [...(this.brokenAsksOfTurn.get(item.conversationId) ?? []), item.id]);
+    return errors;
+  }
+
+  /** Each view of a question reports its pages' errors again, so only new ones are kept. */
+  private keepAskErrors(itemId: string, errors: string[]) {
+    const item = this.store.findCanvasItem(itemId);
+    if (item?.kind !== "ask") return;
+    const { errorsForAgent = [], errorsHeard = [] } = item;
+    const newErrors = errors.filter((error) => ![...errorsForAgent, ...errorsHeard].includes(error));
+    if (newErrors.length > 0) this.save({ ...item, errorsForAgent: [...errorsForAgent, ...newErrors] });
   }
 
   /** Nobody saw the page render, so its first view's report goes to the agent instead. */
@@ -305,9 +381,9 @@ export class CanvasService {
 
   private heardErrorsOf(itemId: string) {
     const latest = this.store.findCanvasItem(itemId);
-    if (latest?.kind !== "show") return;
-    const { errorsForAgent: _heard, ...heard } = latest;
-    this.save(heard);
+    if (!latest || latest.kind === "plugin") return;
+    const { errorsForAgent = [], ...heard } = latest;
+    this.save(heard.kind === "ask" ? { ...heard, errorsHeard: [...(heard.errorsHeard ?? []), ...errorsForAgent] } : heard);
   }
 
   private waitForRenderReport(item: CanvasItem): Promise<RenderOutcome> {
@@ -318,7 +394,7 @@ export class CanvasService {
         this.renderWaiters.delete(item.id);
         resolve(outcome);
       };
-      const timer = setTimeout(() => settle("no-viewer"), RENDER_REPORT_TIMEOUT_MS);
+      const timer = setTimeout(() => settle("no-report"), RENDER_REPORT_TIMEOUT_MS);
       this.renderWaiters.set(item.id, settle);
     });
   }

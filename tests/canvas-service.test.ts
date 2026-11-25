@@ -1,4 +1,4 @@
-import { describe, expect, setSystemTime, test } from "bun:test";
+import { describe, expect, jest, setSystemTime, test } from "bun:test";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -305,7 +305,7 @@ describe("CanvasService pages shown while nobody viewed them", () => {
     canvas.reportRender(item.id, { errors: ["SyntaxError: Unexpected token ']' (script 1 on the page)"] });
     const note = canvas.pageErrorsNote("c1");
     expect(note?.text).toBe(
-      `The page "Charts" (canvas item ${item.id}), shown while nobody was viewing, reported errors when the user opened it:\n- SyntaxError: Unexpected token ']' (script 1 on the page)`,
+      `The page "Charts" (canvas item ${item.id}) reported errors after your show call had returned:\n- SyntaxError: Unexpected token ']' (script 1 on the page)`,
     );
     expect(canvas.notesForAgent("c1").map(({ text }) => text)).toEqual([note!.text]);
     note?.heard();
@@ -332,6 +332,186 @@ describe("CanvasService pages shown while nobody viewed them", () => {
     expect((await shown).render).toEqual({ errors: ["told in the tool result"] });
     canvas.reportRender(item!.id, { errors: ["a later view"] });
     expect(canvas.pageErrorsNote("c1")).toBeNull();
+  });
+
+  test("a page that takes too long to render while someone views it tells of its errors with the next message", async () => {
+    const hub = new Hub();
+    hub.isShown = () => true;
+    const { canvas, store } = setUp(hub);
+    jest.useFakeTimers();
+    try {
+      const shown = canvas.show("c1", charts);
+      jest.advanceTimersByTime(6_000);
+      expect((await shown).render).toBe("no-report");
+    } finally {
+      jest.useRealTimers();
+    }
+    const [item] = store.listCanvasItems("c1");
+    canvas.reportRender(item!.id, { errors: ["Mermaid: Parse error on line 3"] });
+    expect(canvas.notesForAgent("c1").map(({ text }) => text)).toEqual([
+      `The page "Charts" (canvas item ${item!.id}) reported errors after your show call had returned:\n- Mermaid: Parse error on line 3`,
+    ]);
+  });
+});
+
+describe("CanvasService questions whose pages report errors", () => {
+  const withPages = { question: "Color?", html: "<p>Wall</p>", options: [{ label: "Red", html: "<p>Red</p>" }, { label: "Blue" }] };
+  const above = { question: 0, option: null };
+  const onRed = { question: 0, option: 0 };
+  const BROKEN = { errors: ["Mermaid: Parse error on line 3"] };
+  const FINE = { errors: [] };
+  const uncancelled = () => new AbortController().signal;
+
+  const viewed = () => {
+    const hub = new Hub();
+    hub.isShown = () => true;
+    return setUp(hub);
+  };
+
+  test("the wait for an answer gives up once all its pages have reported, with the errors and the page each is on, and the question stays open", async () => {
+    const { store, canvas, nextMessages } = setUp();
+    const item = canvas.openAsk("c1", withPages);
+    const answer = canvas.waitForAnswerDuringTurn(item, uncancelled());
+    canvas.reportAskPage(item.id, onRed, BROKEN);
+    canvas.reportAskPage(item.id, above, { errors: ["ReferenceError: draw is not defined"] });
+    expect(await answer).toEqual({ pageErrors: ['option "Red": Mermaid: Parse error on line 3', "the page above the options: ReferenceError: draw is not defined"] });
+    expect(asAsk(store.findCanvasItem(item.id))?.status).toBe("waiting");
+
+    canvas.answer(item.id, "Red");
+    expect(nextMessages).toEqual(['My answer to your question "Color?": Red']);
+    expect(canvas.notesForAgent("c1"), "the agent has heard of the errors").toEqual([]);
+  });
+
+  test("pages that render without errors leave the tool call waiting for its answer", async () => {
+    const { canvas } = setUp();
+    const item = canvas.openAsk("c1", withPages);
+    const answer = canvas.waitForAnswerDuringTurn(item, uncancelled());
+    canvas.reportAskPage(item.id, above, FINE);
+    canvas.reportAskPage(item.id, onRed, FINE);
+    canvas.answer(item.id, "Blue");
+    expect(await answer).toEqual({ label: "Blue" });
+    expect(canvas.takeAskErrors(item.id)).toEqual([]);
+  });
+
+  test("an answer that comes before every page has reported brings the errors reported by then", async () => {
+    const { canvas } = setUp();
+    const item = canvas.openAsk("c1", withPages);
+    const answer = canvas.waitForAnswerDuringTurn(item, uncancelled());
+    canvas.reportAskPage(item.id, onRed, BROKEN);
+    canvas.answer(item.id, "Red");
+    expect(await answer).toEqual({ label: "Red" });
+    expect(canvas.takeAskErrors(item.id)).toEqual(['option "Red": Mermaid: Parse error on line 3']);
+    expect(canvas.takeAskErrors(item.id)).toEqual([]);
+  });
+
+  test("errors of a later question of several wait for the answer, as the user has answered the ones before it", async () => {
+    const { canvas } = setUp();
+    const item = canvas.openAsk("c1", { questions: [withPages, { question: "Size?", options: [{ label: "Small" }, { label: "Large", html: "<p>Large</p>" }] }] });
+    const answer = canvas.waitForAnswerDuringTurn(item, uncancelled());
+    canvas.reportAskPage(item.id, above, FINE);
+    canvas.reportAskPage(item.id, onRed, FINE);
+    canvas.reportAskPage(item.id, { question: 1, option: 1 }, BROKEN);
+    canvas.reportAskPage(item.id, { question: 1, option: 1 }, BROKEN);
+    canvas.answer(item.id, "", undefined, [{ label: "Red" }, { label: "Large" }]);
+    await answer;
+    expect(canvas.takeAskErrors(item.id)).toEqual(['question 2, option "Large": Mermaid: Parse error on line 3']);
+  });
+
+  test("an agent that does not wait for the answer hears of the errors where someone is viewing the question", async () => {
+    const { canvas } = viewed();
+    const item = canvas.openAsk("c1", withPages);
+    const errors = canvas.errorsOfOpeningPages(item);
+    canvas.reportAskPage(item.id, above, FINE);
+    canvas.reportAskPage(item.id, onRed, BROKEN);
+    expect(await errors).toEqual(['option "Red": Mermaid: Parse error on line 3']);
+    expect(canvas.notesForAgent("c1")).toEqual([]);
+  });
+
+  test("a question answered before its pages reported is not told to be asked again; its errors go with the answer", async () => {
+    const { canvas } = viewed();
+    const item = canvas.openAsk("c1", withPages);
+    jest.useFakeTimers();
+    try {
+      const errors = canvas.errorsOfOpeningPages(item);
+      canvas.reportAskPage(item.id, onRed, BROKEN);
+      canvas.answer(item.id, "Blue");
+      jest.advanceTimersByTime(6_000);
+      expect(await errors).toEqual([]);
+    } finally {
+      jest.useRealTimers();
+    }
+    expect(canvas.notesForAgent("c1").map(({ text }) => text)).toEqual([
+      `The pages of your question "Color?" (canvas item ${item.id}) reported errors:\n- option "Red": Mermaid: Parse error on line 3`,
+    ]);
+  });
+
+  test("a question without pages, or one nobody is viewing, holds up no agent that does not wait for the answer", async () => {
+    const { canvas, ask } = viewed();
+    expect(await canvas.errorsOfOpeningPages(ask())).toEqual([]);
+    const unviewed = setUp().canvas;
+    expect(await unviewed.errorsOfOpeningPages(unviewed.openAsk("c1", withPages))).toEqual([]);
+  });
+
+  test("a question first seen after its tool call returned tells of its errors once, with the user's next message, however often it is seen", () => {
+    const { canvas } = setUp();
+    const item = canvas.openAsk("c1", withPages);
+    canvas.reportAskPage(item.id, onRed, BROKEN);
+    canvas.reportAskPage(item.id, onRed, BROKEN);
+    const [note, ...others] = canvas.notesForAgent("c1");
+    expect(others).toEqual([]);
+    expect(note?.text).toBe(`The pages of your question "Color?" (canvas item ${item.id}) reported errors:\n- option "Red": Mermaid: Parse error on line 3`);
+    note?.heard();
+    canvas.reportAskPage(item.id, onRed, BROKEN);
+    expect(canvas.notesForAgent("c1")).toEqual([]);
+  });
+
+  test("what the pages of an answered or withdrawn question report is of no use to the agent", () => {
+    const { canvas } = setUp();
+    const answered = canvas.openAsk("c1", withPages);
+    canvas.answer(answered.id, "Red");
+    canvas.reportAskPage(answered.id, onRed, BROKEN);
+    const withdrawn = canvas.openAsk("c1", withPages);
+    canvas.reportAskPage(withdrawn.id, onRed, BROKEN);
+    canvas.cancelAsk(withdrawn.id);
+    expect(canvas.notesForAgent("c1")).toEqual([]);
+  });
+
+  test("asking again in the turn that heard of broken pages takes the broken question back, and leaves the others", async () => {
+    const { store, canvas, ask } = setUp();
+    const sound = ask();
+    const broken = canvas.openAsk("c1", withPages);
+    const answer = canvas.waitForAnswerDuringTurn(broken, uncancelled());
+    canvas.reportAskPage(broken.id, above, FINE);
+    canvas.reportAskPage(broken.id, onRed, BROKEN);
+    await answer;
+    canvas.takeBackBrokenAsks("c1");
+    expect(store.findCanvasItem(broken.id)?.status).toBe("cancelled");
+    expect(store.findCanvasItem(sound.id)?.status).toBe("waiting");
+  });
+
+  test("a question whose broken pages the agent left as they are stays open past the turn", async () => {
+    const { store, canvas } = setUp();
+    const broken = canvas.openAsk("c1", withPages);
+    const answer = canvas.waitForAnswerDuringTurn(broken, uncancelled());
+    canvas.reportAskPage(broken.id, above, FINE);
+    canvas.reportAskPage(broken.id, onRed, BROKEN);
+    await answer;
+    canvas.turnEnded("c1");
+    canvas.takeBackBrokenAsks("c1");
+    expect(store.findCanvasItem(broken.id)?.status).toBe("waiting");
+  });
+
+  test("a question answered before the agent asks again keeps its answer", async () => {
+    const { store, canvas, nextMessages } = setUp();
+    const broken = canvas.openAsk("c1", withPages);
+    const answer = canvas.waitForAnswerDuringTurn(broken, uncancelled());
+    canvas.reportAskPage(broken.id, above, FINE);
+    canvas.reportAskPage(broken.id, onRed, BROKEN);
+    await answer;
+    canvas.answer(broken.id, "Blue");
+    canvas.takeBackBrokenAsks("c1");
+    expect(asAsk(store.findCanvasItem(broken.id))).toMatchObject({ status: "answered", answer: { label: "Blue", deliveredAs: "next-message" } });
+    expect(nextMessages).toEqual(['My answer to your question "Color?": Blue']);
   });
 });
 
