@@ -1,13 +1,15 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { machineAddress, type MachineToJoin } from "../shared/machines.ts";
+import { LONGEST_MACHINE_NAME, machineAddress, type MachineToJoin } from "../shared/machines.ts";
 import { markInitials } from "../shared/marks.ts";
 import type { Machine, Pastel } from "../shared/model.ts";
+import { tunnelOrigin } from "../shared/tunnel.ts";
 import { ColorSwatches } from "./ColorSwatches.tsx";
 import { ConfirmButton } from "./ConfirmButton.tsx";
 import { connection } from "./connection.ts";
 import { hints } from "./hints.ts";
+import { replyProblemText } from "./host-error.ts";
 import { t } from "./i18n/index.ts";
-import { colorAttributes, seenPart } from "./MachineRail.tsx";
+import { colorAttributes, reachedAt, seenPart } from "./MachineRail.tsx";
 
 /** Where this host cannot show the machine (a page opened from another device), a tab of its own, used again next time. */
 export function openMachine(origin: string, conversationId: string | null = null) {
@@ -19,36 +21,67 @@ const words = t.shell.machines;
 function AddMachine({ machines }: { machines: Machine[] }) {
   const [name, setName] = useState("");
   const [address, setAddress] = useState("");
+  const [adding, setAdding] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
   const parsed = machineAddress(address);
-  const known = parsed && machines.some(({ origin }) => origin === parsed.origin);
+  const origins = parsed ? [parsed.origin, ...(parsed.tunnel ? [tunnelOrigin(parsed.tunnel)] : [])] : [];
+  const known = machines.some(({ origin }) => origins.includes(origin));
 
-  const add = (event: FormEvent) => {
+  const add = async (event: FormEvent) => {
     event.preventDefault();
-    if (!parsed || known || !connection.send({ type: "machine.add", name, address })) return;
-    setName("");
-    setAddress("");
+    if (!parsed || known || adding) return;
+    setAdding(true);
+    setProblem(null);
+    try {
+      const added = await connection.sendAndAwait(
+        (requestId) => ({ type: "machine.add", requestId, name, address }),
+        (message, requestId) => (message.type === "machine.added" && message.requestId === requestId ? message : undefined),
+      );
+      if (added.machineId) {
+        setName("");
+        setAddress("");
+      }
+      setProblem(replyProblemText(added));
+    } catch {
+      // Disconnected; the page says so
+    } finally {
+      setAdding(false);
+    }
   };
 
   return (
-    <form className="add-machine" onSubmit={add}>
+    <form className="add-machine" onSubmit={(event) => void add(event)}>
       <label>
         {words.name}
-        <input value={name} onChange={(event) => setName(event.target.value)} placeholder={words.namePlaceholder} />
+        <input
+          value={name}
+          maxLength={LONGEST_MACHINE_NAME}
+          onChange={(event) => setName(event.target.value)}
+          placeholder={parsed?.tunnel?.name ?? words.namePlaceholder}
+        />
       </label>
       <label>
         {words.address}
         <input
           value={address}
-          onChange={(event) => setAddress(event.target.value)}
+          onChange={(event) => {
+            setAddress(event.target.value);
+            setProblem(null);
+          }}
           placeholder="home-server.your-tailnet.ts.net"
           autoComplete="off"
           spellCheck={false}
         />
       </label>
-      <button type="submit" className="primary" disabled={!parsed || !!known}>
-        {parsed?.joinCode ? words.addAndJoin : words.add}
+      <button type="submit" className="primary" disabled={!parsed || known || adding}>
+        {adding && parsed?.joinCode ? words.joining : parsed?.joinCode ? words.addAndJoin : words.add}
       </button>
       {known && <p className="hint">{words.alreadyListed}</p>}
+      {problem && (
+        <p className="join-problem" role="alert">
+          {problem}
+        </p>
+      )}
     </form>
   );
 }
@@ -73,7 +106,7 @@ function MachineRow({ machine, onOpen }: { machine: Machine; onOpen: (machine: M
         {markInitials(machine.name)}
       </button>
       <span className="machine-name">{machine.name}</span>
-      <span className="machine-origin">{machine.origin}</span>
+      <span className="machine-origin">{reachedAt(machine)}</span>
       {!machine.joined && <span className="machine-not-joined">{words.notJoinedYet}</span>}
       <button type="button" onClick={() => onOpen(machine)}>
         {words.open}

@@ -387,14 +387,14 @@ export type ClientMessage =
   | { type: "voice.engine.remove" }
   /** Refused for a model the voice settings use. */
   | { type: "voice.engine.remove-model"; model: string }
-  /** address is what the user typed or pasted: a name on the network, an address, or an invite link. */
-  | { type: "machine.add"; name: string; address: string }
+  /** address is what the user typed or pasted: a name on the network, an address, or an invite link; answered with "machine.added". */
+  | { type: "machine.add"; requestId?: string; name: string; address: string }
   | { type: "machine.remove"; machineId: string }
   | { type: "machine.set-color"; machineId: string; color: Pastel | null }
   /** Keeps a machine one of this computer's machines has joined out of the rail; machine.show-again brings it back. */
   | { type: "machine.hide"; machine: MachineSeen }
   | { type: "machine.show-again"; machine: MachineSeen }
-  | { type: "machine.join"; requestId: string; machineId: string; code: string; authorityFingerprint: string | null }
+  | { type: "machine.join"; requestId: string; machineId: string; code: string; authorityFingerprint: string | null; tunnel?: InviteTunnel | null }
   | { type: "machine.ask-to-join"; requestId: string; machineId: string }
   | { type: "search"; requestId: string; query: string };
 
@@ -660,6 +660,7 @@ export type ServerMessage =
   /** The addresses that answered as this Mirador, and whether this machine has Tailscale to put its ports on the tailnet. */
   | { type: "address.found"; requestId: string; addresses: FoundAddress[]; tailscale: "absent" | "present"; problem: string | null; problemAbout?: HostProblem }
   | { type: "machines.changed"; machines: Machine[] }
+  | { type: "machine.added"; requestId: string; machineId: string | null; problem: string | null; problemAbout?: HostProblem }
   | { type: "machines.hidden"; machines: MachineSeen[] }
   | { type: "machine.status"; status: MachineStatus }
   /** The machine has the request; it waits there until someone types the number this host shows. */

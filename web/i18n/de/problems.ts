@@ -49,6 +49,8 @@ export const problems: Messages["problems"] = {
     "group-needs-name": "Eine Gruppe braucht einen Namen",
     "that-is-this-machine": "Das ist dieser Rechner.",
     "machine-gone": "Dieser Rechner gehört nicht mehr zu deinen Rechnern.",
+    "peer-to-peer-unavailable-here": "Peer-to-Peer ist auf diesem Computer nicht verfügbar, und diese Einladung braucht es: mirador-p2p ließ sich nicht herunterladen, oder es gibt keins für dieses System.",
+    "join-too-often": "Es gab zu viele Versuche, diesem Rechner beizutreten. Versuche es in einer Minute erneut.",
     "unknown-question": "Unbekannte Frage.",
     "question-already-answered": "Diese Frage wurde schon beantwortet oder zurückgezogen.",
     "question-takes-one-answer": "Diese Frage nimmt nur eine Antwort an.",
@@ -232,6 +234,23 @@ export const problems: Messages["problems"] = {
   machineCertificateNotItsOwn: (machine, hostname) =>
     `Das Zertifikat von ${machine} stammt nicht von seiner eigenen Zertifizierungsstelle oder nennt ${hostname} nicht.`,
   machineDidNotAnswer: (machine) => `${machine} hat nicht geantwortet. Läuft dort Mirador?`,
+  machineUnreachableNow: (machine) =>
+    `${machine} ist gerade nicht erreichbar. Vielleicht ist Mirador dort aus oder offline, oder die Einladung wurde schon benutzt oder ist abgelaufen. Versuch es später noch einmal oder bitte um eine neue Einladung.`,
+  peerToPeerDidNotStartHere:
+    "Peer-to-Peer ist auf diesem Computer nicht gestartet, daher wurde die Einladung nicht verwendet. Prüfe, ob dieser Computer online ist. Der Fehler steht im Host-Log.",
+  environmentPeerToPeerDidNotStart: (binary) =>
+    `Peer-to-Peer ist auf diesem Computer nicht gestartet, daher wurde die Einladung nicht verwendet. Prüfe, ob dieser Computer online ist und ob ${binary} aus MIRADOR_P2P_BINARY neu genug für dieses Mirador ist. Der Fehler steht im Host-Log.`,
+  machineNeedsWholeInvite: (machine) => `${machine} wird per Peer-to-Peer erreicht, daher braucht der Beitritt den ganzen Einladungslink, nicht nur seinen Code.`,
+  inviteFromAnotherMachine: (machine) => `Diese Einladung kommt von einem anderen Rechner als ${machine}. Füge sie unter Rechner ein, dort fügt sie ihren eigenen hinzu.`,
+  dialFolderTooLong: (folder) =>
+    `Peer-to-Peer funktioniert nicht aus dem Mirador-Datenordner dieses Computers, weil sein Pfad für die nötigen Sockets zu lang ist: ${folder}. Starte Mirador mit einem kürzeren Datenordner, festgelegt in MIRADOR_DATA_DIR.`,
+  dialFolderUnusableCharacter: (folder) =>
+    `Peer-to-Peer funktioniert nicht aus dem Mirador-Datenordner dieses Computers, weil sein Pfad ein Zeichen enthält, mit dem sich die nötigen Sockets nicht benennen lassen, etwa einen Doppelpunkt, ein Leerzeichen oder einen Buchstaben außerhalb von ASCII: ${folder}. Starte Mirador mit einem Datenordner aus einfachen Buchstaben, festgelegt in MIRADOR_DATA_DIR.`,
+  dialFolderNotOwn: (folder) => `Peer-to-Peer funktioniert nicht aus dem Mirador-Datenordner dieses Computers, weil er einem anderen Konto auf diesem Computer gehört: ${folder}.`,
+  machineAuthorityNotInTunnelLink: (machine) =>
+    `Dieser Einladungslink erreicht ${machine} per Peer-to-Peer und sagt nicht, welches Zertifikat an seiner Adresse zu erwarten ist, daher wurde der Code nicht dorthin gesendet. Füge den Link unter Rechner auf einem Computer ein, auf dem Peer-to-Peer funktioniert.`,
+  inviteAddressUnprotected: (address) =>
+    `Peer-to-Peer ist auf diesem Computer nicht verfügbar, und die Adresse der Einladung, ${address}, ist nicht durch HTTPS geschützt, daher wurde der Code nicht dorthin gesendet. Tritt von einem Computer aus bei, auf dem Peer-to-Peer funktioniert.`,
   machineCertificateUntrusted: (machine) =>
     `Dieser Computer vertraut dem Zertifikat von ${machine} nicht, und ${machine} bietet keine eigene Zertifizierungsstelle an.`,
   machineGaveNoToken: (machine) => `${machine} hat diesen Computer ohne Token hereingelassen.`,

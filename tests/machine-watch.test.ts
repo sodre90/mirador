@@ -110,7 +110,7 @@ describe("MachineWatch", () => {
       machine.send("/ws", { type: "snapshot", conversations: [conversation("a", "question")], machines: [], hostId: "home-server-id" });
       await eventually(() => expect(watch.statuses()[0]!.waiting).toEqual(["question"]));
       expect(logged).toHaveBeenCalledTimes(2);
-      expect(logged).toHaveBeenCalledWith(expect.stringContaining(`skipped a message from ${machine.origin.replace(/^http/, "ws")}/ws`), expect.any(Error));
+      expect(logged).toHaveBeenCalledWith(expect.stringContaining("skipped a message on /ws of a machine"), expect.any(Error));
     } finally {
       logged.mockRestore();
     }

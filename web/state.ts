@@ -515,6 +515,7 @@ function applyServerMessage(state: AppState, message: ServerMessage): AppState {
     case "search.results":
     case "machine.join-asked":
     case "machine.join-answered":
+    case "machine.added":
     case "settings.saved":
     case "settings.exported":
     case "settings.export-saved":

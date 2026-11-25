@@ -238,6 +238,7 @@ export const shell: Messages["shell"] = {
     thisComputer: "Ez a számítógép",
     manage: "Gépek…",
     notJoinedYet: "még nem csatlakozott",
+    peerToPeer: "peer to peer kapcsolattal",
     notAnswering: "nem válaszol",
     joinedBy: (machine) => `${machine} csatlakozott hozzá`,
     hideFromRail: "Elrejtés a sávról",

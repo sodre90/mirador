@@ -49,6 +49,8 @@ export const problems: Messages["problems"] = {
     "group-needs-name": "分组需要一个名称",
     "that-is-this-machine": "那就是这台机器。",
     "machine-gone": "那台机器已不在你的机器中。",
+    "peer-to-peer-unavailable-here": "这台电脑无法使用点对点连接，而这个邀请需要它：mirador-p2p 无法下载，或者没有适用于此系统的版本。",
+    "join-too-often": "加入这台机器的尝试太多了。请一分钟后再试。",
     "unknown-question": "未知问题。",
     "question-already-answered": "此问题已被回答或已撤回。",
     "question-takes-one-answer": "此问题只接受一个回答。",
@@ -223,6 +225,19 @@ export const problems: Messages["problems"] = {
   tailscaleServeExited: (exitCode) => `tailscale serve 以退出码 ${exitCode} 结束`,
   machineCertificateNotItsOwn: (machine, hostname) => `${machine} 的证书不是由它自己的证书颁发机构签发的，或者没有包含 ${hostname}。`,
   machineDidNotAnswer: (machine) => `${machine} 没有响应。它的 Mirador 在运行吗？`,
+  machineUnreachableNow: (machine) => `现在连不上 ${machine}。它的 Mirador 可能没有运行或已离线，也可能邀请已被使用或已过期。请稍后再试，或再要一个新邀请。`,
+  peerToPeerDidNotStartHere: "这台电脑上的点对点连接没有启动，所以邀请没有被使用。请确认这台电脑已联网。错误已记录在 host 日志中。",
+  environmentPeerToPeerDidNotStart: (binary) =>
+    `这台电脑上的点对点连接没有启动，所以邀请没有被使用。请确认这台电脑已联网，并且 MIRADOR_P2P_BINARY 指定的 ${binary} 对这个 Mirador 来说足够新。错误已记录在 host 日志中。`,
+  machineNeedsWholeInvite: (machine) => `${machine} 通过点对点连接，所以加入时需要完整的邀请链接，而不只是邀请码。`,
+  inviteFromAnotherMachine: (machine) => `这个邀请来自另一台机器，而不是 ${machine}。请把它粘贴到“机器”里，它会添加自己的机器。`,
+  dialFolderTooLong: (folder) => `这台电脑无法从它的 Mirador 数据文件夹使用点对点连接，因为它的路径对所需的套接字来说太长：${folder}。请用更短的数据文件夹启动 Mirador，在 MIRADOR_DATA_DIR 中设置。`,
+  dialFolderUnusableCharacter: (folder) =>
+    `这台电脑无法从它的 Mirador 数据文件夹使用点对点连接，因为它的路径含有所需套接字无法使用的字符，例如冒号、空格或 ASCII 以外的字母：${folder}。请用只含普通字母的数据文件夹启动 Mirador，在 MIRADOR_DATA_DIR 中设置。`,
+  dialFolderNotOwn: (folder) => `这台电脑无法从它的 Mirador 数据文件夹使用点对点连接，因为它属于这台电脑上的另一个账户：${folder}。`,
+  machineAuthorityNotInTunnelLink: (machine) =>
+    `这个邀请链接通过点对点连接到 ${machine}，没有说明它的地址上应该是哪个证书，因此没有把邀请码发送到那里。请在能使用点对点连接的电脑上，把链接粘贴到“机器”里。`,
+  inviteAddressUnprotected: (address) => `这台电脑无法使用点对点连接，而邀请的地址 ${address} 没有 HTTPS 保护，因此没有把邀请码发送到那里。请在能使用点对点连接的电脑上加入。`,
   machineCertificateUntrusted: (machine) => `这台电脑不信任 ${machine} 的证书，而 ${machine} 也没有提供自己的证书颁发机构。`,
   machineGaveNoToken: (machine) => `${machine} 让这台电脑加入了，却没有给出令牌。`,
   machineAuthorityNotInLink: (machine) => `${machine} 的证书颁发机构不是邀请链接中的那个，因此没有发送邀请码。网络上可能有东西在冒充 ${machine}。`,

@@ -21,6 +21,8 @@ import { ConversationService } from "./conversations.ts";
 import { DeviceService } from "./devices.ts";
 import { JoinRequestService } from "./join-requests.ts";
 import { MachineRelays } from "./machine-relays.ts";
+import { forgetSignInAt } from "./machine-sign-in.ts";
+import { MachineTunnels } from "./machine-tunnels.ts";
 import { MachineWatch } from "./machine-watch.ts";
 import { ownPageOrigins } from "./addresses.ts";
 import { ConversationSearch } from "./search.ts";
@@ -48,7 +50,8 @@ import { Lookout } from "./lookout.ts";
 import { NewerVersionWatcher, newerVersionLookup, pullCheckout } from "./newer-version.ts";
 import { desktopAppCode } from "../shared/desktop-app-code.ts";
 import { startServer } from "./server.ts";
-import { BUILT_IN_BROKER, PeerToPeer, peerToPeerSettings } from "./p2p/service.ts";
+import { BUILT_IN_BROKER, PeerToPeer, peerToPeerSettings, peerToPeerUnlessBuiltInFails } from "./p2p/service.ts";
+import { dialProgram } from "./p2p/dial.ts";
 import { downloadedSidecar } from "./p2p/sidecar-download.ts";
 import { SourceWatcher } from "./source-watcher.ts";
 import { StatuslineService } from "./statusline.ts";
@@ -201,9 +204,10 @@ const devices = new DeviceService(store);
 const joinRequests = new JoinRequestService(store, devices, ownAuthorityFingerprint);
 const signInCodes = new SignInCodes(store);
 const p2pSettings = peerToPeerSettings(process.env, { sidecar: downloadedSidecar(config.dataDir), broker: BUILT_IN_BROKER });
-const p2p = p2pSettings && new PeerToPeer({ ...p2pSettings, canvasAssetsPort: config.canvasAssetsPort }, join(config.dataDir, "p2p"), store);
+const p2p = p2pSettings && peerToPeerUnlessBuiltInFails(process.env, () => new PeerToPeer({ ...p2pSettings, canvasAssetsPort: config.canvasAssetsPort }, join(config.dataDir, "p2p"), store));
 const search = new ConversationSearch(store);
 const signedIn = signedInWith(config.browserToken, devices);
+const tunnels = new MachineTunnels(store, join(config.dataDir, "machine-tunnels"), dialProgram(process.env, downloadedSidecar(config.dataDir)), config.relayPorts);
 const watch = new MachineWatch(
   store,
   { id: store.hostId(), origins: ownPageOrigins(config, certificate) },
@@ -211,6 +215,7 @@ const watch = new MachineWatch(
   () => hub.broadcast({ type: "machines.changed", machines: store.listMachines() }),
   (notification) => hub.notifyThisComputer(notification),
   machineSignedOut,
+  tunnels,
 );
 const relays = new MachineRelays(
   store,
@@ -222,7 +227,9 @@ const relays = new MachineRelays(
     watch.start(machineId);
   },
   machineSignedOut,
+  tunnels,
 );
+tunnels.startAll();
 relays.startAll();
 watch.startAll();
 const voiceDir = join(config.dataDir, "voice");
@@ -252,7 +259,7 @@ hub.whenRunningTurnsCounted((count) => keepAwake.setRunningTurns(count));
 const settingsImport = new SettingsImport({ store, hub, profiles, conversations, plugins, pluginSettings });
 const configFile = config.userConfigFile === null ? null : await applyConfigFile(config.userConfigFile, settingsImport, store);
 if (configFile) reportConfigFile(configFile);
-const server = startServer({ config, store, hub, conversations, canvas, mcp, apps, plugins, canvasPlugins, pluginSettings, pluginLooks, catalog, profiles, statusline, terminals, images, droppedFiles, voice, voiceEngine, restart, desktopApp, newerVersion, pullNewerVersion: () => pullCheckout(sourceDir), pluginUpdates, readyPluginUpdates, devices, joinRequests, signInCodes, search, relays, watch, certificate, keepAwake, p2p, pushes, settingsImport, configFile });
+const server = startServer({ config, store, hub, conversations, canvas, mcp, apps, plugins, canvasPlugins, pluginSettings, pluginLooks, catalog, profiles, statusline, terminals, images, droppedFiles, voice, voiceEngine, restart, desktopApp, newerVersion, pullNewerVersion: () => pullCheckout(sourceDir), pluginUpdates, readyPluginUpdates, devices, joinRequests, signInCodes, search, relays, watch, tunnels, certificate, keepAwake, p2p, pushes, settingsImport, configFile });
 const sourceWatcher = new SourceWatcher(sourceDir, {
   uiEdited: (edited) => {
     console.log(`${edited} changed, so the page is built again`);
@@ -289,7 +296,7 @@ function reportConfigFile({ path, found, added, overwritten, problems }: ConfigF
 }
 
 function machineSignedOut(machineId: string) {
-  store.forgetMachineDeviceToken(machineId);
+  forgetSignInAt(store, tunnels, machineId);
   watch.stop(machineId);
   hub.broadcast({ type: "machines.changed", machines: store.listMachines() });
 }
@@ -307,6 +314,7 @@ async function stopServices() {
   networkAssetsServer?.stop(true);
   relays.stopAll();
   watch.stopAll();
+  tunnels.stopAll();
   keepAwake.stop();
   clearInterval(forgettingDeletedCanvases);
   apps.stop();

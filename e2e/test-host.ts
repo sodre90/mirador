@@ -295,6 +295,7 @@ export class TestHost {
       MIRADOR_PORT: String(port),
       MIRADOR_DATA_DIR: this.dataDir,
       MIRADOR_MCP_TOKEN: this.mcpToken,
+      MIRADOR_P2P: "off",
       MIRADOR_TEST_MODEL: process.env.MIRADOR_TEST_MODEL ?? "haiku",
       MIRADOR_TEST_EFFORT: process.env.MIRADOR_TEST_EFFORT ?? "low",
       MIRADOR_TEST_SKIP_USER_SETTINGS: "1",

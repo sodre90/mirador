@@ -108,9 +108,18 @@ export type HostProblem =
   | { code: "tailscale-serve-exited"; exitCode: number }
   | { code: "machine-certificate-not-its-own"; machine: string; hostname: string }
   | { code: "machine-did-not-answer"; machine: string }
+  | { code: "machine-unreachable-now"; machine: string }
+  | { code: "peer-to-peer-did-not-start-here"; environmentBinary: string | null }
+  | { code: "machine-needs-whole-invite"; machine: string }
+  | { code: "invite-from-another-machine"; machine: string }
+  | { code: "dial-folder-too-long"; folder: string }
+  | { code: "dial-folder-unusable-character"; folder: string }
+  | { code: "dial-folder-not-own"; folder: string }
   | { code: "machine-certificate-untrusted"; machine: string }
   | { code: "machine-gave-no-token"; machine: string }
   | { code: "machine-authority-not-in-link"; machine: string }
+  | { code: "machine-authority-not-in-tunnel-link"; machine: string }
+  | { code: "invite-address-unprotected"; address: string }
   | { code: "machine-authority-changed"; machine: string }
   | { code: "join-request-denied"; machine: string }
   | { code: "join-request-timed-out"; machine: string }

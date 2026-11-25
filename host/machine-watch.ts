@@ -1,48 +1,95 @@
 import type { Conversation, Machine, MachineSeen, MachineStatus, WaitingFor } from "../shared/model.ts";
-import { TOKEN_COOKIE, type ServerMessage } from "../shared/protocol.ts";
+import { TOKEN_COOKIE, type ClientMessage, type ServerMessage } from "../shared/protocol.ts";
 import type { SystemNotification } from "../shared/system-notifications.ts";
 import { signInRevoked } from "./machine-sign-in.ts";
+import { DIRECT_REACH, type MachineReach } from "./machine-tunnels.ts";
 import { trusting } from "./machine-trust.ts";
+import { webSocketTo } from "./p2p/dial.ts";
 import type { Store } from "./store.ts";
 
 /** Waits longer after each failed try in a row, so a machine that is off is asked about once a minute at most. */
 const RECONNECT_DELAYS_MS = [2_000, 5_000, 15_000, 60_000];
+/** A tunnel's forward accepts a connection at once even while the machine is off, so opening waits only this long for it to answer. */
+const OPEN_TIMEOUT_MS = 10_000;
+/** How often this host checks that a machine reached through a tunnel still answers; closing a lid leaves a quiet socket open otherwise. */
+export const PEER_TO_PEER_HEARTBEAT_MS = 30_000;
 
 /** With the DOM library loaded, TypeScript hides the overload of Bun's WebSocket that takes headers. */
-type BunWebSocket = new (url: string, options: Bun.WebSocketOptions) => WebSocket;
+type BunWebSocket = new (url: string, options: Bun.WebSocketOptions) => WebSocket & { terminate(): void };
 
 /** A socket to a machine that opens again whenever it closes, for as long as it is wanted. */
 class MachineSocket {
-  private socket: WebSocket | null = null;
+  private socket: (WebSocket & { terminate(): void }) | null = null;
   private retry?: ReturnType<typeof setTimeout>;
+  private heartbeat?: ReturnType<typeof setInterval>;
+  private answeredSinceAsked = true;
   private failures = 0;
   private stopped = false;
 
   constructor(
-    private readonly url: string,
-    private readonly signIn: () => Bun.WebSocketOptions | null,
-    private readonly events: { opened?: () => void; message: (message: ServerMessage) => void; closed?: () => void; refused?: () => void },
+    private readonly path: string,
+    /** The machine as this host reaches it now, asked again each time the socket opens, as a tunnel's forward moves whenever its dial starts again. */
+    private readonly reach: Pick<MachineReach, "reached" | "wayTo">,
+    private readonly machine: Machine,
+    private readonly signIn: (origin: string) => { headers: Record<string, string>; tls?: Bun.WebSocketOptions["tls"] } | null,
+    private readonly events: { opened?: () => void; message: (message: ServerMessage) => void; closed?: () => void; refused?: (reached: Machine) => void },
+    /** How often the machine is asked to answer while the socket is open; never where it is reached at its address. */
+    private readonly heartbeatEveryMs: number | null = null,
   ) {}
 
   start() {
-    const options = this.signIn();
-    if (!options || this.stopped) return;
-    const socket = new (WebSocket as unknown as BunWebSocket)(this.url, options);
+    void this.open();
+  }
+
+  private async open() {
+    const reached = await this.reach.reached(this.machine);
+    if (this.stopped) return;
+    const way = reached && this.reach.wayTo(reached);
+    if (!reached || !way) return this.openLater();
+    const options = this.signIn(reached.origin);
+    if (!options) return;
+    const { url, headers } = webSocketTo(way, this.path, options.headers);
+    const socket = new (WebSocket as unknown as BunWebSocket)(url, { ...options, headers });
     this.socket = socket;
     let opened = false;
+    const givingUp = setTimeout(() => socket.close(), OPEN_TIMEOUT_MS);
     socket.onopen = () => {
+      clearTimeout(givingUp);
+      if (this.stopped) return socket.close();
       opened = true;
       this.failures = 0;
       this.events.opened?.();
+      this.keepAsking(socket);
     };
-    socket.onmessage = ({ data }) => this.receive(data);
-    socket.onclose = () => {
-      this.socket = null;
-      this.events.closed?.();
-      if (!opened && !this.stopped) this.events.refused?.();
+    socket.onmessage = ({ data }) => {
       if (this.stopped) return;
-      this.retry = setTimeout(() => this.start(), RECONNECT_DELAYS_MS[Math.min(this.failures++, RECONNECT_DELAYS_MS.length - 1)]);
+      this.answeredSinceAsked = true;
+      this.receive(data);
     };
+    socket.onclose = () => {
+      clearTimeout(givingUp);
+      clearInterval(this.heartbeat);
+      if (this.socket === socket) this.socket = null;
+      if (this.stopped) return;
+      this.events.closed?.();
+      if (!opened) this.events.refused?.(reached);
+      this.openLater();
+    };
+  }
+
+  /** A socket the machine stops answering on is dropped, which then counts as the machine not answering. */
+  private keepAsking(socket: WebSocket & { terminate(): void }) {
+    if (this.heartbeatEveryMs === null) return;
+    this.answeredSinceAsked = true;
+    this.heartbeat = setInterval(() => {
+      if (!this.answeredSinceAsked) return socket.terminate();
+      this.answeredSinceAsked = false;
+      socket.send(JSON.stringify({ type: "ping" } satisfies ClientMessage));
+    }, this.heartbeatEveryMs);
+  }
+
+  private openLater() {
+    this.retry = setTimeout(() => this.start(), RECONNECT_DELAYS_MS[Math.min(this.failures++, RECONNECT_DELAYS_MS.length - 1)]);
   }
 
   /** A message this host cannot read or follow, e.g. from a machine on another version, is skipped rather than taking the host down. */
@@ -50,13 +97,14 @@ class MachineSocket {
     try {
       this.events.message(JSON.parse(String(data)) as ServerMessage);
     } catch (error) {
-      console.error(`skipped a message from ${this.url} it could not follow:`, error);
+      console.error(`skipped a message on ${this.path} of a machine, as this host could not follow it:`, error);
     }
   }
 
   stop() {
     this.stopped = true;
     clearTimeout(this.retry);
+    clearInterval(this.heartbeat);
     this.socket?.close();
   }
 }
@@ -98,6 +146,8 @@ export class MachineWatch {
     private readonly machinesChanged: () => void,
     private readonly notify: (notification: SystemNotification) => void,
     private readonly signedOut: (machineId: string) => void,
+    private readonly tunnels: Pick<MachineReach, "reached" | "stillReaches" | "wayTo"> = DIRECT_REACH,
+    private readonly heartbeatEveryMs = PEER_TO_PEER_HEARTBEAT_MS,
   ) {}
 
   startAll() {
@@ -110,19 +160,26 @@ export class MachineWatch {
     const machine = this.store.findMachine(machineId);
     if (!machine?.joined) return;
     const watched: WatchedMachine = { sockets: [], status: { machineId, reachable: false, waiting: [], joinedThere: [] }, waitingIn: new Map() };
-    const signIn = () => {
+    const signIn = (origin: string) => {
       const token = this.store.machineDeviceToken(machineId);
-      return token ? { headers: { Origin: machine.origin, Cookie: `${TOKEN_COOKIE}=${token}` }, ...trusting(this.store.machineAuthority(machineId)) } : null;
+      return token ? { headers: { Origin: origin, Cookie: `${TOKEN_COOKIE}=${token}` }, ...trusting(this.store.machineAuthority(machineId)) } : null;
     };
-    const socketUrl = (path: string) => `${machine.origin.replace(/^http/, "ws")}${path}`;
+    const heartbeat = machine.peerToPeer ? this.heartbeatEveryMs : null;
     watched.sockets = [
-      new MachineSocket(socketUrl("/ws"), signIn, {
-        opened: () => this.update(watched, { reachable: true }),
-        message: (message) => this.follow(watched, message),
-        closed: () => this.update(watched, { reachable: false }),
-        refused: () => signInRevoked(this.store, machineId).then((revoked) => revoked && this.signedOut(machineId)),
-      }),
-      new MachineSocket(socketUrl("/notifications"), signIn, {
+      new MachineSocket(
+        "/ws",
+        this.tunnels,
+        machine,
+        signIn,
+        {
+          opened: () => this.update(watched, { reachable: true }),
+          message: (message) => this.follow(watched, message),
+          closed: () => this.update(watched, { reachable: false }),
+          refused: (reached) => signInRevoked(this.store, reached, this.tunnels).then((revoked) => revoked && this.signedOut(machineId)),
+        },
+        heartbeat,
+      ),
+      new MachineSocket("/notifications", this.tunnels, machine, signIn, {
         message: (message) => message.type === "system-notification" && this.notify(this.passedOn(machine, message.notification)),
       }),
     ];

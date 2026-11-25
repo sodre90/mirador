@@ -204,12 +204,30 @@ export function problemText(problem: HostProblem, words: ProblemWords): string {
       return words.machineCertificateNotItsOwn(problem.machine, problem.hostname);
     case "machine-did-not-answer":
       return words.machineDidNotAnswer(problem.machine);
+    case "machine-unreachable-now":
+      return words.machineUnreachableNow(problem.machine);
+    case "peer-to-peer-did-not-start-here":
+      return problem.environmentBinary ? words.environmentPeerToPeerDidNotStart(problem.environmentBinary) : words.peerToPeerDidNotStartHere;
+    case "machine-needs-whole-invite":
+      return words.machineNeedsWholeInvite(problem.machine);
+    case "invite-from-another-machine":
+      return words.inviteFromAnotherMachine(problem.machine);
+    case "dial-folder-too-long":
+      return words.dialFolderTooLong(problem.folder);
+    case "dial-folder-unusable-character":
+      return words.dialFolderUnusableCharacter(problem.folder);
+    case "dial-folder-not-own":
+      return words.dialFolderNotOwn(problem.folder);
     case "machine-certificate-untrusted":
       return words.machineCertificateUntrusted(problem.machine);
     case "machine-gave-no-token":
       return words.machineGaveNoToken(problem.machine);
     case "machine-authority-not-in-link":
       return words.machineAuthorityNotInLink(problem.machine);
+    case "machine-authority-not-in-tunnel-link":
+      return words.machineAuthorityNotInTunnelLink(problem.machine);
+    case "invite-address-unprotected":
+      return words.inviteAddressUnprotected(problem.address);
     case "machine-authority-changed":
       return words.machineAuthorityChanged(problem.machine);
     case "join-request-denied":

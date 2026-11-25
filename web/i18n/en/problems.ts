@@ -47,6 +47,8 @@ export const problems = {
     "group-needs-name": "A group needs a name",
     "that-is-this-machine": "That is this machine.",
     "machine-gone": "That machine is no longer among your machines.",
+    "peer-to-peer-unavailable-here": "Peer to peer isn't available on this computer, and this invite needs it: mirador-p2p could not be downloaded, or there is none for this system.",
+    "join-too-often": "There were too many tries to join this machine. Try again in a minute.",
     "unknown-question": "Unknown question.",
     "question-already-answered": "This question was already answered or withdrawn.",
     "question-takes-one-answer": "This question takes one answer.",
@@ -229,6 +231,23 @@ export const problems = {
   machineCertificateNotItsOwn: (machine: string, hostname: string) =>
     `${machine}'s certificate is not from its own certificate authority, or does not name ${hostname}.`,
   machineDidNotAnswer: (machine: string) => `${machine} did not answer. Is its Mirador running?`,
+  machineUnreachableNow: (machine: string) =>
+    `${machine} can't be reached right now. Its Mirador may be off or offline, or the invite was used or has expired. Try again later, or ask for a new invite.`,
+  peerToPeerDidNotStartHere:
+    "Peer to peer didn't start on this computer, so the invite wasn't used. Check that this computer is online. The host log says what went wrong.",
+  environmentPeerToPeerDidNotStart: (binary: string) =>
+    `Peer to peer didn't start on this computer, so the invite wasn't used. Check that this computer is online, and that ${binary}, which MIRADOR_P2P_BINARY names, is new enough for this Mirador. The host log says what went wrong.`,
+  machineNeedsWholeInvite: (machine: string) => `${machine} is reached peer to peer, so joining it takes the whole invite link, not just its code.`,
+  inviteFromAnotherMachine: (machine: string) => `That invite is from another machine than ${machine}. Paste it under Machines, where it adds its own.`,
+  dialFolderTooLong: (folder: string) =>
+    `Peer to peer can't work from this computer's Mirador data folder, as its path is too long for the sockets it needs: ${folder}. Start Mirador with a shorter data folder, set in MIRADOR_DATA_DIR.`,
+  dialFolderUnusableCharacter: (folder: string) =>
+    `Peer to peer can't work from this computer's Mirador data folder, as its path has a character the sockets it needs can't be named with, such as a colon, a space or a letter outside ASCII: ${folder}. Start Mirador with a data folder of plain letters, set in MIRADOR_DATA_DIR.`,
+  dialFolderNotOwn: (folder: string) => `Peer to peer can't work from this computer's Mirador data folder, as another account on this computer owns it: ${folder}.`,
+  machineAuthorityNotInTunnelLink: (machine: string) =>
+    `This invite link reaches ${machine} peer to peer, and doesn't say which certificate to expect at its address, so the code was not sent there. Paste the link under Machines on a computer where peer to peer works.`,
+  inviteAddressUnprotected: (address: string) =>
+    `Peer to peer isn't available on this computer, and the invite's address, ${address}, is not protected by HTTPS, so the code was not sent there. Join from a computer where peer to peer works.`,
   machineCertificateUntrusted: (machine: string) =>
     `This computer doesn't trust ${machine}'s certificate, and ${machine} offers no certificate authority of its own.`,
   machineGaveNoToken: (machine: string) => `${machine} let this computer in without a token.`,

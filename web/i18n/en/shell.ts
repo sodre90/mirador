@@ -250,6 +250,7 @@ export const shell = {
     thisComputer: "This computer",
     manage: "Machines…",
     notJoinedYet: "not joined yet",
+    peerToPeer: "peer to peer",
     notAnswering: "not answering",
     joinedBy: (machine: string) => `${machine} has joined it`,
     hideFromRail: "Hide from the rail",

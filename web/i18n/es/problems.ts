@@ -49,6 +49,8 @@ export const problems: Messages["problems"] = {
     "group-needs-name": "Un grupo necesita un nombre",
     "that-is-this-machine": "Esa es esta máquina.",
     "machine-gone": "Esa máquina ya no está entre tus máquinas.",
+    "peer-to-peer-unavailable-here": "La conexión peer to peer no está disponible en este equipo, y esta invitación la necesita: no se pudo descargar mirador-p2p, o no lo hay para este sistema.",
+    "join-too-often": "Hubo demasiados intentos de unirse a esta máquina. Inténtalo de nuevo en un minuto.",
     "unknown-question": "Pregunta desconocida.",
     "question-already-answered": "Esta pregunta ya se respondió o se retiró.",
     "question-takes-one-answer": "Esta pregunta admite una sola respuesta.",
@@ -230,6 +232,23 @@ export const problems: Messages["problems"] = {
   tailscaleServeExited: (exitCode) => `tailscale serve terminó con el código ${exitCode}`,
   machineCertificateNotItsOwn: (machine, hostname) => `El certificado de ${machine} no es de su propia autoridad de certificación, o no nombra ${hostname}.`,
   machineDidNotAnswer: (machine) => `${machine} no respondió. ¿Está en marcha su Mirador?`,
+  machineUnreachableNow: (machine) =>
+    `Ahora no se puede llegar a ${machine}. Puede que su Mirador esté apagado o sin conexión, o que la invitación ya se haya usado o haya caducado. Inténtalo más tarde, o pide una invitación nueva.`,
+  peerToPeerDidNotStartHere:
+    "La conexión peer to peer no se inició en este equipo, así que la invitación no se usó. Comprueba que este equipo tenga conexión a internet. El error está en el registro del host.",
+  environmentPeerToPeerDidNotStart: (binary) =>
+    `La conexión peer to peer no se inició en este equipo, así que la invitación no se usó. Comprueba que este equipo tenga conexión a internet y que ${binary}, que indica MIRADOR_P2P_BINARY, sea lo bastante reciente para este Mirador. El error está en el registro del host.`,
+  machineNeedsWholeInvite: (machine) => `A ${machine} se llega peer to peer, así que para unirse hace falta el enlace de invitación completo, no solo su código.`,
+  inviteFromAnotherMachine: (machine) => `Esa invitación es de otra máquina, no de ${machine}. Pégala en Máquinas, donde añade la suya.`,
+  dialFolderTooLong: (folder) =>
+    `La conexión peer to peer no funciona desde la carpeta de datos de Mirador de este equipo, porque su ruta es demasiado larga para los sockets que necesita: ${folder}. Inicia Mirador con una carpeta de datos más corta, indicada en MIRADOR_DATA_DIR.`,
+  dialFolderUnusableCharacter: (folder) =>
+    `La conexión peer to peer no funciona desde la carpeta de datos de Mirador de este equipo, porque su ruta tiene un carácter con el que no se pueden nombrar los sockets que necesita, como dos puntos, un espacio o una letra fuera de ASCII: ${folder}. Inicia Mirador con una carpeta de datos de letras simples, indicada en MIRADOR_DATA_DIR.`,
+  dialFolderNotOwn: (folder) => `La conexión peer to peer no funciona desde la carpeta de datos de Mirador de este equipo, porque pertenece a otra cuenta del equipo: ${folder}.`,
+  machineAuthorityNotInTunnelLink: (machine) =>
+    `Este enlace de invitación llega a ${machine} peer to peer, y no dice qué certificado esperar en su dirección, así que el código no se envió allí. Pega el enlace en Máquinas en un equipo donde funcione peer to peer.`,
+  inviteAddressUnprotected: (address) =>
+    `La conexión peer to peer no está disponible en este equipo, y la dirección de la invitación, ${address}, no está protegida con HTTPS, así que el código no se envió allí. Únete desde un equipo donde funcione peer to peer.`,
   machineCertificateUntrusted: (machine) =>
     `Este equipo no confía en el certificado de ${machine}, y ${machine} no ofrece una autoridad de certificación propia.`,
   machineGaveNoToken: (machine) => `${machine} dejó entrar a este equipo sin un token.`,

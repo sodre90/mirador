@@ -234,6 +234,7 @@ export const shell: Messages["shell"] = {
     thisComputer: "这台电脑",
     manage: "机器…",
     notJoinedYet: "尚未加入",
+    peerToPeer: "点对点连接",
     notAnswering: "没有响应",
     joinedBy: (machine) => `${machine} 已加入它`,
     hideFromRail: "从机器栏隐藏",

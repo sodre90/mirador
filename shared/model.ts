@@ -53,6 +53,8 @@ export interface Machine {
   color: Pastel | null;
   /** The id the machine's own Mirador goes by, once this host has reached it. */
   hostId: string | null;
+  /** Reached through its peer-to-peer tunnel rather than an address of its own. */
+  peerToPeer: boolean;
 }
 
 /**

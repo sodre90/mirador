@@ -6,7 +6,7 @@ import { hostname, tmpdir } from "node:os";
 import { join } from "node:path";
 import { DeviceService } from "../host/devices.ts";
 import { hostAddressIn, isTunnelKey, newDeviceAddress, newKeyPair, tunnelIdentity } from "../host/p2p/identity.ts";
-import { PeerToPeer, peerToPeerSettings, type PeerToPeerSettings, type TunnelEnd } from "../host/p2p/service.ts";
+import { PeerToPeer, BUILT_IN_BROKER, peerToPeerSettings, peerToPeerUnlessBuiltInFails, type PeerToPeerSettings, type TunnelEnd } from "../host/p2p/service.ts";
 import { Sidecar } from "../host/p2p/sidecar.ts";
 import { downloadedSidecar, installSidecar, SIDECAR_RELEASE } from "../host/p2p/sidecar-download.ts";
 import { Store } from "../host/store.ts";
@@ -174,21 +174,45 @@ unixOnlyTest("a revoked device is let in no more, and its listener closes", asyn
   p2p.forget(device.id);
   devices.revoke(device.id);
   expect([...listening.values()].some((end) => "deviceId" in end)).toBe(false);
-  expect((await commandsRead(2)).at(-1)).toEqual({ unpin: { key } });
+  const commands = await commandsRead(3);
+  expect(commands[1]).toEqual({ unpin: { key } });
+  expect(commands[2]?.pin).toMatchObject({ key, socket_only: true });
 });
 
 unixOnlyTest("an invite's one-time key reaches only the joining socket, until shortly after the invite is used", async () => {
   const { p2p, devices, listening } = host();
   const { code, expiresAt } = devices.invite();
   const tunnel = (await p2p.invite(code, expiresAt))!;
-  const joinSocket = [...listening].find(([, end]) => "joining" in end)?.[0];
+  const joinSocket = [...listening].find(([, end]) => "inviteKey" in end)?.[0];
   const [pinned] = await commandsRead(1);
   expect(pinned.pin).toMatchObject({ address: tunnel.joinAddress, socket: joinSocket });
   expect(isTunnelKey(tunnel.joinKey)).toBe(true);
   expect(tunnel.name).toBe(hostname().replace(/\.local$/, ""));
   expect(p2p.refusedKey(pinned.pin.key)).not.toBeNull();
   p2p.inviteUsed(code.toLowerCase());
-  expect((await commandsRead(2))[1]).toEqual({ unpin: { key: pinned.pin.key } });
+  const commands = await commandsRead(3);
+  expect(commands[1]).toEqual({ unpin: { key: pinned.pin.key } });
+  expect(commands[2]?.pin).toMatchObject({ key: pinned.pin.key, socket_only: true });
+});
+
+test("with nothing named, peer to peer goes through the built-in broker with a downloaded sidecar, unless it is turned off", () => {
+  const sidecar = { path: "/data/p2p/bin/mirador-p2p", download: { url: "https://example.test/mirador-p2p", sha256: "0".repeat(64) } };
+  const builtIn = { sidecar, broker: BUILT_IN_BROKER };
+  expect(peerToPeerSettings({}, builtIn)).toEqual({ binary: sidecar.path, download: sidecar.download, broker: BUILT_IN_BROKER });
+  expect(isTunnelKey(BUILT_IN_BROKER.key)).toBe(true);
+  expect(peerToPeerSettings({ MIRADOR_P2P: "off" }, builtIn)).toBeNull();
+  expect(peerToPeerSettings({}, { sidecar: null, broker: BUILT_IN_BROKER })).toBeNull();
+  const named = { MIRADOR_P2P_BINARY: "/bin/mirador-p2p", MIRADOR_P2P_BROKER: "203.0.113.7:47800", MIRADOR_P2P_BROKER_KEY: brokerKey };
+  expect(peerToPeerSettings({ MIRADOR_P2P: "off", ...named }, builtIn)?.broker.address).toBe("203.0.113.7:47800");
+});
+
+test("built-in peer to peer that can't be set up leaves the host without it, while the environment's own fails out loud", () => {
+  const tooLong = () => {
+    throw new Error("Peer to peer needs a shorter data folder");
+  };
+  expect(peerToPeerUnlessBuiltInFails({}, tooLong)).toBeNull();
+  expect(() => peerToPeerUnlessBuiltInFails({ MIRADOR_P2P_BINARY: "/bin/mirador-p2p" }, tooLong)).toThrow(/shorter data folder/);
+  expect(peerToPeerUnlessBuiltInFails({}, () => "made")).toBe("made");
 });
 
 unixOnlyTest("an invite's one-time key is let in no more once the invite expires", async () => {

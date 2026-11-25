@@ -49,6 +49,8 @@ export const problems: Messages["problems"] = {
     "group-needs-name": "A csoportnak kell egy név",
     "that-is-this-machine": "Ez ugyanez a gép.",
     "machine-gone": "Ez a gép már nincs a gépeid között.",
+    "peer-to-peer-unavailable-here": "Ezen a számítógépen nem érhető el az egyenrangú (peer to peer) kapcsolat, pedig ez a meghívó azt kívánja: a mirador-p2p nem tölthető le, vagy nincs ehhez a rendszerhez.",
+    "join-too-often": "Túl sokszor próbáltak csatlakozni ehhez a géphez. Próbáld újra egy perc múlva.",
     "unknown-question": "Ismeretlen kérdés.",
     "question-already-answered": "Erre a kérdésre már válaszoltak, vagy visszavonták.",
     "question-takes-one-answer": "Erre a kérdésre egy válasz adható.",
@@ -231,6 +233,23 @@ export const problems: Messages["problems"] = {
   machineCertificateNotItsOwn: (machine, hostname) =>
     `A gép (${machine}) tanúsítványát nem a saját tanúsítványkiadója adta ki, vagy nem ez a név szerepel benne: ${hostname}.`,
   machineDidNotAnswer: (machine) => `Nem válaszolt: ${machine}. Fut rajta a Mirador?`,
+  machineUnreachableNow: (machine) =>
+    `A gép (${machine}) most nem érhető el. Lehet, hogy a Miradora nem fut vagy nincs hálózaton, vagy a meghívót már felhasználták, illetve lejárt. Próbáld újra később, vagy kérj új meghívót.`,
+  peerToPeerDidNotStartHere:
+    "A peer to peer kapcsolat nem indult el ezen a számítógépen, így a meghívót nem használta fel. Nézd meg, hogy a számítógép csatlakozik-e az internethez. A hiba a host naplójában van.",
+  environmentPeerToPeerDidNotStart: (binary) =>
+    `A peer to peer kapcsolat nem indult el ezen a számítógépen, így a meghívót nem használta fel. Nézd meg, hogy a számítógép csatlakozik-e az internethez, és hogy a MIRADOR_P2P_BINARY által megadott program (${binary}) elég új-e ehhez a Miradorhoz. A hiba a host naplójában van.`,
+  machineNeedsWholeInvite: (machine) => `A gépet (${machine}) peer to peer kapcsolattal éred el, így a csatlakozáshoz a teljes meghívólink kell, nem csak a kódja.`,
+  inviteFromAnotherMachine: (machine) => `Ez a meghívó nem a géptől (${machine}) jött, hanem egy másiktól. Illeszd be a Gépek alatt, ott hozzáadja a saját gépét.`,
+  dialFolderTooLong: (folder) =>
+    `A peer to peer kapcsolat nem működik ennek a számítógépnek a Mirador-adatmappájából, mert az útvonala túl hosszú a szükséges socketekhez: ${folder}. Indítsd a Miradort rövidebb adatmappával, ezt a MIRADOR_DATA_DIR adja meg.`,
+  dialFolderUnusableCharacter: (folder) =>
+    `A peer to peer kapcsolat nem működik ennek a számítógépnek a Mirador-adatmappájából, mert az útvonalában olyan karakter van, amellyel a szükséges socketek nem nevezhetők meg, például kettőspont, szóköz vagy ASCII-n kívüli betű: ${folder}. Indítsd a Miradort egyszerű betűkből álló adatmappával, ezt a MIRADOR_DATA_DIR adja meg.`,
+  dialFolderNotOwn: (folder) => `A peer to peer kapcsolat nem működik ennek a számítógépnek a Mirador-adatmappájából, mert a számítógép egy másik fiókjáé: ${folder}.`,
+  machineAuthorityNotInTunnelLink: (machine) =>
+    `Ez a meghívólink peer to peer kapcsolattal éri el a gépet (${machine}), és nem mondja meg, milyen tanúsítványra számíts a címén, ezért a kód nem ment el oda. Illeszd be a linket a Gépek alatt egy olyan számítógépen, ahol működik a peer to peer kapcsolat.`,
+  inviteAddressUnprotected: (address) =>
+    `Ezen a számítógépen nem érhető el a peer to peer kapcsolat, a meghívó címét (${address}) pedig nem védi HTTPS, ezért a kód nem ment el oda. Csatlakozz egy olyan számítógépről, ahol működik a peer to peer kapcsolat.`,
   machineCertificateUntrusted: (machine) => `Ez a számítógép nem bízik a gép (${machine}) tanúsítványában, és ${machine} nem kínál saját tanúsítványkiadót.`,
   machineGaveNoToken: (machine) => `A gép (${machine}) token nélkül engedte be ezt a számítógépet.`,
   machineAuthorityNotInLink: (machine) =>

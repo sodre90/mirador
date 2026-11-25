@@ -29,6 +29,7 @@ import type {
 import { DEFAULT_OLDER_AFTER, isCanvasUse, isConversationPlace, isKeepAwake, isKeepDeletedCanvas, isOlderAfter, isPastel, keptForMs, type CanvasUse, type ConversationPlace, type ConversationWorktree, type KeepAwake, type OlderAfter, type KeepDeletedCanvas, type Pastel } from "../shared/model.ts";
 import { defaultPromptTemplates } from "../shared/prompt-templates.ts";
 import { LONGEST_MACHINE_NAME } from "../shared/machines.ts";
+import type { TunnelPlaces } from "../shared/tunnel.ts";
 import { computerName } from "./machine-name.ts";
 import type { PushRegistration, PushRelaySetting } from "../shared/push.ts";
 import { pluginItemOfSavedChecklist, type SavedChecklist } from "./saved-checklists.ts";
@@ -127,6 +128,7 @@ const schema = `
     PRIMARY KEY (folder_id, app, key));
   CREATE TABLE IF NOT EXISTS plugin_settings (plugin TEXT NOT NULL, id TEXT NOT NULL, value TEXT NOT NULL, PRIMARY KEY (plugin, id));
   CREATE TABLE IF NOT EXISTS canvas_plugin_storage (plugin TEXT NOT NULL, key TEXT NOT NULL, value TEXT NOT NULL, PRIMARY KEY (plugin, key));
+  CREATE TABLE IF NOT EXISTS tunnel_keys_over (key TEXT PRIMARY KEY, address TEXT NOT NULL, kind TEXT NOT NULL, until INTEGER NOT NULL);
 `;
 
 /** A conversation's terminal tab as the host left it, with what each of its terminals showed by then. */
@@ -137,10 +139,43 @@ export interface SavedTerminalTab {
   scrollback: Map<string, string>;
 }
 
+/** This host's own place in another machine's tunnel: its address there, and the private key it dials with. */
+export interface MachineTunnelDevice {
+  address: string;
+  privateKey: string;
+}
+
+/** Where a machine is in its tunnel, and this host's place there once it has one. */
+export interface MachineTunnel {
+  places: TunnelPlaces;
+  device: MachineTunnelDevice | null;
+}
+
 /** A paired device's key in the peer-to-peer tunnel, and its address there. */
 export interface StoredDeviceTunnel {
   key: string;
   address: string;
+}
+
+export interface PublicTunnelKey {
+  key: string;
+  address: string;
+}
+
+/** The one-time key of an invite, kept with the invite so the host lets it in again after a restart. */
+export interface InviteJoinKey extends PublicTunnelKey {
+  /** The invite's code as `inviteKey` keeps it. */
+  codeKey: string;
+  expiresAt: number;
+}
+
+/** Whose a key that is over was: a device's, revoked, or an invite's, used, expired or withdrawn. */
+export type KeyOverKind = "device" | "invite";
+
+/** A key the tunnel still lets in until `until`, to a socket that answers nothing but that it is over. */
+export interface KeyOver extends PublicTunnelKey {
+  kind: KeyOverKind;
+  until: number;
 }
 
 const addedColumns = [
@@ -190,6 +225,11 @@ const addedColumns = [
   { table: "conversations", column: "side_chat_of", definition: "TEXT" },
   { table: "conversations", column: "agent_commands", definition: "TEXT" },
   { table: "conversations", column: "agent_commands_at", definition: "INTEGER" },
+  { table: "machines", column: "tunnel", definition: "TEXT" },
+  { table: "machines", column: "tunnel_address", definition: "TEXT" },
+  { table: "machines", column: "tunnel_key", definition: "TEXT" },
+  { table: "invites", column: "join_key", definition: "TEXT" },
+  { table: "invites", column: "join_address", definition: "TEXT" },
 ];
 
 /** A turn that ended while nobody looked at its conversation, or the owner's Unread mark, until someone opens it. */
@@ -307,15 +347,15 @@ const toProfile = (row: ProfileRow): Profile => ({
   createdAt: row.created_at,
 });
 
-type MachineRow = { id: string; name: string; origin: string; created_at: number; relay_port: number | null; joined: number; color: string | null; host_id: string | null };
+type MachineRow = { id: string; name: string; origin: string; created_at: number; relay_port: number | null; joined: number; color: string | null; host_id: string | null; peer_to_peer: number };
 
-const MACHINE_COLUMNS = "SELECT id, name, origin, created_at, relay_port, device_token IS NOT NULL AS joined, color, host_id FROM machines";
+const MACHINE_COLUMNS = "SELECT id, name, origin, created_at, relay_port, device_token IS NOT NULL AS joined, color, host_id, tunnel IS NOT NULL AS peer_to_peer FROM machines";
 
 type JobWaitRow = { id: string; conversation_id: string; job: string; ssh_host: string | null; message: string; resume: number; since: number };
 
 const toMachine = (row: unknown): Machine => {
-  const { id, name, origin, created_at, relay_port, joined, color, host_id } = row as MachineRow;
-  return { id, name, origin, createdAt: created_at, relayPort: relay_port, joined: joined === 1, color: isPastel(color) ? color : null, hostId: host_id };
+  const { id, name, origin, created_at, relay_port, joined, color, host_id, peer_to_peer } = row as MachineRow;
+  return { id, name, origin, createdAt: created_at, relayPort: relay_port, joined: joined === 1, color: isPastel(color) ? color : null, hostId: host_id, peerToPeer: peer_to_peer === 1 };
 };
 
 const startedByOf = (row: ConversationRow) =>
@@ -1232,6 +1272,35 @@ export class Store {
     this.db.query("INSERT INTO machines (id, name, origin, created_at) VALUES (?, ?, ?, ?)").run(id, name, origin, createdAt);
   }
 
+  /** Where the machine is in its own tunnel, from the invite this host was given and then from the machine's own answer; its key names the machine for good. */
+  setMachineTunnelPlaces(id: string, places: TunnelPlaces) {
+    this.db.query("UPDATE machines SET tunnel = ? WHERE id = ?").run(JSON.stringify(places), id);
+  }
+
+  /** This host's place in the machine's tunnel, with the private key it dials with there: a secret like the device token, never sent to pages. */
+  setMachineTunnelDevice(id: string, places: TunnelPlaces, device: MachineTunnelDevice) {
+    this.db.query("UPDATE machines SET tunnel = ?, tunnel_address = ?, tunnel_key = ? WHERE id = ?").run(JSON.stringify(places), device.address, device.privateKey, id);
+  }
+
+  /** Its places stay, so a new invite is checked against the machine's key. */
+  forgetMachineTunnelDevice(id: string) {
+    this.db.query("UPDATE machines SET tunnel_address = NULL, tunnel_key = NULL WHERE id = ?").run(id);
+  }
+
+  machineTunnel(id: string): MachineTunnel | null {
+    const row = this.db.query("SELECT tunnel, tunnel_address AS address, tunnel_key AS privateKey FROM machines WHERE id = ? AND tunnel IS NOT NULL").get(id) as
+      | { tunnel: string; address: string | null; privateKey: string | null }
+      | null;
+    if (!row) return null;
+    const device = row.address && row.privateKey ? { address: row.address, privateKey: row.privateKey } : null;
+    return { places: JSON.parse(row.tunnel) as TunnelPlaces, device };
+  }
+
+  /** The machines this host has a place in the tunnel of, which it dials while it runs. */
+  machinesDialed(): string[] {
+    return (this.db.query("SELECT id FROM machines WHERE tunnel_key IS NOT NULL ORDER BY created_at").all() as { id: string }[]).map(({ id }) => id);
+  }
+
   setMachineRelayPort(id: string, port: number) {
     this.db.query("UPDATE machines SET relay_port = ? WHERE id = ?").run(port, id);
   }
@@ -1438,6 +1507,49 @@ export class Store {
 
   deleteDevice(id: string) {
     this.db.query("DELETE FROM devices WHERE id = ?").run(id);
+  }
+
+  setInviteJoinKey(codeHash: string, { key, address }: PublicTunnelKey) {
+    this.db.query("UPDATE invites SET join_key = ?, join_address = ? WHERE code_hash = ?").run(key, address, codeHash);
+  }
+
+  /** The one-time keys of invites still waiting at `now`. */
+  waitingInviteJoinKeys(now: number): InviteJoinKey[] {
+    return this.db
+      .query("SELECT code_hash AS codeKey, join_key AS key, join_address AS address, expires_at AS expiresAt FROM invites WHERE join_key IS NOT NULL AND expires_at > ?")
+      .all(now) as InviteJoinKey[];
+  }
+
+  /** The one-time keys of invites that expired by `now`, each handed out once: the invites keep them no more. */
+  takeExpiredInviteJoinKeys(now: number): PublicTunnelKey[] {
+    const expired = this.db.query("SELECT join_key AS key, join_address AS address FROM invites WHERE join_key IS NOT NULL AND expires_at <= ?").all(now) as PublicTunnelKey[];
+    this.db.query("UPDATE invites SET join_key = NULL, join_address = NULL WHERE join_key IS NOT NULL AND expires_at <= ?").run(now);
+    return expired;
+  }
+
+  /**
+   * Keeps the key as over, unless it already is; past `most` of them, those whose time ends soonest go. The keys that
+   * went, for the sidecar to let them go too.
+   */
+  addKeyOver({ key, address, kind, until }: KeyOver, most: number): string[] {
+    this.db.query("INSERT OR IGNORE INTO tunnel_keys_over (key, address, kind, until) VALUES (?, ?, ?, ?)").run(key, address, kind, until);
+    const beyondMost = this.db
+      .query("DELETE FROM tunnel_keys_over WHERE key IN (SELECT key FROM tunnel_keys_over WHERE kind = ? ORDER BY until DESC, rowid DESC LIMIT -1 OFFSET ?) RETURNING key")
+      .all(kind, most) as { key: string }[];
+    return beyondMost.map(({ key }) => key);
+  }
+
+  keysOver(): KeyOver[] {
+    return this.db.query("SELECT key, address, kind, until FROM tunnel_keys_over ORDER BY until").all() as KeyOver[];
+  }
+
+  /** Those whose time ran out by `now`, which are gone from then on. */
+  takeKeysOverEndedBy(now: number): string[] {
+    return (this.db.query("DELETE FROM tunnel_keys_over WHERE until <= ? RETURNING key").all(now) as { key: string }[]).map(({ key }) => key);
+  }
+
+  isKeyOver(key: string) {
+    return this.db.query("SELECT 1 FROM tunnel_keys_over WHERE key = ?").get(key) !== null;
   }
 
   setDeviceTunnel(id: string, { key, address }: StoredDeviceTunnel) {

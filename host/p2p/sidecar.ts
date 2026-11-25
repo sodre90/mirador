@@ -5,6 +5,8 @@ export interface SidecarPin {
   key: string;
   address: string;
   socket: string;
+  /** The key reaches its socket and none of what every other key shares, such as the canvas server. */
+  socket_only?: true;
 }
 
 function parsedLine(line: string): { broker?: unknown } | null {

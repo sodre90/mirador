@@ -96,10 +96,13 @@ function WaitingBadge({ waiting }: { waiting: WaitingFor[] }) {
   return <span className={`rail-waiting tone-${mostUrgentTone(waiting)}`}>{waiting.length}</span>;
 }
 
+/** Where the machine is reached: its address, or "peer to peer" where it has none of its own. */
+export const reachedAt = ({ origin, peerToPeer }: Pick<Machine, "origin" | "peerToPeer">) => (peerToPeer ? words.peerToPeer : origin);
+
 const machineHint = (machine: Machine, status: MachineStatus | undefined) =>
   [
     machine.name,
-    machine.origin,
+    reachedAt(machine),
     !machine.joined && words.notJoinedYet,
     status?.reachable === false && words.notAnswering,
     status?.waiting.length && words.waitingForYou(status.waiting.length),
@@ -283,11 +286,13 @@ function JoinMachinePanel({ machine }: { machine: Machine }) {
         <>
           <p>
             {words.notJoinedBefore} <strong>{machine.name}</strong>
-            {words.notJoinedAfter(new URL(machine.origin).host)}
+            {words.notJoinedAfter(machine.peerToPeer ? words.peerToPeer : new URL(machine.origin).host)}
           </p>
-          <button type="button" className="primary" disabled={joining} onClick={askToJoin}>
-            {words.askToJoin}
-          </button>
+          {!machine.peerToPeer && (
+            <button type="button" className="primary" disabled={joining} onClick={askToJoin}>
+              {words.askToJoin}
+            </button>
+          )}
           <p>
             {words.inviteBefore} <code>mirador invite</code>
             {words.inviteAfter}

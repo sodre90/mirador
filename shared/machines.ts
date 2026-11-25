@@ -1,8 +1,11 @@
 import type { Machine, MachineSeen, MachineStatus } from "./model.ts";
-import { decodedInviteTunnel, encodedInviteTunnel, type InviteTunnel } from "./tunnel.ts";
+import { decodedInviteTunnel, encodedInviteTunnel, tunnelOrigin, type InviteTunnel } from "./tunnel.ts";
 
 /** How long a name Settings give a machine can be, so it fits a device's lists. */
 export const LONGEST_MACHINE_NAME = 40;
+
+/** Trimmed, and cut to what every device's lists fit. */
+export const fittedMachineName = (name: string) => name.trim().slice(0, LONGEST_MACHINE_NAME).trim();
 
 /**
  * An invite link's #part: the code, then the fingerprint of the machine's own certificate authority when it has one,
@@ -10,33 +13,58 @@ export const LONGEST_MACHINE_NAME = 40;
  */
 const joinPath = /^#\/join\/([\w-]+?)(?:\/([\w-]+))?(?:\?tunnel=([\w-]+))?$/;
 
+const tunnelOf = (encoded: string | undefined) => (encoded ? decodedInviteTunnel(encoded) : null);
+
 /** The invite code in an invite link's #part, e.g. #/join/ABCD-EFGH-JKLM. */
 export const joinCodeIn = (hash: string) => joinPath.exec(hash)?.[1] ?? null;
 
 export const authorityFingerprintIn = (hash: string) => joinPath.exec(hash)?.[2] ?? null;
 
-export function tunnelIn(hash: string) {
-  const encoded = joinPath.exec(hash)?.[3];
-  return encoded ? decodedInviteTunnel(encoded) : null;
-}
+export const tunnelIn = (hash: string) => tunnelOf(joinPath.exec(hash)?.[3]);
 
 export const inviteLink = (origin: string, code: string, authorityFingerprint: string | null = null, tunnel: InviteTunnel | null = null) =>
   `${origin}/#/join/${code}${authorityFingerprint ? `/${authorityFingerprint}` : ""}${tunnel ? `?tunnel=${encodedInviteTunnel(tunnel)}` : ""}`;
 
+/**
+ * A peer-to-peer invite for another computer's Mirador: mirador:// instead of an unreachable local-looking http://[fd…]
+ * address, so it isn't mistaken for a browser link.
+ */
+export const deviceTunnelInviteLink = (code: string, tunnel: InviteTunnel) => `mirador://join/${code}?tunnel=${encodedInviteTunnel(tunnel)}`;
+
+/**
+ * A mirador:// peer-to-peer device invite link, with its invite code and tunnel.
+ */
+const miradorJoinLink = /^mirador:\/\/join\/([\w-]+)\?tunnel=([\w-]+)$/i;
+
+/** A pasted link whose tunnel part was mangled still carries its code; the whole broken link must not go as the code. */
+const codeInBrokenLink = (text: string) => /^mirador:\/\/join\/([\w-]+)(?:\?|$)/i.exec(text.trim())?.[1] ?? null;
+
 /** What someone pastes to join a machine: the invite code itself, or the whole invite link. */
 export function inviteIn(text: string) {
   const link = machineAddress(text);
-  return { code: link?.joinCode ?? text.trim(), authorityFingerprint: link?.authorityFingerprint ?? null };
+  return { code: link?.joinCode ?? codeInBrokenLink(text) ?? text.trim(), authorityFingerprint: link?.authorityFingerprint ?? null, tunnel: link?.tunnel ?? null };
+}
+
+export interface MachineAddress {
+  origin: string;
+  joinCode: string | null;
+  authorityFingerprint: string | null;
+  tunnel: InviteTunnel | null;
 }
 
 /** What someone types or pastes for a machine: its name on the network, its address, or an invite link from it. */
-export function machineAddress(text: string): { origin: string; joinCode: string | null; authorityFingerprint: string | null } | null {
+export function machineAddress(text: string): MachineAddress | null {
   const trimmed = text.trim();
   if (!trimmed) return null;
+  const miradorJoin = miradorJoinLink.exec(trimmed);
+  if (miradorJoin) {
+    const tunnel = tunnelOf(miradorJoin[2]);
+    return tunnel && { origin: tunnelOrigin(tunnel), joinCode: miradorJoin[1]!, authorityFingerprint: null, tunnel };
+  }
   try {
     const url = new URL(/^[a-z]+:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`);
     if (url.protocol !== "https:" && url.protocol !== "http:") return null;
-    return { origin: url.origin, joinCode: joinCodeIn(url.hash), authorityFingerprint: authorityFingerprintIn(url.hash) };
+    return { origin: url.origin, joinCode: joinCodeIn(url.hash), authorityFingerprint: authorityFingerprintIn(url.hash), tunnel: tunnelIn(url.hash) };
   } catch {
     return null;
   }

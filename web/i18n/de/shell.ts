@@ -261,6 +261,7 @@ export const shell: Messages["shell"] = {
     thisComputer: "Dieser Computer",
     manage: "Rechner…",
     notJoinedYet: "noch nicht beigetreten",
+    peerToPeer: "per Peer-to-Peer",
     notAnswering: "antwortet nicht",
     joinedBy: (machine) => `${machine} ist ihm beigetreten`,
     hideFromRail: "In der Rechnerleiste ausblenden",

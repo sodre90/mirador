@@ -59,15 +59,19 @@ import { publicAddressOf, SETTINGS_ADDRESS_NAMES, reachability, savedNetwork, sa
 import { HERE_PATH, addressesThatAnswer, addressesUsed, ownPageOrigins, rememberAddressUsed, type AddressCandidate } from "./addresses.ts";
 import { servePortOnTailnet, tailnetName, tailscaleCommand } from "./tailscale.ts";
 import { errorMessage, type ConversationService, type DeleteOptions } from "./conversations.ts";
-import { deviceName, type DeviceService } from "./devices.ts";
+import { deviceName, inviteKey, type DeviceService } from "./devices.ts";
 import { JobWaitRefused } from "./job-waits.ts";
 import { JoinRequestRefused, SenderLimit, type JoinRequestService } from "./join-requests.ts";
 import type { ConversationSearch } from "./search.ts";
-import { machineAddress } from "../shared/machines.ts";
+import { fittedMachineName, machineAddress } from "../shared/machines.ts";
+import { placesIn } from "../shared/tunnel.ts";
 import { MIRADOR_VERSION } from "../shared/version.ts";
 import { isLoopback, pageOnHost, socketData, webSocketCompression, type BrowserSocket, type Hub, type SocketData } from "./hub.ts";
 import { newestOnly } from "./newest-only.ts";
 import type { MachineRelays } from "./machine-relays.ts";
+import { forgetMachine } from "./machine-sign-in.ts";
+import type { MachineTunnels } from "./machine-tunnels.ts";
+import { wayToMachine } from "./machine-trust.ts";
 import type { MachineWatch } from "./machine-watch.ts";
 import { cookieValue, sameSecret, signedInWith } from "./sign-in.ts";
 import { MAX_DROPPED_FILE_BYTES, type DroppedFiles } from "./dropped-files.ts";
@@ -132,6 +136,7 @@ export interface HostServices {
   search: ConversationSearch;
   relays: MachineRelays;
   watch: MachineWatch;
+  tunnels: MachineTunnels;
   /** What the network listener serves with; null while the host listens on 127.0.0.1 only. */
   certificate: ServingCertificate | null;
   keepAwake: KeepAwakeHold;
@@ -223,6 +228,7 @@ export function startServer(services: HostServices) {
     search,
     relays,
     watch,
+    tunnels,
     certificate,
     keepAwake,
     p2p,
@@ -315,6 +321,12 @@ export function startServer(services: HostServices) {
   /** A browser joins with the cookie it gets here; an app without cookies keeps the token from the reply. */
   const admittedWith = (request: Request, token: string) => ({ "Set-Cookie": tokenCookie(token, request.headers.get("origin")?.startsWith("https://") ?? false) });
 
+  /** A joining tunnel listener lets in only the invite whose one-time key opened it. */
+  const joinsWithItsOwnInvite = (request: Request, code: string) => {
+    const end = tunnelEnds.get(request);
+    return !end || !("inviteKey" in end) || end.inviteKey === inviteKey(code);
+  };
+
   /**
    * A device that joins with its tunnel key gets its place in the tunnel too. One that joins through the tunnel, with
    * an invite's one-time key, must send its own key, or it would have no way back in.
@@ -324,6 +336,7 @@ export function startServer(services: HostServices) {
     if (refused) return refused;
     const { code, name, tunnelKey } = (await request.json().catch(() => ({}))) as { code?: unknown; name?: unknown; tunnelKey?: unknown };
     if (typeof code !== "string") return problemResponse({ code: "invite-code-missing" }, 400);
+    if (!joinsWithItsOwnInvite(request, code)) return problemResponse({ code: "invite-code-wrong" }, 403);
     const joiningThroughTunnel = tunnelEnds.has(request);
     const sendsKey = p2p !== null && (tunnelKey !== undefined || joiningThroughTunnel);
     const refusedKey = sendsKey ? p2p.refusedKey(tunnelKey) : null;
@@ -499,19 +512,34 @@ export function startServer(services: HostServices) {
   const broadcastHiddenMachines = () => hub.broadcast({ type: "machines.hidden", machines: store.hiddenMachines() });
 
   /** With an invite link, this host joins the machine right away; otherwise its place in the window asks for a code. */
-  async function addMachine(name: string, address: string) {
+  async function addMachine(name: string, address: string): Promise<{ machineId: string | null } & (DescribedProblem | { problem: null })> {
     const parsed = machineAddress(address);
     if (!parsed) throw new HostProblemError({ code: "not-a-machine-address", address });
-    const { origin, joinCode, authorityFingerprint } = parsed;
-    if (pageOrigins.includes(origin)) throw new HostProblemError({ code: "that-is-this-machine" });
+    const { joinCode, authorityFingerprint } = parsed;
+    if (pageOrigins.includes(parsed.origin) || (parsed.tunnel && parsed.tunnel.hostKey === p2p?.publicKey)) throw new HostProblemError({ code: "that-is-this-machine" });
+    const whyNotDialing = parsed.tunnel ? await tunnels.whyNotDialing() : null;
+    const { origin, tunnel, trustsOnFirstUse } = wayToMachine(parsed, whyNotDialing);
     if (store.findMachineByOrigin(origin)) throw new HostProblemError({ code: "machine-already-added", origin });
     const id = crypto.randomUUID();
-    store.insertMachine({ id, name: name.trim() || new URL(origin).hostname, origin, createdAt: Date.now() });
+    const shownName = fittedMachineName(name) || fittedMachineName(parsed.tunnel?.name ?? "") || fittedMachineName(new URL(origin).hostname);
+    store.insertMachine({ id, name: shownName, origin, createdAt: Date.now() });
+    if (tunnel) store.setMachineTunnelPlaces(id, placesIn(tunnel));
     store.showMachineAgain({ origin, hostId: null });
     relays.start(store.findMachine(id)!);
     broadcastMachines();
     broadcastHiddenMachines();
-    if (joinCode) await relays.join(id, joinCode, authorityFingerprint);
+    if (!joinCode) return { machineId: id, problem: null };
+    const leavesNothingAdded = parsed.tunnel !== null;
+    return relays.join(id, joinCode, authorityFingerprint, tunnel, { trustsOnFirstUse }).then(
+      () => ({ machineId: id, problem: null }),
+      (error) => {
+        if (leavesNothingAdded) {
+          forgetMachine({ store, relays, watch, tunnels }, id);
+          broadcastMachines();
+        }
+        return { machineId: leavesNothingAdded ? null : id, ...problemFieldsOf(error, errorMessage(error)) };
+      },
+    );
   }
 
   function colorMachine(machineId: string, color: Pastel | null) {
@@ -524,9 +552,7 @@ export function startServer(services: HostServices) {
   function removeMachine(machineId: string) {
     const machine = store.findMachine(machineId);
     if (!machine) return;
-    relays.stop(machineId);
-    watch.stop(machineId);
-    store.deleteMachine(machineId);
+    forgetMachine({ store, relays, watch, tunnels }, machineId);
     store.hideMachine({ name: machine.name, origin: machine.origin, hostId: machine.hostId });
     broadcastMachines();
     broadcastHiddenMachines();
@@ -1800,8 +1826,12 @@ export function startServer(services: HostServices) {
         if (!socket.data.readsProfileLaunch) return reply(ONLY_OWN_PAGES_SET_UP_VOICE);
         if (thisMacModelsInUse(store.voiceSettings()).includes(message.model)) return reply(MODEL_IN_USE);
         return await voiceEngine.removeModel(message.model);
-      case "machine.add":
-        return await addMachine(message.name, message.address);
+      case "machine.add": {
+        const added = await addMachine(message.name, message.address).catch((error) => ({ machineId: null, ...problemFieldsOf(error, errorMessage(error)) }));
+        if (message.requestId) return reply({ type: "machine.added", requestId: message.requestId, ...added });
+        if (added.problem) return reply({ type: "error", message: added.problem, ...(added.problemAbout && { problem: added.problemAbout }) });
+        return;
+      }
       case "machine.remove":
         return removeMachine(message.machineId);
       case "machine.set-color":
@@ -1830,7 +1860,7 @@ export function startServer(services: HostServices) {
           )
           .then((problem) => reply({ type: "machine.join-answered", requestId: message.requestId, ...(problem ?? { problem: null }) }));
       case "machine.join": {
-        const problem = await relays.join(message.machineId, message.code, message.authorityFingerprint).then(
+        const problem = await relays.join(message.machineId, message.code, message.authorityFingerprint, message.tunnel ?? null).then(
           () => null,
           (error) => problemFieldsOf(error, errorMessage(error)),
         );
