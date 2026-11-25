@@ -659,7 +659,7 @@ export class RoomService implements RoomRules, TurnListener {
 
   /** Approvers hear of it as of a request. */
   private workspaceWaits(room: Room, agentId: string) {
-    this.notifications.roomTaskHeld(room, { kind: "permission", tool: `the room's workspace, for ${this.nameOf({ profileId: agentId })}` });
+    this.notifications.roomTaskHeld(room, { kind: "permission", ask: { kind: "workspace", agent: this.nameOf({ profileId: agentId }) } });
   }
 
   /** Where the agent someone brought works in the room's workspace: in the room's sandbox alone where it has one, else on this computer; null where the workspace is gone. */
@@ -1208,7 +1208,7 @@ export class RoomService implements RoomRules, TurnListener {
   private holdTask(room: Room, task: RoomMessage, asked: string[]) {
     const agent = room.agents.find(({ profileId, brought }) => !brought && asked.includes(profileId));
     const { role, name } = this.authorOf(task);
-    const waiting = { kind: "permission" as const, tool: `a task of ${name}, ${role}` };
+    const waiting = { kind: "permission" as const, ask: { kind: "task" as const, by: name, role } };
     if (agent) this.notifications.notify(agent.conversationId ?? this.startSession(room, agent.profileId), waiting);
     else this.notifications.roomTaskHeld(room, waiting);
     this.waitingChanged(room.id);

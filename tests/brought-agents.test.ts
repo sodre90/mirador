@@ -249,7 +249,7 @@ describe("a task a room's machine sends an agent you brought", () => {
     ]);
     expect([...brought.conversationsHoldingTasks()]).toEqual([agent.conversationId!]);
     expect(held).toEqual([agent.conversationId!]);
-    expect(notified).toEqual([{ conversationId: agent.conversationId!, reason: { kind: "permission", tool: "a task from Ann" } }]);
+    expect(notified).toEqual([{ conversationId: agent.conversationId!, reason: { kind: "permission", ask: { kind: "task", by: "Ann" } } }]);
   });
 
   test("says which machine a waiting task came from by the name this computer gives it now", async () => {

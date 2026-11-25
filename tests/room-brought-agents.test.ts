@@ -11,7 +11,7 @@ import { Store } from "../host/store.ts";
 import { HostProblemError } from "../shared/host-problems.ts";
 import type { Conversation, Launch, Profile } from "../shared/model.ts";
 import type { ServerMessage } from "../shared/protocol.ts";
-import type { NotificationReason } from "../shared/system-notifications.ts";
+import type { NotificationReason, RoomAsk } from "../shared/system-notifications.ts";
 import { mentionsIn, agentsTaggedIn } from "../shared/room-mentions.ts";
 import { DEFAULT_PERMISSION_PRESET } from "../shared/room-permissions.ts";
 import { BROUGHT_AGENT_ROLE, MOST_AGENTS_BROUGHT, taskOf, type RoomMessage } from "../shared/rooms.ts";
@@ -103,13 +103,13 @@ function roomWithMia({ peoplesTasksWait = false } = {}) {
     startAfreshInRoom: () => {},
   };
   const clock = { now: Date.UTC(2026, 10, 20, 9) };
-  const notified: { by: "conversation" | "room"; tool: string | null | undefined }[] = [];
-  const toolOf = (reason: NotificationReason) => (reason.kind === "permission" ? reason.tool : undefined);
+  const notified: { by: "conversation" | "room"; ask: RoomAsk | undefined }[] = [];
+  const askOf = (reason: NotificationReason) => (reason.kind === "permission" ? reason.ask : undefined);
   const rooms = new RoomService(
     store,
     hub,
     sessions,
-    { notify: (_conversationId, reason) => void notified.push({ by: "conversation", tool: toolOf(reason) }), roomTaskHeld: (_room, reason) => void notified.push({ by: "room", tool: toolOf(reason) }) },
+    { notify: (_conversationId, reason) => void notified.push({ by: "conversation", ask: askOf(reason) }), roomTaskHeld: (_room, reason) => void notified.push({ by: "room", ask: askOf(reason) }) },
     mkdtempSync(join(tmpdir(), "room-data-")),
     () => ({}),
     new SenderLimit(() => clock.now, MOST_ROOM_MESSAGES_A_MINUTE),
@@ -360,7 +360,7 @@ describe("a brought agent's answer is its bringer's word", () => {
       expect(answer).toMatchObject({ author: { profileId: agentId }, broughtBy: "m1", tags: ["p1"], taskHeld: "waiting" });
       expect(sent).toEqual([]);
       expect(rooms.tasksWaiting(room.id)).toEqual([expect.objectContaining({ messageId: answer.id, personId: "m1", role: "member", byAgent: agentId, profileIds: ["p1"] })]);
-      expect(notified.at(-1)).toEqual({ by: "conversation", tool: "a task of Mia's Coder, member's agent" });
+      expect(notified.at(-1)).toEqual({ by: "conversation", ask: { kind: "task", by: "Mia's Coder", role: "member's agent" } });
       rooms.answerTask(room.id, answer.id, "allow", ownerId);
       expect(sent).toHaveLength(1);
       expect(sent[0]!.text).toContain(`#${answer.seq} [member's agent] Mia's Coder`);
@@ -416,7 +416,7 @@ describe("a brought agent's answer is its bringer's word", () => {
     rooms.bringAgent(room.id, "b1", "Helper", "claude");
     const { answer } = coderAnswers(fixture, "@Bob's Helper check it");
     expect(answer.taskHeld).toBe("waiting");
-    expect(notified.at(-1)).toEqual({ by: "room", tool: "a task of Mia's Coder, member's agent" });
+    expect(notified.at(-1)).toEqual({ by: "room", ask: { kind: "task", by: "Mia's Coder", role: "member's agent" } });
   });
 
   test("the room's agents are told what a member's agent is, and it reads its own messages by that mark", () => {

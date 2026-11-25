@@ -3,10 +3,15 @@ import { notificationWords } from "../desktop/src/core/desktop-words.ts";
 import { Hub, socketData, type BrowserSocket, type SocketData } from "../host/hub.ts";
 import type { ServerMessage } from "../shared/protocol.ts";
 import type { RoomAlert } from "../shared/room-reading.ts";
-import { bodyWithWorkspace, joinRequestNotification, roomNotification, systemNotification, turnEndReason, type NotificationReason, type SystemNotification } from "../shared/system-notifications.ts";
+import { BROUGHT_AGENT_ROLE, ROOM_ROLES, type RoomAuthorRole } from "../shared/rooms.ts";
+import { bodyWithWorkspace, joinRequestNotification, roomNotification, systemNotification, turnEndReason, type NotificationReason, type RoomAsk, type SystemNotification } from "../shared/system-notifications.ts";
 import { inLanguage } from "../web/notification-text.ts";
 
 const conversation = { id: "c1", title: "Fix the tray menu", titleSetByUser: false };
+
+const ROOM_AUTHOR_ROLES: RoomAuthorRole[] = ["owner", ...ROOM_ROLES, "agent", BROUGHT_AGENT_ROLE];
+
+const bodyOf = (reason: NotificationReason) => systemNotification(conversation, "mirador", reason).body;
 
 describe("system notification text", () => {
   test("names the conversation and its workspace, and says why and what kind it is", () => {
@@ -20,6 +25,9 @@ describe("system notification text", () => {
     });
     expect(systemNotification(conversation, "mirador", { kind: "permission", tool: "bun run test" }).body).toBe("Wants permission: bun run test");
     expect(systemNotification(conversation, "mirador", { kind: "permission", tool: null }).body).toBe("Wants permission: a tool");
+    expect(bodyOf({ kind: "permission", ask: { kind: "task", by: "Ann" } })).toBe("Wants permission: a task from Ann");
+    expect(bodyOf({ kind: "permission", ask: { kind: "task", by: "Mia", role: "member" } })).toBe("Wants permission: a task of Mia, member");
+    expect(bodyOf({ kind: "permission", ask: { kind: "workspace", agent: "Mia's Coder" } })).toBe("Wants permission: the room's workspace, for Mia's Coder");
     expect(systemNotification(conversation, "mirador", { kind: "finished" }).body).toBe("Finished, waiting for you");
     expect(systemNotification(conversation, "mirador", { kind: "error", message: "exited" }).body).toBe("Stopped with an error: exited");
   });
@@ -162,12 +170,23 @@ describe("a notification in the page's or the desktop app's language", () => {
     expect(inLanguage(systemNotification(conversation, "mirador", { kind: "error", message: "Overloaded" }), hungarian).body).toBe("Hibával leállt: Overloaded");
   });
 
+  test("of a room's task or workspace waiting for an OK, says by whom in that language, the name after Mirador's own words", () => {
+    const inHungarian = (ask: RoomAsk) => inLanguage(systemNotification(conversation, "mirador", { kind: "permission", ask }), hungarian).body;
+    expect(inHungarian({ kind: "task", by: "Ann" })).toBe("Engedélyt kér: Ann feladata");
+    expect(inHungarian({ kind: "task", by: "Mia", role: "member" })).toBe("Engedélyt kér: Mia feladata (tag)");
+    expect(inHungarian({ kind: "task", by: "Mia's Coder", role: "member's agent" })).toBe("Engedélyt kér: Mia's Coder feladata (tag ágense)");
+    expect(inHungarian({ kind: "workspace", agent: "Mia's Coder" })).toBe("Engedélyt kér: a szoba munkaterülete, Mia's Coder számára");
+  });
+
   test("in English, it says what the host wrote", () => {
     const english = notificationWords("en");
     const reasons: NotificationReason[] = [
       { kind: "question", question: `Line one\n${"x".repeat(300)}` },
       { kind: "permission", tool: "bun run test" },
       { kind: "permission", tool: null },
+      { kind: "permission", ask: { kind: "task", by: "Ann" } },
+      ...ROOM_AUTHOR_ROLES.map((role): NotificationReason => ({ kind: "permission", ask: { kind: "task", by: "Mia", role } })),
+      { kind: "permission", ask: { kind: "workspace", agent: "Mia's Coder" } },
       { kind: "finished" },
       { kind: "error", message: "exited" },
       { kind: "error", message: "The workspace no longer exists.", problem: { code: "workspace-gone" } },

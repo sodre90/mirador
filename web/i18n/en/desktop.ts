@@ -1,4 +1,5 @@
 import type { HostStatus } from "../../../shared/host-status.ts";
+import type { RoomAuthorRole } from "../../../shared/rooms.ts";
 import type { WaitingTone } from "../../../shared/waiting.ts";
 
 const plural = (count: number, one: string, many: string) => (count === 1 ? one : many);
@@ -29,6 +30,10 @@ export const desktop = {
     asks: (question: string) => `Asks: ${question}`,
     wantsPermission: (tool: string) => `Wants permission: ${tool}`,
     aTool: "a tool",
+    taskFrom: (by: string) => `a task from ${by}`,
+    taskOf: (by: string, role: string) => `a task of ${by}, ${role}`,
+    roomWorkspaceFor: (agent: string) => `the room's workspace, for ${agent}`,
+    authorRoles: { owner: "owner", approver: "approver", collaborator: "collaborator", member: "member", guest: "guest", agent: "agent", "member's agent": "member's agent" } satisfies Record<RoomAuthorRole, string>,
     finished: "Finished, waiting for you",
     reminder: "You asked to come back to this now",
     reminderWithNote: (note: string) => `Back to it: ${note}`,

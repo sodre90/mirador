@@ -1,13 +1,17 @@
 import type { HostProblem } from "./host-problems.ts";
 import { isUntitled, type Conversation, type JoinRequest } from "./model.ts";
 import type { RoomAlert } from "./room-reading.ts";
+import type { RoomAuthorRole } from "./rooms.ts";
 import { cutWithEllipsis } from "./text-cut.ts";
 import { oneLine } from "./written-text.ts";
+
+/** What waits in a room for your OK that no tool asks for: a task, by whose name and role where the room knows it, or the room's workspace for an agent someone brought. */
+export type RoomAsk = { kind: "task"; by: string; role?: RoomAuthorRole } | { kind: "workspace"; agent: string };
 
 /** Why a conversation needs you: everything that makes it your move. */
 export type NotificationReason =
   | { kind: "question"; question: string }
-  | { kind: "permission"; tool?: string | null }
+  | { kind: "permission"; tool?: string | null; ask?: RoomAsk }
   | { kind: "finished" }
   | { kind: "error"; message: string; problem?: HostProblem }
   /** A job the agent left running ended, and its message is for you rather than the agent. */
@@ -42,12 +46,17 @@ export interface SystemNotification {
 
 const BODY_LENGTH = 200;
 
+function roomAskText(ask: RoomAsk) {
+  if (ask.kind === "workspace") return `the room's workspace, for ${ask.agent}`;
+  return ask.role ? `a task of ${ask.by}, ${ask.role}` : `a task from ${ask.by}`;
+}
+
 function reasonText(reason: NotificationReason) {
   switch (reason.kind) {
     case "question":
       return `Asks: ${reason.question}`;
     case "permission":
-      return `Wants permission: ${reason.tool || "a tool"}`;
+      return `Wants permission: ${reason.ask ? roomAskText(reason.ask) : reason.tool || "a tool"}`;
     case "finished":
       return "Finished, waiting for you";
     case "error":

@@ -1,5 +1,5 @@
 import type { RoomAlert } from "../shared/room-reading.ts";
-import { notificationBody, type NotificationAbout, type NotificationReason, type SystemNotification } from "../shared/system-notifications.ts";
+import { notificationBody, type NotificationAbout, type NotificationReason, type RoomAsk, type SystemNotification } from "../shared/system-notifications.ts";
 import type { desktop } from "./i18n/en/desktop.ts";
 import { errorText, type ProblemWords } from "./problem-text.ts";
 
@@ -9,12 +9,17 @@ export interface NotificationWords {
   problems: ProblemWords;
 }
 
+function roomAskText(ask: RoomAsk, words: NotificationWords["desktop"]["notifications"]) {
+  if (ask.kind === "workspace") return words.roomWorkspaceFor(ask.agent);
+  return ask.role ? words.taskOf(ask.by, words.authorRoles[ask.role]) : words.taskFrom(ask.by);
+}
+
 function reasonText(reason: NotificationReason, { desktop: { notifications: words }, problems }: NotificationWords) {
   switch (reason.kind) {
     case "question":
       return words.asks(reason.question);
     case "permission":
-      return words.wantsPermission(reason.tool || words.aTool);
+      return words.wantsPermission(reason.ask ? roomAskText(reason.ask, words) : reason.tool || words.aTool);
     case "finished":
       return words.finished;
     case "error":

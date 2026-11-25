@@ -409,7 +409,7 @@ export class BroughtAgents {
   private hold(task: BroughtTask, brought: BroughtAgentHere) {
     const conversationId = this.conversationOf(brought);
     if (!conversationId) return this.finish(task, "", "failed");
-    this.notifications.notify(conversationId, { kind: "permission", tool: `a task from ${task.byName}` });
+    this.notifications.notify(conversationId, { kind: "permission", ask: { kind: "task", by: task.byName } });
   }
 
   private run(task: BroughtTask) {

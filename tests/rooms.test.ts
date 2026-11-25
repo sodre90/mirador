@@ -1856,7 +1856,7 @@ describe("a task a person other than the owner asks of a room's agents", () => {
     expect(rooms.tasksWaiting(room.id)).toEqual([waiting]);
     expect(rooms.allTasksWaiting()).toEqual([waiting]);
     expect(lastApprovals()).toEqual({ type: "room.approvals", roomId: room.id, approvals: [], tasks: [waiting], workspace: [] });
-    expect(notified).toEqual([{ conversationId: builder, reason: { kind: "permission", tool: "a task of Mia, member" } }]);
+    expect(notified).toEqual([{ conversationId: builder, reason: { kind: "permission", ask: { kind: "task", by: "Mia", role: "member" } } }]);
     expect(problemOf(() => rooms.answerTask(room.id, task.id, "allow", "m1"))).toBe("room-approval-not-yours");
 
     rooms.answerTask(room.id, task.id, "allow", ownerId);

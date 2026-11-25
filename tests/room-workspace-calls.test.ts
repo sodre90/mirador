@@ -86,8 +86,8 @@ function roomOfAnn({ permissions = "never-asks" as PermissionPreset, peoplesTask
     followRoomAgentModel: async () => {},
     startAfreshInRoom: () => {},
   };
-  const held: string[] = [];
-  const rooms = new RoomService(store, hub, sessions, { notify: () => {}, roomTaskHeld: (_room, reason) => void held.push(reason.kind === "permission" ? (reason.tool ?? "") : "") }, miradorsData, () => ({ PATH: process.env.PATH ?? "", HOME: path }));
+  const held: unknown[] = [];
+  const rooms = new RoomService(store, hub, sessions, { notify: () => {}, roomTaskHeld: (_room, reason) => void held.push(reason) }, miradorsData, () => ({ PATH: process.env.PATH ?? "", HOME: path }));
   const room = rooms.create("Launch", "w1", ["p1"], permissions);
   people.forEach(([id, , role]) => rooms.setPersonRole(room.id, id, role));
   rooms.setPeoplesTasksWait(room.id, peoplesTasksWait);
@@ -122,7 +122,7 @@ describe("letting a brought agent into the room's workspace", () => {
     const { rooms, room, agentId, ownerId, held, store } = roomOfAnn();
     expect(rooms.workspaceWaiting(room.id)).toEqual([{ asks: "access", roomId: room.id, agentId, at: 0, approvers: [ownerId, "a1"], sandboxNetwork: null }]);
     expect(rooms.countWaiting(room.id)).toBe(1);
-    expect(held).toEqual(["the room's workspace, for Mia's Coder"]);
+    expect(held).toEqual([{ kind: "permission", ask: { kind: "workspace", agent: "Mia's Coder" } }]);
     for (const personId of ["m1", "b1", "c1", "g1", "x1"]) expect(refusal(() => rooms.answerWorkspace(room.id, agentId, "allow", personId))).toBe("room-approval-not-yours");
     rooms.answerWorkspace(room.id, agentId, "allow", "a1");
     expect(store.findRoom(room.id)!.agents.find(({ profileId }) => profileId === agentId)!.brought!.workspace).toBe("allowed");

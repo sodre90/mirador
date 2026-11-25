@@ -264,6 +264,11 @@ test("a member's task waits until the owner, told who asks and as what, allows i
   const miaPage = await miaContext.newPage();
   await miaPage.goto(host.origin);
   await roomCard(miaPage, "People").click();
+  const hungarianContext = await browser.newContext({ locale: "hu-HU" });
+  const hungarianPage = await hungarianContext.newPage();
+  await allowNotifications(hungarianPage);
+  await hungarianPage.goto(host.authUrl);
+  await roomCard(hungarianPage, "Lookout").click();
   const strip = roomStrip(page);
   const builderPrompts = () => readFileSync(join(host.root, "Builder-prompts"), "utf8");
   const miasTask = "@Builder Build the page\n\n\nSAY Done for Mia";
@@ -277,6 +282,8 @@ test("a member's task waits until the owner, told who asks and as what, allows i
     await tag(miaPage, "People", "Builder", "Build the page\n\n\n\n\n\nSAY Done for Mia");
     await expect(workingLine(miaPage, "Builder starts once this task is allowed.")).toBeVisible();
     await expect.poll(async () => (await notificationsShown(page)).map(({ body }) => body)).toEqual(["project · Wants permission: a task of Mia, member"]);
+    await expect.poll(async () => (await notificationsShown(hungarianPage)).map(({ body }) => body)).toEqual(["project · Engedélyt kér: Mia feladata (tag)"]);
+    await hungarianContext.close();
     await expect(roomCard(page, "People")).toHaveAttribute("data-waiting-tone", "decision");
     await expect(roomCard(page, "People").locator(".waiting-pill")).toHaveText("Needs you");
     await roomCard(page, "People").click();
