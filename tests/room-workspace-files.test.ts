@@ -146,6 +146,9 @@ describe("reading in a room's workspace", () => {
     const folders = { workspace, miradorsData, fileMostBytes: WORKSPACE_FILE_MOST_BYTES };
     const streams = ["CLAUDE.md::$DATA", ".mcp.json::$DATA", ".mcp.json::$data", "src/a.ts:hidden", ".claude::$INDEX_ALLOCATION/settings.json", "C:CLAUDE.md", "C:/ws/CLAUDE.md::$DATA"];
     for (const path of streams) expect(() => placeInWorkspace(path, folders, true)).toThrow("A path on Windows holds no colons.");
+    for (const path of ["CLAUDE.md.", ".mcp.json ", ".claude./settings.json", ".git./config"]) expect(() => placeInWorkspace(path, folders, true)).toThrow("ends no name in a dot or space");
+    for (const path of ["CLAUDE.md.", ".mcp.json ", ".claude./settings.json"]) await expect(write(path, "x")).rejects.toThrow("Claude Code's own sessions");
+    await expect(write("sub/.git./config", "x")).rejects.toThrow(".git is reached by git's own commands");
     if (!onWindows) {
       writeFileSync(inWorkspace("note:1.txt"), "ok\n");
       expect((await read("note:1.txt")).text).toContain("ok");

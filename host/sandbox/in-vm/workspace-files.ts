@@ -56,8 +56,11 @@ const holdsControlCharacters = (path: string) => /\p{Cc}/u.test(path);
 /** On Windows, a colon in a file or folder name names an NTFS alternate data stream, bypassing checks on the name before it. */
 const holdsColon = (path: string) => path.replace(/^[A-Za-z]:(?=[\\/])/, "").includes(":");
 
-/** An HFS+ disk takes a name for the same without the characters that show nothing. */
-const asDisksCompare = (name: string) => name.replace(/\p{Default_Ignorable_Code_Point}/gu, "").toLowerCase();
+/** On Windows, Win32 strips trailing dots and spaces from each path component, bypassing checks on the name before them. */
+const endsInDotOrSpace = (path: string) => path.split(/[\\/]/).some((part) => part !== "" && part !== "." && part !== ".." && /[. ]$/.test(part));
+
+/** An HFS+ disk takes a name for the same without the characters that show nothing, APFS folds `ſ` to `s`, and Windows strips trailing dots and spaces. */
+const asDisksCompare = (name: string) => name.replace(/\p{Default_Ignorable_Code_Point}/gu, "").replace(/[. ]+$/, "").toUpperCase().toLowerCase();
 
 const namesGitsOwn = (within: string) => within.split(/[\\/]/).some((part) => asDisksCompare(part) === ".git");
 
@@ -92,6 +95,7 @@ function realPlace(path: string): string {
 export function placeInWorkspace(path: string, { workspace, miradorsData }: WorkspaceFolders, onWindows = process.platform === "win32"): { place: string; within: string } {
   if (holdsControlCharacters(path)) throw refused("A path holds no control characters.");
   if (onWindows && holdsColon(path)) throw refused("A path on Windows holds no colons.");
+  if (onWindows && endsInDotOrSpace(path)) throw refused("A path on Windows ends no name in a dot or space.");
   const root = realPathOrNull(workspace);
   if (root === null) throw refused("The room's workspace is not there.");
   const place = realPlace(resolve(root, path));
@@ -100,6 +104,7 @@ export function placeInWorkspace(path: string, { workspace, miradorsData }: Work
   const within = relative(root, place).replaceAll(sep, "/");
   if (holdsControlCharacters(within)) throw refused(`${path} leads to a name with control characters.`);
   if (onWindows && within.includes(":")) throw refused(`${path} leads to a name with a colon.`);
+  if (onWindows && endsInDotOrSpace(within)) throw refused(`${path} leads to a name ending in a dot or space.`);
   if (namesGitsOwn(within)) throw refused("What git keeps in .git is reached by git's own commands alone.");
   return { place, within: within || "." };
 }
@@ -161,8 +166,27 @@ export async function entryAt(path: string, folders: WorkspaceFolders): Promise<
   return { within, entry: { kind: "file", text: await withFile(path, place, constants.O_RDONLY, folders, (file) => textOf(file, path, folders)) } };
 }
 
-async function makeNew(path: string, place: string, text: string, folders: WorkspaceFolders) {
-  await mkdir(dirname(place), { recursive: true });
+async function makeFoldersInWorkspace(root: string, within: string, path: string) {
+  let at = root;
+  for (const part of within.split("/").slice(0, -1)) {
+    at = join(at, part);
+    const there = await lstat(at).catch(() => null);
+    if (there) {
+      if (!there.isDirectory()) throw refused(`${path} changed while it was opened.`);
+      continue;
+    }
+    await mkdir(at).catch((error: unknown) => {
+      if ((error as NodeJS.ErrnoException)?.code !== "EEXIST") throw error;
+    });
+    const made = await lstat(at).catch(() => null);
+    if (!made?.isDirectory()) throw refused(`${path} changed while it was opened.`);
+  }
+}
+
+async function makeNew(path: string, place: string, within: string, text: string, folders: WorkspaceFolders) {
+  const root = realPathOrNull(folders.workspace);
+  if (root === null) throw refused("The room's workspace is not there.");
+  await makeFoldersInWorkspace(root, within, path);
   if (placeInWorkspace(path, folders).place !== place) throw refused(`${path} changed while it was opened.`);
   const file = await open(place, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o644).catch(() => {
     throw refused(`${path} came to be meanwhile, so it was left as it is.`);
@@ -179,7 +203,7 @@ async function makeNew(path: string, place: string, text: string, folders: Works
 export async function makeChange({ path, within, before, after }: FileChange, folders: WorkspaceFolders) {
   const found = placeInWorkspace(path, folders);
   if (found.within !== within) throw refused(`${path} leads elsewhere than it did, so nothing was changed.`);
-  if (before === null) return makeNew(path, found.place, after, folders);
+  if (before === null) return makeNew(path, found.place, found.within, after, folders);
   await withFile(path, found.place, constants.O_RDWR, folders, async (file) => {
     if ((await textOf(file, path, folders)) !== before) throw refused(`${path} was changed meanwhile, so it was left as it is. Read it again.`);
     await file.truncate(0);
