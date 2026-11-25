@@ -436,6 +436,7 @@ export const problems: Messages["problems"] = {
     "restarted-for-profile": "wurde neu gestartet, weil sich sein Profil geändert hat",
     "restarted-for-claude-program": "wurde neu gestartet, weil sich das Claude-Code-Programm geändert hat",
     "restarted-for-reload": "wurde neu gestartet, um geänderte Einstellungen zu übernehmen",
+    "sandbox-outgrown": "wurde mit seiner Sandbox gestoppt, weil sich geändert hat, was Git in einem Ordner liest oder ausführt, in dem er arbeitet; seine nächste Runde startet mit dem neuen Stand",
     noAnswer: (seconds) => `hat nicht innerhalb von ${seconds} s nach dem Start geantwortet`,
     exited: (how) => `endete mit ${how}`,
     couldNotStart: (cause) => `konnte nicht starten: ${cause}`,
@@ -516,6 +517,7 @@ export const problems: Messages["problems"] = {
   sandboxConfigReadThroughLink: (file: string, link: string) => `Git liest Konfiguration aus ${file} über den Link ${link}, daher kann eine Sandbox die Datei nicht schreibgeschützt halten.`,
   sandboxConfigIncludesMissingFile: (file: string) => `Die Git-Konfiguration bindet ${file} ein, das es nicht gibt, daher könnte die Sandbox es anlegen: Lege die Datei an oder entferne die Einbindung, um eine Sandbox zu nutzen.`,
   sandboxConfigIncludesNotAFile: (file: string) => `Die Git-Konfiguration bindet ${file} ein, das keine reguläre Datei ist, daher kann eine Sandbox es nicht schreibgeschützt halten: Entferne die Einbindung, um eine Sandbox zu nutzen.`,
+  sandboxHooksFolderHoldsRepository: (folder: string) => `Die Git-Konfiguration nennt ${folder} als Hook-Ordner, der ein Repository enthält, daher kann eine Sandbox die Hooks nicht schreibgeschützt halten: Trage in core.hooksPath einen eigenen Ordner ein, um eine Sandbox zu nutzen.`,
   sandboxWorkspaceHoldsComputersOwn: (folder: string) =>
     `Der Arbeitsbereich ist oder enthält ${folder}, aus dem dieser Rechner von selbst Programme startet: Eine Sandbox könnte sie ändern.`,
   sandboxWorkspaceOverlapsSandboxFolder: (folder: string) => `Eine andere eingeschaltete Sandbox hat ${folder} les- und schreibbar, also den Arbeitsbereich, einen Ordner darüber oder darin: Nur eine Sandbox darf dort schreiben.`,

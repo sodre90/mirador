@@ -120,11 +120,12 @@ export interface HarnessSpec {
   launching?: (environment: Record<string, string>) => Promise<AgentLaunch>;
 }
 
-/** What starts an agent process, and what is told once that process has gone, or never started after all. */
+/** What starts an agent process, what is told once that process has gone, or never started after all, and why it went where whatever it ran in was ended. */
 export interface AgentLaunch {
   command: string[];
   environment: Record<string, string>;
   gone?: () => void;
+  goneAs?: () => AgentGone | undefined;
 }
 
 export interface HarnessListener {
@@ -364,7 +365,7 @@ export class HarnessProcess {
       .connect(stream);
     this.connection = connection;
     child.once("exit", (code, signal) => {
-      goneBecause(this.stopReason ?? { kind: "exited", how: String(code ?? signal) });
+      goneBecause(this.stopReason ?? launched.goneAs?.() ?? { kind: "exited", how: String(code ?? signal) });
       setTimeout(() => connection.close(), LAST_OUTPUT_AFTER_EXIT_MS).unref();
     });
     return this.initialize();

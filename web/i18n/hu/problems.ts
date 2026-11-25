@@ -431,6 +431,7 @@ export const problems: Messages["problems"] = {
     "restarted-for-profile": "újraindult, mert megváltozott a profilja",
     "restarted-for-claude-program": "újraindult, mert megváltozott a Claude Code program",
     "restarted-for-reload": "újraindult, hogy átvegye a megváltozott beállításokat",
+    "sandbox-outgrown": "leállt a sandboxával együtt, mert megváltozott, hogy a git mit olvas vagy futtat egy mappában, ahol dolgozik; a következő köre már ezzel indul",
     noAnswer: (seconds) => `nem válaszolt az indulás utáni ${seconds} másodpercben`,
     exited: (how) => `kilépett (${how})`,
     couldNotStart: (cause) => `nem tudott elindulni: ${cause}`,
@@ -511,6 +512,7 @@ export const problems: Messages["problems"] = {
   sandboxConfigReadThroughLink: (file: string, link: string) => `A git a(z) ${link} linken át olvassa a(z) ${file} beállításait, így a sandbox nem tudja csak olvashatóvá tenni.`,
   sandboxConfigIncludesMissingFile: (file: string) => `A git-beállítások behúzzák a(z) ${file} fájlt, amely nincs meg, így a sandbox létrehozhatná: a sandboxhoz hozd létre a fájlt, vagy vedd ki a behúzást.`,
   sandboxConfigIncludesNotAFile: (file: string) => `A git-beállítások behúzzák a(z) ${file} elemet, amely nem közönséges fájl, így a sandbox nem tudja csak olvashatóvá tenni: a sandboxhoz vedd ki a behúzást.`,
+  sandboxHooksFolderHoldsRepository: (folder: string) => `A git-beállítások a(z) ${folder} mappát adják meg a hookoknak, amelyben repó van, így a sandbox nem tudja csak olvashatóvá tenni a hookokat: a sandboxhoz adj meg a core.hooksPath értékében egy külön mappát.`,
   sandboxWorkspaceHoldsComputersOwn: (folder: string) =>
     `A munkaterület maga a(z) ${folder}, vagy tartalmazza azt: ebből a gép magától futtat programokat, amelyeket egy sandbox megváltoztathatna.`,
   sandboxWorkspaceOverlapsSandboxFolder: (folder: string) => `Egy másik, bekapcsolt sandbox olvashatóan és írhatóan kapta meg ezt a mappát, amely a munkaterület, tartalmazza, vagy benne van; csak egy sandbox írhat oda: ${folder}`,

@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
-import { HostProblemError } from "../../shared/host-problems.ts";
+import { HostProblemError, type AgentGone } from "../../shared/host-problems.ts";
 import {
   HELD_CHANGES_MOST,
   ownerKey,
@@ -32,12 +32,14 @@ import { addedFolderRefusal, foldersMounted, repositoryRefusal, type FolderSurro
 import { AGENT_USER, BUN_IN_VM, environmentInVm, IN_VM, NETWORK_RELAY_PORT, SCRIPTS_IN_VM, type SandboxedKind } from "./agent-environment.ts";
 import { startCanvasSocket, type SandboxCanvas } from "./canvas-socket.ts";
 import { behindGuard, guardMounts, MANIFEST_FOLDER_IN_VM, RAW_FOLDERS_IN_VM, type GuardedFolder } from "./guard.ts";
-import { entryOf, isInside, protectedPartsOf, realOrAsIs, sandboxRefusalOf, wayTo, type MiradorPlaces, type WayTo } from "./guarded-workspace.ts";
+import { guardPlanOf, sandboxRefusalOf, type GuardPlan, type MiradorPlaces } from "./guarded-workspace.ts";
 import { HeldFiles, HeldFilesRefused, type HeldSandbox } from "./held-files.ts";
 import type { PlacesPutBack, PlacesRequest } from "./in-vm/held-places.ts";
 import type { AgentImage } from "./image.ts";
 import { secretsOf, startModelProxy, type ModelRoute } from "./model-proxy.ts";
 import { startNetworkProxy, type NetworkProxy } from "./network-proxy.ts";
+import { entryOf, isInside, realOrAsIs, wayTo, type WayTo } from "./paths-on-disk.ts";
+import { PlanWatch } from "./plan-watch.ts";
 import { removeLeftSocketFolders, SOCKETS_FOLDER_PREFIX } from "./socket-folders.ts";
 import type { RunningSocket } from "./vm-connections.ts";
 import { HOST_LABEL, OWNER_LABEL, SandboxNotReady, type AgentInVm, type Mount, type VmLauncher } from "./vm-launcher.ts";
@@ -170,6 +172,8 @@ interface SandboxVm {
   running: boolean;
   /** The VM's stop, once asked for. */
   halted?: Promise<void>;
+  /** Why it was stopped, where its agents' processes went away with it for a reason to be told. */
+  stoppedAs?: AgentGone;
   /** The VM stopped, and its held files are no longer its business. */
   left: boolean;
   /** The agents at work in it, or a brought agent's calls under way there. */
@@ -275,7 +279,8 @@ const hostLabelOf = (dataDir: string) => shortHash(dataDir);
  * A mount follows whatever link stands where its source was, and a running VM's agents can put one wherever they write. So
  * whatever a starting VM mounts lies outside every running VM's writable roots, or is one of them, which nothing in that VM
  * can move: none starts where its workspace lies in or around where one that works elsewhere writes, and they start one at
- * a time. The VMs of one workspace, whoever's they are, share one plan of what their guards keep of it.
+ * a time. The VMs of one workspace, whoever's they are, share one plan of what their guards keep of it; once git reads or
+ * runs more of it than that, they stop.
  */
 export class Sandboxes {
   private setupState: SandboxSetup = SETUP_NOT_STARTED;
@@ -295,6 +300,7 @@ export class Sandboxes {
     /** Where each VM's sockets get a folder of their own. */
     private readonly socketsParent = tmpdir(),
     private readonly broughtIdleStopMs = 60_000,
+    private readonly planLookedAtMs = 2_000,
   ) {
     this.hostLabel = hostLabelOf(host.dataDir);
   }
@@ -493,6 +499,7 @@ export class Sandboxes {
         gone = true;
         this.agentGone(vm);
       },
+      goneAs: () => vm.stoppedAs,
     };
   }
 
@@ -661,6 +668,8 @@ export class Sandboxes {
     vm.left = true;
     const stopped = vm.helds.filter((held) => this.workingAmong(held).length === 0);
     const goingOn = vm.helds.filter((held) => !stopped.includes(held));
+    stopped.forEach((held) => this.planWatches.get(held)?.stop());
+    stopped.forEach((held) => this.planWatches.delete(held));
     await Promise.all([...stopped.map((held) => held.stop().catch(() => {})), ...goingOn.map((held) => held.check().catch(() => false))]);
     this.keepWaiting(stopped);
   }
@@ -928,9 +937,24 @@ export class Sandboxes {
   /** The plan each held workspace's VMs share. */
   private readonly plans = new WeakMap<HeldFiles, WorkspacePlan>();
 
+  /** The watch of each held folder's plan, while a VM works there. */
+  private readonly planWatches = new Map<HeldFiles, PlanWatch>();
+
+  private watchPlan(held: HeldFiles, plan: GuardPlan) {
+    this.planWatches.set(held, new PlanWatch(plan, () => guardPlanOf(held.workspace, this.host.places), () => this.stopOutgrown(held), this.planLookedAtMs));
+  }
+
+  /** Git reads or runs more of the folder than the guards of the VMs that work there keep as it is: they stop at once, and the next one is planned anew. */
+  private async stopOutgrown(held: HeldFiles) {
+    this.plans.delete(held);
+    const working = this.workingAmong(held);
+    working.forEach((vm) => (vm.stoppedAs = { kind: "sandbox-outgrown" }));
+    await Promise.all(working.map((vm) => this.stopVm(vm)));
+  }
+
   private async newPlan(workspace: string, vm: SandboxVm): Promise<WorkspacePlan> {
     const held = await this.newHeldFiles(workspace, vm);
-    const planned = await protectedPartsOf(workspace, this.host.places, await held.start());
+    const planned = await guardPlanOf(workspace, this.host.places, await held.start());
     if ("refused" in planned) {
       await held.stop().catch(() => {});
       throw new SandboxNotReady({ kind: "blocked", blocker: planned.refused });
@@ -939,6 +963,7 @@ export class Sandboxes {
     this.plans.set(held, plan);
     this.takeOverStoppedHeld(held);
     this.worksAmong(held, vm);
+    this.watchPlan(held, planned);
     return plan;
   }
 
@@ -978,7 +1003,7 @@ export class Sandboxes {
     const held = await this.newHeldFiles(folder, vm);
     const heldThere = await held.start().catch(leftOutFor);
     if (!Array.isArray(heldThere)) return heldThere;
-    const planned = await protectedPartsOf(folder, this.host.places, heldThere).catch(leftOutFor);
+    const planned = await guardPlanOf(folder, this.host.places, heldThere).catch(leftOutFor);
     if (!("parts" in planned)) {
       await held.stop().catch(() => {});
       return "refused" in planned ? leftOutAs(repositoryRefusal(planned.refused)) : planned;
@@ -986,6 +1011,7 @@ export class Sandboxes {
     vm.writableRoots.push(folder);
     this.takeOverStoppedHeld(held);
     this.worksAmong(held, vm, true);
+    this.watchPlan(held, planned);
     return { folder, parts: planned.parts };
   }
 

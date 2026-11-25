@@ -4,7 +4,7 @@ import { release } from "node:os";
 import { dirname, join } from "node:path";
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { guardedIn, mountsOfRun } from "../tests/guard-told.ts";
-import { addWorkspace, addWorkspaceFromSidebar, clickWorkspaceButton, createProfile, createRoom, openRoomSettings, roomCard, sendMessage, signIn, workspaceCard } from "./helpers.ts";
+import { addWorkspace, addWorkspaceFromSidebar, clickWorkspaceButton, createProfile, createRoom, lastAgentMessage, openRoomSettings, roomCard, sendMessage, signIn, waitForTurnToEnd, workspaceCard } from "./helpers.ts";
 import { bunProgramPath, TestHost, writeBunProgram } from "./test-host.ts";
 
 const sandboxesRunHere = process.platform === "darwin" && process.arch === "arm64" && Number(release().split(".")[0]) >= 25;
@@ -48,12 +48,22 @@ const projectCard = (page: Page) => workspaceCard(page, host.projectDir);
 const heldCard = (scope: Page | Locator) => scope.getByRole("region", { name: "Agent config change held for you" });
 const roomComposer = (page: Page) => page.getByRole("textbox", { name: "Write in Reviews, @ tags an agent…" });
 
+async function tagBuilder(page: Page, rest: string) {
+  await roomComposer(page).fill("@Bu");
+  await page.getByRole("listbox", { name: "Agents and people of the room" }).getByRole("option", { name: "@Builder" }).click();
+  await roomComposer(page).fill(`@Builder ${rest}`);
+  await roomComposer(page).press("Enter");
+}
+
 async function openSandboxOf(page: Page, card: Locator, workspace: string) {
   await clickWorkspaceButton(card, "Sandbox…");
   const dialog = page.getByRole("dialog", { name: `Sandbox for ${workspace}` });
   await expect(dialog.getByText("Checking whether this workspace can have a sandbox…")).toBeHidden();
   return { dialog, sandboxSwitch: dialog.getByRole("switch", { name: "Run this workspace's agents in a sandbox" }) };
 }
+
+let conversation = "";
+const openConversation = (page: Page) => page.locator(`li[data-reorder-id="${conversation}"] .conversation-title`).click();
 
 const vmsStarted = () =>
   readFileSync(join(containerState(), "calls.log"), "utf8")
@@ -73,6 +83,7 @@ test("a workspace's sandbox and a room's in the same folder protect the same of 
   const previousUrl = page.url();
   await projectCard(page).getByRole("button", { name: "+ New conversation" }).click();
   await expect(page).not.toHaveURL(previousUrl);
+  conversation = page.url().match(/#\/c\/(.+)$/)![1]!;
   await sendMessage(page, `WRITE ${JSON.stringify([{ waitFor: turnsMayEnd() }])}`);
   await expect.poll(() => vmsStarted().length).toBe(1);
 
@@ -81,10 +92,7 @@ test("a workspace's sandbox and a room's in the same folder protect the same of 
   await expect(settings.getByText("Checking whether this room can have a sandbox…")).toBeHidden();
   await settings.getByRole("switch", { name: "Run the agents in a sandbox" }).check();
   await settings.getByRole("button", { name: "Close" }).click();
-  await roomComposer(page).fill("@Bu");
-  await page.getByRole("listbox", { name: "Agents and people of the room" }).getByRole("option", { name: "@Builder" }).click();
-  await roomComposer(page).fill(`@Builder WAIT ${turnsMayEnd()} SAY Reviewed.`);
-  await roomComposer(page).press("Enter");
+  await tagBuilder(page, `WAIT ${turnsMayEnd()} SAY Reviewed.`);
   await expect.poll(() => promptsSoFar().split(turnsMayEnd()).length).toBe(3);
 
   const [ofWorkspace, ofRoom] = vmsStarted().map((run) => guardedIn(mountsOfRun(run)));
@@ -109,6 +117,38 @@ test("a workspace's sandbox and a room's in the same folder protect the same of 
   expect(existsSync(inProject(".mcp.json"))).toBe(false);
   writeFileSync(turnsMayEnd(), "");
   await expect(page.locator(".room-timeline .room-entry .message.agent", { hasText: "Reviewed." })).toBeVisible();
+});
+
+test("where the owner has git run hooks from another folder meanwhile, the agents of both are stopped at once, saying why, and work on in VMs that protect it", async ({ page }) => {
+  test.skip(!sandboxesRunHere, "Sandboxes run on macOS 26 on Apple silicon only.");
+  await signIn(page, host);
+  const neverMade = join(host.root, "never-made");
+  await roomCard(page, "Reviews").click();
+  await tagBuilder(page, `WAIT ${neverMade} SAY Reviewed again.`);
+  await openConversation(page);
+  await sendMessage(page, `WRITE ${JSON.stringify([{ waitFor: neverMade }])}`);
+  await expect.poll(() => promptsSoFar().split(neverMade).length).toBe(3);
+
+  const foldersKept = () => vmsStarted().map((run) => guardedIn(mountsOfRun(run))[0]!.parts.folders);
+  const startedBefore = foldersKept();
+  expect(startedBefore.flat()).toEqual([]);
+  mkdirSync(inProject("githooks"));
+  execFileSync("git", ["-C", host.projectDir, "config", "core.hooksPath", "githooks"]);
+  const outgrown = "The Claude Code (Builder) agent process was stopped with its sandbox, as what git reads or runs in a folder it works in changed; its next turn takes that in.";
+  await expect(page.locator(".timeline:visible .error-line")).toContainText(outgrown, { timeout: 15_000 });
+  await roomCard(page, "Reviews").click();
+  await page.locator(".room-timeline .room-entry", { hasText: "The turn failed." }).getByRole("button", { name: "Open thread" }).click();
+  const thread = page.getByRole("complementary", { name: "Thread of Builder" });
+  await expect(thread.locator(".error-line")).toContainText(outgrown);
+  await thread.getByRole("button", { name: "Close thread" }).click();
+
+  await tagBuilder(page, "SAY Reviewed with the hooks kept.");
+  await expect(page.locator(".room-timeline .room-entry .message.agent", { hasText: "Reviewed with the hooks kept." })).toBeVisible();
+  await openConversation(page);
+  await sendMessage(page, "SAY Written with the hooks kept.");
+  await waitForTurnToEnd(page);
+  await expect(lastAgentMessage(page)).toHaveText("Written with the hooks kept.");
+  expect(foldersKept().slice(startedBefore.length)).toEqual([["githooks"], ["githooks"]]);
 });
 
 test("a workspace inside one whose sandbox is on can't have one of its own, saying which, until that one is off", async ({ page }) => {

@@ -110,6 +110,8 @@ export type SandboxBlocker =
   | { kind: "config-read-through-link"; file: string; link: string }
   | { kind: "config-includes-missing-file"; file: string }
   | { kind: "config-includes-not-a-file"; file: string }
+  /** The hooks folder git's config names is, or holds, a repository in the workspace, which agents must write to work in it. */
+  | { kind: "hooks-folder-holds-repository"; folder: string }
   | { kind: "workspace-is-home" }
   | { kind: "workspace-holds-mirador-data" }
   | { kind: "workspace-is-mirador" }

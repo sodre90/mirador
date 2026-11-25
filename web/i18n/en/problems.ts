@@ -430,6 +430,7 @@ export const problems = {
     "restarted-for-profile": "was restarted because its profile changed",
     "restarted-for-claude-program": "was restarted because the Claude Code program changed",
     "restarted-for-reload": "was restarted to pick up changed settings",
+    "sandbox-outgrown": "was stopped with its sandbox, as what git reads or runs in a folder it works in changed; its next turn takes that in",
     noAnswer: (seconds: number) => `did not answer within ${seconds} s of starting`,
     exited: (how: string) => `exited with ${how}`,
     couldNotStart: (cause: string) => `could not start: ${cause}`,
@@ -505,6 +506,7 @@ export const problems = {
   sandboxConfigReadThroughLink: (file: string, link: string) => `Git reads config from ${file} through the link ${link}, so a sandbox can't keep it read-only.`,
   sandboxConfigIncludesMissingFile: (file: string) => `Git's config includes ${file}, which isn't there, so the sandbox could make it: make that file, or take the include out, to use a sandbox.`,
   sandboxConfigIncludesNotAFile: (file: string) => `Git's config includes ${file}, which isn't a regular file, so a sandbox can't keep it read-only: take the include out to use a sandbox.`,
+  sandboxHooksFolderHoldsRepository: (folder: string) => `Git's config names ${folder} as the hooks folder, which holds a repository, so a sandbox can't keep the hooks read-only: have core.hooksPath name a folder of its own to use a sandbox.`,
   sandboxWorkspaceHoldsComputersOwn: (folder: string) =>
     `The workspace is or holds ${folder}, which this computer runs programs from by itself: a sandbox could change them.`,
   sandboxWorkspaceOverlapsSandboxFolder: (folder: string) => `Another sandbox that is on has ${folder} read and write, which is the workspace, holds it or lies inside it: only one sandbox may write there.`,

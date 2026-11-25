@@ -11,6 +11,7 @@ export type AgentGone =
   | { kind: "restarted-for-profile" }
   | { kind: "restarted-for-claude-program" }
   | { kind: "restarted-for-reload" }
+  | { kind: "sandbox-outgrown" }
   | { kind: "no-answer"; seconds: number }
   | { kind: "exited"; how: string }
   | { kind: "could-not-start"; cause: string };

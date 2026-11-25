@@ -38,7 +38,7 @@ const notReady = (why: Partial<SandboxNotReadyWhy>) => ({ problem: { code: "sand
 const overlapsWorkspace = (folder: string) => notReady({ kind: "blocked", blocker: { kind: "workspace-overlaps-sandbox-workspace", folder } });
 
 /** A computer whose rooms and workspaces work where a test says, with what the others' sandboxes are set to. */
-function computer() {
+function computer({ planLookedAtMs = 60_000 } = {}) {
   const workspaces = new Map<string, string>();
   const folders = new Map<string, SandboxFolder[]>();
   const others = new Map<string, OtherSandboxes>();
@@ -62,7 +62,7 @@ function computer() {
   const launcher = new FakeVmLauncher();
   const socketsParent = mkdtempSync(join(tmpdir(), "of-"));
   socketFolders.push(socketsParent);
-  const sandboxes = new Sandboxes(launcher, host, 60_000, socketsParent, 60_000);
+  const sandboxes = new Sandboxes(launcher, host, 60_000, socketsParent, 60_000, planLookedAtMs);
   const launch = (owner: SandboxOwner, workspace: string) => {
     workspaces.set(ownerKey(owner), workspace);
     return sandboxes.launch({
@@ -507,6 +507,92 @@ describe("the held files of a folder several sandboxes work in", () => {
     expect(first).toBeDefined();
     expect(second).toBeDefined();
     expect(first).not.toBe(second);
+    await sandboxes.stopAll();
+  });
+});
+
+describe("once git reads or runs more of a folder than the guards of the VMs that work there keep as it is", () => {
+  const LOOKED_AT_MS = 30;
+  const afterSomeLooks = () => Bun.sleep(LOOKED_AT_MS * 20);
+  const git = (folder: string, ...args: string[]) => {
+    const ran = Bun.spawnSync(["git", "-c", "user.name=t", "-c", "user.email=t@t", "-C", folder, ...args]);
+    if (ran.exitCode !== 0) throw new Error(`git ${args.join(" ")}: ${ran.stderr}`);
+  };
+  const OUTGROWN = { kind: "sandbox-outgrown" as const };
+
+  test.skipIf(!RUNS_SANDBOXES)("they all stop at once, whoever's they are, their agents going away for that, and the next one is planned anew; VMs elsewhere run on", async () => {
+    const { launcher, sandboxes, launch, launchBrought } = computer({ planLookedAtMs: LOOKED_AT_MS });
+    const [workspace, elsewhere] = [repository(), repository()];
+    const launched = [await launch(WORKSPACE, workspace), await launch(ROOM, workspace), await launchBrought(ROOM, workspace)];
+    const other = await launch(OTHER_ROOM, elsewhere);
+    expect(launched.map(({ goneAs }) => goneAs!())).toEqual([undefined, undefined, undefined]);
+    git(workspace, "config", "core.hooksPath", ".husky");
+    expect(await settled(() => launcher.running().length === 1)).toBe(true);
+    expect(launched.map(({ goneAs }) => goneAs!())).toEqual([OUTGROWN, OUTGROWN, OUTGROWN]);
+    expect(other.goneAs!()).toBeUndefined();
+
+    const again = await launch(ROOM, workspace);
+    expect(guardedByPlan(launcher.started.at(-1)!)[0]!.parts.folders).toEqual([".husky"]);
+    await afterSomeLooks();
+    expect(launcher.running()).toHaveLength(2);
+    expect(again.goneAs!()).toBeUndefined();
+    await sandboxes.stopAll();
+  });
+
+  test.skipIf(!RUNS_SANDBOXES)("they stop for a file its config includes, for a submodule, and for what keeps it from any sandbox, which the next start says", async () => {
+    const { launcher, sandboxes, launch } = computer({ planLookedAtMs: LOOKED_AT_MS });
+    const stopsAfter = async (change: (workspace: string) => void) => {
+      const workspace = repository();
+      writeFileSync(join(workspace, "team.cfg"), "");
+      await launch(WORKSPACE, workspace);
+      change(workspace);
+      expect(await settled(() => launcher.running().length === 0)).toBe(true);
+      return workspace;
+    };
+    await stopsAfter((workspace) => git(workspace, "config", "include.path", "../team.cfg"));
+    await stopsAfter((workspace) => gitFolder(moduleOf(workspace, "lib")));
+    const refused = await stopsAfter((workspace) => git(workspace, "config", "core.hooksPath", "."));
+    await expect(launch(WORKSPACE, refused)).rejects.toMatchObject(notReady({ kind: "blocked", blocker: { kind: "hooks-folder-holds-repository", folder: "." } }));
+    await sandboxes.stopAll();
+  });
+
+  test.skipIf(!RUNS_SANDBOXES)("they run on while there is no more of it: less, work in its repository and submodules, or a worktree made elsewhere", async () => {
+    const { launcher, sandboxes, launch } = computer({ planLookedAtMs: LOOKED_AT_MS });
+    const workspace = repository();
+    git(workspace, "config", "core.hooksPath", ".husky");
+    gitFolder(moduleOf(workspace, "lib"));
+    const launched = await launch(WORKSPACE, workspace);
+    mkdirSync(join(workspace, ".husky"));
+    git(workspace, "commit", "-q", "--allow-empty", "-m", "first");
+    git(workspace, "worktree", "add", "-q", join(scratch, `worktree-${crypto.randomUUID()}`));
+    git(workspace, "config", "user.name", "Owner");
+    writeFileSync(join(moduleOf(workspace, "lib"), "index.lock"), "");
+    await afterSomeLooks();
+    git(workspace, "config", "--unset", "core.hooksPath");
+    await afterSomeLooks();
+    expect(launcher.running()).toHaveLength(1);
+    expect(launched.goneAs!()).toBeUndefined();
+    await sandboxes.stopAll();
+  });
+
+  test.skipIf(!RUNS_SANDBOXES)("they stop in a folder added read and write too, and one that was starting there doesn't start", async () => {
+    const { launcher, sandboxes, launch, set } = computer({ planLookedAtMs: LOOKED_AT_MS });
+    const [workspace, added] = [repository(), repository()];
+    set.folders(ROOM, { path: added, writable: true });
+    await launch(ROOM, workspace);
+    expect(guardedByPlan(launcher.started.at(-1)!).map(({ folder }) => folder)).toEqual([workspace, added]);
+    git(added, "config", "core.hooksPath", ".husky");
+    expect(await settled(() => launcher.running().length === 0)).toBe(true);
+
+    const starts = Promise.withResolvers<void>();
+    launcher.starting = starts.promise;
+    const starting = launch(ROOM, workspace);
+    await afterSomeLooks();
+    git(added, "config", "include.path", "../team.cfg");
+    await afterSomeLooks();
+    starts.resolve();
+    await expect(starting).rejects.toMatchObject(notReady({ kind: "could-not-start" }));
+    expect(await settled(() => launcher.running().length === 0)).toBe(true);
     await sandboxes.stopAll();
   });
 });

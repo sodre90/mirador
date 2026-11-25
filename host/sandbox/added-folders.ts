@@ -3,7 +3,8 @@ import { isAbsolute, relative, sep } from "node:path";
 import type { SandboxBlocker, SandboxFolder, SandboxFolderRefusal, SandboxFolderState } from "../../shared/sandbox.ts";
 import { expandHome } from "../paths.ts";
 import { SOCKETS_FOLDER_PREFIX } from "./socket-folders.ts";
-import { isInside, miradorsOwn, realOrAsIs, sandboxRefusalOf, type MiradorPlaces } from "./guarded-workspace.ts";
+import { miradorsOwn, sandboxRefusalOf, type MiradorPlaces } from "./guarded-workspace.ts";
+import { isInside, realOrAsIs } from "./paths-on-disk.ts";
 
 /** What the other rooms' and workspaces' sandboxes work in, without links, which a folder read and write keeps clear of. */
 export interface OtherSandboxes {

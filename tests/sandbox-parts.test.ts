@@ -9,7 +9,7 @@ import { execProcessEnvironment } from "../host/sandbox/exec-environment.ts";
 import { versionSaidIn } from "../host/sandbox/agent-version.ts";
 import { baseImageOf, buildArguments, buildStepIn, imageReferencesIn, imageTag, RECIPE } from "../host/sandbox/image.ts";
 import { PODMAN_READS } from "../host/sandbox/podman.ts";
-import { protectedPartsOf, sandboxRefusalOf, type MiradorPlaces, type ProtectedParts } from "../host/sandbox/guarded-workspace.ts";
+import { guardPlanOf, sandboxRefusalOf, type MiradorPlaces, type ProtectedParts } from "../host/sandbox/guarded-workspace.ts";
 import { keepingNetworkOf, narrowsSandbox, NO_SANDBOX, reachesMoreThan, SANDBOX_NETWORKS, sandboxSettingIn, sameSandbox, sharesKernel, signInElsewhere, type SandboxNetwork, type SandboxSetting } from "../shared/sandbox.ts";
 import { RUNS_SANDBOXES } from "./sandbox-computer.ts";
 
@@ -26,7 +26,7 @@ function repositoryIn(name: string) {
 }
 
 async function partsOf(workspace: string, held: string[] = []): Promise<ProtectedParts> {
-  const found = await protectedPartsOf(workspace, ELSEWHERE, held);
+  const found = await guardPlanOf(workspace, ELSEWHERE, held);
   if ("refused" in found) throw new Error(`refused: ${found.refused.kind}`);
   return found.parts;
 }
@@ -201,14 +201,14 @@ test.skipIf(!RUNS_SANDBOXES)("of a workspace the guard protects the held files a
 test("a workspace that isn't a repository of its own, a git worktree, or a git folder taking another's config is refused", async () => {
   const plain = join(scratch, `plain-${crypto.randomUUID()}`);
   mkdirSync(plain);
-  expect(await protectedPartsOf(plain, ELSEWHERE)).toEqual({ refused: { kind: "workspace-not-a-repository" } });
+  expect(await guardPlanOf(plain, ELSEWHERE)).toEqual({ refused: { kind: "workspace-not-a-repository" } });
   const worktree = join(scratch, `worktree-${crypto.randomUUID()}`);
   mkdirSync(worktree);
   writeFileSync(join(worktree, ".git"), "gitdir: /elsewhere/.git/worktrees/w\n");
-  expect(await protectedPartsOf(worktree, ELSEWHERE)).toEqual({ refused: { kind: "workspace-is-worktree" } });
+  expect(await guardPlanOf(worktree, ELSEWHERE)).toEqual({ refused: { kind: "workspace-is-worktree" } });
   const pointing = repositoryIn("pointing");
   writeFileSync(join(pointing, ".git/commondir"), "/elsewhere/.git\n");
-  expect(await protectedPartsOf(pointing, ELSEWHERE)).toEqual({ refused: { kind: "workspace-has-commondir" } });
+  expect(await guardPlanOf(pointing, ELSEWHERE)).toEqual({ refused: { kind: "workspace-has-commondir" } });
 });
 
 test("a repository whose worktrees' folders point git elsewhere, or whose hooks or worktrees folder is a link, is refused, and one with worktrees of its own is not", async () => {
@@ -243,7 +243,7 @@ test("a submodule's git folder with its config or hooks a link to this computer'
     writeFileSync(join(planted, "HEAD"), "ref: refs/heads/main\n");
     symlinkSync(target, join(planted, part));
 
-    expect(await protectedPartsOf(workspace, ELSEWHERE)).toEqual({ refused: { kind: "part-is-link", part: `.git/modules/x/${part}` } });
+    expect(await guardPlanOf(workspace, ELSEWHERE)).toEqual({ refused: { kind: "part-is-link", part: `.git/modules/x/${part}` } });
   }
 });
 
@@ -295,7 +295,7 @@ test.skipIf(!RUNS_SANDBOXES)("a file of the workspace a config git reads include
   const linkedFile = repositoryIn("include-linked-file");
   symlinkSync(join(secrets, "id_ed25519"), join(linkedFile, ".gitconfig"));
   includes(linkedFile, "../.gitconfig");
-  expect(await protectedPartsOf(linkedFile, ELSEWHERE)).toEqual({ refused: { kind: "config-read-through-link", file: ".gitconfig", link: ".gitconfig" } });
+  expect(await guardPlanOf(linkedFile, ELSEWHERE)).toEqual({ refused: { kind: "config-read-through-link", file: ".gitconfig", link: ".gitconfig" } });
 
   const steppingBack = repositoryIn("include-stepping-back");
   mkdirSync(join(steppingBack, "deep/er"), { recursive: true });
@@ -377,22 +377,22 @@ test.skipIf(!RUNS_SANDBOXES)("a configured hooksPath through a symlink or at a n
   const linkedOut = repositoryIn("hooks-linked-out");
   symlinkSync(outside, join(linkedOut, "scripts"));
   Bun.spawnSync(["git", "-C", linkedOut, "config", "core.hooksPath", "scripts/git-hooks"]);
-  expect(await protectedPartsOf(linkedOut, ELSEWHERE)).toEqual({ refused: { kind: "part-is-link", part: "scripts" } });
+  expect(await guardPlanOf(linkedOut, ELSEWHERE)).toEqual({ refused: { kind: "part-is-link", part: "scripts" } });
   expect(existsSync(join(outside, "git-hooks"))).toBe(false);
 
   const linkedIn = repositoryIn("hooks-linked-in");
   mkdirSync(join(linkedIn, "tools/git-hooks"), { recursive: true });
   symlinkSync("tools", join(linkedIn, "scripts"));
   Bun.spawnSync(["git", "-C", linkedIn, "config", "core.hooksPath", "scripts/git-hooks"]);
-  expect(await protectedPartsOf(linkedIn, ELSEWHERE)).toEqual({ refused: { kind: "part-is-link", part: "scripts" } });
+  expect(await guardPlanOf(linkedIn, ELSEWHERE)).toEqual({ refused: { kind: "part-is-link", part: "scripts" } });
 
   const fileHooks = repositoryIn("hooks-file");
   writeFileSync(join(fileHooks, "hooks"), "not a folder");
   Bun.spawnSync(["git", "-C", fileHooks, "config", "core.hooksPath", "hooks"]);
-  expect(await protectedPartsOf(fileHooks, ELSEWHERE)).toEqual({ refused: { kind: "part-is-link", part: "hooks" } });
+  expect(await guardPlanOf(fileHooks, ELSEWHERE)).toEqual({ refused: { kind: "part-is-link", part: "hooks" } });
 
   const underFile = repositoryIn("hooks-under-file");
   writeFileSync(join(underFile, "tools"), "not a folder");
   Bun.spawnSync(["git", "-C", underFile, "config", "core.hooksPath", "tools/hooks"]);
-  expect(await protectedPartsOf(underFile, ELSEWHERE)).toEqual({ refused: { kind: "part-is-link", part: "tools" } });
+  expect(await guardPlanOf(underFile, ELSEWHERE)).toEqual({ refused: { kind: "part-is-link", part: "tools" } });
 });

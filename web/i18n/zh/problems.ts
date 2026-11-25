@@ -400,6 +400,7 @@ export const problems: Messages["problems"] = {
     "restarted-for-profile": "因配置更改已重启",
     "restarted-for-claude-program": "因 Claude Code 程序更改已重启",
     "restarted-for-reload": "已重启以使用更改后的设置",
+    "sandbox-outgrown": "已随其沙箱停止，因为 git 在其工作的某个文件夹中读取或运行的内容有变化；下一轮会按新的情况启动",
     noAnswer: (seconds) => `启动后 ${seconds} 秒内未响应`,
     exited: (how) => `已退出（${how}）`,
     couldNotStart: (cause) => `无法启动：${cause}`,
@@ -478,6 +479,7 @@ export const problems: Messages["problems"] = {
   sandboxConfigReadThroughLink: (file: string, link: string) => `git 通过链接 ${link} 读取 ${file} 中的配置，因此沙箱无法让它保持只读。`,
   sandboxConfigIncludesMissingFile: (file: string) => `git 配置包含了 ${file}，但它不存在，沙箱可以创建它：要使用沙箱，请创建这个文件，或去掉这个包含。`,
   sandboxConfigIncludesNotAFile: (file: string) => `git 配置包含了 ${file}，但它不是普通文件，沙箱无法让它保持只读：要使用沙箱，请去掉这个包含。`,
+  sandboxHooksFolderHoldsRepository: (folder: string) => `git 配置把 ${folder} 指定为 hook 文件夹，其中有仓库，因此沙箱无法让 hook 保持只读：要使用沙箱，请在 core.hooksPath 中指定单独的文件夹。`,
   sandboxWorkspaceHoldsComputersOwn: (folder: string) =>
     `工作区就是或包含 ${folder}，这台电脑会自行从中运行程序：沙箱可能会改动它们。`,
   sandboxWorkspaceOverlapsSandboxFolder: (folder: string) => `另一个已开启的沙箱以读写方式添加了 ${folder}，它就是这个工作区、包含它或位于其中：只能有一个沙箱在那里写入。`,

@@ -431,6 +431,7 @@ export const problems: Messages["problems"] = {
     "restarted-for-profile": "se reinició porque cambió su perfil",
     "restarted-for-claude-program": "se reinició porque cambió el programa de Claude Code",
     "restarted-for-reload": "se reinició para tomar la configuración cambiada",
+    "sandbox-outgrown": "se detuvo con su sandbox, porque cambió lo que git lee o ejecuta en una carpeta donde trabaja; su próximo turno ya parte de eso",
     noAnswer: (seconds) => `no respondió en los ${seconds} s siguientes a su inicio`,
     exited: (how) => `terminó con ${how}`,
     couldNotStart: (cause) => `no pudo iniciarse: ${cause}`,
@@ -511,6 +512,7 @@ export const problems: Messages["problems"] = {
   sandboxConfigReadThroughLink: (file: string, link: string) => `Git lee configuración de ${file} a través del enlace ${link}, así que un sandbox no puede dejarlo de solo lectura.`,
   sandboxConfigIncludesMissingFile: (file: string) => `La configuración de git incluye ${file}, que no existe, así que el sandbox podría crearlo: crea ese archivo, o quita la inclusión, para usar un sandbox.`,
   sandboxConfigIncludesNotAFile: (file: string) => `La configuración de git incluye ${file}, que no es un archivo normal, así que un sandbox no puede dejarlo de solo lectura: quita la inclusión para usar un sandbox.`,
+  sandboxHooksFolderHoldsRepository: (folder: string) => `La configuración de git señala ${folder} como carpeta de hooks, que contiene un repositorio, así que un sandbox no puede dejar los hooks de solo lectura: pon en core.hooksPath una carpeta aparte para usar un sandbox.`,
   sandboxWorkspaceHoldsComputersOwn: (folder: string) =>
     `El espacio de trabajo es o contiene ${folder}, desde donde este equipo ejecuta programas por sí solo: un sandbox podría cambiarlos.`,
   sandboxWorkspaceOverlapsSandboxFolder: (folder: string) => `Otro sandbox encendido tiene ${folder} en lectura y escritura, que es el espacio de trabajo, lo contiene o está dentro de él: solo un sandbox puede escribir ahí.`,

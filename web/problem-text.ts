@@ -56,6 +56,8 @@ export function sandboxBlockerText(blocker: SandboxBlocker, words: ProblemWords)
       return words.sandboxConfigIncludesMissingFile(blocker.file);
     case "config-includes-not-a-file":
       return words.sandboxConfigIncludesNotAFile(blocker.file);
+    case "hooks-folder-holds-repository":
+      return words.sandboxHooksFolderHoldsRepository(blocker.folder);
     case "workspace-holds-computers-own":
       return words.sandboxWorkspaceHoldsComputersOwn(blocker.folder);
     case "workspace-overlaps-sandbox-folder":

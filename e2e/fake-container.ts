@@ -2,7 +2,7 @@
  * Stands in for Apple's `container` in e2e. It keeps its service, builder, images and VMs in state.json under
  * FAKE_CONTAINER_STATE and notes each call it gets in calls.log there. `exec` starts the agent "in" a VM by running
  * e2e/fake-acp-agent.ts on this computer, in the folder `-w` names, with only the values `-e` names, and runs the
- * script that puts held files back in a VM here, from host/sandbox/in-vm. With
+ * script that puts held files back in a VM here, from host/sandbox/in-vm; what it runs ends with the VM. With
  * FAKE_CONTAINER_BUILD_HELD_BY, the image build stops after its second step until that file exists.
  */
 import { appendFileSync, existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
@@ -77,6 +77,7 @@ async function exec() {
   const command = args.slice(index + 1);
   const program = command.includes(HELD_PLACES_IN_VM) ? HELD_PLACES_HERE : AGENT;
   const ran = Bun.spawn([process.execPath, program], { cwd: folder, env: environment, stdio: ["inherit", "inherit", "inherit"] });
+  setInterval(() => read().vms[vm] || ran.kill("SIGKILL"), 100);
   process.exit(await ran.exited);
 }
 

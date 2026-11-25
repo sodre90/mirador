@@ -161,6 +161,26 @@ test("the switch stays off where the workspace's git config includes a file of i
   await again.getByRole("button", { name: "Done" }).click();
 });
 
+test("the switch stays off where the workspace's git config runs hooks from a folder that holds a repository, saying so, and can be turned on once they have one of their own", async ({ page }) => {
+  test.skip(!sandboxesRunHere, "Sandboxes run on macOS 26 on Apple silicon only.");
+  const hooked = join(host.root, "hooked");
+  execFileSync("git", ["init", "-q", hooked]);
+  execFileSync("git", ["-C", hooked, "config", "core.hooksPath", "."]);
+  await signIn(page, host);
+  await addWorkspaceFromSidebar(page, hooked);
+  const dialog = await openSandboxOf(page, workspaceCard(page, hooked), "hooked");
+  await expect(reasons(dialog)).toHaveText("Git's config names . as the hooks folder, which holds a repository, so a sandbox can't keep the hooks read-only: have core.hooksPath name a folder of its own to use a sandbox.");
+  await expect(sandboxSwitch(dialog)).toBeDisabled();
+  await keepScreenshot(dialog, "hooks-folder-holds-repository");
+  await dialog.getByRole("button", { name: "Done" }).click();
+
+  execFileSync("git", ["-C", hooked, "config", "core.hooksPath", "githooks"]);
+  const again = await openSandboxOf(page, workspaceCard(page, hooked), "hooked");
+  await expect(reasons(again)).toHaveCount(0);
+  await expect(sandboxSwitch(again)).toBeEnabled();
+  await again.getByRole("button", { name: "Done" }).click();
+});
+
 test("turned on, the workspace's sandbox is set up with its progress shown, marked in the sidebar and the conversation, and its agent works in a VM of its own without the key", async ({ page }) => {
   test.skip(!sandboxesRunHere, "Sandboxes run on macOS 26 on Apple silicon only.");
   await signIn(page, host);
