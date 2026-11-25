@@ -9,8 +9,15 @@ const shopDir = join(host.root, "web-shop");
 const plainDir = join(host.root, "plain-notes");
 const hostileDir = join(host.root, "hostile-clone");
 const brokenDir = join(host.root, "broken-icon");
+const filteredDir = join(host.root, "drop-shadow");
+const tracedDir = join(host.root, "traced-logo");
 
 const square = (colour: string) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><rect width="24" height="24" fill="${colour}"/></svg>`;
+
+/** Were its filter drawn, it would be blue all over. */
+const filteredYellowSquare = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><defs><filter id="s"><feFlood flood-color="rgb(0, 0, 255)"/></filter></defs><rect width="24" height="24" fill="rgb(255, 255, 0)" filter="url(#s)"/></svg>`;
+
+const tracedMagentaSquare = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="rgb(255, 0, 255)" d="M0 0h24v24H0z${"M6 6h.1v.1z".repeat(14_000)}"/></svg>`;
 
 /** Drawn at 24 pixels it takes a browser minutes, on the page's own thread. */
 const fanOut = `<svg xmlns="http://www.w3.org/2000/svg"><defs><g id="l0"><rect width="1" height="1"/></g>${[1, 2, 3, 4, 5, 6, 7]
@@ -26,10 +33,12 @@ function write(directory: string, path: string, content: string | Buffer) {
 
 test.describe.configure({ mode: "serial" });
 test.beforeAll(async () => {
-  [shopDir, plainDir, hostileDir, brokenDir].forEach((directory) => mkdirSync(directory, { recursive: true }));
+  [shopDir, plainDir, hostileDir, brokenDir, filteredDir, tracedDir].forEach((directory) => mkdirSync(directory, { recursive: true }));
   write(shopDir, "public/favicon.svg", square("rgb(255, 0, 0)"));
   write(hostileDir, ".idea/icon.svg", fanOut);
   write(brokenDir, ".mirador/icon.png", pngSaying64PixelsWithNoPicture);
+  write(filteredDir, ".idea/icon.svg", filteredYellowSquare);
+  write(tracedDir, ".idea/icon.svg", tracedMagentaSquare);
   await host.start();
 });
 test.afterAll(async () => {
@@ -58,6 +67,17 @@ test("a workspace shows its folder's icon in place of its initials, and one with
   await expect(mark(page, shopDir)).toHaveText("");
   await expect(mark(page, plainDir)).toHaveText("PN");
   await expect(icon(page, plainDir)).toHaveCount(0);
+});
+
+test("an icon with a filter shows without it, and one traced from a picture shows though its outlines are long", async ({ page }) => {
+  expect(tracedMagentaSquare.length).toBeGreaterThan(150 * 1024);
+  await signIn(page, host);
+  await addWorkspaceFromSidebar(page, filteredDir);
+  await addWorkspaceFromSidebar(page, tracedDir);
+  await expect(icon(page, filteredDir)).toBeVisible();
+  expect(await colourShown(page, filteredDir)).toBe("255 255 0");
+  await expect(icon(page, tracedDir)).toBeVisible();
+  expect(await colourShown(page, tracedDir)).toBe("255 0 255");
 });
 
 test("the icon opens the workspace's colours as the initials do", async ({ page }) => {
@@ -100,7 +120,7 @@ test("an icon made to freeze the page, and one that is broken, leave the initial
   await expect(workspaceCard(page, brokenDir)).toBeVisible();
   const answers = iconsAnswered(page);
   await page.reload();
-  await expect.poll(answers, "the plain and the hostile folder give no icon, the shop and the broken one do").toEqual([false, false, true, true]);
+  await expect.poll(answers, "only the plain and the hostile folder give no icon").toEqual([false, false, true, true, true, true]);
   await expect(mark(page, brokenDir)).toHaveText("BI");
   await expect(mark(page, hostileDir)).toHaveText("HC");
   await expect(icon(page, shopDir)).toBeVisible();
