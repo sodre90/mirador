@@ -1,6 +1,9 @@
 import { chmod, rm } from "node:fs/promises";
+import { connect } from "node:net";
+import { basename, dirname, join } from "node:path";
 import { modelKeyVariableOf } from "../../shared/sandbox.ts";
 import { cameThroughRelay } from "./relayed-request.ts";
+import { listenOnSocket, passBothWays, refuse, type RunningSocket } from "./vm-connections.ts";
 
 /** The model APIs the proxy speaks: Anthropic's Messages, and OpenAI's Chat Completions and Responses, as their clients call them. */
 export type ModelApi = "anthropic-messages" | "openai-completions" | "openai-responses";
@@ -103,18 +106,15 @@ export async function proxiedModelRequest(request: Request, relayPort: number, r
   }
 }
 
-export interface RunningSocket {
-  stop(): Promise<void>;
-}
-
-/** How much of this computer a room's VM may hold through one socket: requests at once, and seconds one may go without a byte, 0 for no end. */
+/** How much of this computer a room's VM may hold through one socket: connections, requests at once, and seconds one may go without a byte, 0 for no end. */
 export interface SocketLimits {
+  mostConnections: number;
   mostAtOnce: number;
   idleSeconds: number;
 }
 
 /** A room's agents' model requests: as many at once as a few agents with their subagents make, none silent past Bun's longest idle time. */
-export const MODEL_SOCKET_LIMITS: SocketLimits = { mostAtOnce: 32, idleSeconds: 255 };
+export const MODEL_SOCKET_LIMITS: SocketLimits = { mostConnections: 128, mostAtOnce: 32, idleSeconds: 255 };
 
 /** The answer, its slot given back once its body was read to the end, failed or was given up on. */
 function givingBackWhenDone(answer: Response, giveBack: () => void): Response {
@@ -146,12 +146,19 @@ function givingBackWhenDone(answer: Response, giveBack: () => void): Response {
 /** Bun's types leave it out of a unix socket's server, which keeps to it. A request's own `server.timeout` would end as its answer starts to stream. */
 const idleTimeoutOfSocket = (seconds: number): object => ({ idleTimeout: seconds });
 
+const TURNED_AWAY_GONE_WITHIN_MS = 10_000;
+const TOO_MANY_CONNECTIONS = "too many connections at once";
+
+/** Where Bun serves, behind the socket that counts the VM's connections, which it doesn't itself: beside it, and not shown to the VM. */
+const servedBehind = (socketPath: string) => join(dirname(socketPath), `.${basename(socketPath)}`);
+
 /** Serves a unix socket only this user of this computer reaches, made anew where an old one was left, within its limits. */
-export async function serveOnSocket(socketPath: string, fetch: (request: Request) => Response | Promise<Response>, { mostAtOnce, idleSeconds }: SocketLimits): Promise<RunningSocket> {
-  await rm(socketPath, { force: true });
+export async function serveOnSocket(socketPath: string, fetch: (request: Request) => Response | Promise<Response>, { mostConnections, mostAtOnce, idleSeconds }: SocketLimits): Promise<RunningSocket> {
+  const served = servedBehind(socketPath);
+  await rm(served, { force: true });
   let atOnce = 0;
   const server = Bun.serve({
-    unix: socketPath,
+    unix: served,
     ...idleTimeoutOfSocket(idleSeconds),
     async fetch(request) {
       if (atOnce >= mostAtOnce) return refused(429, "too many requests at once");
@@ -170,11 +177,18 @@ export async function serveOnSocket(socketPath: string, fetch: (request: Request
       }
     },
   });
-  await chmod(socketPath, 0o600);
+  await chmod(served, 0o600);
+  const connections = await listenOnSocket(socketPath, {
+    mostAtOnce: mostConnections,
+    allowHalfOpen: true,
+    take: (client) => passBothWays(client, connect({ path: served, allowHalfOpen: true }), 0),
+    turnAway: (client) => refuse(client, "503 Service Unavailable", TOO_MANY_CONNECTIONS, TURNED_AWAY_GONE_WITHIN_MS),
+  });
   return {
     async stop() {
+      await connections.stop();
       await server.stop(true);
-      await rm(socketPath, { force: true });
+      await rm(served, { force: true });
     },
   };
 }

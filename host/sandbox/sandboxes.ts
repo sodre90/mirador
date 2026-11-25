@@ -36,9 +36,10 @@ import { entryOf, isInside, protectedPartsOf, realOrAsIs, sandboxRefusalOf, wayT
 import { HeldFiles, HeldFilesRefused, type HeldSandbox } from "./held-files.ts";
 import type { PlacesPutBack, PlacesRequest } from "./in-vm/held-places.ts";
 import type { AgentImage } from "./image.ts";
-import { secretsOf, startModelProxy, type ModelRoute, type RunningSocket } from "./model-proxy.ts";
+import { secretsOf, startModelProxy, type ModelRoute } from "./model-proxy.ts";
 import { startNetworkProxy, type NetworkProxy } from "./network-proxy.ts";
 import { removeLeftSocketFolders, SOCKETS_FOLDER_PREFIX } from "./socket-folders.ts";
+import type { RunningSocket } from "./vm-connections.ts";
 import { HOST_LABEL, OWNER_LABEL, SandboxNotReady, type AgentInVm, type Mount, type VmLauncher } from "./vm-launcher.ts";
 
 /** The ports a sandbox's VM gives its agents on its own 127.0.0.1, relayed to Mirador's sockets on this computer. */

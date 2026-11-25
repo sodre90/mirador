@@ -28,7 +28,7 @@ export function canvasRequest(request: Request, relayPort: number, canvas: Sandb
 }
 
 /** A sandbox's canvas requests: a canvas server's stream per conversation, and its calls, one of which may wait on the owner for long. */
-export const CANVAS_SOCKET_LIMITS: SocketLimits = { mostAtOnce: 64, idleSeconds: 0 };
+export const CANVAS_SOCKET_LIMITS: SocketLimits = { mostConnections: 128, mostAtOnce: 64, idleSeconds: 0 };
 
 export const startCanvasSocket = (socketPath: string, relayPort: number, canvas: SandboxCanvas, limits = CANVAS_SOCKET_LIMITS) =>
   serveOnSocket(socketPath, (request) => canvasRequest(request, relayPort, canvas), limits);

@@ -1,10 +1,11 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, statSync } from "node:fs";
-import { connect } from "node:net";
+import { connect, type Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { startCanvasSocket } from "../host/sandbox/canvas-socket.ts";
-import { modelRouteOf, startModelProxy, type ModelRoute, type RunningSocket } from "../host/sandbox/model-proxy.ts";
+import { modelRouteOf, startModelProxy, type ModelRoute } from "../host/sandbox/model-proxy.ts";
+import type { RunningSocket } from "../host/sandbox/vm-connections.ts";
 import { RUNS_SANDBOXES } from "./sandbox-computer.ts";
 
 const scratch = mkdtempSync(join(tmpdir(), "sbx-sockets-"));
@@ -202,7 +203,7 @@ describe("a room's model proxy holds only so much of this Mac", () => {
       fetch: () => new Promise<Response>((resolve) => releases.push(() => resolve(Response.json({ answered: true })))),
     });
     const socket = join(scratch, "limited.sock");
-    const proxy = await startModelProxy(socket, MODEL_PORT, () => routeTo(slow.port!), { mostAtOnce: 2, idleSeconds: 255 });
+    const proxy = await startModelProxy(socket, MODEL_PORT, () => routeTo(slow.port!), { mostConnections: 128, mostAtOnce: 2, idleSeconds: 255 });
     try {
       const first = askedThrough(socket);
       const second = askedThrough(socket);
@@ -224,7 +225,7 @@ describe("a room's model proxy holds only so much of this Mac", () => {
   test("cuts off a request the model API takes too long over, and gives its place back", async () => {
     const silent = Bun.serve({ port: 0, fetch: () => new Promise<Response>(() => {}) });
     const socket = join(scratch, "timed.sock");
-    const proxy = await startModelProxy(socket, MODEL_PORT, () => routeTo(silent.port!), { mostAtOnce: 1, idleSeconds: 255 }, 200);
+    const proxy = await startModelProxy(socket, MODEL_PORT, () => routeTo(silent.port!), { mostConnections: 128, mostAtOnce: 1, idleSeconds: 255 }, 200);
     try {
       expect(statusOf(await askedThrough(socket))).toBe(502);
       expect(statusOf(await askedThrough(socket))).toBe(502);
@@ -232,6 +233,83 @@ describe("a room's model proxy holds only so much of this Mac", () => {
       await proxy.stop();
       silent.stop(true);
     }
+  });
+});
+
+describe("a sandbox's VM holds only so many connections", () => {
+  const TURNED_AWAY = 64;
+
+  /** A connection that asks nothing, or no more than it did, and is never let go of by the VM. */
+  async function held(path: string, said = ""): Promise<Socket> {
+    const socket = connect(path);
+    socket.on("error", () => {});
+    await new Promise((open) => socket.once("connect", open));
+    socket.write(said);
+    return socket;
+  }
+
+  async function untilAnswered(status: number, ask: () => Promise<string>) {
+    while (statusOf(await ask()) !== status) await Bun.sleep(20);
+  }
+
+  test("to its model and to its canvas, idle ones and those refused a request counted: one more is told so, many more end without a word, and one is taken again once another ended", async () => {
+    const [model, canvas] = [join(scratch, "model-counted.sock"), join(scratch, "canvas-counted.sock")];
+    const sockets = [
+      await startModelProxy(model, MODEL_PORT, () => null, { mostConnections: 3, mostAtOnce: 32, idleSeconds: 255 }),
+      await startCanvasSocket(canvas, CANVAS_PORT, { belongs: () => false, tokenOf: () => "", handle: () => new Response() }, { mostConnections: 3, mostAtOnce: 64, idleSeconds: 0 }),
+    ];
+    for (const path of [model, canvas]) {
+      const refusedOnce = "GET /nowhere HTTP/1.1\r\nHost: elsewhere\r\n\r\n";
+      const ask = () => rawRequest(path, "GET /nowhere HTTP/1.1\nHost: elsewhere\nConnection: close\n\n").catch(() => "");
+      expect(statusOf(await ask())).toBe(403);
+      const idle = [await held(path), await held(path, refusedOnce), await held(path, "GET /half")];
+      await untilAnswered(503, ask);
+      expect(await ask()).toContain("too many connections at once");
+
+      const waiting = await Promise.all(Array.from({ length: TURNED_AWAY }, () => held(path)));
+      await Bun.sleep(100);
+      expect(await ask()).toBe("");
+
+      [...waiting, idle[0]!].forEach((socket) => socket.destroy());
+      await untilAnswered(403, ask);
+      idle.forEach((socket) => socket.destroy());
+    }
+    await Promise.all(sockets.map((socket) => socket.stop()));
+  }, 20_000);
+
+  test("each a request may come over again, one that has said all it will is answered, and a request given up on ends where it went", async () => {
+    const gone = Promise.withResolvers<void>();
+    const path = join(scratch, "canvas-again.sock");
+    const socket = await startCanvasSocket(path, CANVAS_PORT, {
+      belongs: () => true,
+      tokenOf: () => "token",
+      handle: (conversationId, request) => {
+        if (conversationId !== "waits") return new Response("canvas");
+        request.signal.addEventListener("abort", () => gone.resolve());
+        return new Response(new ReadableStream({ start: (controller) => controller.enqueue("begun") }));
+      },
+    });
+    const asked = (conversationId: string) => `GET /mcp/${conversationId} HTTP/1.1\r\nHost: 127.0.0.1:${CANVAS_PORT}\r\nAuthorization: Bearer token\r\n\r\n`;
+    const client = await held(path);
+    let heard = "";
+    client.on("data", (chunk) => (heard += chunk.toString()));
+    for (const times of [1, 2]) {
+      client.write(asked("answers"));
+      while (heard.split("canvas").length <= times) await Bun.sleep(10);
+    }
+    const saidAll = connect({ path, allowHalfOpen: true });
+    const answered = Promise.withResolvers<string>();
+    saidAll.on("data", (chunk) => answered.resolve(chunk.toString()));
+    saidAll.on("close", () => answered.resolve(""));
+    saidAll.end(asked("answers"));
+    expect(statusOf(await answered.promise)).toBe(200);
+    saidAll.destroy();
+
+    client.write(asked("waits"));
+    while (!heard.includes("begun")) await Bun.sleep(10);
+    client.destroy();
+    await gone.promise;
+    await socket.stop();
   });
 });
 

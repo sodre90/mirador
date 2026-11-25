@@ -1,9 +1,8 @@
-import { chmod, rm } from "node:fs/promises";
 import { lookup } from "node:dns/promises";
-import { connect, createServer, isIP, type Socket } from "node:net";
+import { connect, isIP, type Socket } from "node:net";
 import { reachesMoreThan, type SandboxNetwork } from "../../shared/sandbox.ts";
 import { mayDial } from "./dialable-addresses.ts";
-import type { RunningSocket } from "./model-proxy.ts";
+import { listenOnSocket, passBothWays, refuse, type RunningSocket } from "./vm-connections.ts";
 
 /** How much of this computer a sandbox's VM may hold through its proxy, and how long it may take to ask. */
 export interface NetworkProxyLimits {
@@ -17,9 +16,6 @@ export interface NetworkProxyLimits {
 }
 
 export const NETWORK_PROXY_LIMITS: NetworkProxyLimits = { mostAtOnce: 128, mostHeadBytes: 16 * 1024, headWithinMs: 10_000, lookUpWithinMs: 10_000, connectWithinMs: 15_000, idleMs: 60 * 60_000 };
-
-/** Connections past the most at once that are told so before they end; any more end without a word. */
-const MOST_TURNED_AWAY_AT_ONCE = 64;
 
 /** How the proxy finds its way: the addresses of a name, and whether a sandbox with this network may be connected with one. */
 export interface NetworkProxyWays {
@@ -54,9 +50,6 @@ const NOT_FOR_IT: Record<Exclude<SandboxNetwork, "closed">, string> = {
   internet: "There is no such place on the internet, which is all this sandbox reaches: not its owner's computer or networks.",
   everything: "There is no such place this sandbox reaches.",
 };
-
-const refusal = (status: string, why: string) =>
-  `HTTP/1.1 ${status}\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: ${Buffer.byteLength(why) + 1}\r\nConnection: close\r\n\r\n${why}\n`;
 
 const HEAD_ENDS = "\r\n\r\n";
 
@@ -150,87 +143,52 @@ async function firstConnected([address, ...others]: string[], port: number, unti
 /** A network whose IPv6 leads nowhere then costs no time. */
 const ipv4First = (a: string, b: string) => isIP(a) - isIP(b);
 
-/** Bytes both ways until either side ends, what it had sent still going out. */
-function join(client: Socket, upstream: Socket, idleMs: number) {
-  const ended = () => {
-    client.destroy();
-    upstream.destroy();
-  };
-  [client, upstream].forEach((side) => {
-    side.setTimeout(idleMs, ended);
-    side.on("error", ended);
-  });
-  upstream.on("close", () => client.end());
-  client.on("close", () => upstream.destroy());
-  upstream.pipe(client);
-  client.pipe(upstream);
-}
-
 /**
  * The way out of a sandbox whose VM has no network: a web proxy on a unix socket of this computer's, forwarded in. It looks
  * each name up here, connects with an address the sandbox may reach and no other, and passes bytes both ways, following
  * nothing. Where the sandbox's network is closed it reads a request, refuses it, and looks nothing up.
  */
 export async function startNetworkProxy(socketPath: string, networkNow: () => SandboxNetwork, limits = NETWORK_PROXY_LIMITS, ways = WAYS_OF_THIS_COMPUTER): Promise<NetworkProxy> {
-  await rm(socketPath, { force: true });
-  const clients = new Set<Socket>();
   /** Those let through or on their way, and what the sandbox reached then. */
   const letThrough = new Map<Socket, SandboxNetwork>();
 
-  const refuse = (client: Socket, status: string, why: string) => {
-    client.end(refusal(status, why));
-    client.resume();
-    setTimeout(() => client.destroy(), limits.headWithinMs).unref();
-  };
+  const refused = (client: Socket, status: string, why: string) => refuse(client, status, why, limits.headWithinMs);
 
   const answer = async (client: Socket) => {
     const request = await headFrom(client, limits);
     if (client.destroyed) return;
     if (!request) return void client.destroy();
     const network = networkNow();
-    if (network === "closed") return refuse(client, "403 Forbidden", CLOSED);
+    if (network === "closed") return refused(client, "403 Forbidden", CLOSED);
     const asked = askedIn(request.head);
-    if (!asked) return refuse(client, "400 Bad Request", UNREADABLE);
+    if (!asked) return refused(client, "400 Bad Request", UNREADABLE);
     letThrough.set(client, network);
+    client.on("close", () => letThrough.delete(client));
     const { host, port } = asked;
     const addresses = isIP(host) ? [host] : ((await within(limits.lookUpWithinMs, ways.addressesOf(host))) ?? []);
     if (client.destroyed) return;
     const dialled = addresses.filter((address) => ways.mayDial(network, address)).toSorted(ipv4First);
-    if (dialled.length === 0) return refuse(client, "403 Forbidden", NOT_FOR_IT[network]);
+    if (dialled.length === 0) return refused(client, "403 Forbidden", NOT_FOR_IT[network]);
     const upstream = await firstConnected(dialled, port, Date.now() + limits.connectWithinMs, () => !client.destroyed);
     if (client.destroyed || reachesMoreThan(network, networkNow())) {
       upstream?.destroy();
       return void client.destroy();
     }
-    if (!upstream) return refuse(client, "502 Bad Gateway", NOT_REACHED);
+    if (!upstream) return refused(client, "502 Bad Gateway", NOT_REACHED);
     if (asked.isTunnel) client.write("HTTP/1.1 200 Connection established\r\n\r\n");
     upstream.write(asked.first, "latin1");
     if (request.rest.length > 0) upstream.write(request.rest);
-    join(client, upstream, limits.idleMs);
+    passBothWays(client, upstream, limits.idleMs);
   };
 
-  const server = createServer((client) => {
-    client.on("error", () => client.destroy());
-    clients.add(client);
-    client.on("close", () => {
-      clients.delete(client);
-      letThrough.delete(client);
-    });
-    if (clients.size > MOST_TURNED_AWAY_AT_ONCE + limits.mostAtOnce) return void client.destroy();
-    if (clients.size > limits.mostAtOnce) return refuse(client, "503 Service Unavailable", TOO_MANY);
-    void answer(client).catch(() => client.destroy());
+  const { stop } = await listenOnSocket(socketPath, {
+    mostAtOnce: limits.mostAtOnce,
+    allowHalfOpen: false,
+    take: (client) => void answer(client).catch(() => client.destroy()),
+    turnAway: (client) => refused(client, "503 Service Unavailable", TOO_MANY),
   });
-  const listening = Promise.withResolvers<void>();
-  server.once("error", listening.reject);
-  server.listen(socketPath, listening.resolve);
-  await listening.promise;
-  await chmod(socketPath, 0o600);
   return {
     networkChanged: () => [...letThrough].filter(([, network]) => reachesMoreThan(network, networkNow())).forEach(([client]) => client.destroy()),
-    async stop() {
-      server.close();
-      clients.forEach((client) => client.destroy());
-      await rm(socketPath, { force: true });
-    },
+    stop,
   };
 }
