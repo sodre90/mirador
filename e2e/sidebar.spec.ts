@@ -451,3 +451,42 @@ test("the rooms scroll with the workspaces as one list, each section's heading s
     expect(await scrolled()).toBe(at);
   });
 });
+
+test("a row's control that takes the focus shows under the heading stuck at the top of the list, not behind it, and a heading's button that does leaves the list where it was scrolled", async ({ page }) => {
+  await page.setViewportSize({ width: 1100, height: 420 });
+  const folders = ["focused-a", "focused-b", "focused-c", "focused-d"].map((name) => join(host.root, name));
+  folders.forEach((folder) => mkdirSync(folder, { recursive: true }));
+  await signIn(page, host);
+  for (const folder of folders) await addWorkspaceFromSidebar(page, folder);
+  for (const room of ["Alcove", "Bower"]) await createRoom(page, room, []);
+
+  /** Each control of the section takes the focus with the list scrolled first to `from`; those left behind a heading, or that moved the list while their own heading showed, by name. */
+  const controlsOutOfPlace = (section: string, from: number) =>
+    page.evaluate(async ({ section, from }) => {
+      const list = document.querySelector<HTMLElement>(".sidebar-scroll")!;
+      const boxOf = (element: Element) => element.getBoundingClientRect();
+      const nextFrame = () => new Promise(requestAnimationFrame);
+      const stuckOver = (control: Element) => [...list.querySelectorAll("[data-sticky-heading]")].filter((heading) => !heading.contains(control)).map(boxOf).filter(({ top }) => top <= boxOf(list).top + 1).map(({ bottom }) => bottom);
+      const outOfPlace: string[] = [];
+      for (const control of list.querySelectorAll<HTMLElement>(`${section} :is(button, select)`)) {
+        list.scrollTo({ top: from });
+        await nextFrame();
+        const before = list.scrollTop;
+        const headingShown = control.closest("[data-sticky-heading]") !== null && boxOf(control).top >= boxOf(list).top;
+        control.focus();
+        await nextFrame();
+        if (document.activeElement !== control) continue;
+        const { top, bottom } = boxOf(control);
+        const shownFrom = Math.max(boxOf(list).top, ...stuckOver(control));
+        const name = control.getAttribute("aria-label") ?? control.textContent;
+        if (headingShown && list.scrollTop !== before) outOfPlace.push(`${name}, from ${from}, scrolled the list ${before} to ${list.scrollTop}`);
+        if (top < shownFrom - 1 || bottom > boxOf(list).bottom + 1) outOfPlace.push(`${name}, from ${from}, at ${top}..${bottom}, shown from ${shownFrom}`);
+      }
+      return outOfPlace;
+    }, { section, from });
+
+  expect(await controlsOutOfPlace(".sidebar-scroll", 1_000_000)).toEqual([]);
+
+  const roomsEnd = await page.locator(".sidebar-scroll").evaluate((list) => list.querySelector(".rooms")!.getBoundingClientRect().bottom - list.getBoundingClientRect().top + list.scrollTop);
+  for (const beforeEnd of [10, 20, 30, 40]) expect(await controlsOutOfPlace(".rooms", roomsEnd - beforeEnd)).toEqual([]);
+});

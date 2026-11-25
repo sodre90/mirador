@@ -47,15 +47,15 @@ export function coveredByHeading(headings: { top: number; bottom: number }[], li
 
 /**
  * The part of the list a person sees: below the heading stuck at its top, whose height the list's stylesheet gets as
- * --covered-top, so the chip above shows under it.
+ * --covered-top, so the chip above shows under it. A heading may yet come to stick at the top as the list scrolls, so the
+ * stylesheet also gets the height of the tallest, as --tallest-heading.
  */
 function viewUnderHeadings(scroller: HTMLElement) {
   const { top, bottom } = scroller.getBoundingClientRect();
-  const covered = coveredByHeading(
-    [...scroller.querySelectorAll(STICKY_HEADING)].map((heading) => heading.getBoundingClientRect()),
-    top,
-  );
+  const headings = [...scroller.querySelectorAll(STICKY_HEADING)].map((heading) => heading.getBoundingClientRect());
+  const covered = coveredByHeading(headings, top);
   scroller.style.setProperty("--covered-top", `${covered}px`);
+  scroller.style.setProperty("--tallest-heading", `${Math.max(0, ...headings.map(({ height }) => height))}px`);
   return { top: top + covered, bottom };
 }
 

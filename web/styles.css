@@ -907,6 +907,11 @@ body.resizing iframe {
   z-index: 6;
 }
 
+/* The focus scrolls a row out from behind the heading stuck over the list; a heading's own button is never behind it. */
+.sidebar-scroll :focus:not([data-sticky-heading] *) {
+  scroll-margin-top: var(--tallest-heading, 0px);
+}
+
 /* Its menu opens over the Workspaces heading below it. */
 .rooms > header {
   z-index: 7;
