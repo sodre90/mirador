@@ -83,16 +83,16 @@ test("Mia brings her opencode agent to work in the room's workspace: it reads an
 
   await roomCard(ann, "Garden").click();
   const accessCard = ann.locator("[data-workspace-access-asked]");
-  await expect(accessCard).toContainText("Mia's OpenCoder asks to work in this room's workspace");
+  await expect(accessCard).toContainText("OpenCoder (Mia) asks to work in this room's workspace");
   await accessCard.getByRole("button", { name: "Let it work here" }).click();
   await expect(accessCard).toHaveCount(0);
 
   const composer = ann.getByRole("textbox", { name: "Write in Garden, @ tags an agent…" });
-  const answers = ann.locator(".room-timeline .room-entry").filter({ has: ann.locator(".author", { hasText: "Mia's OpenCoder" }) });
+  const answers = ann.locator(".room-timeline .room-entry").filter({ has: ann.locator(".author", { hasText: "OpenCoder (Mia)" }) });
   const giveTask = async (line: string) => {
-    await composer.fill("@Mi");
-    await ann.getByRole("listbox", { name: "Agents and people of the room" }).getByRole("option", { name: "@Mia's OpenCoder" }).click();
-    await composer.fill(`@Mia's OpenCoder\n${line}`);
+    await composer.fill("@Op");
+    await ann.getByRole("listbox", { name: "Agents and people of the room" }).getByRole("option", { name: "@OpenCoder (Mia)" }).click();
+    await composer.fill(`@OpenCoder (Mia)\n${line}`);
     await composer.press("Enter");
   };
 

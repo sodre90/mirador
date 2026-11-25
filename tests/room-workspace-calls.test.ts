@@ -122,7 +122,7 @@ describe("letting a brought agent into the room's workspace", () => {
     const { rooms, room, agentId, ownerId, held, store } = roomOfAnn();
     expect(rooms.workspaceWaiting(room.id)).toEqual([{ asks: "access", roomId: room.id, agentId, at: 0, approvers: [ownerId, "a1"], sandboxNetwork: null }]);
     expect(rooms.countWaiting(room.id)).toBe(1);
-    expect(held).toEqual([{ kind: "permission", ask: { kind: "workspace", agent: "Mia's Coder" } }]);
+    expect(held).toEqual([{ kind: "permission", ask: { kind: "workspace", agent: "Coder (Mia)" } }]);
     for (const personId of ["m1", "b1", "c1", "g1", "x1"]) expect(refusal(() => rooms.answerWorkspace(room.id, agentId, "allow", personId))).toBe("room-approval-not-yours");
     rooms.answerWorkspace(room.id, agentId, "allow", "a1");
     expect(store.findRoom(room.id)!.agents.find(({ profileId }) => profileId === agentId)!.brought!.workspace).toBe("allowed");
@@ -395,7 +395,7 @@ describe("the task a call is made for", () => {
     const other = rooms.bringAgent(room.id, "m1", "Scout", "claude");
     rooms.write(room.id, ownerId, "look around", [other], null);
     const scouts = tasksTo(mia).at(-1)!;
-    rooms.broughtTaskAnswered("m1", room.id, other, scouts.taskId, "@Mia's Coder run it", null);
+    rooms.broughtTaskAnswered("m1", room.id, other, scouts.taskId, "@Coder (Mia) run it", null);
     const answer = rooms.timeline(room.id).messages.at(-1)!;
     expect([answer.tags, answer.taskHeld]).toEqual([[agentId], "waiting"]);
     expect(tasksTo(mia).at(-1)!.taskId).toBe(scouts.taskId);
@@ -410,7 +410,7 @@ describe("the task a call is made for", () => {
     const seq = store.appendEvent(conversationId, { type: "user-message", text: "x", roomMessageId: builders.id } as never).seq;
     store.appendEvent(conversationId, { type: "acp", update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "over to Coder" } } } as never);
     store.appendEvent(conversationId, { type: "turn-end", stopReason: "end_turn" } as never);
-    rooms.nameTagsForAnswer(conversationId, ["Mia's Coder"]);
+    rooms.nameTagsForAnswer(conversationId, ["Coder (Mia)"]);
     rooms.turnEnded(conversationId, seq);
     const taskId = tasksTo(mia).at(-1)!.taskId;
     expect(tasksTo(mia).at(-1)!.agentId).toBe(agentId);

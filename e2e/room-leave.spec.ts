@@ -85,7 +85,7 @@ test("a person leaves a room they were invited to from their list, and the last 
   await test.step("left once confirmed on that line, the open room closes and goes from their list, and they and the agent they brought from the owner's room", async () => {
     await bringsCoder(visitor, "Shed");
     await expect(coderConversation(visitor)).toHaveCount(1);
-    await expect(subline(page, "Shed")).toHaveText("1 person · Dora's Coder");
+    await expect(subline(page, "Shed")).toHaveText("1 person · Coder (Dora)");
     await roomCard(visitor, "Shed").click();
     await leaves(visitor, "Shed", await openMenuOfLine(visitor, "Shed"));
     await expect(openInvitedRoom(visitor)).toHaveCount(0);

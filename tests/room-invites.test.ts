@@ -331,7 +331,7 @@ describe("a room invite for several people", () => {
     addRoom(store, "r2");
     const key = keyPair();
     const mia = joining(invites, invites.invite("r1", "member", 1, "at-once", "15-minutes").code, key, "Mia");
-    store.insertPerson({ id: "z1", name: "Bob's Bot", color: null });
+    store.insertPerson({ id: "z1", name: "Bot (Bob)", color: null });
     store.setRoomPersonRole("r1", "z1", "guest");
     store.addBroughtAgent("r1", "b1", { personId: mia.personId, name: "Bot", harness: "claude" }, true);
     const { code } = invites.invite("r2", "member", 1, "at-once", "15-minutes");

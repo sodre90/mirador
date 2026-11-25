@@ -434,7 +434,7 @@ export const rooms: Messages["rooms"] = {
   bringAgent: "Agenten mitbringen…",
   bringAgentInto: (room) => `Agenten in ${room} mitbringen`,
   agent: "Agent",
-  broughtNameSeen: "Der Raum sieht ihn unter dem Namen dieses Profils, nach deinem.",
+  broughtNameSeen: "Der Raum sieht ihn unter dem Namen dieses Profils, gefolgt von deinem in Klammern.",
   othersTasks: "Wenn andere ihm eine Aufgabe geben",
   othersTasksChoices: { "after-ok": "Nur nach meinem OK", "any-time": "Jederzeit" },
   bringMeaning: [
@@ -495,5 +495,6 @@ export const rooms: Messages["rooms"] = {
   bring: "Mitbringen",
   bringing: "Wird mitgebracht…",
   broughtTask: (person, role, room, machine) => `${person} (${role}) gibt diesem Agenten eine Aufgabe in ${room} auf ${machine}`,
+  broughtTaskOfMembersAgent: (agent, room, machine) => `${agent}, Agent eines Mitglieds, gibt diesem Agenten eine Aufgabe in ${room} auf ${machine}`,
   broughtTaskHint: "Das ist alles, was der Agent bekommt, nach einer Zeile, die sagt, woher es kommt.",
 };

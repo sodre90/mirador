@@ -1058,7 +1058,7 @@ describe("a person other than the owner", () => {
     const brought = await miaPage.waitFor(isType("room.agent-brought", ({ requestId }) => requestId === "owner-rename-check"), miaMark);
     expect(brought.agentId).toBeTruthy();
 
-    for (const name of ["Mia R's Coder", "mia r's coder"]) {
+    for (const name of ["Coder (Mia R)", "coder (mia r)"]) {
       expect({ name, problem: problemOf(await settingOwnProfile(owner, name)) }).toEqual({ name, problem: "person-name-taken" });
     }
     expect(problemOf(await settingOwnProfile(owner, "Ann"))).toBeNull();

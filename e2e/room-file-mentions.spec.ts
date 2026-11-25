@@ -108,9 +108,9 @@ test("a file of the bringer's computer named with an @ in a task is not read for
   await expect(dialog).toHaveCount(0);
 
   await roomCard(page, "Garden").click();
-  await expect(page.locator(".room-header .agent-chip", { hasText: "Mia's Coder" })).toBeVisible();
-  await tag(page, "Garden", "@Mi", "Mia's Coder", `RAKE THE LEAVES ${namingSecretsOf(mias)}`);
-  await expect(page.locator(".room-timeline .room-entry").filter({ has: page.locator(".author", { hasText: "Mia's Coder" }) })).toBeVisible({ timeout: 60_000 });
+  await expect(page.locator(".room-header .agent-chip", { hasText: "Coder (Mia)" })).toBeVisible();
+  await tag(page, "Garden", "@Co", "Coder (Mia)", `RAKE THE LEAVES ${namingSecretsOf(mias)}`);
+  await expect(page.locator(".room-timeline .room-entry").filter({ has: page.locator(".author", { hasText: "Coder (Mia)" }) })).toBeVisible({ timeout: 60_000 });
   const asked = sentToTheModel().filter((sent) => sent.includes("RAKE THE LEAVES"));
   expect(asked.some((sent) => sent.includes(`@${fileOutsideWorkspace(mias)}`))).toBe(true);
   expect(asked.filter((sent) => sent.includes(MIAS_SECRET))).toEqual([]);

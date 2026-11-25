@@ -38,8 +38,8 @@ const screenshot = async (page: Page, name: string) => {
 };
 
 const composer = (page: Page) => page.getByRole("textbox", { name: "Write in Garden, @ tags an agent…" });
-const agentChip = (page: Page) => page.locator(".room-header .agent-chip", { hasText: "Mia's Coder" });
-const answersOfCoder = (page: Page) => page.locator(".room-timeline .room-entry").filter({ has: page.locator(".author", { hasText: "Mia's Coder" }) });
+const agentChip = (page: Page) => page.locator(".room-header .agent-chip", { hasText: "Coder (Mia)" });
+const answersOfCoder = (page: Page) => page.locator(".room-timeline .room-entry").filter({ has: page.locator(".author", { hasText: "Coder (Mia)" }) });
 const joinedCard = (page: Page) => roomCard(page, "Garden").and(page.locator(".joined-room"));
 const coderConversation = (page: Page) => page.locator(".sidebar li").filter({ has: page.locator(".conversation-title", { hasText: "Garden · Ann's machine" }) });
 const okCard = (page: Page) => page.locator(".brought-task:visible");
@@ -48,18 +48,20 @@ const answersOfBuilder = (page: Page) => page.locator(".room-timeline .room-entr
 
 /** Ann tags Mia's agent from the @ menu and gives it the rest. */
 async function tagCoder(rest: string) {
-  await composer(ann).fill("@Mi");
-  await ann.getByRole("listbox", { name: "Agents and people of the room" }).getByRole("option", { name: "@Mia's Coder" }).click();
-  await composer(ann).fill(`@Mia's Coder ${rest}`);
+  await composer(ann).fill("@Co");
+  await ann.getByRole("listbox", { name: "Agents and people of the room" }).getByRole("option", { name: "@Coder (Mia)" }).click();
+  await composer(ann).fill(`@Coder (Mia) ${rest}`);
   await composer(ann).press("Enter");
 }
 
-async function bringCoder(othersTasks: "Only after my OK" | "Any time") {
+const bringCoder = (othersTasks: "Only after my OK" | "Any time") => chooseToBring("Coder", othersTasks);
+
+async function chooseToBring(agent: string, othersTasks: "Only after my OK" | "Any time") {
   await joinedCard(mia).hover();
   await joinedCard(mia).getByRole("button", { name: "More for Garden" }).click();
   await mia.getByRole("menuitem", { name: "Bring an agent…" }).click();
   const dialog = mia.getByRole("dialog", { name: "Bring an agent into Garden" });
-  await dialog.getByRole("combobox", { name: /^Agent/ }).selectOption({ label: "Coder" });
+  await dialog.getByRole("combobox", { name: /^Agent/ }).selectOption({ label: agent });
   await dialog.getByLabel(othersTasks).check();
   return dialog;
 }
@@ -84,7 +86,7 @@ test("Mia brings an agent of hers into Ann's room: Ann's tasks for it wait for M
   await test.step("Mia brings her Coder from her own Mirador, only after her OK for others' tasks", async () => {
     const dialog = await bringCoder("Only after my OK");
     await expect(dialog.getByLabel("Only after my OK")).toBeChecked();
-    await expect(dialog).toContainText("The room sees it by this profile's name, after yours.");
+    await expect(dialog).toContainText("The room sees it by this profile's name, followed by yours in parentheses.");
     const meaning = (await whatItMeans(mia, dialog)).join("\n");
     expect(meaning).toContain("reading files in that workspace usually goes ahead without asking");
     expect(meaning).toContain("Its owner could pass a task off as yours");
@@ -105,7 +107,7 @@ test("Mia brings an agent of hers into Ann's room: Ann's tasks for it wait for M
   await test.step("Ann's list of who is here shows it as Mia's, and fits it without scrolling sideways", async () => {
     await ann.locator(".room-here-count").click();
     const popover = ann.locator(".room-people");
-    await expect(popover).toContainText("Mia's Coder");
+    await expect(popover).toContainText("Coder (Mia)");
     await expect(popover.locator(".room-agent-brought")).toBeVisible();
     expect(await popover.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
     await screenshot(ann, "people-here-with-brought-agent");
@@ -118,10 +120,10 @@ test("Mia brings an agent of hers into Ann's room: Ann's tasks for it wait for M
     await expect(coderConversation(mia).locator(".waiting-pill")).toBeVisible();
     await coderConversation(mia).click();
     await expect(okCard(mia)).toContainText("Ann (Owner) gives this agent a task in Garden on Ann's machine");
-    await expect(okCard(mia).locator(".brought-task-text")).toContainText("@Mia's Coder SAY Weeded the beds");
+    await expect(okCard(mia).locator(".brought-task-text")).toContainText("@Coder (Mia) SAY Weeded the beds");
     await screenshot(mia, "ok-card");
     expect(readFileSync(coderPrompts(), "utf8")).not.toContain("Weeded");
-    await expect(ann.locator(".room-timeline")).toContainText("Mia's Coder has not started on it yet.");
+    await expect(ann.locator(".room-timeline")).toContainText("Coder (Mia) has not started on it yet.");
   });
 
   await test.step("allowed, the task goes to Mia's agent, whose answer comes into the room as its message", async () => {
@@ -164,14 +166,14 @@ test("brought to take others' tasks any time, the agent answers without a card; 
 
   await test.step("its answer tagging Ann's Builder waits for Ann's OK as Mia's task, given by her agent, and reaches Builder once allowed", async () => {
     await tagCoder("SAY @Builder please check the beans");
-    await expect(taskCard(ann)).toContainText("Mia's Coder gives Builder a task on behalf of Mia (Member)");
+    await expect(taskCard(ann)).toContainText("Coder (Mia) gives Builder a task on behalf of Mia (Member)");
     await expect(taskCard(ann)).toContainText("@Builder please check the beans");
     await expect(answersOfBuilder(ann)).toHaveCount(0);
     await screenshot(ann, "task-of-brought-agent");
     await taskCard(ann).getByRole("button", { name: "Allow" }).click();
     await expect(taskCard(ann)).toHaveCount(0);
     await expect(answersOfBuilder(ann).locator(".message.agent")).toHaveText("Noted.");
-    expect(readFileSync(builderPrompts(), "utf8")).toContain("[member's agent] Mia's Coder");
+    expect(readFileSync(builderPrompts(), "utf8")).toContain("[member's agent] Coder (Mia)");
   });
 
   await test.step("Ann lets no member bring agents: Mia's leaves, and her next bringing is refused until Ann lets them again", async () => {
@@ -196,7 +198,7 @@ test("brought to take others' tasks any time, the agent answers without a card; 
 
 test("every task Mia's Mirador took is answered, though she takes it out of the queue or her host restarts in the middle of it", async () => {
   const letGo = (name: string) => join(mias.root, name);
-  const working = ann.locator(".room-timeline", { hasText: "Mia's Coder is working…" });
+  const working = ann.locator(".room-timeline", { hasText: "Coder (Mia) is working…" });
   const timesStarted = () => mias.log.match(/Mirador is running/g)?.length ?? 0;
 
   await test.step("a queued task Mia removes reads as not taken in the room", async () => {
@@ -232,6 +234,50 @@ test("every task Mia's Mirador took is answered, though she takes it out of the 
   });
 });
 
+test("Mia's Builder beside Ann's: the name the @ menu put in tags the one it names, and a task Mia's Coder gives it says whose agent asks", async () => {
+  const profiles = await createProfile(mia, "Builder", `OPENCODE_FAKE_ACP_PROMPTS=${join(mias.root, "builder-prompts")}`, "", "opencode");
+  await profiles.getByRole("button", { name: "Close" }).click();
+  const dialog = await chooseToBring("Builder", "Only after my OK");
+  await dialog.getByRole("button", { name: "Bring", exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  const miasBuilderChip = ann.locator(".room-header .agent-chip", { hasText: "Builder (Mia)" });
+  await expect(miasBuilderChip).toBeVisible();
+  const answersOfMiasBuilder = ann.locator(".room-timeline .room-entry").filter({ has: ann.locator(".author", { hasText: "Builder (Mia)" }) });
+  const allowsHerBuilder = async (title: string) => {
+    await coderConversation(mia).filter({ has: mia.locator(".waiting-pill.tone-decision") }).click();
+    await expect(okCard(mia).locator(".permission-title")).toHaveText(title);
+    await okCard(mia).getByRole("button", { name: "Allow" }).click();
+    await expect(okCard(mia)).toHaveCount(0);
+  };
+
+  await test.step("a message whose tag of Ann's Builder gave way to one of Mia's reaches Mia's alone", async () => {
+    const pick = async (name: string) => {
+      await composer(ann).fill("@Bu");
+      await ann.getByRole("listbox", { name: "Agents and people of the room" }).getByRole("option", { name, exact: true }).click();
+    };
+    await pick("@Builder");
+    await pick("@Builder (Mia)");
+    await composer(ann).fill("@Builder (Mia) SAY Pruned the roses");
+    await composer(ann).press("Enter");
+    await allowsHerBuilder("Ann (Owner) gives this agent a task in Garden on Ann's machine");
+    await expect(answersOfMiasBuilder.locator(".message.agent").last()).toHaveText("Pruned the roses");
+    expect(readFileSync(builderPrompts(), "utf8")).not.toContain("Pruned the roses");
+  });
+
+  await test.step("Coder's answer tagging it waits on Mia's Mirador as a task of her own Coder", async () => {
+    await tagCoder("SAY @Builder (Mia) please check the roses");
+    await allowsHerBuilder("Coder (Mia), a member's agent, gives this agent a task in Garden on Ann's machine");
+    await expect(answersOfMiasBuilder.locator(".message.agent").last()).toHaveText("Noted.");
+    expect(readFileSync(builderPrompts(), "utf8")).not.toContain("check the roses");
+  });
+
+  await joinedCard(mia).hover();
+  await joinedCard(mia).getByRole("button", { name: "More for Garden" }).click();
+  await mia.getByRole("menuitem", { name: "Take out Builder" }).click();
+  await mia.getByRole("menuitem", { name: "Confirm: Take out Builder" }).click();
+  await expect(miasBuilderChip).toHaveCount(0);
+});
+
 test("while Mia's Mirador is away, the room says so at once, and Ann takes the agent out", async () => {
   await mias.stop();
   await expect(agentChip(ann)).toHaveClass(/\baway\b/);
@@ -241,8 +287,8 @@ test("while Mia's Mirador is away, the room says so at once, and Ann takes the a
   const settings = await openRoomSettings(ann, "Garden", "Agents");
   const brought = settings.getByRole("list", { name: "Agents people brought" });
   await expect(brought).toContainText("Away: Mia's Mirador is not connected");
-  await brought.getByRole("button", { name: "Take out Mia's Coder" }).click();
-  await brought.getByRole("button", { name: "Take out Mia's Coder" }).click();
+  await brought.getByRole("button", { name: "Take out Coder (Mia)" }).click();
+  await brought.getByRole("button", { name: "Take out Coder (Mia)" }).click();
   await expect(brought).toHaveCount(0);
   await settings.getByRole("button", { name: "Close" }).click();
   await expect(agentChip(ann)).toHaveCount(0);

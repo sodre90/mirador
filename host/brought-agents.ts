@@ -14,7 +14,7 @@ import { HostProblemError, type HostProblem } from "../shared/host-problems.ts";
 import { replyOf } from "../shared/last-words.ts";
 import { isRoomId, MOST_ROOMS_READ } from "../shared/machines.ts";
 import type { Conversation, Launch, StoredEvent } from "../shared/model.ts";
-import { LONGEST_PERSON_NAME, personName } from "../shared/people.ts";
+import { authorNameIn, personName } from "../shared/people.ts";
 import type { ClientMessage, ServerMessage } from "../shared/protocol.ts";
 import { endsTurn } from "../shared/reverts.ts";
 import { MOST_WORKSPACE_CALLS_A_MINUTE, MOST_WORKSPACE_CALLS_AT_ONCE, WORKSPACE_TASK_MS, workspaceCallResultIn, type WorkspaceCall, type WorkspaceCallResult } from "../shared/room-workspace.ts";
@@ -97,11 +97,10 @@ export function refusalIn(problem: unknown): HostProblem {
   return { code: REFUSALS_PASSED_ON.find((code) => code === said) ?? "room-agent-not-let-in" };
 }
 
-/** Who the room's machine says gave a task: a role there is, and a name cleaned as a person's; null for anything else. */
+/** Who the room's machine says gave a task: a role there is, and a name as `authorNameIn` cleans it; null for anything else. */
 export function taskAuthorIn(name: unknown, role: unknown): FramedAuthor | null {
-  if (typeof name !== "string" || !isRoomAuthorRole(role)) return null;
-  const shown = personName(shownAsWritten(name.slice(0, LONGEST_PERSON_NAME * 4)));
-  return shown ? { role, name: shown } : null;
+  const shown = authorNameIn(name);
+  return shown && isRoomAuthorRole(role) ? { role, name: shown } : null;
 }
 
 const answerOf = (events: StoredEvent[]) => {

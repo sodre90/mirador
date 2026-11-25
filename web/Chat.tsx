@@ -69,6 +69,7 @@ import { FormatBarToggle } from "./FormatBar.tsx";
 import { ReadAloud, ReadsRepliesAloud } from "./ReadAloud.tsx";
 import { CopyReply, TimelineNow } from "./CopyReply.tsx";
 import { replyEnds, type ReplyEnd } from "../shared/replies.ts";
+import { BROUGHT_AGENT_ROLE } from "../shared/rooms.ts";
 import { awaitSpokenReply, forgetSpokenReply, readWhenSpokenTurnEnds, stopReading, stopReadingIn } from "./reply-player.ts";
 import { canFork } from "./actions.ts";
 import { hints, statusHints } from "./hints.ts";
@@ -800,9 +801,11 @@ function PermissionCard({ block, conversationId }: { block: PermissionBlock; con
  */
 function BroughtTaskCard({ task }: { task: BroughtTaskWaiting }) {
   const roomWords = t.rooms;
+  const { byName, byRole, roomName, machineName } = task;
+  const title = byRole === BROUGHT_AGENT_ROLE ? roomWords.broughtTaskOfMembersAgent(byName, roomName, machineName) : roomWords.broughtTask(byName, roomWords.authorRoles[byRole], roomName, machineName);
   return (
-    <div className="permission pending brought-task" data-brought-task={task.id} role="group" aria-label={roomWords.broughtTask(task.byName, roomWords.authorRoles[task.byRole], task.roomName, task.machineName)}>
-      <div className="permission-title">{roomWords.broughtTask(task.byName, roomWords.authorRoles[task.byRole], task.roomName, task.machineName)}</div>
+    <div className="permission pending brought-task" data-brought-task={task.id} role="group" aria-label={title}>
+      <div className="permission-title">{title}</div>
       <pre className="brought-task-text">{task.text}</pre>
       <div className="hint">{roomWords.broughtTaskHint}</div>
       <div className="permission-options">

@@ -27,7 +27,7 @@ describe("system notification text", () => {
     expect(systemNotification(conversation, "mirador", { kind: "permission", tool: null }).body).toBe("Wants permission: a tool");
     expect(bodyOf({ kind: "permission", ask: { kind: "task", by: "Ann" } })).toBe("Wants permission: a task from Ann");
     expect(bodyOf({ kind: "permission", ask: { kind: "task", by: "Mia", role: "member" } })).toBe("Wants permission: a task of Mia, member");
-    expect(bodyOf({ kind: "permission", ask: { kind: "workspace", agent: "Mia's Coder" } })).toBe("Wants permission: the room's workspace, for Mia's Coder");
+    expect(bodyOf({ kind: "permission", ask: { kind: "workspace", agent: "Coder (Mia)" } })).toBe("Wants permission: the room's workspace, for Coder (Mia)");
     expect(systemNotification(conversation, "mirador", { kind: "finished" }).body).toBe("Finished, waiting for you");
     expect(systemNotification(conversation, "mirador", { kind: "error", message: "exited" }).body).toBe("Stopped with an error: exited");
   });
@@ -174,8 +174,8 @@ describe("a notification in the page's or the desktop app's language", () => {
     const inHungarian = (ask: RoomAsk) => inLanguage(systemNotification(conversation, "mirador", { kind: "permission", ask }), hungarian).body;
     expect(inHungarian({ kind: "task", by: "Ann" })).toBe("Engedélyt kér: Ann feladata");
     expect(inHungarian({ kind: "task", by: "Mia", role: "member" })).toBe("Engedélyt kér: Mia feladata (tag)");
-    expect(inHungarian({ kind: "task", by: "Mia's Coder", role: "member's agent" })).toBe("Engedélyt kér: Mia's Coder feladata (tag ágense)");
-    expect(inHungarian({ kind: "workspace", agent: "Mia's Coder" })).toBe("Engedélyt kér: a szoba munkaterülete, Mia's Coder számára");
+    expect(inHungarian({ kind: "task", by: "Coder (Mia)", role: "member's agent" })).toBe("Engedélyt kér: Coder (Mia) feladata (tag ágense)");
+    expect(inHungarian({ kind: "workspace", agent: "Coder (Mia)" })).toBe("Engedélyt kér: a szoba munkaterülete, Coder (Mia) számára");
   });
 
   test("in English, it says what the host wrote", () => {
@@ -186,7 +186,7 @@ describe("a notification in the page's or the desktop app's language", () => {
       { kind: "permission", tool: null },
       { kind: "permission", ask: { kind: "task", by: "Ann" } },
       ...ROOM_AUTHOR_ROLES.map((role): NotificationReason => ({ kind: "permission", ask: { kind: "task", by: "Mia", role } })),
-      { kind: "permission", ask: { kind: "workspace", agent: "Mia's Coder" } },
+      { kind: "permission", ask: { kind: "workspace", agent: "Coder (Mia)" } },
       { kind: "finished" },
       { kind: "error", message: "exited" },
       { kind: "error", message: "The workspace no longer exists.", problem: { code: "workspace-gone" } },

@@ -184,7 +184,7 @@ describe("bringing an agent into a room", () => {
 
   test("its bringer takes no new name under which it would read as someone else of their rooms", () => {
     const { rooms, room, store } = roomWithMia();
-    store.insertPerson({ id: "z1", name: "Zed's Coder", color: null });
+    store.insertPerson({ id: "z1", name: "Coder (Zed)", color: null });
     rooms.setPersonRole(room.id, "z1", "guest");
     rooms.bringAgent(room.id, "m1", "Coder", "claude");
     expect(rooms.broughtAgentsFreeUnder("m1", "Zed")).toBe(false);
@@ -217,10 +217,10 @@ describe("bringing an agent into a room", () => {
     const people = [{ personId: "m1", name: "Mia" }];
     const agents = [
       { agentId: "p1", name: "Builder" },
-      { agentId, name: "Mia's Builder" },
+      { agentId, name: "Builder (Mia)" },
     ];
-    expect(mentionsIn("@Mia's Builder look", people, agents)).toEqual([]);
-    expect(agentsTaggedIn("@Mia's Builder look", people, agents)).toEqual([agentId]);
+    expect(mentionsIn("@Builder (Mia) look", people, agents)).toEqual([]);
+    expect(agentsTaggedIn("@Builder (Mia) look", people, agents)).toEqual([agentId]);
     expect(agentsTaggedIn("@Builder look", people, agents)).toEqual(["p1"]);
   });
 });
@@ -230,7 +230,7 @@ describe("a task for a brought agent", () => {
     const { rooms, room, ownerId, miaArrives, tasksToMia, sent } = roomWithMia();
     miaArrives();
     const agentId = rooms.bringAgent(room.id, "m1", "Coder", "claude");
-    const asked = rooms.write(room.id, ownerId, "@Mia's Coder fix it", [agentId], null);
+    const asked = rooms.write(room.id, ownerId, "@Coder (Mia) fix it", [agentId], null);
     const [task] = tasksToMia();
     expect(task).toMatchObject({ roomId: room.id, agentId, byName: "Ann", byRole: "owner", fromYou: false });
     expect(task!.text).toContain('You are an attendee of the room "Launch"');
@@ -244,14 +244,14 @@ describe("a task for a brought agent", () => {
     const { rooms, room, miaArrives, tasksToMia } = roomWithMia();
     miaArrives();
     const agentId = rooms.bringAgent(room.id, "m1", "Coder", "claude");
-    rooms.write(room.id, "m1", "@Mia's Coder fix it", [agentId], null);
+    rooms.write(room.id, "m1", "@Coder (Mia) fix it", [agentId], null);
     expect(tasksToMia()[0]).toMatchObject({ byName: "Mia", byRole: "member", fromYou: true });
   });
 
   test("while its bringer's Mirador is away, its thread says so at once and the task is not kept", () => {
     const { rooms, room, ownerId, tasksToMia, posted, store } = roomWithMia();
     const agentId = rooms.bringAgent(room.id, "m1", "Coder", "claude");
-    rooms.write(room.id, ownerId, "@Mia's Coder fix it", [agentId], null);
+    rooms.write(room.id, ownerId, "@Coder (Mia) fix it", [agentId], null);
     expect(tasksToMia()).toEqual([]);
     expect(posted().at(-1)).toMatchObject({ author: { profileId: agentId }, ended: "away", text: "" });
     expect(store.roomBroughtTasksOf("m1")).toEqual([]);
@@ -261,7 +261,7 @@ describe("a task for a brought agent", () => {
     const { rooms, room, ownerId, mias, miaArrives, tasksToMia, hub, agentOf } = roomWithMia();
     miaArrives();
     const agentId = rooms.bringAgent(room.id, "m1", "Coder", "claude");
-    rooms.write(room.id, ownerId, "@Mia's Coder fix it", [agentId], null);
+    rooms.write(room.id, ownerId, "@Coder (Mia) fix it", [agentId], null);
     hub.remove(mias as unknown as BrowserSocket);
     mias.data.carriesAgents = false;
     rooms.bringerLeft("m1");
@@ -276,7 +276,7 @@ describe("a task for a brought agent", () => {
     const { rooms, room, ownerId, miaArrives, tasksToMia } = roomWithMia();
     miaArrives();
     const agentId = rooms.bringAgent(room.id, "m1", "Coder", "claude");
-    rooms.write(room.id, ownerId, "@Mia's Coder fix it", [agentId], null);
+    rooms.write(room.id, ownerId, "@Coder (Mia) fix it", [agentId], null);
     miaArrives();
     expect(tasksToMia()).toHaveLength(1);
   });
@@ -285,7 +285,7 @@ describe("a task for a brought agent", () => {
     const { rooms, room, ownerId, miaArrives, tasksToMia, upserts, agentOf } = roomWithMia();
     miaArrives();
     const agentId = rooms.bringAgent(room.id, "m1", "Coder", "claude");
-    rooms.write(room.id, ownerId, "@Mia's Coder fix it", [agentId], null);
+    rooms.write(room.id, ownerId, "@Coder (Mia) fix it", [agentId], null);
     const { taskId } = tasksToMia()[0]!;
     const before = upserts();
     rooms.broughtTaskStarted("m1", room.id, agentId, taskId);
@@ -293,7 +293,7 @@ describe("a task for a brought agent", () => {
     expect(upserts()).toBe(before + 1);
     Array.from({ length: MOST_BROUGHT_TASK_STARTS_A_MINUTE }, () => {
       rooms.broughtTaskAnswered("m1", room.id, agentId, tasksToMia().at(-1)!.taskId, "done", null);
-      rooms.write(room.id, ownerId, "@Mia's Coder again", [agentId], null);
+      rooms.write(room.id, ownerId, "@Coder (Mia) again", [agentId], null);
       rooms.broughtTaskStarted("m1", room.id, agentId, tasksToMia().at(-1)!.taskId);
     });
     expect(agentOf(agentId)!.answering).toBeNull();
@@ -303,7 +303,7 @@ describe("a task for a brought agent", () => {
     const { rooms, room, ownerId, miaArrives, tasksToMia, posted, agentOf } = roomWithMia();
     miaArrives();
     const agentId = rooms.bringAgent(room.id, "m1", "Coder", "claude");
-    const asked = rooms.write(room.id, ownerId, "@Mia's Coder fix it", [agentId], null);
+    const asked = rooms.write(room.id, ownerId, "@Coder (Mia) fix it", [agentId], null);
     const { taskId } = tasksToMia()[0]!;
     expect(refusal(() => rooms.broughtTaskStarted("g1", room.id, agentId, taskId))).toBe("room-agent-not-yours");
     rooms.broughtTaskStarted("m1", room.id, agentId, taskId);
@@ -319,7 +319,7 @@ describe("a task for a brought agent", () => {
     const { rooms, room, ownerId, miaArrives, tasksToMia, posted, sent } = roomWithMia();
     miaArrives();
     const agentId = rooms.bringAgent(room.id, "m1", "Coder", "claude");
-    rooms.write(room.id, ownerId, "@Mia's Coder fix it", [agentId], null);
+    rooms.write(room.id, ownerId, "@Coder (Mia) fix it", [agentId], null);
     rooms.broughtTaskAnswered("m1", room.id, agentId, tasksToMia()[0]!.taskId, "@Builder please review, @Mia have a look", null);
     expect(posted().at(-1)).toMatchObject({ tags: ["p1"], mentions: [{ personId: "m1" }] });
     expect(sent).toHaveLength(1);
@@ -329,7 +329,7 @@ describe("a task for a brought agent", () => {
     const { rooms, room, ownerId, miaArrives, tasksToMia, posted } = roomWithMia();
     miaArrives();
     const agentId = rooms.bringAgent(room.id, "m1", "Coder", "claude");
-    rooms.write(room.id, ownerId, "@Mia's Coder fix it", [agentId], null);
+    rooms.write(room.id, ownerId, "@Coder (Mia) fix it", [agentId], null);
     const { taskId } = tasksToMia()[0]!;
     expect(refusal(() => rooms.broughtTaskAnswered("m1", room.id, agentId, taskId, "", "taken-out" as never))).not.toBeNull();
     rooms.broughtTaskAnswered("m1", room.id, agentId, taskId, "", "refused");
@@ -343,7 +343,7 @@ describe("a brought agent's answer is its bringer's word", () => {
     const { rooms, room, ownerId, miaArrives, tasksToMia, posted } = fixture;
     miaArrives();
     const agentId = rooms.bringAgent(room.id, "m1", "Coder", "claude");
-    const task = rooms.write(room.id, taskBy, "@Mia's Coder fix it", [agentId], null);
+    const task = rooms.write(room.id, taskBy, "@Coder (Mia) fix it", [agentId], null);
     if (rooms.tasksWaiting(room.id).length > 0) rooms.answerTask(room.id, task.id, "allow", ownerId);
     rooms.broughtTaskAnswered("m1", room.id, agentId, tasksToMia().at(-1)!.taskId, text, null);
     return { agentId, answer: posted().at(-1)! };
@@ -360,10 +360,10 @@ describe("a brought agent's answer is its bringer's word", () => {
       expect(answer).toMatchObject({ author: { profileId: agentId }, broughtBy: "m1", tags: ["p1"], taskHeld: "waiting" });
       expect(sent).toEqual([]);
       expect(rooms.tasksWaiting(room.id)).toEqual([expect.objectContaining({ messageId: answer.id, personId: "m1", role: "member", byAgent: agentId, profileIds: ["p1"] })]);
-      expect(notified.at(-1)).toEqual({ by: "conversation", ask: { kind: "task", by: "Mia's Coder", role: "member's agent" } });
+      expect(notified.at(-1)).toEqual({ by: "conversation", ask: { kind: "task", by: "Coder (Mia)", role: "member's agent" } });
       rooms.answerTask(room.id, answer.id, "allow", ownerId);
       expect(sent).toHaveLength(1);
-      expect(sent[0]!.text).toContain(`#${answer.seq} [member's agent] Mia's Coder`);
+      expect(sent[0]!.text).toContain(`#${answer.seq} [member's agent] Coder (Mia)`);
     });
 
     test(`while people's tasks start without asking, its tag of the owner's agent asks it at once, in a chain ${chain} started`, () => {
@@ -405,18 +405,18 @@ describe("a brought agent's answer is its bringer's word", () => {
     const { rooms, room, ownerId, tasksToMia, miaArrives } = fixture;
     miaArrives();
     const tester = rooms.bringAgent(room.id, "m1", "Tester", "claude");
-    const { answer } = coderAnswers(fixture, "@Mia's Tester check it", { taskBy: ownerId });
+    const { answer } = coderAnswers(fixture, "@Tester (Mia) check it", { taskBy: ownerId });
     expect(answer.taskHeld).toBeUndefined();
-    expect(tasksToMia().at(-1)).toMatchObject({ agentId: tester, byName: "Mia's Coder", byRole: "member's agent" });
+    expect(tasksToMia().at(-1)).toMatchObject({ agentId: tester, byName: "Coder (Mia)", byRole: "member's agent" });
   });
 
   test("a task held for agents of other people only tells the owner from the room", () => {
     const fixture = roomWithMia({ peoplesTasksWait: true });
     const { rooms, room, notified } = fixture;
     rooms.bringAgent(room.id, "b1", "Helper", "claude");
-    const { answer } = coderAnswers(fixture, "@Bob's Helper check it");
+    const { answer } = coderAnswers(fixture, "@Helper (Bob) check it");
     expect(answer.taskHeld).toBe("waiting");
-    expect(notified.at(-1)).toEqual({ by: "room", ask: { kind: "task", by: "Mia's Coder", role: "member's agent" } });
+    expect(notified.at(-1)).toEqual({ by: "room", ask: { kind: "task", by: "Coder (Mia)", role: "member's agent" } });
   });
 
   test("the room's agents are told what a member's agent is, and it reads its own messages by that mark", () => {
@@ -424,7 +424,7 @@ describe("a brought agent's answer is its bringer's word", () => {
     const { tasksToMia, sent } = fixture;
     coderAnswers(fixture, "@Builder review it");
     expect(sent[0]!.text).toContain("[member's agent] is an AI agent a member brought from their own machine, which speaks for that member");
-    expect(tasksToMia()[0]!.text).toContain("messages of [member's agent] Mia's Coder are your own");
+    expect(tasksToMia()[0]!.text).toContain("messages of [member's agent] Coder (Mia) are your own");
   });
 
   test("a blank name is refused", () => {
@@ -438,7 +438,7 @@ describe("taking a brought agent out", () => {
     const { rooms, room, ownerId, miaArrives, posted, agentOf, store } = roomWithMia();
     miaArrives();
     const agentId = rooms.bringAgent(room.id, "m1", "Coder", "claude");
-    rooms.write(room.id, ownerId, "@Mia's Coder fix it", [agentId], null);
+    rooms.write(room.id, ownerId, "@Coder (Mia) fix it", [agentId], null);
     expect(refusal(() => rooms.takeAgentOut(room.id, agentId, "g1"))).toBe("room-agent-not-yours");
     rooms.takeAgentOut(room.id, agentId, ownerId);
     expect(agentOf(agentId)).toBeUndefined();
@@ -452,13 +452,13 @@ describe("taking a brought agent out", () => {
     const { rooms, room, ownerId, miaArrives, tasksToMia, posted } = fixture;
     miaArrives();
     const agentId = rooms.bringAgent(room.id, "m1", "Coder", "claude");
-    const taskForAgent = rooms.write(room.id, ownerId, "@Mia's Coder fix it", [agentId], null);
+    const taskForAgent = rooms.write(room.id, ownerId, "@Coder (Mia) fix it", [agentId], null);
     rooms.broughtTaskAnswered("m1", room.id, agentId, tasksToMia().at(-1)!.taskId, "@Builder follow up", null);
     const heldByAgent = posted().at(-1)!;
     expect(heldByAgent.taskHeld).toBe("waiting");
 
-    const heldForOnlyAgent = rooms.write(room.id, "m1", "@Mia's Coder check it", [agentId], null);
-    const heldForBoth = rooms.write(room.id, "m1", "@Mia's Coder @Builder both", [agentId, "p1"], null);
+    const heldForOnlyAgent = rooms.write(room.id, "m1", "@Coder (Mia) check it", [agentId], null);
+    const heldForBoth = rooms.write(room.id, "m1", "@Coder (Mia) @Builder both", [agentId, "p1"], null);
     expect(rooms.tasksWaiting(room.id).map(({ messageId }) => messageId)).toEqual([heldByAgent.id, heldForOnlyAgent.id, heldForBoth.id]);
     expect(taskForAgent.id).toBeTruthy();
 

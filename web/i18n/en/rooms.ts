@@ -447,7 +447,7 @@ export const rooms = {
   bringAgent: "Bring an agent…",
   bringAgentInto: (room: string) => `Bring an agent into ${room}`,
   agent: "Agent",
-  broughtNameSeen: "The room sees it by this profile's name, after yours.",
+  broughtNameSeen: "The room sees it by this profile's name, followed by yours in parentheses.",
   othersTasks: "When others give it a task",
   othersTasksChoices: { "after-ok": "Only after my OK", "any-time": "Any time" } satisfies Record<OthersTasks, string>,
   bringMeaning: [
@@ -508,5 +508,6 @@ export const rooms = {
   bring: "Bring",
   bringing: "Bringing…",
   broughtTask: (person: string, role: string, room: string, machine: string) => `${person} (${role}) gives this agent a task in ${room} on ${machine}`,
+  broughtTaskOfMembersAgent: (agent: string, room: string, machine: string) => `${agent}, a member's agent, gives this agent a task in ${room} on ${machine}`,
   broughtTaskHint: "This is all the agent is sent, after a line saying where it comes from.",
 };

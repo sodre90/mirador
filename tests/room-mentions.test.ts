@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { MOST_PEOPLE_TAGGED, mentionsIn, textAroundMentions, withTagAtCaret } from "../shared/room-mentions.ts";
+import { MOST_PEOPLE_TAGGED, mentionsIn, stillTagged, textAroundMentions, withTagAtCaret } from "../shared/room-mentions.ts";
 import { ROOM_MESSAGE_MOST_CHARACTERS } from "../shared/rooms.ts";
 import { pickOf } from "../shared/room-votes.ts";
 
@@ -65,6 +65,26 @@ test("what a confirmer confirms of a question is their own pick alone, none whil
     { personId: "stan", question: 0, option: 1 },
   ];
   expect([pickOf(ballots, 0, "mia"), pickOf(ballots, 0, "ann"), pickOf(ballots, 1, "mia"), pickOf(ballots, 0, null)]).toEqual([2, null, null, null]);
+});
+
+test("an agent tagged while the message was written stays tagged as long as its whole name follows an @, the longest name that fits winning", () => {
+  const builder = { id: "p1", name: "Builder" };
+  const miasBuilder = { id: "b1", name: "Builder (Mia)" };
+  const agents = [builder, miasBuilder];
+  const tagsLeftIn = (text: string, tagged = agents) => stillTagged(text, tagged, people, agents).map(({ id }) => id);
+  expect(tagsLeftIn("@Builder (Mia) look")).toEqual(["b1"]);
+  expect(tagsLeftIn("@Builder (Mia is away) look")).toEqual(["p1"]);
+  expect(tagsLeftIn("@Builder (Mia), and @builder")).toEqual(["p1", "b1"]);
+  expect(tagsLeftIn("@Builder look", [miasBuilder])).toEqual([]);
+  expect(tagsLeftIn("@Builders look, me@Builder")).toEqual([]);
+});
+
+test("agents that share a name are each tagged by it, and one no longer offered stays tagged", () => {
+  const tagged = [
+    { id: "p1", name: "Builder" },
+    { id: "p2", name: "builder" },
+  ];
+  expect(stillTagged("@Builder look", tagged, people, []).map(({ id }) => id)).toEqual(["p1", "p2"]);
 });
 
 test("puts a tag in at the caret, a space apart from the word before it", () => {

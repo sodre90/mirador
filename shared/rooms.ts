@@ -24,7 +24,7 @@ export const PROFILES_MODEL: RoomAgentModel = { model: null, effort: null };
  */
 export interface BroughtAgent {
   personId: string;
-  /** Its own name, cleaned as a person's is; the room calls it by its bringer's name and this, as `broughtAgentName` puts them. */
+  /** Its own name, cleaned as a person's is; the room calls it by this and its bringer's name, as `broughtAgentName` puts them. */
   name: string;
   /** The kind of agent it runs on, for its mark. */
   harness: HarnessId;
@@ -37,8 +37,8 @@ export interface BroughtAgent {
 /** How many agents one person may bring into one room. */
 export const MOST_AGENTS_BROUGHT = 3;
 
-/** What the room calls a brought agent, in every language, as agents and tags read it: "Mia's Builder". */
-export const broughtAgentName = (bringerName: string, agentName: string) => `${bringerName}'s ${agentName}`;
+/** What the room calls a brought agent, in every language, as agents and tags read it: "Builder (Mia)". */
+export const broughtAgentName = (bringerName: string, agentName: string) => `${agentName} (${bringerName})`;
 
 /**
  * An agent of a room, by its profile, and the conversation it works on the room's tasks in, made the first time it is

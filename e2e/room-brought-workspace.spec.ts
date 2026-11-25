@@ -47,8 +47,8 @@ const screenshot = async (page: Page, name: string) => {
 };
 
 const composer = (page: Page) => page.getByRole("textbox", { name: "Write in Garden, @ tags an agent…" });
-const agentChip = (page: Page) => page.locator(".room-header .agent-chip", { hasText: "Mia's Coder" });
-const answersOfCoder = (page: Page) => page.locator(".room-timeline .room-entry").filter({ has: page.locator(".author", { hasText: "Mia's Coder" }) });
+const agentChip = (page: Page) => page.locator(".room-header .agent-chip", { hasText: "Coder (Mia)" });
+const answersOfCoder = (page: Page) => page.locator(".room-timeline .room-entry").filter({ has: page.locator(".author", { hasText: "Coder (Mia)" }) });
 const accessCard = (page: Page) => page.locator("[data-workspace-access-asked]");
 const callCard = (page: Page) => page.locator("[data-workspace-call-asked]");
 const thread = (page: Page) => page.locator(".room-thread");
@@ -85,9 +85,9 @@ async function bringCoder() {
 /** Ann gives Mia's agent a task, which its model answers by calling the tools of these `CALL ` lines. */
 async function giveTask(words: string, calls: string) {
   api.callsWhenSaid.set(words, calls);
-  await composer(ann).fill("@Mi");
-  await ann.getByRole("listbox", { name: "Agents and people of the room" }).getByRole("option", { name: "@Mia's Coder" }).click();
-  await composer(ann).fill(`@Mia's Coder ${words}`);
+  await composer(ann).fill("@Co");
+  await ann.getByRole("listbox", { name: "Agents and people of the room" }).getByRole("option", { name: "@Coder (Mia)" }).click();
+  await composer(ann).fill(`@Coder (Mia) ${words}`);
   await composer(ann).press("Enter");
 }
 
@@ -148,7 +148,7 @@ test("Mia brings her Claude agent to work in the room's workspace, and nothing o
 test("Ann lets it in, and it reads the room's workspace, changes a file and runs a command there, each only after her OK", async () => {
   await test.step("before she does, its call is refused", async () => {
     await roomCard(ann, "Garden").click();
-    await expect(accessCard(ann)).toContainText("Mia's Coder asks to work in this room's workspace");
+    await expect(accessCard(ann)).toContainText("Coder (Mia) asks to work in this room's workspace");
     await expect(accessCard(ann)).toContainText("each change and each command asks first");
     await expect(agentChip(ann)).toHaveAttribute("data-hint", "On Mia's computer · Waits to be let into this room's workspace");
     await screenshot(ann, "workspace-access-card");
@@ -172,12 +172,12 @@ test("Ann lets it in, and it reads the room's workspace, changes a file and runs
 
   await test.step("a change shows as a diff to Ann, and is made once she allows it", async () => {
     await giveTask("CHANGE THE NOTES", 'CALL mcp__canvas__room_edit {"path":"notes.txt","old":"beets","new":"peas"}\nTHEN Peas it is.');
-    await expect(callCard(ann)).toContainText("Mia's Coder asks to change a file", { timeout: 60_000 });
+    await expect(callCard(ann)).toContainText("Coder (Mia) asks to change a file", { timeout: 60_000 });
     await expect(callCard(ann).locator(".workspace-call-path")).toHaveText("notes.txt");
     await expect(callCard(ann).locator(".diff-removed")).toHaveText("-Sow the beets");
     await expect(callCard(ann).locator(".diff-added")).toHaveText("+Sow the peas");
-    await expect(callCard(ann)).toContainText("Your task: “@Mia's Coder CHANGE THE NOTES”");
-    await expect(ann.locator(".room-timeline")).toContainText("Mia's Coder is waiting for approval");
+    await expect(callCard(ann)).toContainText("Your task: “@Coder (Mia) CHANGE THE NOTES”");
+    await expect(ann.locator(".room-timeline")).toContainText("Coder (Mia) is waiting for approval");
     await screenshot(ann, "workspace-change-card");
     expect(readFileSync(inRoomsWorkspace("notes.txt"), "utf8")).toBe("Sow the beets\n");
     await callCard(ann).getByRole("button", { name: "Allow" }).click();
@@ -188,7 +188,7 @@ test("Ann lets it in, and it reads the room's workspace, changes a file and runs
 
   await test.step("a command shows whole, with what it runs as, and runs in the room's workspace once she allows it", async () => {
     await giveTask("COPY THE NOTES", `CALL mcp__canvas__room_run {"command":"cat notes.txt > copy.txt\\npwd\\ncat ${join(mias.projectDir, "nothing-here.txt")} || true"}\nTHEN Copied.`);
-    await expect(callCard(ann)).toContainText("Mia's Coder asks to run a command", { timeout: 60_000 });
+    await expect(callCard(ann)).toContainText("Coder (Mia) asks to run a command", { timeout: 60_000 });
     await expect(callCard(ann).locator(".workspace-call-text")).toContainText("cat notes.txt > copy.txt");
     await expect(callCard(ann)).toContainText("3 lines");
     await expect(callCard(ann)).toContainText("It runs on the room's machine with all its owner may do there, not only in the workspace.");
@@ -236,7 +236,7 @@ test("a task's thread shows what it did there and who allowed it; Ann takes the 
   await test.step("taken away, what waits stops, and its next call is refused", async () => {
     await giveTask("DROP THEM AGAIN", 'CALL mcp__canvas__room_run {"command":"rm notes.txt"}');
     await expect(callCard(ann).first()).toBeVisible({ timeout: 60_000 });
-    const takeAway = thread(ann).getByRole("button", { name: "Take this room's workspace away from Mia's Coder" });
+    const takeAway = thread(ann).getByRole("button", { name: "Take this room's workspace away from Coder (Mia)" });
     await takeAway.click();
     await takeAway.click();
     await expect(callCard(ann)).toHaveCount(0);
@@ -250,7 +250,7 @@ test("a task's thread shows what it did there and who allowed it; Ann takes the 
     const settings = await openRoomSettings(ann, "Garden", "Agents");
     const brought = settings.getByRole("list", { name: "Agents people brought" });
     await expect(brought).toContainText("Not let into this room's workspace");
-    await brought.getByRole("button", { name: "Let Mia's Coder work in this room's workspace" }).click();
+    await brought.getByRole("button", { name: "Let Coder (Mia) work in this room's workspace" }).click();
     await expect(brought).toContainText("Works in this room's workspace");
     await screenshot(ann, "workspace-in-settings");
     await settings.getByRole("button", { name: "Close" }).click();
@@ -278,14 +278,14 @@ test("an approver allows its calls too, a guest sees none of them, and a member'
 
   await test.step("Max's task waits for an approver, and opens the workspace once Pat allows it", async () => {
     api.callsWhenSaid.set("WEED THE NOTES", 'CALL mcp__canvas__room_edit {"path":"notes.txt","old":"peas","new":"beans"}\nTHEN Beans it is.');
-    await composer(max).fill("@Mi");
-    await max.getByRole("listbox", { name: "Agents and people of the room" }).getByRole("option", { name: "@Mia's Coder" }).click();
-    await composer(max).fill("@Mia's Coder WEED THE NOTES");
+    await composer(max).fill("@Co");
+    await max.getByRole("listbox", { name: "Agents and people of the room" }).getByRole("option", { name: "@Coder (Mia)" }).click();
+    await composer(max).fill("@Coder (Mia) WEED THE NOTES");
     await composer(max).press("Enter");
     const task = pat.locator(".room-task-approval");
     await expect(task).toContainText("WEED THE NOTES");
     await task.getByRole("button", { name: "Allow" }).click();
-    await expect(callCard(pat)).toContainText("Task of Max (Member): “@Mia's Coder WEED THE NOTES”", { timeout: 60_000 });
+    await expect(callCard(pat)).toContainText("Task of Max (Member): “@Coder (Mia) WEED THE NOTES”", { timeout: 60_000 });
     await expect(callCard(pat).locator(".diff-added")).toHaveText("+Sow the beans");
   });
 
@@ -301,12 +301,12 @@ test("an approver allows its calls too, a guest sees none of them, and a member'
     await openThreadOf(pat, "WEED THE NOTES");
     await callsInThread(pat).locator("summary").click();
     await expect(callsInThread(pat)).toContainText("Allowed by Pat");
-    await expect(thread(pat).getByRole("button", { name: "Take this room's workspace away from Mia's Coder" })).toBeVisible();
+    await expect(thread(pat).getByRole("button", { name: "Take this room's workspace away from Coder (Mia)" })).toBeVisible();
     for (const page of [gus, max]) {
       await openThreadOf(page, "WEED THE NOTES");
       await expect(thread(page)).toContainText("Beans it is.");
       await expect(callsInThread(page)).toHaveCount(0);
-      await expect(thread(page).getByRole("button", { name: "Take this room's workspace away from Mia's Coder" })).toHaveCount(0);
+      await expect(thread(page).getByRole("button", { name: "Take this room's workspace away from Coder (Mia)" })).toHaveCount(0);
     }
   });
   await Promise.all([pat, gus, max].map((page) => page.context().close()));
@@ -317,7 +317,7 @@ test("nothing of Mia's computer went to the model, and once she takes it out it 
   await takeOutOfJoinedRoom("Coder");
   await expect(agentChip(ann)).toHaveCount(0);
   await bringCoder();
-  await expect(accessCard(ann)).toContainText("Mia's Coder asks to work in this room's workspace");
+  await expect(accessCard(ann)).toContainText("Coder (Mia) asks to work in this room's workspace");
   expect(coderFolders()).toHaveLength(1);
 });
 

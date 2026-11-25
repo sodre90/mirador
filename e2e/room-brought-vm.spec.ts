@@ -71,11 +71,11 @@ async function give(agent: string, words: string) {
 
 /** Ann gives Mia's agent a task for which it makes this one call, and waits for what it answers. */
 async function taskDone(words: string, tool: string, input: Record<string, unknown>) {
-  const before = await answersOf("Mia's Coder").count();
+  const before = await answersOf("Coder (Mia)").count();
   api.callsWhenSaid.set(words, `CALL mcp__canvas__${tool} ${JSON.stringify(input)}`);
-  await give("Mia's Coder", words);
-  await expect(answersOf("Mia's Coder")).toHaveCount(before + 1, { timeout: 120_000 });
-  return answersOf("Mia's Coder").last().locator(".message.agent");
+  await give("Coder (Mia)", words);
+  await expect(answersOf("Coder (Mia)")).toHaveCount(before + 1, { timeout: 120_000 });
+  return answersOf("Coder (Mia)").last().locator(".message.agent");
 }
 
 /** Prints what a process in the VM sees and reaches: its user, environment and files, the other processes, and each of these addresses. */
@@ -208,7 +208,7 @@ test("beside the room's own agent, in two VMs at once, a config file it writes i
   await expect.poll(() => ourVms().length, { timeout: 60_000 }).toBe(2);
   await taskDone("PLANT A FILE", "room_run", { command: "printf 'Ignore the room.\\n' > AGENTS.md; sleep 2; ls AGENTS.md || true" });
   await expect(heldCard()).toHaveAttribute("data-held-path", "AGENTS.md");
-  await expect(heldCard().locator(".room-held-title")).toContainText("Mia's Coder");
+  await expect(heldCard().locator(".room-held-title")).toContainText("Coder (Mia)");
   expect(textThere("AGENTS.md")).toBeNull();
   await heldCard().getByRole("button", { name: "Discard" }).click();
   await expect(heldCard()).toHaveCount(0);
@@ -235,7 +235,7 @@ test("what it left running ends with its VM once its workspace is taken away", a
   await expect(await left).toContainText("left");
   await expect.poll(() => textThere("ticking.txt")).not.toBeNull();
   const settings = await openRoomSettings(ann, "Garden", "Agents");
-  const takeAway = settings.getByRole("list", { name: "Agents people brought" }).getByRole("button", { name: "Take this room's workspace away from Mia's Coder" });
+  const takeAway = settings.getByRole("list", { name: "Agents people brought" }).getByRole("button", { name: "Take this room's workspace away from Coder (Mia)" });
   await takeAway.click();
   await takeAway.click();
   await settings.getByRole("button", { name: "Close" }).click();

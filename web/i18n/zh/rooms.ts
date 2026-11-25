@@ -424,7 +424,7 @@ export const rooms: Messages["rooms"] = {
   bringAgent: "带入 Agent…",
   bringAgentInto: (room) => `把 Agent 带入 ${room}`,
   agent: "Agent",
-  broughtNameSeen: "房间会以你的名字加上这个配置的名称来称呼它。",
+  broughtNameSeen: "房间会以这个配置的名称来称呼它，后面的括号里是你的名字。",
   othersTasks: "别人给它任务时",
   othersTasksChoices: { "after-ok": "只在我同意后", "any-time": "随时" },
   bringMeaning: [
@@ -484,5 +484,6 @@ export const rooms: Messages["rooms"] = {
   bring: "带入",
   bringing: "正在带入…",
   broughtTask: (person, role, room, machine) => `${person}（${role}）在 ${machine} 上的 ${room} 给这个 Agent 一个任务`,
+  broughtTaskOfMembersAgent: (agent, room, machine) => `成员的 Agent ${agent} 在 ${machine} 上的 ${room} 给这个 Agent 一个任务`,
   broughtTaskHint: "这就是 Agent 收到的全部内容，前面有一行说明它来自哪里。",
 };

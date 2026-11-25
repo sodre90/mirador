@@ -9,7 +9,9 @@ import { BROUGHT_TASK_MOST_CHARACTERS, MOST_BROUGHT_TASKS_A_MINUTE, MOST_BROUGHT
 import { HostProblemError } from "../shared/host-problems.ts";
 import { MOST_ROOMS_READ } from "../shared/machines.ts";
 import type { Conversation, ConversationEvent, Launch, Profile } from "../shared/model.ts";
+import { LONGEST_PERSON_NAME } from "../shared/people.ts";
 import type { ClientMessage, ServerMessage } from "../shared/protocol.ts";
+import { broughtAgentName } from "../shared/rooms.ts";
 import { MOST_WORKSPACE_CALLS_A_MINUTE, MOST_WORKSPACE_CALLS_AT_ONCE, WORKSPACE_RESULT_MOST_CHARACTERS, WORKSPACE_TASK_MS, type WorkspaceCall, type WorkspaceCallResult } from "../shared/room-workspace.ts";
 import type { NotificationReason } from "../shared/system-notifications.ts";
 
@@ -365,6 +367,14 @@ describe("a task a room's machine sends an agent you brought", () => {
     expect(waiting!.text.length).toBeLessThanOrEqual(BROUGHT_TASK_MOST_CHARACTERS);
     expect(waiting!.byName).toBe("Ann[owner]");
     expect(taskAuthorIn("Ann", "agent")).toEqual({ role: "agent", name: "Ann" });
+    expect(taskAuthorIn("Ann", "boss")).toBeNull();
+    expect(taskAuthorIn(" \u202e", "agent")).toBeNull();
+  });
+
+  test("its author, an agent with a name as long as names get, keeps the bringer's name in it", () => {
+    const longest = broughtAgentName("M".repeat(LONGEST_PERSON_NAME), `${"C".repeat(LONGEST_PERSON_NAME)} 9`);
+    expect(taskAuthorIn(longest, "member's agent")).toEqual({ role: "member's agent", name: longest });
+    expect(taskAuthorIn(longest + "x".repeat(1_000), "member's agent")).toEqual({ role: "member's agent", name: longest });
   });
 });
 

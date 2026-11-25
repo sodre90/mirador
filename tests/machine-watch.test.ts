@@ -4,11 +4,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { forgetSignInAt, leftEveryRoomAt, signInRevoked } from "../host/machine-sign-in.ts";
 import type { MachineReach } from "../host/machine-tunnels.ts";
-import { MachineWatch, MOST_ROOM_CALLS_A_MINUTE } from "../host/machine-watch.ts";
+import { MachineWatch, MOST_ROOM_CALLS_A_MINUTE, roomAlertIn } from "../host/machine-watch.ts";
 import { atAddress, DIALS_THROUGH_SOCKETS, type Way } from "../host/p2p/dial.ts";
 import { Store } from "../host/store.ts";
 import type { Machine, MachineStatus } from "../shared/model.ts";
+import { LONGEST_PERSON_NAME } from "../shared/people.ts";
 import { OUT_OF_ROOMS_CLOSE_CODE, type ServerMessage } from "../shared/protocol.ts";
+import { broughtAgentName } from "../shared/rooms.ts";
 import type { SystemNotification } from "../shared/system-notifications.ts";
 
 async function eventually(check: () => void, timeoutMs = 3_000) {
@@ -308,6 +310,12 @@ describe("MachineWatch", () => {
     await eventually(() => expect(roomCalls).toHaveLength(3));
     expect(roomCalls[2]).toMatchObject({ kind: "question", roomId: "r1", body: "Waits for your approval: Run ls in the project", about: { kind: "room", alert: { about: "approve", what: "Run ls in the project" } } });
     expect(notifications).toEqual([]);
+  });
+
+  test("a call by an agent someone brought keeps the bringer's name in the agent's, however long the two are", () => {
+    const by = broughtAgentName("M".repeat(LONGEST_PERSON_NAME), `${"C".repeat(LONGEST_PERSON_NAME)} 9`);
+    expect(roomAlertIn({ about: "mention", by, text: "Look" })).toEqual({ about: "mention", by, text: "Look" });
+    expect(roomAlertIn({ about: "mention", by: 7, text: "Look" })).toBeNull();
   });
 
   test("joined as a person, passes on calls of a few of the machine's rooms a minute at most, however many rooms it lists", async () => {

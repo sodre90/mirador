@@ -1,5 +1,5 @@
 import { isRoomId, joinedRoomsIn, withJoinedRoom, withoutJoinedRoom, withReadings } from "../shared/machines.ts";
-import { LONGEST_PERSON_NAME, personName } from "../shared/people.ts";
+import { authorNameIn, LONGEST_PERSON_NAME, personName } from "../shared/people.ts";
 import { alertText, ROOM_ALERT_TEXT_MOST, type RoomAlert } from "../shared/room-reading.ts";
 import { shownAsWritten } from "../shared/written-text.ts";
 import type { Conversation, JoinedRoom, Machine, MachineSeen, MachineStatus, RoomKnock, WaitingFor } from "../shared/model.ts";
@@ -182,8 +182,8 @@ export function roomAlertIn(said: unknown): RoomAlert | null {
   const { about, by, text, question, what } = said as Record<string, unknown>;
   if (about === "confirm" && typeof question === "string") return { about, question: alertText(question.slice(0, READ_OF_WHAT_IS_SAID)) };
   if (about === "approve" && typeof what === "string") return { about, what: alertText(what.slice(0, READ_OF_WHAT_IS_SAID)) };
-  if (about !== "mention" || typeof by !== "string" || typeof text !== "string") return null;
-  const name = cleanedPersonName(by);
+  if (about !== "mention" || typeof text !== "string") return null;
+  const name = authorNameIn(by);
   return name ? { about, by: name, text: alertText(text.slice(0, READ_OF_WHAT_IS_SAID)) } : null;
 }
 

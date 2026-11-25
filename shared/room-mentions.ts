@@ -43,7 +43,7 @@ const keyOfNamed = (named: Named) => ("person" in named ? `person ${named.person
 
 /**
  * Whom the text tags, each once, in the order it first tags them: an @ followed by the whole of a person's or an agent's
- * name, in any case, the longest name that fits where two do, so that "@Mia's Builder" tags the agent and not Mia,
+ * name, in any case, the longest name that fits where two do, so that "@Builder (Mia)" tags Mia's agent and not the room's Builder,
  * within as much text as a person may write, the first `MOST_PEOPLE_TAGGED` of them. Nobody without a name is tagged.
  */
 function namedIn(text: string, people: TaggablePerson[], agents: TaggableAgent[]): { named: Named; written: string }[] {
@@ -69,6 +69,13 @@ export function mentionsIn(text: string, people: TaggablePerson[], agents: Tagga
 /** The agents the text tags, by their ids, as `namedIn` finds them among the people. */
 export function agentsTaggedIn(text: string, people: TaggablePerson[], agents: TaggableAgent[]): string[] {
   return namedIn(text, people, agents).flatMap(({ named }) => ("agent" in named ? [named.agent.agentId] : []));
+}
+
+/** Of the agents tagged while the text was written, those it tags now, as `namedIn` finds names among all a tag there can name; agents that share a name all count. */
+export function stillTagged<Tagged extends { name: string }>(text: string, tagged: Tagged[], people: TaggablePerson[], agents: { name: string }[]): Tagged[] {
+  const byName = [...agents, ...tagged].map(({ name }) => ({ agentId: name.toLowerCase(), name }));
+  const names = agentsTaggedIn(text, people, byName);
+  return tagged.filter(({ name }) => names.includes(name.toLowerCase()));
 }
 
 /** A stretch of a message's text, which is a tag of one of the people it mentions or none. */

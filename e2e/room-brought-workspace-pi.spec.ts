@@ -87,17 +87,17 @@ test("Mia brings her pi agent to work in the room's workspace: it reads and edit
 
   await roomCard(ann, "Garden").click();
   const accessCard = ann.locator("[data-workspace-access-asked]");
-  await expect(accessCard).toContainText("Mia's PiCoder asks to work in this room's workspace");
+  await expect(accessCard).toContainText("PiCoder (Mia) asks to work in this room's workspace");
   await accessCard.getByRole("button", { name: "Let it work here" }).click();
   await expect(accessCard).toHaveCount(0);
 
   const composer = ann.getByRole("textbox", { name: "Write in Garden, @ tags an agent…" });
-  const answers = ann.locator(".room-timeline .room-entry").filter({ has: ann.locator(".author", { hasText: "Mia's PiCoder" }) });
+  const answers = ann.locator(".room-timeline .room-entry").filter({ has: ann.locator(".author", { hasText: "PiCoder (Mia)" }) });
   const giveTask = async (words: string, calls: string) => {
     api.callsWhenSaid.set(words, calls);
-    await composer.fill("@Mi");
-    await ann.getByRole("listbox", { name: "Agents and people of the room" }).getByRole("option", { name: "@Mia's PiCoder" }).click();
-    await composer.fill(`@Mia's PiCoder ${words}`);
+    await composer.fill("@Pi");
+    await ann.getByRole("listbox", { name: "Agents and people of the room" }).getByRole("option", { name: "@PiCoder (Mia)" }).click();
+    await composer.fill(`@PiCoder (Mia) ${words}`);
     await composer.press("Enter");
   };
 

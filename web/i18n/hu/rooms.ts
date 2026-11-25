@@ -433,7 +433,7 @@ export const rooms: Messages["rooms"] = {
   bringAgent: "Ágens behozása…",
   bringAgentInto: (room) => `Ágens behozása ide: ${room}`,
   agent: "Ágens",
-  broughtNameSeen: "A szoba ennek a profilnak a nevén látja, a te neved után.",
+  broughtNameSeen: "A szoba ennek a profilnak a nevén látja, utána zárójelben a te neveddel.",
   othersTasks: "Ha mások adnak neki feladatot",
   othersTasksChoices: { "after-ok": "Csak az engedélyemmel", "any-time": "Bármikor" },
   bringMeaning: [
@@ -494,5 +494,6 @@ export const rooms: Messages["rooms"] = {
   bring: "Behoz",
   bringing: "Behozás…",
   broughtTask: (person, role, room, machine) => `${person} (${role}) feladatot ad ennek az ágensnek itt: ${room}, ${machine}`,
+  broughtTaskOfMembersAgent: (agent, room, machine) => `${agent}, egy tag ágense, feladatot ad ennek az ágensnek itt: ${room}, ${machine}`,
   broughtTaskHint: "Az ágens csak ezt kapja meg, egy sor után, amely megmondja, honnan jön.",
 };

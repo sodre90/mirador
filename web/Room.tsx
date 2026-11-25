@@ -5,7 +5,7 @@ import { personGoesBy } from "../shared/people.ts";
 import { categoryChoices, chosenModel } from "../shared/config-options.ts";
 import { mentionAt, withMention } from "../shared/mentions.ts";
 import type { RoomApprovalAnswer } from "../shared/room-permissions.ts";
-import { withTagAtCaret, type TaggablePerson } from "../shared/room-mentions.ts";
+import { stillTagged, withTagAtCaret, type TaggablePerson } from "../shared/room-mentions.ts";
 import type { RoomQuestionVotes } from "../shared/room-votes.ts";
 import {
   AGENT_TAGGED_TURNS_AFTER_A_PERSON,
@@ -276,7 +276,7 @@ function RoomComposer({
     if (!text.trim() || tooLong) return;
     onSend(
       text,
-      tagged.filter(({ name }) => text.includes(`@${name}`)).map(({ profileId }) => profileId),
+      stillTagged(text, tagged, people, agents).map(({ profileId }) => profileId),
     );
     writingSignals.sent();
     setText("");
