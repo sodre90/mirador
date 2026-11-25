@@ -105,10 +105,17 @@ test("a person joins a room from their own Mirador with an invite, works in it w
     await expect(roomCard(visitor, "Garden")).toHaveClass(/\bselected\b/);
     const line = invitedRoomPane(visitor).locator(".invited-room-bar");
     await expect(line.locator(".invited-room-whose")).toHaveText("Ann's room, on Ann's machine");
-    const [sidebarBox, lineBox, frameBox] = await Promise.all([visitor.locator(".sidebar"), line, visitor.locator('iframe[title="Ann\'s machine"]')].map((part) => part.boundingBox()));
+    const [sidebarBox, lineBox, frameBox, composerBox] = await Promise.all(
+      [visitor.locator(".sidebar"), line, visitor.locator('iframe[title="Ann\'s machine"]'), frame.locator(".room-composer")].map((part) => part.boundingBox()),
+    );
+    const viewport = visitor.viewportSize()!;
     expect(lineBox!.x).toBeGreaterThanOrEqual(sidebarBox!.x + sidebarBox!.width - 1);
     expect(frameBox!.y).toBeGreaterThanOrEqual(lineBox!.y + lineBox!.height - 1);
     expect(frameBox!.x).toBeCloseTo(lineBox!.x, 0);
+    expect(frameBox!.y + frameBox!.height).toBeCloseTo(viewport.height, 0);
+    expect(composerBox!.y + composerBox!.height).toBeLessThanOrEqual(viewport.height);
+    expect(await visitor.evaluate(() => document.documentElement.scrollHeight)).toBeLessThanOrEqual(viewport.height);
+    expect(await invitedRoomPane(visitor).evaluate((pane) => getComputedStyle(pane).height)).toBe(`${viewport.height}px`);
     await expect(frame.locator(".sidebar")).toHaveCount(0);
     await expect(frame.getByRole("button", { name: "Hide the sidebar" })).toHaveCount(0);
   });

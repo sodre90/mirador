@@ -312,10 +312,13 @@ button.icon.layout-toggle svg {
   visibility: hidden !important;
 }
 
+/* Explicit height so WebKit sizes the 1fr row's iframe against the remaining height, not the full viewport. */
 .invited-room {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   min-width: 0;
+  min-height: 0;
+  height: 100%;
   visibility: hidden;
 }
 
