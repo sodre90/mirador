@@ -16,6 +16,7 @@ import { isRoomId, MOST_ROOMS_READ } from "../shared/machines.ts";
 import type { Conversation, Launch, StoredEvent } from "../shared/model.ts";
 import { LONGEST_PERSON_NAME, personName } from "../shared/people.ts";
 import type { ClientMessage, ServerMessage } from "../shared/protocol.ts";
+import { endsTurn } from "../shared/reverts.ts";
 import { MOST_WORKSPACE_CALLS_A_MINUTE, MOST_WORKSPACE_CALLS_AT_ONCE, WORKSPACE_TASK_MS, workspaceCallResultIn, type WorkspaceCall, type WorkspaceCallResult } from "../shared/room-workspace.ts";
 import { broughtTaskPrompt, isRoomAuthorRole, MOST_AGENTS_BROUGHT, ROOM_MESSAGE_MOST_CHARACTERS, type BroughtAnswerEnd, type FramedAuthor } from "../shared/rooms.ts";
 import { shownAsWritten } from "../shared/written-text.ts";
@@ -78,6 +79,7 @@ export interface BroughtSessions {
   send(conversationId: string, text: string, imageIds: string[], options: { fromScript: true; fromMirador: true; afterTurn: true; broughtTaskId: string }): Promise<void>;
   heldTasksChanged(conversationId: string): void;
   dropQueuedBroughtTasks(conversationId: string, taskIds: string[]): void;
+  broughtTasksInHand(conversationId: string): string[];
 }
 
 type Said = Record<string, unknown>;
@@ -105,6 +107,12 @@ export function taskAuthorIn(name: unknown, role: unknown): FramedAuthor | null 
 const answerOf = (events: StoredEvent[]) => {
   const { text, ended } = replyOf(events);
   return { text: (text ?? "").slice(0, ROOM_MESSAGE_MOST_CHARACTERS), ended: ended === "finished" ? null : ended };
+};
+
+/** The events up to the end of the turn they begin with, so that none of the turns after it is told. */
+const firstTurnOf = (events: StoredEvent[]) => {
+  const end = events.findIndex(endsTurn);
+  return end === -1 ? events : events.slice(0, end + 1);
 };
 
 /**
@@ -161,6 +169,25 @@ export class BroughtAgents {
   /** A task queued in its agent's conversation goes to the agent only while it is sent and unanswered, of an agent still in its room. */
   stillToRun(taskId: string) {
     return this.store.findBroughtTaskById(taskId)?.state === "sent";
+  }
+
+  /**
+   * Answers the tasks the conversation was given and has in hand no longer, as after a restart that did not continue their
+   * turn, or once the owner takes them out of its queue or deletes it; those that wait for an OK there go with it too.
+   */
+  settleLost(conversationId: string) {
+    const deleted = !this.store.hasConversation(conversationId);
+    const inHand = this.sessions.broughtTasksInHand(conversationId);
+    const isLost = ({ id, state }: BroughtTask) => deleted || (state !== "waiting" && !inHand.includes(id));
+    this.store
+      .listBroughtAgents()
+      .filter((brought) => brought.conversationId === conversationId)
+      .flatMap(({ id }) => this.store.broughtTasksQueued(id))
+      .filter(isLost)
+      .forEach((task) => {
+        const { text, ended } = this.lostAnswer(conversationId, task);
+        this.finish(task, text, ended);
+      });
   }
 
   /**
@@ -298,6 +325,16 @@ export class BroughtAgents {
     if (!task) return;
     const { text, ended } = answerOf(this.store.listEventsFrom(conversationId, turnSeq));
     this.finish(task, text, ended);
+  }
+
+  /** What came of a task no turn is left to answer: of the last turn on it, or that it was not taken where none began. */
+  private lostAnswer(conversationId: string, task: BroughtTask): { text: string; ended: BroughtAnswerEnd | null } {
+    const began = this.store.listEventsOfTypes(conversationId, ["user-message"]).findLast(({ event }) => event.type === "user-message" && event.broughtTaskId === task.id);
+    if (began) {
+      const turn = firstTurnOf(this.store.listEventsFrom(conversationId, began.seq));
+      return turn.some(endsTurn) ? answerOf(turn) : { ...answerOf(turn), ended: "stopped" };
+    }
+    return { text: "", ended: this.turnsOnTasks.get(conversationId)?.taskId === task.id ? "stopped" : "refused" };
   }
 
   private taskStarting(conversationId: string, turnSeq: number) {

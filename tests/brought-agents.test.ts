@@ -8,7 +8,7 @@ import { Store } from "../host/store.ts";
 import { BROUGHT_TASK_MOST_CHARACTERS, MOST_BROUGHT_TASKS_A_MINUTE, MOST_BROUGHT_TASKS_QUEUED, type OthersTasks } from "../shared/brought-agents.ts";
 import { HostProblemError } from "../shared/host-problems.ts";
 import { MOST_ROOMS_READ } from "../shared/machines.ts";
-import type { Conversation, Launch, Profile } from "../shared/model.ts";
+import type { Conversation, ConversationEvent, Launch, Profile } from "../shared/model.ts";
 import type { ClientMessage, ServerMessage } from "../shared/protocol.ts";
 import { MOST_WORKSPACE_CALLS_A_MINUTE, MOST_WORKSPACE_CALLS_AT_ONCE, WORKSPACE_RESULT_MOST_CHARACTERS, WORKSPACE_TASK_MS, type WorkspaceCall, type WorkspaceCallResult } from "../shared/room-workspace.ts";
 import type { NotificationReason } from "../shared/system-notifications.ts";
@@ -83,12 +83,14 @@ function miasMirador({ lettingInMs = 1_000 } = {}) {
   const notified: { conversationId: string; reason: NotificationReason }[] = [];
   const pages: ServerMessage[] = [];
   const dropped: { conversationId: string; taskIds: string[] }[] = [];
+  const inHand: string[] = [];
   const sessions: BroughtSessions = {
     createBroughtIntoRoom: (workspaceId, launch, title, inRoomsWorkspace) =>
       store.insertConversation({ ...conversationOf(workspaceId, launch, title), broughtIntoRoom: true, ...(inRoomsWorkspace && { worksInRoomsWorkspace: true }) }),
     send: async (conversationId, text, _images, { broughtTaskId }) => void prompts.push({ conversationId, text, broughtTaskId }),
     heldTasksChanged: (conversationId) => void held.push(conversationId),
     dropQueuedBroughtTasks: (conversationId, taskIds) => void dropped.push({ conversationId, taskIds }),
+    broughtTasksInHand: () => inHand,
   };
   const clock = { now: Date.UTC(2026, 10, 20, 9) };
   const startHost = () =>
@@ -132,7 +134,7 @@ function miasMirador({ lettingInMs = 1_000 } = {}) {
       brought.turnEnded(conversationId, seq);
     };
   };
-  return { store, brought, toAnn, link, prompts, held, notified, pages, clock, dropped, emptyFolders, startHost, sentToAnn, letIn, bringCoder, task, runTurn, startTurn };
+  return { store, brought, toAnn, link, prompts, held, notified, pages, clock, dropped, inHand, emptyFolders, startHost, sentToAnn, letIn, bringCoder, task, runTurn, startTurn };
 }
 
 /** Mia's Coder works in the workspace of Ann's room, on a task of its that is under way. */
@@ -419,6 +421,96 @@ describe("what a host keeps of the tasks of agents you brought", () => {
     expect(store.listBroughtAgents()).toEqual([]);
     afterRestart.heard("ann", { type: "snapshot", you: "mia", rooms: [{ id: "r1", agents: [{ profileId: "a7", brought: { personId: "mia" } }] }] } as unknown as ServerMessage);
     expect(sentToAnn("room.take-agent-out")).toEqual([{ type: "room.take-agent-out", roomId: "r1", agentId: "a7" }]);
+  });
+});
+
+describe("a task its conversation no longer has in hand", () => {
+  const says = (text: string): ConversationEvent => ({ type: "acp", update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text } } satisfies SessionUpdate });
+
+  /** Mia's Coder was sent a task of Ann's room, which went to its conversation. */
+  async function coderOnATask() {
+    const mirador = miasMirador();
+    const agent = await mirador.bringCoder("any-time");
+    mirador.task("t1");
+    const conversationId = agent.conversationId!;
+    const taskId = mirador.prompts[0]!.broughtTaskId;
+    const happened = (...events: ConversationEvent[]) => events.forEach((event) => mirador.store.appendEvent(conversationId, event));
+    const answered = () => mirador.sentToAnn("room.brought-task-answered").map(({ taskId, text, ended }) => ({ taskId, text, ended }));
+    return { ...mirador, conversationId, taskId, happened, answered, sent: { type: "user-message", text: "task", broughtTaskId: taskId } satisfies ConversationEvent };
+  }
+
+  test("is left alone while it waits in the queue or its turn runs", async () => {
+    const { brought, conversationId, taskId, inHand, answered } = await coderOnATask();
+    inHand.push(taskId);
+    brought.settleLost(conversationId);
+    expect(answered()).toEqual([]);
+    expect(brought.stillToRun(taskId)).toBe(true);
+  });
+
+  test("taken out of the queue before its turn came, the room hears it was not taken, once", async () => {
+    const { brought, conversationId, taskId, answered } = await coderOnATask();
+    brought.settleLost(conversationId);
+    brought.settleLost(conversationId);
+    expect(answered()).toEqual([{ taskId: "t1", text: "", ended: "refused" }]);
+    expect(brought.stillToRun(taskId)).toBe(false);
+  });
+
+  test("of another conversation stays", async () => {
+    const { brought, answered } = await coderOnATask();
+    brought.settleLost("another");
+    expect(answered()).toEqual([]);
+  });
+
+  test("its turn finished as the host stopped, its answer goes, and nothing of the turns after it", async () => {
+    const { brought, conversationId, happened, answered, sent } = await coderOnATask();
+    happened(sent, says("Fixed it"), { type: "turn-end", stopReason: "end_turn" });
+    happened({ type: "user-message", text: "and my own question" }, says("for Mia alone"), { type: "turn-end", stopReason: "end_turn" });
+    brought.settleLost(conversationId);
+    expect(answered()).toEqual([{ taskId: "t1", text: "Fixed it", ended: null }]);
+  });
+
+  test("its turn cut short, the room hears how far it got, of the last turn on it", async () => {
+    const { brought, conversationId, happened, answered, sent } = await coderOnATask();
+    happened(sent, says("Looking"), { type: "turn-end", stopReason: "cancelled" });
+    happened({ ...sent, text: "continue" }, says("Half"), { type: "turn-end", stopReason: "cancelled", cutShortByRestart: true });
+    brought.settleLost(conversationId);
+    expect(answered()).toEqual([{ taskId: "t1", text: "Half", ended: "stopped" }]);
+  });
+
+  test("its turn gone with no end, as in a crash before the agent began, it was stopped", async () => {
+    const { brought, conversationId, happened, answered, sent } = await coderOnATask();
+    happened(sent);
+    brought.settleLost(conversationId);
+    expect(answered()).toEqual([{ taskId: "t1", text: "", ended: "stopped" }]);
+  });
+
+  test("its conversation deleted, the one under way was stopped, the one queued and the one waiting for an OK not taken", async () => {
+    const { brought, bringCoder, store, task, prompts, inHand, startTurn, sentToAnn } = miasMirador();
+    const agent = await bringCoder("after-ok");
+    task("t1", { fromYou: true });
+    task("t2", { fromYou: true });
+    task("t3");
+    startTurn(agent.conversationId!, prompts[0]!.broughtTaskId);
+    inHand.push(...prompts.map(({ broughtTaskId }) => broughtTaskId));
+    store.deleteConversation(agent.conversationId!);
+    brought.settleLost(agent.conversationId!);
+    expect(sentToAnn("room.brought-task-answered").map(({ taskId, ended }) => [taskId, ended])).toEqual([
+      ["t1", "stopped"],
+      ["t2", "refused"],
+      ["t3", "refused"],
+    ]);
+    expect(brought.list().tasks).toEqual([]);
+    expect([...brought.conversationsHoldingTasks()]).toEqual([]);
+  });
+
+  test("while the room's machine is out of reach, its answer goes once that asks again", async () => {
+    const { brought, conversationId, link, task, answered } = await coderOnATask();
+    link.open = false;
+    brought.settleLost(conversationId);
+    expect(answered()).toEqual([]);
+    link.open = true;
+    task("t1");
+    expect(answered()).toEqual([{ taskId: "t1", text: "", ended: "refused" }]);
   });
 });
 

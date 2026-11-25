@@ -1,7 +1,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
-import { addWorkspace, createProfile, createRoom, inviteIntoRoom, joinRoom, nameMachine, nameOwnProfile, openRoomSettings, reachedAtOwnPort, roomCard, signIn, whatItMeans } from "./helpers.ts";
+import { addWorkspace, createProfile, createRoom, inviteIntoRoom, joinRoom, nameMachine, nameOwnProfile, openRoomSettings, primaryModifier, reachedAtOwnPort, reloadFromRestartedHost, roomCard, signIn, whatItMeans } from "./helpers.ts";
 import { TestHost, writeBunProgram } from "./test-host.ts";
 
 test.describe.configure({ mode: "serial" });
@@ -187,6 +187,44 @@ test("brought to take others' tasks any time, the agent answers without a card; 
     await dialog.getByRole("button", { name: "Bring", exact: true }).click();
     await expect(dialog).toHaveCount(0);
     await expect(agentChip(ann)).toBeVisible();
+  });
+});
+
+test("every task Mia's Mirador took is answered, though she takes it out of the queue or her host restarts in the middle of it", async () => {
+  const letGo = (name: string) => join(mias.root, name);
+  const working = ann.locator(".room-timeline", { hasText: "Mia's Coder is working…" });
+  const timesStarted = () => mias.log.match(/Mirador is running/g)?.length ?? 0;
+
+  await test.step("a queued task Mia removes reads as not taken in the room", async () => {
+    await tagCoder(`WAIT ${letGo("leaves")} SAY Raked the leaves`);
+    await expect(working).toBeVisible();
+    await tagCoder("SAY Swept the path");
+    await coderConversation(mia).first().click();
+    const queued = mia.locator(".queued:visible", { hasText: "Swept the path" });
+    await queued.getByRole("button", { name: "Remove" }).click({ timeout: 15_000 });
+    await expect(queued).toHaveCount(0);
+    await expect(answersOfCoder(ann).last()).toContainText("Its bringer's Mirador did not take the task.");
+  });
+
+  await test.step("a task whose turn Mia's restart stops goes on after it, and its answer comes into the room", async () => {
+    const startedBefore = timesStarted();
+    await mia.keyboard.press(`${await primaryModifier(mia)}+Shift+R`);
+    await expect.poll(timesStarted, { timeout: 60_000 }).toBe(startedBefore + 1);
+    writeFileSync(letGo("leaves"), "");
+    await expect(answersOfCoder(ann).last().locator(".message.agent")).toHaveText("Raked the leaves", { timeout: 60_000 });
+    await expect(working).toHaveCount(0);
+  });
+
+  await test.step("a task whose turn Mia's host died in says it was stopped once that is back", async () => {
+    await expect(agentChip(ann)).not.toHaveClass(/\baway\b/, { timeout: 60_000 });
+    await tagCoder(`WAIT ${letGo("hedge")} SAY Trimmed the hedge`);
+    await expect(working).toBeVisible();
+    await mias.kill();
+    await mias.start();
+    await expect(answersOfCoder(ann).last()).toContainText("Stopped before it finished.", { timeout: 60_000 });
+    await expect(working).toHaveCount(0);
+    writeFileSync(letGo("hedge"), "");
+    await reloadFromRestartedHost(mia);
   });
 });
 

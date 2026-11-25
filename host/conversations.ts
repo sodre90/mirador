@@ -278,9 +278,11 @@ export interface BroughtTaskRules {
   conversationsHoldingTasks(): ReadonlySet<string>;
   /** Whether a task queued in a conversation, by its id here, still goes to the agent once its turn comes. */
   stillToRun(taskId: string): boolean;
+  /** The conversation may have let go of tasks it will not work on: each that it no longer has in hand is answered. */
+  settleLost(conversationId: string): void;
 }
 
-const NO_BROUGHT_TASKS: BroughtTaskRules = { conversationsHoldingTasks: () => new Set(), stillToRun: () => false };
+const NO_BROUGHT_TASKS: BroughtTaskRules = { conversationsHoldingTasks: () => new Set(), stillToRun: () => false, settleLost: () => {} };
 
 type TurnFailure = Extract<TurnOutcome, { error: string }>;
 
@@ -315,6 +317,8 @@ interface TurnInProgress {
   ended: boolean;
   /** The turn's own prompt, once handed to the agent, with the moment it went out. */
   promptSent?: { text: string; sentAt: number };
+  /** The task of a room of another machine it works on. */
+  broughtTaskId?: string;
   /** The user stopped the turn before its prompt went out, as while the turn's files are kept. */
   stoppedBeforePrompt?: boolean;
   /** The reply whose chunks last streamed, so the late chunks of a turn a stop cancelled can be recognised. */
@@ -919,6 +923,14 @@ export class ConversationService {
     if (kept.length === runtime.queuedMessages.length) return;
     this.setQueue(conversationId, runtime, kept);
     this.publish(this.get(conversationId));
+  }
+
+  /** The tasks of rooms of other machines, by their ids here, that wait in the conversation's queue or that its running turn works on. */
+  broughtTasksInHand(conversationId: string): string[] {
+    const runtime = this.runtimes.get(conversationId);
+    const queued = runtime?.queuedMessages ?? this.store.findConversation(conversationId)?.queuedMessages ?? [];
+    const running = runtime?.running ? runtime.turn?.broughtTaskId : undefined;
+    return [running, ...queued.map(({ broughtTaskId }) => broughtTaskId)].filter((taskId) => taskId !== undefined);
   }
 
   heldTasksChanged(conversationId: string) {
@@ -1821,6 +1833,7 @@ export class ConversationService {
     this.keepCanvasOf(conversation);
     const workspace = this.store.findWorkspace(conversation.workspaceId);
     this.store.deleteConversation(conversationId);
+    this.broughtTasks.settleLost(conversationId);
     this.images.deleteConversation(conversationId);
     this.droppedFiles.deleteConversation(conversationId);
     this.hub.broadcast({ type: "conversation.deleted", conversationId });
@@ -2169,7 +2182,7 @@ export class ConversationService {
     this.endUsageLimitWait(runtime);
     let endTurn = () => {};
     runtime.turnEnded = new Promise((resolve) => (endTurn = resolve));
-    const turn: TurnInProgress = { steered: [], ended: false, lastReplyMessageId: null, awaitedUser: false, fromScript, reply: "", lastMessage: "", toolCalls: [] };
+    const turn: TurnInProgress = { steered: [], ended: false, lastReplyMessageId: null, awaitedUser: false, fromScript, reply: "", lastMessage: "", toolCalls: [], ...(broughtTaskId && { broughtTaskId }) };
     runtime.turn = turn;
     runtime.openToolCalls.clear();
     this.forgetUnseenTurnEnd(conversationId);
@@ -2860,6 +2873,7 @@ export class ConversationService {
 
   removeQueuedMessage(conversationId: string, messageId: string) {
     this.replaceQueue(conversationId, (queue) => queue.filter(({ id }) => id !== messageId), messageId);
+    this.broughtTasks.settleLost(conversationId);
   }
 
   /** The stop reaches the process the turn runs on, which a sandbox turned on or off since no longer picks. */
@@ -3071,6 +3085,7 @@ export class ConversationService {
     this.jobWaits.startAll();
     this.store.listConversations().forEach(({ id, acpSessionId }) => {
       if (stoppedTurns.includes(id)) return void this.resumeStoppedTurn(id, acpSessionId).catch(() => {});
+      this.broughtTasks.settleLost(id);
       this.deliverOwedReply(id, this.turnsCutShortByCrash.has(id) ? "failed" : undefined);
       if (!this.resumeUsageLimitWait(id)) this.sendNextQueuedMessage(id);
     });
@@ -3193,6 +3208,7 @@ export class ConversationService {
     const continuation = await this.continuationOf(conversationId, stoppedSessionId, request).catch((error: unknown) => {
       runtime.holdingQueue = false;
       this.deliverOwedReply(conversationId, "failed");
+      this.broughtTasks.settleLost(conversationId);
       this.sendNextQueuedMessage(conversationId);
       throw error;
     });
@@ -3203,13 +3219,15 @@ export class ConversationService {
     // session that starts afresh never asked it, so the question goes and the whole request comes back instead.
     if (waitedOnAnswer && continuation.keptItsPlace) return this.letTheTurnRest(conversationId);
     if (waitedOnAnswer) this.withdrawWaitingAsks(conversationId);
-    return this.prompt(conversationId, continuation.text, { imageIds: continuation.imageIds, authorId: request.authorId });
+    const broughtTaskId = request.broughtTaskId !== undefined && this.broughtTasks.stillToRun(request.broughtTaskId) ? request.broughtTaskId : undefined;
+    return this.prompt(conversationId, continuation.text, { imageIds: continuation.imageIds, authorId: request.authorId, broughtTaskId });
   }
 
   /** The turn a stop cut short gets no message of the host's: it waits for the user, whose next one carries it on. */
   private letTheTurnRest(conversationId: string) {
     this.setStatus(conversationId, "idle");
     this.deliverOwedReply(conversationId);
+    this.broughtTasks.settleLost(conversationId);
     this.sendNextQueuedMessage(conversationId);
   }
 
@@ -4627,6 +4645,8 @@ interface TurnRequest {
   firstText: string;
   /** Who wrote the message that started the turn, so the request made again is theirs too. */
   authorId?: string;
+  /** The task of a room of another machine the turn works on, which the turn that continues it goes on with. */
+  broughtTaskId?: string;
   imageIds: string[];
   /** When the message that started the turn went out, so what the turn was waiting on can be told from what an earlier one left behind. */
   beganAt: number;
@@ -4749,6 +4769,7 @@ function turnRequestWithin(events: StoredEvent[], wholeLog: StoredEvent[]): Turn
     text: messages.map(({ text }) => text).join("\n\n"),
     firstText: first.text,
     ...(first.authorId && { authorId: first.authorId }),
+    ...(first.broughtTaskId && { broughtTaskId: first.broughtTaskId }),
     imageIds: messages.flatMap(({ imageIds = [] }) => imageIds),
     beganAt: first.at,
   };

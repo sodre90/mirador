@@ -130,7 +130,8 @@ function hostWithEvents(events: ConversationEvent[], store = new Store(":memory:
   events.forEach((event) => store.appendEvent("c1", event));
   beforeStart();
   const config = loadConfig({ MIRADOR_DATA_DIR: join(scratch, "data") });
-  return new ConversationService(store, new Hub(), config, {} as never, {} as never, {} as never, new SystemNotifications(store, new Hub()));
+  const forgetful = { unmute() {}, deleteConversation() {} } as never;
+  return new ConversationService(store, new Hub(), config, forgetful, forgetful, forgetful, new SystemNotifications(store, new Hub()));
 }
 
 describe("a host continuing turns the previous one stopped for a restart", () => {
@@ -197,7 +198,16 @@ describe("a host continuing turns the previous one stopped for a restart", () =>
 
 describe("tasks of a room elsewhere queued in a brought agent's conversation", () => {
   const roomTask = (id: string, broughtTaskId: string) => ({ id, text: `room task ${broughtTaskId}`, imageIds: [], fromScript: true as const, fromMirador: true as const, afterTurn: true as const, broughtTaskId });
-  const stillToRun = (kept: string[]) => ({ conversationsHoldingTasks: () => new Set<string>(), stillToRun: (taskId: string) => kept.includes(taskId) });
+  const stillToRun = (kept: string[], settleLost = (_conversationId: string) => {}) => ({ conversationsHoldingTasks: () => new Set<string>(), stillToRun: (taskId: string) => kept.includes(taskId), settleLost });
+
+  /** The tasks the conversation has in hand each time it says some may be lost. */
+  function followed(conversations: ConversationService, kept: string[] = []) {
+    const inHand: string[][] = [];
+    conversations.followsBroughtTasksOf(stillToRun(kept, (conversationId) => void inHand.push(conversations.broughtTasksInHand(conversationId))));
+    return inHand;
+  }
+  const taskSaid = (broughtTaskId: string): ConversationEvent => ({ type: "user-message", text: "room task", broughtTaskId });
+  const began: ConversationEvent = { type: "acp", update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "on it" } } };
 
   test("one no longer to run is left out once its turn comes, also after a restart, and the next goes", async () => {
     const store = new Store(":memory:");
@@ -216,6 +226,53 @@ describe("tasks of a room elsewhere queued in a brought agent's conversation", (
     conversations.dropQueuedBroughtTasks("c1", ["t1", "t3"]);
     expect(conversations.get("c1").queuedMessages.map(({ id }) => id)).toEqual(["q2"]);
     expect(store.findConversation("c1")!.queuedMessages.map(({ id }) => id)).toEqual(["q2"]);
+    void conversations.shutdown();
+  });
+
+  test("one whose turn the last host died in may be lost, the ones still queued are in hand", () => {
+    const store = new Store(":memory:");
+    const conversations = hostWithEvents([taskSaid("t1"), began], store, () => store.saveQueuedMessages("c1", [roomTask("q2", "t2")]));
+    const inHand = followed(conversations, ["t2"]);
+    conversations.resumeAfterRestart([]);
+    expect(inHand).toEqual([["t2"]]);
+    void conversations.shutdown();
+  });
+
+  test("one you take out of the queue may be lost, the ones behind it are in hand", () => {
+    const store = new Store(":memory:");
+    const conversations = hostWithEvents([], store, () => store.saveQueuedMessages("c1", [roomTask("q1", "t1"), roomTask("q2", "t2")]));
+    const inHand = followed(conversations);
+    conversations.removeQueuedMessage("c1", "q1");
+    expect(inHand).toEqual([["t2"]]);
+    void conversations.shutdown();
+  });
+
+  test("all of a deleted conversation may be lost", () => {
+    const store = new Store(":memory:");
+    const conversations = hostWithEvents([], store, () => store.saveQueuedMessages("c1", [roomTask("q1", "t1")]));
+    const inHand = followed(conversations);
+    conversations.delete("c1");
+    expect(inHand).toEqual([[]]);
+    void conversations.shutdown();
+  });
+
+  test("one whose turn the stop cut short goes on with the turn that continues it, and may be lost once that can't start", async () => {
+    const events = [taskSaid("t1"), began, { type: "turn-end", stopReason: "cancelled" } satisfies ConversationEvent];
+    expect(unfinishedTurnRequest(events.map((event, index) => ({ seq: index + 1, at: index, event })))?.broughtTaskId).toBe("t1");
+    const conversations = hostWithEvents(events);
+    const inHand = followed(conversations, ["t1"]);
+    conversations.resumeAfterRestart(["c1"]);
+    expect(inHand).toEqual([]);
+    while (inHand.length === 0) await Bun.sleep(20);
+    expect(inHand).toEqual([[]]);
+    void conversations.shutdown();
+  });
+
+  test("one whose turn a finished agent ended as the host stopped may be lost at once", () => {
+    const conversations = hostWithEvents([taskSaid("t1"), began, { type: "turn-end", stopReason: "end_turn" }]);
+    const inHand = followed(conversations, ["t1"]);
+    conversations.resumeAfterRestart(["c1"]);
+    expect(inHand).toEqual([[]]);
     void conversations.shutdown();
   });
 });
