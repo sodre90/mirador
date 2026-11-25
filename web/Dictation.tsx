@@ -25,6 +25,12 @@ const releasingKeys = ["Meta", "Control", "Shift"];
 const aDialogIsOpen = () => document.querySelector(".modal-backdrop") !== null;
 const problemOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
+function whatIsHeardNextIn(conversationId: string): ListeningFor {
+  const { answeringAQuestion, takesSeveralAnswers } = spokenConversationIn(conversationId);
+  if (!answeringAQuestion) return "conversation";
+  return takesSeveralAnswers ? "severalAnswers" : "answer";
+}
+
 async function transcribed(conversationId: string, clip: Blob): Promise<Dictated> {
   let response: Response;
   try {
@@ -136,7 +142,7 @@ export function useDictation({
   /** The microphone would hear a reply being read aloud. */
   const begin = ({ listeningAgain = false } = {}) => {
     sendsWhatIsHeard.current = listeningAgain;
-    setListeningFor(listeningAgain ? (spokenConversationIn(conversationId).answeringAQuestion ? "answer" : "conversation") : "message");
+    setListeningFor(listeningAgain ? whatIsHeardNextIn(conversationId) : "message");
     stopReading();
     if (speaksReplies(settings)) allowReplyAudio();
     setProblem(null);

@@ -68,8 +68,8 @@ export class RoomQuestions {
     if (!this.picking.allows(personId)) throw new HostProblemError({ code: "room-voting-too-fast" });
     const entries = answers.map((answer, index) => this.entryOf(room, questions[index]!, answer, personId));
     const answerer = this.answererOf(room, personId, answers);
-    if (item.questions) this.canvas.answer(itemId, answersSummary(entries), undefined, entries, personId, answerer);
-    else this.canvas.answer(itemId, entries[0]!.label, undefined, undefined, personId, answerer);
+    if (item.questions) this.canvas.answer(itemId, { label: answersSummary(entries) }, entries, personId, answerer);
+    else this.canvas.answer(itemId, entries[0]!, undefined, personId, answerer);
   }
 
   /** Where each question of the room's agents stands, for a page that opens the room. */

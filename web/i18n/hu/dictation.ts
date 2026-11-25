@@ -16,6 +16,7 @@ export const dictation: Messages["dictation"] = {
     message: "Figyelek… Megáll, ha szünetet tartasz vagy elengeded. Az Esc megszakítja.",
     conversation: "Figyelek… Mondd, hogy „stop” a befejezéshez, „repeat that” az ismétléshez, vagy „help” a többihez.",
     answer: "Figyelek… Mondd, hogy „yes”, „the others”, egy számot, vagy válaszolj a saját szavaiddal.",
+    severalAnswers: "Figyelek… Mondd a kívánt lehetőségek számát vagy nevét, például „one and three”, vagy válaszolj a saját szavaiddal.",
   },
   loadingRecognition: "A beszédfelismerés betöltése ezen a Macen…",
   loadingVoiceModel: "A hangmodell betöltése ezen a Macen…",

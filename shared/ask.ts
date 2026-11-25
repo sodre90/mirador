@@ -1,4 +1,4 @@
-import type { AskAnswerEntry, AskItem, AskQuestion, CanvasItem } from "./model.ts";
+import type { AskAnswerEntry, AskItem, AskQuestion, CanvasItem, PickedSeveral } from "./model.ts";
 
 /** The questions an ask holds: the several the agent sent, or the one an older or simpler ask has in the item's own fields. */
 export function questionsOf(item: AskItem): AskQuestion[] {
@@ -11,7 +11,7 @@ export function questionsOf(item: AskItem): AskQuestion[] {
 export function answerTo(item: AskItem, index: number): AskAnswerEntry | undefined {
   if (!item.answer) return undefined;
   if (item.questions) return item.answer.answers?.[index];
-  return index === 0 ? { label: item.answer.label, note: item.answer.note } : undefined;
+  return index === 0 ? { label: item.answer.label, picked: item.answer.picked, note: item.answer.note } : undefined;
 }
 
 /** An answer the user wrote themselves rather than picked from the question's options. */
@@ -30,17 +30,20 @@ export function newestWaitingAsk(items: CanvasItem[]): AskItem | undefined {
 /** All the answers on one line, for a list of past questions and for a note of what was sent. */
 export const answersSummary = (answers: AskAnswerEntry[]) => answers.map(({ label }) => label).join(" · ");
 
-/** Between the options a user ticked, in the one line their answer is. */
-export const TICKED_JOINER = "; ";
+/** What was picked on one line, to show; the parts can't be told from it again, as any of them may hold a semicolon. */
+export const pickedOnOneLine = ({ options, own }: PickedSeveral) => [...options, ...(own ? [own] : [])].join("; ");
 
-/** The options of a question that an answer line names, in the question's order. */
-export const tickedLabelsIn = (question: AskQuestion, answerLabel: string | undefined) => {
-  const named = (answerLabel ?? "").split(TICKED_JOINER);
-  return question.options.map(({ label }) => label).filter((label) => named.includes(label));
-};
+/** The answer to a question that takes several: the options ticked, in the question's order, and the user's own words; null for neither. */
+export function answerPicking(question: AskQuestion, ticked: string[], ownWords = ""): AskAnswerEntry | null {
+  const options = question.options.map(({ label }) => label).filter((label) => ticked.includes(label));
+  const own = ownWords.trim();
+  if (options.length === 0 && !own) return null;
+  const picked = { options, ...(own && { own }) };
+  return { label: pickedOnOneLine(picked), picked };
+}
 
-/** What an answer line holds beyond the options of a question that takes several: the user's own words. */
-export const ownTextIn = (question: AskQuestion, answerLabel: string) => {
-  const own = answerLabel.split(TICKED_JOINER).filter((part) => !question.options.some(({ label }) => label === part));
-  return own.length > 0 ? own.join(TICKED_JOINER) : undefined;
-};
+/** The options an answer picks and the words of the user's own in it, whether the question takes one answer or several. */
+export function pickedIn(question: AskQuestion, { label, picked }: AskAnswerEntry): PickedSeveral {
+  if (picked) return picked;
+  return isOwnAnswer(question, label) ? { options: [], own: label } : { options: [label] };
+}

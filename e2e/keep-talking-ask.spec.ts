@@ -20,6 +20,7 @@ const said = () => [
   "Repeat that.",
   "Help.",
   "Make it the longer wait.",
+  "One and three.",
   "Stop.",
 ];
 
@@ -139,13 +140,29 @@ test("with Keep talking, a question the agent asks is read aloud, recommended op
     expect(heard, "\"hmm\" listened on, and \"repeat that\" read the second question again, in the words it kept").toBe(8);
   });
 
+  await test.step("where several can be picked, every option is read, and the numbers said are the answer", async () => {
+    spoken = [];
+    const answered = callCanvasTool(host, conversationId, "ask", {
+      question: "Which parts?",
+      multiple: true,
+      options: [{ label: "Host", recommended: true }, { label: "Phone" }, { label: "Website" }],
+    });
+    await expect(page.locator(".dictation-status:visible")).toHaveText(
+      "Listening… Say the numbers or names of the ones you want, as in “one and three”, or answer in your own words.",
+      { timeout: 30_000 },
+    );
+    expect(await answered).toContain('The user chose: "Host", "Website"');
+    await expect.poll(() => spoken).toEqual(["Which parts?", "One: Host.", "Two: Phone.", "Three: Website.", "I recommend Host.", "Which ones?", "Going with Host; Website."]);
+    expect(heard).toBe(9);
+  });
+
   await test.step("\"stop\" ends it: the question stays on the canvas, waiting for an answer", async () => {
     spoken = [];
     void callCanvasTool(host, conversationId, "ask", { question: "Push now?", options: [{ label: "Yes (recommended)" }, { label: "Not yet" }] }).catch(() => {});
-    await expect.poll(() => heard, { timeout: 30_000 }).toBe(9);
+    await expect.poll(() => heard, { timeout: 30_000 }).toBe(10);
     await expect(dictate).toHaveAttribute("aria-pressed", "false", { timeout: 10_000 });
     await page.waitForTimeout(3_000);
-    expect(heard, "the microphone didn't open again").toBe(9);
+    expect(heard, "the microphone didn't open again").toBe(10);
     await expect(page.locator(".canvas-outcome:visible")).toHaveText("needs your answer");
   });
 });

@@ -45,7 +45,7 @@ function created(conversationId: string) {
       readReply: async (key, reply) => outcomeOf(conversationId, key, await readReply(conversationId, key, reply, conversation.readingAs)),
       say: async (key, sentences) => outcomeOf(conversationId, `spoken:${key}`, await sayAloud(conversationId, `spoken:${key}`, sentences)),
       stopSpeaking: () => stopReadingAloudIn(conversationId),
-      answer: (itemId, { label, note }, answers) => void connection.send({ type: "ask.answer", itemId, label, note, answers }),
+      answer: (itemId, answer, answers) => void connection.send({ type: "ask.answer", itemId, ...answer, answers }),
       ticking: tickTheClock,
       changed: () => {},
       now: () => performance.now(),

@@ -109,6 +109,9 @@ describe("the status under the message box", () => {
     expect(dictationStatus("listening", settings(ownServer), servers("stopped"), "answer"), "and those a question read aloud takes").toBe(
       "Listening… Say “yes”, “the others”, a number, or answer in your own words.",
     );
+    expect(dictationStatus("listening", settings(ownServer), servers("stopped"), "severalAnswers"), "where it takes several").toBe(
+      "Listening… Say the numbers or names of the ones you want, as in “one and three”, or answer in your own words.",
+    );
     expect(dictationStatus("transcribing", settings(ownServer), servers("stopped"))).toBe("Turning speech into text…");
     expect(dictationStatus("transcribing", settings(thisMacRecognition), servers("stopped"))).toBe("Loading speech recognition on this Mac…");
     expect(dictationStatus("transcribing", settings(thisMacRecognition), servers("loading"))).toBe("Loading speech recognition on this Mac…");

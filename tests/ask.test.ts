@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { answerTo, isOwnAnswer } from "../shared/ask.ts";
+import { answerPicking, answerTo, isOwnAnswer, pickedIn } from "../shared/ask.ts";
 import type { AskItem, AskQuestion } from "../shared/model.ts";
 
 const color: AskQuestion = { question: "Which color?", options: [{ label: "Red" }, { label: "Blue" }] };
@@ -37,8 +37,38 @@ describe("the answer to each question of an ask", () => {
     expect(answerTo(asked({ ...color, status: "cancelled" }), 0)).toBeUndefined();
   });
 
+  test("a single question's answer has its parts, where it takes several", () => {
+    const picked = { options: ["Red"], own: "teal" };
+    expect(answerTo(asked({ ...color, multiple: true, status: "answered", answer: { label: "Red; teal", picked, deliveredAs: "tool-result" } }), 0)).toEqual({ label: "Red; teal", picked });
+  });
+
   test("an answer that is none of the options is the user's own", () => {
     expect(isOwnAnswer(size, "Large")).toBe(false);
     expect(isOwnAnswer(size, "Huge")).toBe(true);
+  });
+});
+
+describe("an answer to a question that takes several", () => {
+  const fixes: AskQuestion = { question: "Which fixes?", options: [{ label: "Cache" }, { label: "Cache; with a TTL" }, { label: "Neither" }], allowOther: true, multiple: true };
+
+  test("lists the ticked options in the question's order, and the user's own words apart from them", () => {
+    expect(answerPicking(fixes, ["Neither", "Cache"])).toEqual({ label: "Cache; Neither", picked: { options: ["Cache", "Neither"] } });
+    expect(answerPicking(fixes, ["Neither"], " Cache; but later ")).toEqual({ label: "Neither; Cache; but later", picked: { options: ["Neither"], own: "Cache; but later" } });
+    expect(answerPicking(fixes, [], "Neither")).toEqual({ label: "Neither", picked: { options: [], own: "Neither" } });
+  });
+
+  test("is none with nothing ticked and no words", () => {
+    expect(answerPicking(fixes, [], "  ")).toBeNull();
+  });
+
+  test("is told apart by its parts, whatever its line reads like", () => {
+    const picked = { options: ["Cache; with a TTL"] };
+    expect(pickedIn(fixes, { label: "Cache; with a TTL", picked })).toEqual(picked);
+    expect(pickedIn(fixes, { label: "Neither", picked: { options: [], own: "Neither" } })).toEqual({ options: [], own: "Neither" });
+  });
+
+  test("without parts, as to a question that takes one, it is the option it names or the user's own words", () => {
+    expect(pickedIn(size, { label: "Large" })).toEqual({ options: ["Large"] });
+    expect(pickedIn(size, { label: "Huge" })).toEqual({ options: [], own: "Huge" });
   });
 });

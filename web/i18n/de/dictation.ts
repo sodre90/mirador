@@ -16,6 +16,7 @@ export const dictation: Messages["dictation"] = {
     message: "Hört zu… Es stoppt, wenn du eine Pause machst oder loslässt. Esc bricht ab.",
     conversation: "Hört zu… Sag „stop“ zum Beenden, „repeat that“, um es noch einmal zu hören, oder „help“ für mehr.",
     answer: "Hört zu… Sag „yes“, „the others“, eine Zahl, oder antworte in deinen eigenen Worten.",
+    severalAnswers: "Hört zu… Sag die Nummern oder Namen der gewünschten Optionen, etwa „one and three“, oder antworte in deinen eigenen Worten.",
   },
   loadingRecognition: "Spracherkennung wird auf diesem Mac geladen…",
   loadingVoiceModel: "Sprachmodell wird auf diesem Mac geladen…",

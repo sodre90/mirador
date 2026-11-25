@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { AskQuestion } from "../shared/model.ts";
-import { heardChoice, otherOptionsSentences, questionSentences, recommendedIndex, spokenLabel } from "../shared/spoken-asks.ts";
+import { heardChoice, heardSeveral, otherOptionsSentences, questionSentences, recommendedIndex, spokenLabel } from "../shared/spoken-asks.ts";
 
 const sounds: AskQuestion = {
   question: "What should signal the microphone's state",
@@ -47,6 +47,16 @@ describe("reading a question aloud", () => {
     });
   });
 
+  test("where several can be picked, every option is read, the recommended one named, and a yes alone takes none", () => {
+    const several = { ...sounds, multiple: true };
+    expect(questionSentences(several, { position: 0, of: 1 })).toEqual({
+      sentences: ["What should signal the microphone's state.", "One: Visual only.", "Two: Short sounds.", "Three: Sounds plus a stronger visual.", "I recommend Short sounds.", "Which ones?"],
+      offered: "all",
+    });
+    expect(questionSentences({ ...plain, multiple: true }, { position: 1, of: 3 }).sentences).toEqual(["Question 2 of 3.", "Which chart comes next?", "One: By month.", "Two: By product line.", "Which ones?"]);
+    expect(heardSeveral("Yes.", several)).toBeNull();
+  });
+
   test("the others keep the numbers they have in the question", () => {
     expect(otherOptionsSentences(sounds)).toEqual(["The others are:", "One: Visual only.", "Three: Sounds plus a stronger visual.", "Which one?"]);
   });
@@ -90,5 +100,23 @@ describe("what a spoken answer chooses", () => {
     expect(heardChoice("Month.", plain, "all")).toEqual({ kind: "pick", index: 0 });
     expect(heardChoice("Sounds.", sounds, "all"), "two labels have it").toEqual({ kind: "unclear" });
     expect(heardChoice("The one that beeps.", sounds, "all"), "for the voice model to judge").toEqual({ kind: "unclear" });
+  });
+});
+
+describe("what a spoken answer picks where several can be", () => {
+  const colours: AskQuestion = { question: "Which apply?", options: [{ label: "Red" }, { label: "Salt and pepper" }, { label: "Green" }], multiple: true };
+
+  test("numbers, names, or both, said one after another", () => {
+    expect(heardSeveral("One and three.", colours)).toEqual([0, 2]);
+    expect(heardSeveral("Red, the second, and green, please", colours)).toEqual([0, 1, 2]);
+    expect(heardSeveral("Green.", colours)).toEqual([2]);
+  });
+
+  test("a label with an and in it is one option", () => {
+    expect(heardSeveral("Salt and pepper", colours)).toEqual([1]);
+  });
+
+  test("anything else is the user's own words, also when it names an option to leave out", () => {
+    for (const said of ["All but red.", "Everything except green", "Not red and green", "All of them", "Red and something blue", "No", "four"]) expect(heardSeveral(said, colours), said).toBeNull();
   });
 });

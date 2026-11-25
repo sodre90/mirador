@@ -6,7 +6,8 @@ import { answerAsToolResult, CanvasService, pastAnswerOf } from "../host/canvas/
 import type { ConversationService } from "../host/conversations.ts";
 import type { Hub } from "../host/hub.ts";
 import type { SystemNotifications } from "../host/system-notifications.ts";
-import type { AskItem, CanvasItem, ConversationEvent, StoredEvent } from "../shared/model.ts";
+import type { AskItem, CanvasItem, ConversationEvent, PickedSeveral, StoredEvent } from "../shared/model.ts";
+import { pickedOnOneLine } from "../shared/ask.ts";
 import { canvasPluginHost } from "./canvas-plugin-host.ts";
 
 const FIXTURES = join(import.meta.dir, "fixtures", "canvas-plugins");
@@ -156,6 +157,48 @@ describe("pastAnswerOf", () => {
     });
   });
 
+  describe("to a question that takes several", () => {
+    const labels = ["Cache", "Cache; with a TTL", 'Say "no"', "Two\nlines"];
+    const fixes: AskItem = { ...single, question: "Which fixes?", options: labels.map((label) => ({ label })), allowOther: true, multiple: true };
+    const alsoSize: AskItem = {
+      ...single,
+      question: "Which fixes?",
+      questions: [
+        { question: "Which fixes?", options: fixes.options!, allowOther: true, multiple: true },
+        { question: "Size?", options: [{ label: "S" }, { label: '"L"' }] },
+      ],
+    };
+
+    test.each<PickedSeveral>([
+      { options: ["Cache; with a TTL"] },
+      { options: labels },
+      { options: ["Cache"], own: 'Say "no"; but\nIn their own words: later' },
+      { options: [], own: "Cache" },
+    ])("reads its parts back from a tool result, whatever the labels and words hold: %j", (picked) => {
+      const label = pickedOnOneLine(picked);
+      expect(pastAnswerOf(fixes, answerAsToolResult({ label, picked, note: "soon" }), null)).toEqual({ label, picked, note: "soon", deliveredAs: "tool-result" });
+      const answers = [
+        { question: "Which fixes?", label, picked, note: "soon" },
+        { question: "Size?", label: '"L"' },
+      ];
+      expect(pastAnswerOf(alsoSize, answerAsToolResult({ label: "", answers }), null)).toEqual({ label: `${label} · "L"`, answers, deliveredAs: "tool-result" });
+    });
+
+    test("reads its parts back from the user's next message", () => {
+      const picked = { options: ["Cache", 'Say "no"'], own: "or\nneither" };
+      const label = pickedOnOneLine(picked);
+      expect(pastAnswerOf(fixes, "Showing.", 'My answer to your question "Which fixes?": "Cache", "Say \\"no\\""\nIn my own words: or\nneither\nNote: soon')).toEqual({ label, picked, note: "soon", deliveredAs: "next-message" });
+      expect(pastAnswerOf(alsoSize, "Showing.", 'My answers to your questions:\n1. "Which fixes?": "Cache", "Say \\"no\\""\n   In my own words: or\nneither\n2. "Size?": S')).toEqual({
+        label: `${label} · S`,
+        answers: [
+          { question: "Which fixes?", label, picked },
+          { question: "Size?", label: "S" },
+        ],
+        deliveredAs: "next-message",
+      });
+    });
+  });
+
   test("finds no answer when neither holds one for every question", () => {
     expect(pastAnswerOf(single, "The question is now showing in the user's browser.", "Never mind, do something else")).toBeNull();
     expect(pastAnswerOf(several, "The user answered 2 questions:\n1. First?\n   The user chose: A", null)).toBeNull();
@@ -195,6 +238,17 @@ describe("rebuildCanvas", () => {
     expect(unanswered).toMatchObject({ kind: "ask", question: "Left open?", status: "cancelled" });
     expect(unanswered).not.toHaveProperty("shownBefore");
     expect(prompts).toEqual([]);
+  });
+
+  test("a question that takes several comes back as one, with what was ticked", async () => {
+    const { store, canvas, plugins } = await setUp();
+    const options = [{ label: "Red" }, { label: "Blue" }, { label: "Green" }];
+    const picked = { options: ["Red", "Green"] };
+    const events = stored(claudeCall("t1", "mcp__canvas__ask", { question: "Which apply?", options, multiple: true }, answerAsToolResult({ label: "Red; Green", picked })));
+
+    await rebuildCanvas("c1", events, canvas, plugins);
+
+    expect(store.listCanvasItems("c1")).toMatchObject([{ kind: "ask", multiple: true, status: "answered", answer: { label: "Red; Green", picked, deliveredAs: "tool-result" } }]);
   });
 
   test("leaves out the calls of plugin tools that don't say they are rebuilt from their input", async () => {

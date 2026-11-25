@@ -343,16 +343,102 @@ test("a question that takes several shows checkboxes, and the answer lists every
   });
 
   await expect(ask.getByRole("radio")).toHaveCount(0);
+  await expect(ask.getByText("Tick one or more options to answer")).toBeVisible();
   await expect(ask.getByRole("button", { name: "Submit" })).toBeDisabled();
+  await expect(ask.getByRole("checkbox", { name: "Red", exact: true }), "styled as the radio buttons are").toHaveCSS("margin", "0px");
   await ask.getByRole("checkbox", { name: "Green", exact: true }).check();
   await ask.getByRole("checkbox", { name: "Red", exact: true }).check();
   await ask.getByRole("checkbox", { name: "Blue", exact: true }).check();
   await ask.getByRole("checkbox", { name: "Blue", exact: true }).uncheck();
   await ask.getByRole("button", { name: "Submit" }).click();
 
-  expect(await toolResult).toBe("The user chose: Red; Green");
+  expect(await toolResult).toBe('The user chose: "Red", "Green"');
   await openFromCanvasHistory(page, "Which of these apply?");
   await expect(ask.getByRole("checkbox", { name: "Red", exact: true })).toBeChecked();
   await expect(ask.getByRole("checkbox", { name: "Green", exact: true })).toBeChecked();
   await expect(ask.getByRole("checkbox", { name: "Blue", exact: true })).not.toBeChecked();
+  await expect(ask.locator(".ask-own-answer")).toHaveCount(0);
+});
+
+test("a question that takes several keeps the ticked options and your own words apart, whatever punctuation they hold", async ({ page }) => {
+  await signIn(page, host);
+  await page.goto(host.origin);
+  const conversationId = await startConversation(page);
+  const ask = page.locator(".ask");
+  const toolResult = callCanvasTool(host, conversationId, "ask", {
+    question: "Which fixes?",
+    options: [{ label: "Cache" }, { label: "Cache; with a TTL" }, { label: "Neither" }],
+    allowOther: true,
+    multiple: true,
+  });
+
+  await ask.getByRole("checkbox", { name: "Cache; with a TTL", exact: true }).check();
+  await ask.getByRole("textbox", { name: "Your own answer" }).fill("Neither; or both");
+  await ask.getByRole("button", { name: "Submit" }).click();
+
+  expect(await toolResult).toBe('The user chose: "Cache; with a TTL"\nIn their own words: Neither; or both');
+  await openFromCanvasHistory(page, "Which fixes?");
+  await expect(ask.getByRole("checkbox", { name: "Cache; with a TTL", exact: true })).toBeChecked();
+  await expect(ask.getByRole("checkbox", { name: "Cache", exact: true })).not.toBeChecked();
+  await expect(ask.getByRole("checkbox", { name: "Neither", exact: true })).not.toBeChecked();
+  await expect(ask.getByRole("checkbox", { name: "Your own answer" })).toBeChecked();
+  await expect(ask.locator(".ask-own-answer-text")).toHaveText("Neither; or both");
+  await expect(ask.getByRole("radio")).toHaveCount(0);
+});
+
+test("your own words beside ticked options, unticked again, stay out of the answer as Tab moves past their field", async ({ page }) => {
+  await signIn(page, host);
+  await page.goto(host.origin);
+  const conversationId = await startConversation(page);
+  const ask = page.locator(".ask");
+  const somethingElse = ask.getByRole("checkbox", { name: "Something else" });
+  const ownAnswer = ask.getByRole("textbox", { name: "Your own answer" });
+  const toolResult = callCanvasTool(host, conversationId, "ask", { question: "Which apply?", options: [{ label: "Red" }, { label: "Blue" }], allowOther: true, multiple: true });
+
+  await ask.getByRole("checkbox", { name: "Red", exact: true }).check();
+  await ownAnswer.focus();
+  await expect(somethingElse, "moving into the field ticks nothing").not.toBeChecked();
+  await ownAnswer.pressSequentially("purple");
+  await expect(somethingElse).toBeChecked();
+  await ownAnswer.press("Shift+Tab");
+  await page.keyboard.press("Space");
+  await expect(somethingElse).not.toBeChecked();
+  await page.keyboard.press("Tab");
+  await page.keyboard.press("Tab");
+  await expect(ask.getByRole("textbox", { name: /note/i })).toBeFocused();
+  await expect(somethingElse).not.toBeChecked();
+  await expect(ask.locator(".ask-selection")).toHaveText("Your answer: Red");
+  await ask.getByRole("button", { name: "Submit" }).click();
+
+  expect(await toolResult).toBe('The user chose: "Red"');
+});
+
+test("of several questions one can take several, whose answer the review page and the history show beside the others'", async ({ page }) => {
+  await signIn(page, host);
+  await page.goto(host.origin);
+  const conversationId = await startConversation(page);
+  const ask = page.locator(".ask");
+  const next = ask.getByRole("button", { name: "Next" });
+  const toolResult = callCanvasTool(host, conversationId, "ask", {
+    questions: [
+      { question: "Which colours?", options: [{ label: "Red" }, { label: "Blue" }, { label: "Green" }], multiple: true },
+      { question: "Which size?", options: [{ label: "Small" }, { label: "Large" }] },
+    ],
+  });
+
+  await expect(next).toBeDisabled();
+  await ask.getByRole("checkbox", { name: "Green", exact: true }).check();
+  await ask.getByRole("checkbox", { name: "Red", exact: true }).check();
+  await ask.getByRole("textbox", { name: /note/i }).fill("bright");
+  await next.click();
+  await ask.getByRole("radio", { name: "Large", exact: true }).check();
+  await next.click();
+  await expect(ask.locator(".ask-review")).toContainText("Which colours? Red; Green — “bright”");
+  await ask.getByRole("button", { name: "Submit" }).click();
+
+  expect(await toolResult).toBe('The user answered 2 questions:\n1. Which colours?\n   The user chose: "Red", "Green"\n   Their note: bright\n2. Which size?\n   The user chose: Large');
+  await openFromCanvasHistory(page, "2 questions: Which colours?");
+  await expect(ask.getByRole("checkbox", { checked: true })).toHaveCount(2);
+  await expect(ask.getByRole("checkbox", { name: "Blue", exact: true })).not.toBeChecked();
+  await expect(ask.getByRole("radio", { name: "Large", exact: true })).toBeChecked();
 });

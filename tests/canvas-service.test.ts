@@ -7,7 +7,7 @@ import { answerAsToolResult, CanvasService, severalQuestionsRequest } from "../h
 import { Hub } from "../host/hub.ts";
 import { Store } from "../host/store.ts";
 import type { SystemNotifications } from "../host/system-notifications.ts";
-import { questionsOf, tickedLabelsIn } from "../shared/ask.ts";
+import { questionsOf } from "../shared/ask.ts";
 import type { AskItem, CanvasItem } from "../shared/model.ts";
 import type { NotificationReason } from "../shared/system-notifications.ts";
 import { completeDirectories } from "../host/paths.ts";
@@ -86,7 +86,7 @@ describe("CanvasService", () => {
 
   test("the conversation hears when its question opens, is answered and is withdrawn, but not about pages shown", async () => {
     const { canvas, ask, questionsChanged } = setUp();
-    canvas.answer(ask().id, "Red");
+    canvas.answer(ask().id, { label: "Red" });
     ask();
     canvas.withdrawWaitingAsks("c1");
     await canvas.show("c1", { title: "x", html: "<p>" });
@@ -97,7 +97,7 @@ describe("CanvasService", () => {
     const { store, canvas, ask } = setUp();
     setSystemTime(new Date("2026-10-02T10:00:00Z"));
     const seenEarlier = await canvas.show("c1", { title: "seen", html: "<p>seen" });
-    canvas.answer(ask().id, "Red");
+    canvas.answer(ask().id, { label: "Red" });
     await canvas.show("c1", { title: "also seen", html: "<p>also" });
     setSystemTime(new Date("2026-10-02T10:01:00Z"));
     store.appendEvent("c1", { type: "user-message", text: "explain it" });
@@ -114,7 +114,7 @@ describe("CanvasService", () => {
     const { canvas, nextMessages, ask } = setUp();
     const item = ask();
     const answer = canvas.waitForAnswer(item, new AbortController().signal);
-    canvas.answer(item.id, "Blue", " keep it subtle ");
+    canvas.answer(item.id, { label: "Blue", note: " keep it subtle " });
     expect(await answer).toEqual({ label: "Blue", note: "keep it subtle" });
     expect(nextMessages).toEqual([]);
   });
@@ -126,14 +126,14 @@ describe("CanvasService", () => {
     const answer = canvas.waitForAnswer(item, aborted.signal);
     aborted.abort(new Error("timeout"));
     await expect(answer).rejects.toThrow("timeout");
-    canvas.answer(item.id, "Red");
+    canvas.answer(item.id, { label: "Red" });
     expect(nextMessages).toEqual(['My answer to your question "Color?": Red']);
     expect(asAsk(store.findCanvasItem(item.id))?.answer?.deliveredAs).toBe("next-message");
   });
 
   test("a late answer goes out as the next message of the person who gave it", () => {
     const { canvas, sendOptions, ask } = setUp();
-    canvas.answer(ask().id, "Red", undefined, undefined, "ada");
+    canvas.answer(ask().id, { label: "Red" }, undefined, "ada");
     expect(sendOptions).toEqual([{ authorId: "ada" }]);
   });
 
@@ -141,7 +141,7 @@ describe("CanvasService", () => {
     const { store, canvas, ask } = setUp();
     const item = ask();
     const answer = canvas.waitForAnswerDuringTurn(item, new AbortController().signal, 60_000);
-    canvas.answer(item.id, "Blue");
+    canvas.answer(item.id, { label: "Blue" });
     expect(await answer).toEqual({ label: "Blue" });
     expect(asAsk(store.findCanvasItem(item.id))?.answer?.deliveredAs).toBe("tool-result");
   });
@@ -151,7 +151,7 @@ describe("CanvasService", () => {
     const item = ask();
     expect(await canvas.waitForAnswerDuringTurn(item, new AbortController().signal, 10)).toBe("time-up");
     expect(asAsk(store.findCanvasItem(item.id))?.status).toBe("waiting");
-    canvas.answer(item.id, "Red");
+    canvas.answer(item.id, { label: "Red" });
     expect(nextMessages).toEqual(['My answer to your question "Color?": Red']);
     expect(asAsk(store.findCanvasItem(item.id))?.answer?.deliveredAs).toBe("next-message");
   });
@@ -171,7 +171,7 @@ describe("CanvasService", () => {
     canvas.turnEnded("c1");
     expect(await answer).toBe("turn-ended");
     expect(asAsk(store.findCanvasItem(item.id))?.status).toBe("waiting");
-    canvas.answer(item.id, "Red");
+    canvas.answer(item.id, { label: "Red" });
     expect(nextMessages).toEqual(['My answer to your question "Color?": Red']);
     expect(asAsk(store.findCanvasItem(item.id))?.answer?.deliveredAs).toBe("next-message");
   });
@@ -181,7 +181,7 @@ describe("CanvasService", () => {
     const item = ask();
     const answer = canvas.waitForAnswerDuringTurn(item, new AbortController().signal);
     canvas.turnEnded("c2");
-    canvas.answer(item.id, "Blue");
+    canvas.answer(item.id, { label: "Blue" });
     expect(await answer).toEqual({ label: "Blue" });
     expect(nextMessages).toEqual([]);
   });
@@ -200,8 +200,8 @@ describe("CanvasService", () => {
     });
     const installQuestion = (offerId: string) =>
       canvas.openAsk("c1", { question: "Install the Media plugin?", options: [{ label: "Install" }, { label: "Not now" }] }, { installsPluginOffer: offerId });
-    canvas.answer(installQuestion("declined").id, "Not now");
-    canvas.answer(installQuestion("agreed").id, "Install");
+    canvas.answer(installQuestion("declined").id, { label: "Not now" });
+    canvas.answer(installQuestion("agreed").id, { label: "Install" });
     await Bun.sleep(0);
     expect(settled).toEqual([
       ["declined", false],
@@ -219,7 +219,7 @@ describe("CanvasService", () => {
     expect(item).toMatchObject({ title: "2 questions: Color?", status: "waiting" });
     expect(notified.at(-1)).toEqual(["c1", { kind: "question", question: "2 questions: Color?" }]);
     const answer = canvas.waitForAnswer(item, new AbortController().signal);
-    canvas.answer(item.id, "", undefined, [{ label: "Blue", note: " subtle " }, { label: "Huge" }]);
+    canvas.answer(item.id, { label: "" }, [{ label: "Blue", note: " subtle " }, { label: "Huge" }]);
     const given = await answer;
     expect(given.label).toBe("Blue · Huge");
     expect(answerAsToolResult(given)).toBe(
@@ -231,21 +231,21 @@ describe("CanvasService", () => {
     const { store, canvas, nextMessages, askSeveral } = setUp();
     const item = askSeveral();
     const answer = canvas.waitForAnswer(item, new AbortController().signal);
-    canvas.answer(item.id, "", " Keep it short ", [{ label: "Blue" }, { label: "Huge" }]);
+    canvas.answer(item.id, { label: "", note: " Keep it short " }, [{ label: "Blue" }, { label: "Huge" }]);
     const given = await answer;
     expect(asAsk(store.findCanvasItem(item.id))?.answer?.note).toBe("Keep it short");
     expect(answerAsToolResult(given)).toBe(
       ["The user answered 2 questions:", "1. Color?", "   The user chose: Blue", "2. Size?", "   The user chose: Huge", "Their note on all the answers: Keep it short"].join("\n"),
     );
     const late = askSeveral();
-    canvas.answer(late.id, "", "   ", [{ label: "Red" }, { label: "Small" }]);
+    canvas.answer(late.id, { label: "", note: "   " }, [{ label: "Red" }, { label: "Small" }]);
     expect(nextMessages.at(-1)).toBe('My answers to your questions:\n1. "Color?": Red\n2. "Size?": Small');
   });
 
   test("several answers sent late arrive as one next message", async () => {
     const { store, canvas, nextMessages, askSeveral } = setUp();
     const item = askSeveral();
-    canvas.answer(item.id, "", undefined, [{ label: "Red" }, { label: "Small", note: "tight fit" }]);
+    canvas.answer(item.id, { label: "" }, [{ label: "Red" }, { label: "Small", note: "tight fit" }]);
     expect(nextMessages).toEqual(['My answers to your questions:\n1. "Color?": Red\n2. "Size?": Small\n   Note: tight fit']);
     expect(asAsk(store.findCanvasItem(item.id))?.answer).toMatchObject({ label: "Red · Small", deliveredAs: "next-message" });
   });
@@ -253,11 +253,11 @@ describe("CanvasService", () => {
   test("an answer to several questions must answer each, and one question takes one answer", () => {
     const { canvas, ask, askSeveral } = setUp();
     const several = askSeveral();
-    expect(() => canvas.answer(several.id, "Red")).toThrow("Answer all 2 questions");
-    expect(() => canvas.answer(several.id, "", undefined, [{ label: "Red" }])).toThrow("Answer all 2 questions");
-    expect(() => canvas.answer(several.id, "", undefined, [{ label: "Red" }, { label: " " }])).toThrow("Answer all 2 questions");
+    expect(() => canvas.answer(several.id, { label: "Red" })).toThrow("Answer all 2 questions");
+    expect(() => canvas.answer(several.id, { label: "" }, [{ label: "Red" }])).toThrow("Answer all 2 questions");
+    expect(() => canvas.answer(several.id, { label: "" }, [{ label: "Red" }, { label: " " }])).toThrow("Answer all 2 questions");
     expect(canvas.list("c1").find(({ id }) => id === several.id)?.status).toBe("waiting");
-    expect(() => canvas.answer(ask().id, "Red", undefined, [{ label: "Red" }])).toThrow("takes one answer");
+    expect(() => canvas.answer(ask().id, { label: "Red" }, [{ label: "Red" }])).toThrow("takes one answer");
   });
 
   test("questionsOf gives the one question of an item that holds just one", () => {
@@ -266,13 +266,44 @@ describe("CanvasService", () => {
     expect(questionsOf(askSeveral()).map(({ question }) => question)).toEqual(["Color?", "Size?"]);
   });
 
-  test("a question that takes several keeps its flag, and the ticked options are read back from the answer line", () => {
-    const { canvas } = setUp();
-    const asked = canvas.openAsk("c1", { question: "Which apply?", options: [{ label: "Red" }, { label: "Blue" }, { label: "Green" }], multiple: true });
-    const [question] = questionsOf(asked);
-    expect(question!.multiple).toBe(true);
-    expect(tickedLabelsIn(question!, "Red; Green")).toEqual(["Red", "Green"]);
-    expect(tickedLabelsIn(question!, undefined)).toEqual([]);
+  test("a question that takes several keeps its flag, and its answer keeps the ticked options and the user's own words apart", async () => {
+    const { store, canvas, ask } = setUp();
+    const fixes = canvas.openAsk("c1", { question: "Which fixes?", options: [{ label: "Cache" }, { label: "Cache; with a TTL" }, { label: "Neither" }], allowOther: true, multiple: true });
+    expect(questionsOf(fixes)[0]!.multiple).toBe(true);
+    expect(ask()).not.toHaveProperty("multiple");
+    const waited = canvas.waitForAnswer(fixes, new AbortController().signal);
+    const picked = { options: ["Cache; with a TTL"], own: "Neither; or both" };
+    canvas.answer(fixes.id, { label: "", picked, note: "soon" });
+    expect(asAsk(store.findCanvasItem(fixes.id))?.answer).toMatchObject({ label: "Cache; with a TTL; Neither; or both", picked, note: "soon" });
+    expect(answerAsToolResult(await waited)).toBe('The user chose: "Cache; with a TTL"\nIn their own words: Neither; or both\nTheir note: soon');
+  });
+
+  test("an answer to a question that takes several that comes as one line, as a spoken one does, is the option it names or the user's own words", async () => {
+    const { store, canvas } = setUp();
+    const answerGiven = async (label: string) => {
+      const asked = canvas.openAsk("c1", { question: "Which apply?", options: [{ label: "Red" }, { label: "Blue" }], multiple: true });
+      const waited = canvas.waitForAnswer(asked, new AbortController().signal);
+      canvas.answer(asked.id, { label });
+      return [asAsk(store.findCanvasItem(asked.id))?.answer?.picked, answerAsToolResult(await waited)];
+    };
+    expect(await answerGiven("Red")).toEqual([{ options: ["Red"] }, 'The user chose: "Red"']);
+    expect(await answerGiven("all but red")).toEqual([{ options: [], own: "all but red" }, "The user chose: none of the options\nIn their own words: all but red"]);
+  });
+
+  test("of several questions, only those that take several have their answer in parts, and a late answer tells them apart too", () => {
+    const { store, canvas, nextMessages } = setUp();
+    const asked = canvas.openAsk("c1", {
+      questions: [
+        { question: "Which colours?", options: [{ label: "Red" }, { label: "Blue" }], allowOther: true, multiple: true },
+        { question: "Size?", options: [{ label: "Small" }, { label: "Large" }] },
+      ],
+    });
+    canvas.answer(asked.id, { label: "" }, [{ label: "Red; teal", picked: { options: ["Red"], own: "teal" }, note: "bright" }, { label: "Small" }]);
+    expect(asAsk(store.findCanvasItem(asked.id))?.answer?.answers).toEqual([
+      { question: "Which colours?", label: "Red; teal", picked: { options: ["Red"], own: "teal" }, note: "bright" },
+      { question: "Size?", label: "Small" },
+    ]);
+    expect(nextMessages).toEqual(['My answers to your questions:\n1. "Which colours?": "Red"\n   In my own words: teal\n   Note: bright\n2. "Size?": Small']);
   });
 
   test("withdrawing waiting asks fails their tool calls and refuses later answers", async () => {
@@ -281,7 +312,7 @@ describe("CanvasService", () => {
     const answer = canvas.waitForAnswer(item, new AbortController().signal);
     canvas.withdrawWaitingAsks("c1");
     await expect(answer).rejects.toThrow("withdrew");
-    expect(() => canvas.answer(item.id, "Red")).toThrow("already answered or withdrawn");
+    expect(() => canvas.answer(item.id, { label: "Red" })).toThrow("already answered or withdrawn");
   });
 
   test("does not wait for a render report when nobody is viewing", async () => {

@@ -54,6 +54,7 @@ import type {
   MachineStatus,
   Launch,
   Person,
+  PickedSeveral,
   Profile,
   PromptTemplate,
   PublicAddress,
@@ -333,7 +334,7 @@ export type ClientMessage =
   | { type: "conversation.set-bypass-permissions"; conversationId: string; bypassPermissions: boolean }
   | { type: "conversation.set-config"; conversationId: string; configId: string; value: string | boolean }
   | { type: "permission.respond"; conversationId: string; permissionId: string; optionId: string | null }
-  | { type: "ask.answer"; itemId: string; label: string; note?: string; answers?: AskAnswerEntry[] }
+  | { type: "ask.answer"; itemId: string; label: string; picked?: PickedSeveral; note?: string; answers?: AskAnswerEntry[] }
   | { type: "canvas.report"; itemId: string; errors: string[] }
   /**
    * The page shows this app's document, and gets its state on every change until it unsubscribes. A phone from before each

@@ -14,6 +14,7 @@ export const dictation = {
     message: "Listening… It stops when you pause or let go. Esc cancels.",
     conversation: "Listening… Say “stop” to end, “repeat that” to hear it again, or “help” for more.",
     answer: "Listening… Say “yes”, “the others”, a number, or answer in your own words.",
+    severalAnswers: "Listening… Say the numbers or names of the ones you want, as in “one and three”, or answer in your own words.",
   },
   loadingRecognition: "Loading speech recognition on this Mac…",
   loadingVoiceModel: "Loading the voice model on this Mac…",

@@ -69,9 +69,11 @@ describe("a pending ask", () => {
       question: "Which layout?",
       choices: [{ label: "Grid", description: "Cards in rows" }, { label: "List", recommended: true }],
       allowOther: true,
+      multiple: false,
       questions: 1,
       previews: false,
     });
+    expect(pendingAsk(ask({ question: "Which colours?", options: [{ label: "Red" }, { label: "Blue" }], multiple: true })).multiple).toBe(true);
     expect(pendingAsk(ask({ question: "Which colour?", html: "<p>Why</p>", options: [{ label: "Red" }] })).previews).toBe(true);
     expect(pendingAsk(ask({ question: "Which colour?", options: [{ label: "Red", html: "<div>Red</div>" }] })).previews).toBe(true);
   });

@@ -16,6 +16,7 @@ export const dictation: Messages["dictation"] = {
     message: "Escuchando… Se detiene cuando haces una pausa o sueltas. Esc cancela.",
     conversation: "Escuchando… Di “stop” para terminar, “repeat that” para oírlo de nuevo o “help” para más opciones.",
     answer: "Escuchando… Di “yes”, “the others”, un número, o responde con tus propias palabras.",
+    severalAnswers: "Escuchando… Di los números o los nombres de las opciones que quieras, como “one and three”, o responde con tus propias palabras.",
   },
   loadingRecognition: "Cargando el reconocimiento de voz en este Mac…",
   loadingVoiceModel: "Cargando el modelo de voz en este Mac…",

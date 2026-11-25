@@ -42,12 +42,17 @@ const numbered = (options: AskOption[], indexes: number[]) => indexes.map((index
 
 /**
  * What is said to ask a question: with a recommended option, that one in full and the offer of the others, so that a
- * yes settles it; without one, every option by its number.
+ * yes settles it; without one, or where several can be picked, every option by its number.
  */
 export function questionSentences(question: AskQuestion, { position, of }: { position: number; of: number }): { sentences: string[]; offered: OfferedOptions } {
   const counted = of > 1 ? [`Question ${position + 1} of ${of}.`] : [];
   const recommended = recommendedIndex(question.options);
-  if (recommended === null) return { sentences: [...counted, asSentence(question.question), ...numbered(question.options, question.options.map((_, index) => index)), "Which one?"], offered: "all" };
+  const everyOption = [...counted, asSentence(question.question), ...numbered(question.options, question.options.map((_, index) => index))];
+  if (question.multiple) {
+    const recommendation = recommended === null ? [] : [`I recommend ${asSentence(question.options[recommended]!.label)}`];
+    return { sentences: [...everyOption, ...recommendation, "Which ones?"], offered: "all" };
+  }
+  if (recommended === null) return { sentences: [...everyOption, "Which one?"], offered: "all" };
   const { label, description } = question.options[recommended]!;
   const others = question.options.length > 1 ? ["Go with it, or hear the others?"] : ["Go with it?"];
   return { sentences: [...counted, asSentence(question.question), `I recommend ${asSentence(label)}`, ...(description ? [asSentence(description)] : []), ...others], offered: "recommended" };
@@ -134,6 +139,22 @@ function labelSaid(said: string, options: AskOption[]) {
   };
   const matching = options.map((_, index) => index).filter((index) => named(options[index]!));
   return matching.length === 1 ? matching[0]! : null;
+}
+
+/** The option the words are, and no more than it, so "all but red" isn't red. */
+function optionSaidAlone(said: string, options: AskOption[]) {
+  const named = options.findIndex(({ label }) => spokenWords(spokenLabel(label)) === said);
+  return named === -1 ? numberSaid(said, options.length) : named;
+}
+
+/** The options said one after another, as in "one and three"; null when anything else was said. */
+export function heardSeveral(text: string, { options }: AskQuestion): number[] | null {
+  const whole = optionSaidAlone(withoutPoliteness(spokenWords(text)), options);
+  if (whole !== null) return [whole];
+  const said = withoutPoliteness(spokenWords(text.replace(/[,;]/g, " and ")));
+  const parts = said.split(/\band\b/).map((part) => part.trim()).filter(Boolean);
+  const indexes = parts.map((part) => optionSaidAlone(part, options)).filter((index) => index !== null);
+  return indexes.length > 0 && indexes.length === parts.length ? indexes : null;
 }
 
 /** What the words say, in English after translation: yes to what was offered, the others, a number, or a label's words. */

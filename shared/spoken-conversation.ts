@@ -1,6 +1,6 @@
-import { answersSummary, questionsOf } from "./ask.ts";
-import type { AskAnswerEntry, AskItem, StoredEvent } from "./model.ts";
-import { heardChoice, otherOptionsSentences, questionSentences, spokenLabel, type OfferedOptions } from "./spoken-asks.ts";
+import { answerPicking, answersSummary, questionsOf } from "./ask.ts";
+import type { AskAnswerEntry, AskItem, AskQuestion, StoredEvent } from "./model.ts";
+import { heardChoice, heardSeveral, otherOptionsSentences, questionSentences, spokenLabel, type OfferedOptions } from "./spoken-asks.ts";
 import { inEnglish, nothingToSend, spokenCommand } from "./spoken-commands.ts";
 import { lastReply, spokenTurn } from "./spoken-replies.ts";
 import type { TimelineBlock } from "./timeline.ts";
@@ -60,6 +60,11 @@ const QUESTION_HELP = [
   "Anything else goes to the agent as your answer.",
   "Stop ends the conversation.",
 ];
+const SEVERAL_HELP = [
+  "Say the numbers or the names of the ones you want, as in one and three.",
+  "Anything else goes to the agent as your answer.",
+  "Stop ends the conversation.",
+];
 export const NO_REPLY = ["The agent stopped without a reply."];
 export const APPROVAL_NEEDED = ["The agent is waiting for your approval on the screen."];
 const NOTHING_TO_REPEAT = ["There is no reply to repeat yet."];
@@ -79,6 +84,13 @@ interface Answering {
   answers: AskAnswerEntry[];
   offered: OfferedOptions;
   said: string[];
+}
+
+const inTheirOwnWords = (text: string): AskAnswerEntry => ({ label: text.trim(), note: SAID_ALOUD });
+
+function severalHeard(text: string, question: AskQuestion): AskAnswerEntry {
+  const indexes = heardSeveral(inEnglish(text), question);
+  return (indexes && answerPicking(question, indexes.map((index) => question.options[index]!.label))) ?? inTheirOwnWords(text);
 }
 
 /**
@@ -180,6 +192,11 @@ export class SpokenConversation {
   /** While a question is asked aloud, what is heard answers it. */
   get answeringAQuestion() {
     return this.answering !== null;
+  }
+
+  /** The question asked aloud takes several answers. */
+  get takesSeveralAnswers() {
+    return this.answering !== null && (questionsOf(this.answering.item)[this.answering.position]!.multiple ?? false);
   }
 
   private followTheTurn({ events, timeline }: ConversationView) {
@@ -289,16 +306,16 @@ export class SpokenConversation {
       return this.set({ phase: "idle" });
     }
     if (command === "repeat") return this.sayToAnswer(asking, asking.said);
-    if (command === "help") return this.sayToAnswer(asking, QUESTION_HELP);
     const question = questionsOf(asking.item)[asking.position]!;
+    if (command === "help") return this.sayToAnswer(asking, question.multiple ? SEVERAL_HELP : QUESTION_HELP);
+    if (question.multiple) return this.answered(asking, severalHeard(text, question));
     const choice = heardChoice(inEnglish(text), question, asking.offered);
     if (choice.kind === "others") {
       if (asking.offered === "all") return this.askAloud(asking);
       asking.offered = "all";
       return this.sayToAnswer(asking, otherOptionsSentences(question));
     }
-    const answered = choice.kind === "pick" ? { label: question.options[choice.index]!.label } : { label: text.trim(), note: SAID_ALOUD };
-    this.answered(asking, answered);
+    this.answered(asking, choice.kind === "pick" ? { label: question.options[choice.index]!.label } : inTheirOwnWords(text));
   }
 
   private answered(asking: Answering, answered: AskAnswerEntry) {

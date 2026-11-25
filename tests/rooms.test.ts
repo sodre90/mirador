@@ -771,12 +771,21 @@ describe("a room's canvas", () => {
     endTurn(builder, askingTurn, "I asked on the canvas.");
     rooms.write(room.id, ownerId, "@Builder and the logo?", ["p1"], null);
     answer(builder, "Logo done.");
-    canvas.answer(question.id, "Red", undefined, undefined, ownerId);
+    canvas.answer(question.id, { label: "Red" }, undefined, ownerId);
     expect(answersSent).toEqual([{ conversationId: builder, text: 'My answer to your question "Which colour?": Red', options: { authorId: ownerId, roomMessageId: asking.id, afterTurn: true } }]);
     endTurn(builder, turnOn(builder, asking.id), "Red it is.");
     const thread = rooms.timeline(room.id).threads.find(({ messageId }) => messageId === asking.id)!;
     expect(posted().at(-1)!.message).toMatchObject({ text: "Red it is.", answers: asking.id, threadId: thread.id });
     expect(rooms.timeline(room.id).messages.filter(({ answers }) => answers === asking.id).map(({ text }) => text)).toEqual(["I asked on the canvas.", "Red it is."]);
+  });
+
+  test("refuses a question that takes several in a room, where each person votes for one option, also as one of several questions", async () => {
+    const { rooms, room, ownerId, callTool, conversationOf } = machineWithRooms();
+    rooms.write(room.id, ownerId, "@Builder which apply?", ["p1"], null);
+    const question = { question: "Which apply?", options: [{ label: "Red" }, { label: "Blue" }] };
+    const refused = { text: expect.stringContaining("vote for one option"), isError: true };
+    expect(await callTool(conversationOf("p1"), "ask", { ...question, multiple: true })).toEqual(refused);
+    expect(await callTool(conversationOf("p1"), "ask", { questions: [question, { ...question, multiple: true }] })).toEqual(refused);
   });
 
   test("marks each agent's answer with the pages and questions made while it answered that message, by the order of the room, whatever the clocks say", () => {

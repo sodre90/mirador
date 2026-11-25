@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { AskItem, ConversationEvent, StoredEvent } from "../shared/model.ts";
+import type { AskAnswerEntry, AskItem, ConversationEvent, StoredEvent } from "../shared/model.ts";
 import type { TimelineBlock } from "../shared/timeline.ts";
 import { APPROVAL_NEEDED, SpokenConversation, KEEP_LISTENING_MS, NO_REPLY, SAID_ALOUD, type ReadingOutcome, type SpokenConversationEffects } from "../shared/spoken-conversation.ts";
 
@@ -10,7 +10,7 @@ const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 function carMode({ connected = true, speaking = { kind: "heard" } as ReadingOutcome } = {}) {
   const did: string[] = [];
   const said: string[][] = [];
-  const answers: { itemId: string; label: string; note?: string }[] = [];
+  const answers: ({ itemId: string } & AskAnswerEntry)[] = [];
   let now = 0;
   const effects: SpokenConversationEffects = {
     chime: async (chime) => void did.push(`chime ${chime}`),
@@ -186,6 +186,27 @@ describe("a spoken conversation", () => {
     await settle();
     free.loop.heard("Whichever is faster to review");
     expect(free.answers).toEqual([{ itemId: "a1", label: "Whichever is faster to review", note: SAID_ALOUD }]);
+  });
+
+  test("where several can be picked, the ones said are the answer, and other words go to the agent as they are", async () => {
+    const askedSeveral = async (heard: string) => {
+      const { loop, answers, said } = carMode();
+      loop.tap();
+      await settle();
+      loop.heard("Refactor the parser");
+      loop.asked({ ...ask([{ label: "Small steps", recommended: true }, { label: "Rewrite" }, { label: "Tests first" }]), multiple: true });
+      await settle();
+      expect(said.at(-1)!.at(-1)).toBe("Which ones?");
+      expect(loop.takesSeveralAnswers).toBe(true);
+      loop.heard("help");
+      await settle();
+      expect(said.at(-1)![0]).toContain("as in one and three");
+      loop.heard(heard);
+      return answers;
+    };
+    expect(await askedSeveral("Three and one.")).toEqual([{ itemId: "a1", label: "Small steps; Tests first", picked: { options: ["Small steps", "Tests first"] } }]);
+    expect(await askedSeveral("Yes.")).toEqual([{ itemId: "a1", label: "Yes.", note: SAID_ALOUD }]);
+    expect(await askedSeveral("All but the rewrite")).toEqual([{ itemId: "a1", label: "All but the rewrite", note: SAID_ALOUD }]);
   });
 
   test("an approval only the screen can give is said, and the reply is read once the turn ends", async () => {

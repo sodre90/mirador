@@ -1853,7 +1853,7 @@ export function startServer(services: HostServices) {
         rooms.assertMayApproveIn(message.conversationId, socket.data.personId);
         return conversations.respondToPermission(message.conversationId, message.permissionId, message.optionId);
       case "ask.answer":
-        return canvas.answer(message.itemId, message.label, message.note, message.answers, socket.data.personId);
+        return canvas.answer(message.itemId, message, message.answers, socket.data.personId);
       case "app.subscribe": {
         const documentId = message.documentId ?? apps.lastShownIn(message.workspaceId, message.app);
         if (message.documentId === undefined && documentId !== null) socket.data.appViewsNamingNoDocument.set(appKey(message), documentId);

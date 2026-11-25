@@ -5627,8 +5627,8 @@ button.jump-to-latest svg {
   line-height: calc(16px * var(--font-scale));
 }
 
-.ask-option input[type="radio"],
-.ask-other input[type="radio"] {
+.ask-option input:is([type="radio"], [type="checkbox"]),
+.ask-other input:is([type="radio"], [type="checkbox"]) {
   accent-color: var(--accent);
   margin: 0;
 }

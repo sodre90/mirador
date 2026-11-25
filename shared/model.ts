@@ -593,6 +593,8 @@ export interface PendingAsk {
   question: string;
   choices: Pick<AskOption, "label" | "description" | "recommended">[];
   allowOther: boolean;
+  /** The first question takes several answers. */
+  multiple: boolean;
   /** How many questions it asks; the ones after the first show only in the conversation. */
   questions: number;
   /** It shows a page or previews, which only the conversation shows. */
@@ -909,9 +911,18 @@ export interface AskQuestion {
   optionWidth?: number;
 }
 
+/** What the user answered to a question that takes several: the options they ticked, and their own words beside them. */
+export interface PickedSeveral {
+  options: string[];
+  own?: string;
+}
+
 /** What the user answered to one question: the option or their own words, and an optional note. */
 export interface AskAnswerEntry {
+  /** For a question that takes several, all of it on one line, to show. */
   label: string;
+  /** For a question that takes several. */
+  picked?: PickedSeveral;
   note?: string;
 }
 
@@ -920,6 +931,8 @@ export type CanvasItemStatus = "shown" | "waiting" | "answered" | "cancelled";
 export interface CanvasAnswer {
   /** The answer, or for several questions a short summary of all of them. */
   label: string;
+  /** For a single question that takes several. */
+  picked?: PickedSeveral;
   note?: string;
   /** For an ask of several questions: each answer beside its question. */
   answers?: (AskAnswerEntry & { question: string })[];

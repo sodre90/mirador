@@ -63,7 +63,8 @@ const describedOptionSchema = z.object(
 const describedAskQuestionShape = describedFields(askQuestionShape, {
   html: "Optional HTML shown above the options: the explanation or mockup the question is about, with any diagram drawn in HTML and CSS, inline SVG or Mermaid, not ASCII art. Put it here rather than in a show call just before.",
   allowOther: "Let the user type an answer that is not one of the options.",
-  multiple: "Let the user tick several options, as for \"tick all that apply\"; without it they choose exactly one. Their answer comes back as the ticked labels, separated by \"; \".",
+  multiple:
+    "Let the user tick several options, as for \"tick all that apply\"; without it they choose exactly one. Their answer comes back as the ticked labels, each in quotes, with any words of their own on a line after them.",
   optionWidth:
     "Optional least width of each answer box in CSS pixels, for options whose descriptions need more room. Boxes still sit side by side while they fit and never get wider than the canvas. Without it they are at least 200px, or as wide as the widest preview.",
 });
@@ -97,6 +98,9 @@ const ANSWER_COMES_LATER: Record<AnswerWaitGivenUp, string> = {
   "turn-ended":
     "The turn that asked this question ended before the user answered, so their answer comes as a message of theirs instead. Go by that message.",
 };
+
+const ONE_OPTION_EACH_IN_A_ROOM =
+  "People in a room vote for one option of a question, so multiple doesn't work here. Ask about each option in a question of its own, with questions.";
 
 const toolError = (text: string) => ({ isError: true, content: [{ type: "text" as const, text }] });
 
@@ -255,6 +259,7 @@ function buildCanvasServer(conversationId: string, parts: CanvasServerParts, cut
       if (!questions && (!question || !options)) return toolError("Give question and options, or questions.");
       if ((questions ?? [{ options: options! }]).some((asked) => asked.options.filter((option) => option.recommended).length > 1))
         return toolError("Recommend at most one option of each question.");
+      if (roomId && (questions ?? [rest]).some(({ multiple }) => multiple)) return toolError(ONE_OPTION_EACH_IN_A_ROOM);
       const caller = await callingConversation(ctx);
       const item = canvas.openAsk(caller, questions ? severalQuestionsRequest(questions, rest.html) : { question: question!, options: options!, ...rest });
       if (conversations.get(caller).askMode === "next-message") {

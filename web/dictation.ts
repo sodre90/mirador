@@ -23,8 +23,8 @@ export function released(press: Press, at: number): { press: Press; action: Pres
 
 export type DictationPhase = "idle" | "starting" | "listening" | "transcribing";
 
-/** What the microphone listens for: a message, the next turn of a spoken conversation, or the answer to a question read aloud. */
-export type ListeningFor = "message" | "conversation" | "answer";
+/** What the microphone listens for: a message, the next turn of a spoken conversation, or the answer, or several, to a question read aloud. */
+export type ListeningFor = "message" | "conversation" | "answer" | "severalAnswers";
 
 const listeningLines: Record<ListeningFor, string> = words.listening;
 

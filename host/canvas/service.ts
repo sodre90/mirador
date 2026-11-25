@@ -1,4 +1,4 @@
-import { answersSummary, questionsOf } from "../../shared/ask.ts";
+import { answersSummary, pickedIn, pickedOnOneLine, questionsOf } from "../../shared/ask.ts";
 import type { PluginOffer } from "../../shared/apps.ts";
 import type {
   AskAnswerEntry,
@@ -8,6 +8,7 @@ import type {
   CanvasItem,
   CanvasItemBase,
   MadeInRoom,
+  PickedSeveral,
   ShowItem,
 } from "../../shared/model.ts";
 import type { ConversationService } from "../conversations.ts";
@@ -61,7 +62,7 @@ export interface RoomAnswerer {
 }
 
 /** An answer as it goes to the agent: what was chosen, and who chose it where that was not the owner. */
-export type GivenAnswer = Pick<CanvasAnswer, "label" | "note" | "answers"> & { answerer?: RoomAnswerer };
+export type GivenAnswer = Pick<CanvasAnswer, "label" | "picked" | "note" | "answers"> & { answerer?: RoomAnswerer };
 
 interface AnswerWaiter {
   answered(answer: GivenAnswer): void;
@@ -225,11 +226,11 @@ export class CanvasService {
    * agent hears it after the turn it may be in, as going on with the room message whose turn asked, so that its answer
    * goes into that message's thread. One a person other than the owner confirmed for a room tells the agent who they are.
    */
-  answer(itemId: string, label: string, note?: string, answers?: AskAnswerEntry[], authorId?: string, answerer?: RoomAnswerer) {
+  answer(itemId: string, answer: AskAnswerEntry, answers?: AskAnswerEntry[], authorId?: string, answerer?: RoomAnswerer) {
     const item = this.store.findCanvasItem(itemId);
     if (!item || item.kind !== "ask") throw new HostProblemError({ code: "unknown-question" });
     if (item.status !== "waiting") throw new HostProblemError({ code: "question-already-answered" });
-    const chosen = answersFor(item, label, note, answers);
+    const chosen = answersFor(item, answer, answers);
     const given: GivenAnswer = answerer ? { ...chosen, answerer } : chosen;
     const waiter = this.answerWaiters.get(itemId);
     this.answerWaiters.delete(itemId);
@@ -402,22 +403,39 @@ const severalQuestionsAsked = (questions: AskQuestion[]): AskedFields => ({
 });
 
 /** What the user sent, checked against what was asked: one answer for a question, one for each of several. */
-function answersFor(item: AskItem, label: string, note: string | undefined, answers: AskAnswerEntry[] | undefined): GivenAnswer {
+function answersFor(item: AskItem, answer: AskAnswerEntry, answers: AskAnswerEntry[] | undefined): GivenAnswer {
   const questions = questionsOf(item);
   if (!item.questions) {
     if (answers) throw new HostProblemError({ code: "question-takes-one-answer" });
-    return { label, note: note?.trim() || undefined };
+    return entryFor(questions[0], answer);
   }
   if (!answers || answers.length !== questions.length || answers.some((entry) => !entry.label.trim())) {
     throw new HostProblemError({ code: "answer-all-questions", count: questions.length });
   }
-  const entries = answers.map(({ label, note }, index) => ({ question: questions[index]!.question, label, note: note?.trim() || undefined }));
-  return { label: answersSummary(entries), note: note?.trim() || undefined, answers: entries };
+  const entries = answers.map((entry, index) => ({ question: questions[index]!.question, ...entryFor(questions[index], entry) }));
+  return { label: answersSummary(entries), note: answer.note?.trim() || undefined, answers: entries };
+}
+
+/** What a question that takes several was answered is kept in its parts, however it was given: spoken, it comes as one line. */
+function entryFor(question: AskQuestion | undefined, answer: AskAnswerEntry): AskAnswerEntry {
+  const note = answer.note?.trim() || undefined;
+  if (!question?.multiple) return { label: answer.label, note };
+  const picked = pickedIn(question, answer);
+  return { label: pickedOnOneLine(picked), picked, note };
 }
 
 const noteLine = (note: string | undefined, prefix: string) => (note ? [`${prefix}${note}`] : []);
 
 const indented = (lines: string[]) => lines.map((line) => `   ${line}`);
+
+const NONE_OF_THE_OPTIONS = "none of the options";
+
+/** Each option in quotes, so the agent, and Mirador reading it back, can tell them apart whatever their labels hold. */
+const quoted = (options: string[]) => (options.length === 0 ? NONE_OF_THE_OPTIONS : options.map((option) => JSON.stringify(option)).join(", "));
+
+const answerText = ({ label, picked }: AskAnswerEntry) => (picked ? quoted(picked.options) : label);
+
+const ownWordsLine = ({ picked }: AskAnswerEntry, prefix: string) => (picked?.own ? [`${prefix}${picked.own}`] : []);
 
 /** One answer of a person other than the owner, named as a room's messages name them: the option they chose, or their own words quoted as those messages are. */
 const roomPersonsAnswer = (who: string, label: string, inOwnWords: boolean) => (inOwnWords ? [`${who} answered in their own words:`, ...quotedLines(label)] : [`${who} chose: ${label}`]);
@@ -431,12 +449,17 @@ function roomPersonsAnswerAsToolResult({ label, answers }: GivenAnswer, { author
 
 export function answerAsToolResult(given: GivenAnswer) {
   if (given.answerer) return roomPersonsAnswerAsToolResult(given, given.answerer);
-  const { label, note, answers } = given;
+  const { note, answers } = given;
   if (answers) {
-    const each = answers.flatMap((entry, index) => [`${index + 1}. ${entry.question}`, `   The user chose: ${entry.label}`, ...noteLine(entry.note, "   Their note: ")]);
+    const each = answers.flatMap((entry, index) => [
+      `${index + 1}. ${entry.question}`,
+      `   The user chose: ${answerText(entry)}`,
+      ...ownWordsLine(entry, "   In their own words: "),
+      ...noteLine(entry.note, "   Their note: "),
+    ]);
     return [`The user answered ${answers.length} questions:`, ...each, ...noteLine(note, "Their note on all the answers: ")].join("\n");
   }
-  return [`The user chose: ${label}`, ...noteLine(note, "Their note: ")].join("\n");
+  return [`The user chose: ${answerText(given)}`, ...ownWordsLine(given, "In their own words: "), ...noteLine(note, "Their note: ")].join("\n");
 }
 
 /** The answer to an install question that has Mirador install the plugin. */
@@ -485,10 +508,30 @@ export function pastAnswerOf(item: AskItem, toolResult: string, nextUserMessage:
     { answer: fromNextMessage, deliveredAs: "next-message" as const },
   ].find(({ answer }) => answer?.entries.length === questions.length);
   if (!read?.answer) return null;
-  const { entries, note } = read.answer;
-  if (!item.questions) return { label: entries[0]!.label, ...(entries[0]!.note && { note: entries[0]!.note }), deliveredAs: read.deliveredAs };
+  const { note } = read.answer;
+  const entries = read.answer.entries.map((entry, index) => withItsParts(questions[index]!, entry));
+  if (!item.questions) return { ...entries[0]!, deliveredAs: read.deliveredAs };
   const answers = entries.map((entry, index) => ({ ...entry, question: questions[index]!.question }));
   return { label: answersSummary(answers), ...(note && { note }), answers, deliveredAs: read.deliveredAs };
+}
+
+/** The answer to a question that takes several, read back from how `answerText` and `ownWordsLine` wrote it. */
+function withItsParts(question: AskQuestion, entry: AskAnswerEntry): AskAnswerEntry {
+  const [, chosen = "", own] = question.multiple ? (/^(.*)(?:\n\s*In (?:their|my) own words: ([\s\S]*))?$/.exec(entry.label) ?? []) : [];
+  const options = optionsQuotedIn(chosen);
+  if (!options) return entry;
+  const picked: PickedSeveral = { options, ...(own && { own }) };
+  return { ...entry, label: pickedOnOneLine(picked), picked };
+}
+
+function optionsQuotedIn(chosen: string): string[] | null {
+  if (chosen === NONE_OF_THE_OPTIONS) return [];
+  if (!chosen.startsWith('"')) return null;
+  try {
+    return JSON.parse(`[${chosen}]`) as string[];
+  } catch {
+    return null;
+  }
 }
 
 interface AnswerFormat {
@@ -548,10 +591,10 @@ function roomPersonsAnswerAsMessage(item: AskItem, { label, answers }: GivenAnsw
 
 function answerAsMessage(item: AskItem, given: GivenAnswer) {
   if (given.answerer) return roomPersonsAnswerAsMessage(item, given, given.answerer);
-  const { label, note, answers } = given;
+  const { note, answers } = given;
   if (answers) {
-    const each = answers.flatMap((entry, index) => [`${index + 1}. "${entry.question}": ${entry.label}`, ...noteLine(entry.note, "   Note: ")]);
+    const each = answers.flatMap((entry, index) => [`${index + 1}. "${entry.question}": ${answerText(entry)}`, ...ownWordsLine(entry, "   In my own words: "), ...noteLine(entry.note, "   Note: ")]);
     return ["My answers to your questions:", ...each, ...noteLine(note, "Note on all the answers: ")].join("\n");
   }
-  return [`My answer to your question "${item.question}": ${label}`, ...noteLine(note, "Note: ")].join("\n");
+  return [`My answer to your question "${item.question}": ${answerText(given)}`, ...ownWordsLine(given, "In my own words: "), ...noteLine(note, "Note: ")].join("\n");
 }
