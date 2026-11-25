@@ -17,6 +17,27 @@ export function answerTo(item: AskItem, index: number): AskAnswerEntry | undefin
 /** An answer the user wrote themselves rather than picked from the question's options. */
 export const isOwnAnswer = (question: AskQuestion, answer: string) => !question.options.some(({ label }) => label === answer);
 
+/** A page a question holds: the one above its options, or an option's own. */
+export interface AskPage {
+  question: number;
+  option: number | null;
+}
+
+/** The pages on screen as a question opens: those of the first question it holds. */
+export function pagesOnOpening(item: AskItem): AskPage[] {
+  const [first] = questionsOf(item);
+  if (!first) return [];
+  const onOptions = first.options.flatMap(({ html }, option) => (html ? [{ question: 0, option }] : []));
+  return [...(first.html ? [{ question: 0, option: null }] : []), ...onOptions];
+}
+
+/** What the agent is told of which page an error is on. */
+export function askPageName(item: AskItem, { question, option }: AskPage) {
+  const questions = questionsOf(item);
+  const page = option === null ? "the page above the options" : `option "${questions[question]?.options[option]?.label ?? option + 1}"`;
+  return questions.length > 1 ? `question ${question + 1}, ${page}` : page;
+}
+
 /**
  * The question still waiting for an answer that went out last: the one the agent can be waiting on, since only the turn
  * under way asks, where an earlier turn may have left an older one open.

@@ -972,7 +972,7 @@ export interface ShowItem extends CanvasItemBase {
   html?: string;
   /** Shown while nobody viewed the conversation, so what its first view reports goes to the agent. */
   unverified?: boolean;
-  /** Script errors its first view reported, which the agent hears of with the user's next message. */
+  /** Errors its first view reported, which the agent hears of with the user's next message. */
   errorsForAgent?: string[];
 }
 
@@ -993,6 +993,10 @@ export interface AskItem extends CanvasItemBase {
   answer?: CanvasAnswer;
   /** Pages the agent showed since the user last wrote or answered, which a question carries so both are seen together. */
   shownBefore?: string[];
+  /** Errors its pages reported, which the agent hears of with the answer or the user's next message. */
+  errorsForAgent?: string[];
+  /** Errors its pages reported that the agent has heard of, as each view of the question reports them again. */
+  errorsHeard?: string[];
   /** The offer of an official plugin, cloned but not built, which Mirador installs when the user answers Install. */
   installsPluginOffer?: string;
 }

@@ -16,6 +16,7 @@ import {
 import { TITLE_CONVERSATION_TOOL } from "./tool-names.ts";
 import type { CanvasPlugins } from "./plugins.ts";
 import { readJobWaitRequest, waitSetUpReply } from "../../shared/job-waits.ts";
+import { errorList } from "./notes.ts";
 import { answerAsToolResult, severalQuestionsRequest, type AnswerWaitGivenUp, type CanvasService, type RenderOutcome } from "./service.ts";
 import { ANTIGRAVITY_ASK_WAIT_MS } from "../config.ts";
 import { MIRADOR_VERSION } from "../../shared/version.ts";
@@ -74,8 +75,16 @@ function describeRender(itemId: string, render: RenderOutcome) {
   if (render === "no-viewer") {
     return `Saved to the canvas as item ${itemId}. Nobody is viewing this conversation right now, so rendering was not verified; if the page reports errors when the user opens it, you will hear of them with their next message.`;
   }
+  if (render === "no-report") {
+    return `Shown to the user as canvas item ${itemId}, but it has not finished rendering yet; if it reports errors, you will hear of them with the user's next message.`;
+  }
   if (render.errors.length === 0) return `Shown to the user as canvas item ${itemId}; it rendered without script errors.`;
-  return `Shown to the user as canvas item ${itemId}, but the page reported errors:\n${render.errors.map((error) => `- ${error}`).join("\n")}`;
+  return `Shown to the user as canvas item ${itemId}, but the page reported errors:\n${errorList(render.errors)}`;
+}
+
+function describeAsk(pageErrors: string[]) {
+  if (pageErrors.length === 0) return "The question is now showing in the user's browser. Their answer will arrive as their next message. End your turn now without assuming an answer.";
+  return `The question is now showing in the user's browser, but its pages reported errors:\n${errorList(pageErrors)}\nFix them and ask again: the new question takes this one's place. If the question reads well enough as it is, end your turn now instead, without assuming an answer: it will arrive as their next message.`;
 }
 
 /**
@@ -93,7 +102,7 @@ const SHOWS_ONLY_IN_MIRADOR = { annotations: { readOnlyHint: true, destructiveHi
 const reviewFreeFor = (harness: HarnessId | undefined) => (harness === "codex" ? SHOWS_ONLY_IN_MIRADOR : {});
 
 /** Read in the turn that asked when a time limit cuts the wait short, but only in a later one when that turn ended first. */
-const ANSWER_COMES_LATER: Record<AnswerWaitGivenUp, string> = {
+const ANSWER_COMES_LATER: Record<Extract<AnswerWaitGivenUp, string>, string> = {
   "time-up":
     "The user hasn't answered yet. The question stays open in their browser, and their answer will arrive as their next message. End your turn now without assuming an answer.",
   "turn-ended":
@@ -107,6 +116,12 @@ const recommendsMoreThanCanBePicked = ({ multiple, options }: { multiple?: boole
 
 const ONE_OPTION_EACH_IN_A_ROOM =
   "People in a room vote for one option of a question, so multiple doesn't work here. Ask about each option in a question of its own, with questions.";
+
+const whyNoAnswerYet = (givenUp: AnswerWaitGivenUp) => (typeof givenUp === "string" ? ANSWER_COMES_LATER[givenUp] : describeAsk(givenUp.pageErrors));
+
+const isGivenUp = (answer: Awaited<ReturnType<CanvasService["waitForAnswerDuringTurn"]>>): answer is AnswerWaitGivenUp => typeof answer === "string" || "pageErrors" in answer;
+
+const withPageErrors = (text: string, pageErrors: string[]) => (pageErrors.length > 0 ? `${text}\n\nThe question's pages reported errors:\n${errorList(pageErrors)}` : text);
 
 const toolError = (text: string) => ({ isError: true, content: [{ type: "text" as const, text }] });
 
@@ -266,19 +281,14 @@ function buildCanvasServer(conversationId: string, parts: CanvasServerParts, cut
       if ((questions ?? [{ ...rest, options: options! }]).some(recommendsMoreThanCanBePicked)) return toolError(ONE_RECOMMENDED_WHERE_ONE_IS_PICKED);
       if (roomId && (questions ?? [rest]).some(({ multiple }) => multiple)) return toolError(ONE_OPTION_EACH_IN_A_ROOM);
       const caller = await callingConversation(ctx);
+      canvas.takeBackBrokenAsks(caller);
       const item = canvas.openAsk(caller, questions ? severalQuestionsRequest(questions, rest.html) : { question: question!, options: options!, ...rest });
       if (conversations.get(caller).askMode === "next-message") {
-        return {
-          content: [
-            {
-              type: "text",
-              text: "The question is now showing in the user's browser. Their answer will arrive as their next message. End your turn now without assuming an answer.",
-            },
-          ],
-        };
+        return { content: [{ type: "text", text: describeAsk(await canvas.errorsOfOpeningPages(item)) }] };
       }
       const answer = await withProgressHeartbeat(ctx, "Waiting for the user's choice", () => canvas.waitForAnswerDuringTurn(item, ctx.mcpReq.signal, askWaitLimitMs));
-      return { content: [{ type: "text", text: typeof answer === "string" ? ANSWER_COMES_LATER[answer] : answerAsToolResult(answer) }] };
+      const text = isGivenUp(answer) ? whyNoAnswerYet(answer) : withPageErrors(answerAsToolResult(answer), canvas.takeAskErrors(item.id));
+      return { content: [{ type: "text", text }] };
     },
   );
 

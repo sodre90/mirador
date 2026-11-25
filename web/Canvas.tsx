@@ -2,7 +2,7 @@ import type { PlanEntry } from "@agentclientprotocol/sdk/unstable";
 import { Fragment, createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type KeyboardEvent, type RefObject } from "react";
 import { buildCanvasDocument, canvasHiddenMessage, canvasPageMessage, canvasRoomMessage, canvasShellUrl, canvasTextScaleMessage, canvasThemeMessage, isCanvasFrameMessage, type CanvasFrameMessage, type CanvasPagePolicy } from "../shared/canvas-document.ts";
 import { appKey, type AppDocumentState, type InstalledApp, type OpenApp } from "../shared/apps.ts";
-import { answerPicking, answersSummary, answerTo, pickedIn, questionsOf } from "../shared/ask.ts";
+import { answerPicking, answersSummary, answerTo, pickedIn, questionsOf, type AskPage } from "../shared/ask.ts";
 import type { AskAnswerEntry, AskItem, AskQuestion, CanvasItem, ShowItem } from "../shared/model.ts";
 import { AppView } from "./AppView.tsx";
 import { BarMenu, type BarMenuEntry } from "./BarMenu.tsx";
@@ -270,8 +270,8 @@ function postTextScaleTo(frame: RefObject<HTMLIFrameElement | null>, zoom: numbe
   frame.current?.contentWindow?.postMessage(canvasTextScaleMessage(zoom), "*");
 }
 
-function reportRender(itemId: string) {
-  return (errors: string[]) => connection.send({ type: "canvas.report", itemId, errors });
+function reportRender(itemId: string, askPage?: AskPage) {
+  return (errors: string[]) => connection.send({ type: "canvas.report", itemId, errors, ...(askPage && { askPage }) });
 }
 
 const SOMETHING_ELSE = Symbol("something else");
@@ -334,6 +334,7 @@ function AskQuestionFields({
   idPrefix,
   radioName,
   assetsOrigin,
+  reportPage,
 }: {
   question: AskQuestion;
   draft: AskDraft;
@@ -343,6 +344,8 @@ function AskQuestionFields({
   idPrefix: string;
   radioName: string;
   assetsOrigin: string;
+  /** How a page of the question rendered: an option's, or with null the one above the options. */
+  reportPage?: (option: number | null) => (errors: string[]) => void;
 }) {
   const typingAidAttributes = useTypingAidAttributes();
   const [previewWidths, setPreviewWidths] = useState<Record<string, number>>({});
@@ -363,7 +366,7 @@ function AskQuestionFields({
 
   return (
     <>
-      {question.html && <CanvasFrame frameId={`${idPrefix}-context`} html={question.html} assetsOrigin={assetsOrigin} className="ask-context" panelFinds fitsContent followsTextSize />}
+      {question.html && <CanvasFrame frameId={`${idPrefix}-context`} html={question.html} assetsOrigin={assetsOrigin} className="ask-context" panelFinds fitsContent followsTextSize onRendered={reportPage?.(null)} />}
       <div className="ask-options" role={multiple ? "group" : "radiogroup"} aria-label={question.question} style={optionsStyle}>
         {question.options.map((option, index) => (
           <label key={option.label} className={`ask-option ${isChosen(option.label) ? "chosen" : ""}`}>
@@ -389,6 +392,7 @@ function AskQuestionFields({
                 panelFinds
                 fitsContent
                 followsTextSize
+                onRendered={reportPage?.(index)}
                 onContentWidth={(width) => setPreviewWidths((current) => ({ ...current, [option.label]: width }))}
               />
             )}
@@ -532,7 +536,7 @@ function AskView({
           <div className="ask-page-before-title" data-hint={hints.askPageBefore}>
             {words.ask.shownJustBefore(before.title)}
           </div>
-          <CanvasFrame frameId={`${item.id}-before-${before.id}`} html={before.html ?? ""} assetsOrigin={assetsOrigin} className="ask-context" panelFinds fitsContent followsTextSize />
+          <CanvasFrame frameId={`${item.id}-before-${before.id}`} html={before.html ?? ""} assetsOrigin={assetsOrigin} className="ask-context" panelFinds fitsContent followsTextSize onRendered={reportRender(before.id)} />
         </section>
       ))}
       {onReviewPage && (
@@ -559,6 +563,7 @@ function AskView({
           idPrefix={several ? `${item.id}-${questionIndex}` : item.id}
           radioName={several ? `ask-${item.id}-${questionIndex}` : `ask-${item.id}`}
           assetsOrigin={assetsOrigin}
+          reportPage={(option) => reportRender(item.id, { question: questionIndex, option })}
         />
       )}
       {several &&

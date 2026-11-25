@@ -7,19 +7,19 @@ test("canvas notes come before the user's message, each in a paragraph of its ow
   expect(withCanvasNotes([], "Go on")).toBe("Go on");
 });
 
-test("the note of page errors names each page by title and canvas item, with its errors under it", () => {
-  const pages = [
-    { id: "p1", title: "Charts", errorsForAgent: ["SyntaxError: a", "Failed to load x"] },
-    { id: "p2", title: "Map", errorsForAgent: ["A script on the page threw an error; this browser hides its message."] },
+test("the note of page errors names each page and question by title and canvas item, with its errors under it", () => {
+  const items = [
+    { kind: "show" as const, id: "p1", title: "Charts", errorsForAgent: ["SyntaxError: a", "Failed to load x"] },
+    { kind: "ask" as const, id: "q1", title: "Color?", errorsForAgent: ['option "Red": Mermaid: Parse error on line 3'] },
   ];
-  expect(noteOfPageErrors(pages)).toBe(
+  expect(noteOfPageErrors(items)).toBe(
     [
-      'The page "Charts" (canvas item p1), shown while nobody was viewing, reported errors when the user opened it:',
+      'The page "Charts" (canvas item p1) reported errors after your show call had returned:',
       "- SyntaxError: a",
       "- Failed to load x",
       "",
-      'The page "Map" (canvas item p2), shown while nobody was viewing, reported errors when the user opened it:',
-      "- A script on the page threw an error; this browser hides its message.",
+      'The pages of your question "Color?" (canvas item q1) reported errors:',
+      '- option "Red": Mermaid: Parse error on line 3',
     ].join("\n"),
   );
 });

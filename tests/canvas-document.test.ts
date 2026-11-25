@@ -18,6 +18,7 @@ import {
   CANVAS_SHELL_PAGE,
   CANVAS_SHELL_PATH,
   canvasShellUrl,
+  DIAGRAM_ERRORS_SCRIPT,
   HIDDEN_ERROR_SCRIPT,
   TEXT_CONTRAST_SCRIPT,
   pluginItemPage,
@@ -211,6 +212,90 @@ describe("areaWithoutBlankSides", () => {
 
   test("a picture all of one colour stays whole", () => {
     expect(areaOf(["....", "...."])).toEqual({ left: 0, top: 0, width: 4, height: 2 });
+  });
+});
+
+interface MermaidStub {
+  parseError?: (error: unknown) => void;
+  run: () => Promise<void>;
+  render: () => Promise<void>;
+}
+interface DiagramErrors {
+  hearDiagrams: (mermaid: MermaidStub, record: (message: string) => void) => void;
+  toldOfDiagram: (message: string) => boolean;
+  stopHearingDiagrams: () => void;
+  drawsUnderWay: () => number;
+}
+const diagramErrors = () =>
+  new Function(
+    `const messageOf = (error) => String((error && error.message) || error); ${DIAGRAM_ERRORS_SCRIPT}; return { hearDiagrams, toldOfDiagram, stopHearingDiagrams, drawsUnderWay };`,
+  )() as DiagramErrors;
+
+describe("hearDiagrams", () => {
+  const PARSE_ERROR = "Parse error on line 3:\n...]B --> F[mongodump | age]";
+
+  function hear(mermaid: MermaidStub = { run: async () => {}, render: async () => {} }) {
+    const { hearDiagrams, toldOfDiagram, stopHearingDiagrams, drawsUnderWay } = diagramErrors();
+    const recorded: string[] = [];
+    const record = (message: string) => {
+      if (!toldOfDiagram(message)) recorded.push(message);
+    };
+    hearDiagrams(mermaid, record);
+    return { mermaid, recorded, record, hearDiagrams, stopHearingDiagrams, drawsUnderWay };
+  }
+
+  test("a diagram's error is recorded once, however Mermaid and the page tell it again", () => {
+    const { mermaid, recorded, record } = hear();
+    mermaid.parseError?.(new Error(PARSE_ERROR));
+    mermaid.parseError?.(PARSE_ERROR);
+    mermaid.parseError?.({ str: PARSE_ERROR, message: PARSE_ERROR });
+    record(`Unhandled promise rejection: ${PARSE_ERROR}`);
+    record(`Mermaid failed ${PARSE_ERROR}`);
+    expect(recorded).toEqual([`Mermaid: ${PARSE_ERROR}`]);
+  });
+
+  test("each diagram's own error is recorded, and so are errors that are not Mermaid's", () => {
+    const { mermaid, recorded, record } = hear();
+    mermaid.parseError?.(new Error(PARSE_ERROR));
+    mermaid.parseError?.(new Error("No diagram type detected"));
+    record("Uncaught ReferenceError: draw is not defined (line 4)");
+    expect(recorded).toEqual([`Mermaid: ${PARSE_ERROR}`, "Mermaid: No diagram type detected", "Uncaught ReferenceError: draw is not defined (line 4)"]);
+  });
+
+  test("draws count until they settle, a failed one too, which the page still gets to handle", async () => {
+    let finishDrawing = () => {};
+    const { mermaid, drawsUnderWay } = hear({
+      run: () => new Promise((resolve) => (finishDrawing = resolve)),
+      render: () => Promise.reject(new Error(PARSE_ERROR)),
+    });
+    const run = mermaid.run();
+    const render = mermaid.render();
+    expect(drawsUnderWay()).toBe(2);
+    await expect(render).rejects.toThrow(PARSE_ERROR);
+    expect(drawsUnderWay()).toBe(1);
+    finishDrawing();
+    await run;
+    expect(drawsUnderWay()).toBe(0);
+  });
+
+  test("once the page has reported, what it fails to draw is its own to show, and what its script says of it is recorded as any error", () => {
+    const { mermaid, recorded, record, stopHearingDiagrams } = hear();
+    stopHearingDiagrams();
+    mermaid.parseError?.(new Error(PARSE_ERROR));
+    expect(recorded).toEqual([]);
+    record(`Unhandled promise rejection: ${PARSE_ERROR}`);
+    expect(recorded).toEqual([`Unhandled promise rejection: ${PARSE_ERROR}`]);
+  });
+
+  test("a library heard already is left as it is, and one loaded anew is heard", () => {
+    const { mermaid, recorded, record, hearDiagrams } = hear();
+    const { run } = mermaid;
+    hearDiagrams(mermaid, record);
+    expect(mermaid.run).toBe(run);
+    const loadedAnew: MermaidStub = { run: async () => {}, render: async () => {} };
+    hearDiagrams(loadedAnew, record);
+    loadedAnew.parseError?.(new Error(PARSE_ERROR));
+    expect(recorded).toEqual([`Mermaid: ${PARSE_ERROR}`]);
   });
 });
 

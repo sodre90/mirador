@@ -676,6 +676,45 @@ export const HIDDEN_ERROR_SCRIPT = `
   };
 `;
 
+/** A page that draws diagrams without end reports how it rendered by then. */
+const LONGEST_DRAWING_MS = 30_000;
+
+/**
+ * Mermaid keeps what goes wrong with a diagram to itself when it draws the page's diagrams on load, and browsers report no
+ * rejection of a library from another origin. As plain JS for the frame: `hearDiagrams(mermaid, record)` records each error
+ * Mermaid names until `stopHearingDiagrams()`, `toldOfDiagram(message)` is whether a message only repeats one of them, as
+ * Mermaid names each up to three times, and `drawsUnderWay()` how many of the page's calls to draw have not settled yet.
+ * Uses `messageOf` from around it.
+ */
+export const DIAGRAM_ERRORS_SCRIPT = `
+  const diagramErrors = new Set();
+  const heardLibraries = new WeakSet();
+  let unsettledDraws = 0;
+  let hearsDiagrams = true;
+  const drawsUnderWay = () => unsettledDraws;
+  const stopHearingDiagrams = () => { hearsDiagrams = false; };
+  const toldOfDiagram = (message) => [...diagramErrors].some((told) => message.endsWith(told));
+  const countedUntilSettled = (draw) => (...given) => {
+    unsettledDraws += 1;
+    const settled = () => { unsettledDraws -= 1; };
+    const drawn = draw(...given);
+    drawn.then(settled, settled);
+    return drawn;
+  };
+  const hearDiagrams = (mermaid, record) => {
+    if (heardLibraries.has(mermaid)) return;
+    heardLibraries.add(mermaid);
+    mermaid.parseError = (error) => {
+      if (!hearsDiagrams) return;
+      const message = messageOf(error);
+      record("Mermaid: " + message);
+      diagramErrors.add(message);
+    };
+    mermaid.run = countedUntilSettled(mermaid.run);
+    mermaid.render = countedUntilSettled(mermaid.render);
+  };
+`;
+
 /**
  * Whether text reads on what is behind it, as plain JS for the frame. `readableTextColor(color, backgrounds, scheme)`
  * takes computed colours, the backgrounds from the text's element outwards, and gives the theme text colour to show
@@ -1581,11 +1620,18 @@ ${PAGE_FIND_SCRIPT}
     event.preventDefault();
     if (toAnotherSite(url)) post({ kind: "open-link", href: url.href });
   });
+  const messageOf = (error) => String((error && error.message) || error);
+${DIAGRAM_ERRORS_SCRIPT}
   const record = (message) => {
-    if (errors.length >= 20 || /ResizeObserver loop/.test(message)) return;
+    if (errors.length >= 20 || /ResizeObserver loop/.test(message) || toldOfDiagram(message)) return;
     errors.push(message);
     post({ kind: "error", message });
   };
+  // A script's load event comes before the next script of the page runs, so this hears Mermaid from its first diagram on.
+  const isMermaid = (library) => Boolean(library) && typeof library.run === "function" && typeof library.render === "function";
+  document.addEventListener("load", () => {
+    if (isMermaid(window.mermaid)) hearDiagrams(window.mermaid, record);
+  }, true);
   const miradorScripts = new Set(document.scripts);
   const pageScripts = () => [...document.scripts].filter((script) => !miradorScripts.has(script));
   // A script's error is reported while it runs, so the scripts in the page by then are the ones it can have come from.
@@ -1606,14 +1652,26 @@ ${HIDDEN_ERROR_SCRIPT}
       record(event.message + (event.lineno ? " (line " + event.lineno + ")" : ""));
     }
   }, true);
-  addEventListener("unhandledrejection", (event) => record("Unhandled promise rejection: " + ((event.reason && event.reason.message) || event.reason)));
+  addEventListener("unhandledrejection", (event) => record("Unhandled promise rejection: " + messageOf(event.reason)));
   addEventListener("securitypolicyviolation", (event) => record("Blocked by the canvas sandbox: " + event.effectiveDirective + " " + event.blockedURI));
   const consoleError = console.error;
   console.error = (...args) => {
-    record(args.map((arg) => (arg instanceof Error ? arg.message : String(arg))).join(" "));
+    record(args.map(messageOf).join(" "));
     consoleError.apply(console, args);
   };
-  addEventListener("load", () => setTimeout(() => post({ kind: "rendered", errors }), 1500));
+  // Counted from the page's own load: the shell of a conversation kept hidden waits for its page a long time.
+  let drawingEndsBy = 0;
+  const stillDrawing = () => drawsUnderWay() > 0 && performance.now() < drawingEndsBy;
+  const reportOnceDrawn = () => {
+    if (stillDrawing()) return void setTimeout(reportOnceDrawn, 100);
+    // What fails from now on, as in a page that draws what the user types, is the page's to show.
+    stopHearingDiagrams();
+    post({ kind: "rendered", errors });
+  };
+  addEventListener("load", () => {
+    drawingEndsBy = performance.now() + ${LONGEST_DRAWING_MS};
+    setTimeout(reportOnceDrawn, 1500);
+  });
   const overflowsFrame = (root) => root.scrollWidth > root.clientWidth;
   // In a frame as wide as it asked for, the page overflows no more, so once its room or its text size changes no overflow
   // tells the width it needs now. It is laid out in its room for a moment instead, which nothing draws: giving its frame

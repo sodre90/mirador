@@ -76,7 +76,7 @@ Rendering environment: every page renders in a sandboxed iframe with NO network 
 - three.js (ES modules): <script type="module">import * as THREE from "three"; import { OrbitControls } from "three/addons/controls/OrbitControls.js";</script>
 - D3 v7: <script src="${assetsOrigin}/d3.min.js"></script> (global d3)
 - Mermaid: <script src="${assetsOrigin}/mermaid.min.js"></script><script>mermaid.initialize({ startOnLoad: true, theme: getComputedStyle(document.documentElement).colorScheme === "dark" ? "dark" : "default" })</script> with <pre class="mermaid">...</pre>
-When someone is viewing the conversation, show reports back script errors from the page so you can fix them.${pluginsOnRequest(plugins.onRequest)}${pluginToolLines(plugins)}`;
+When someone is viewing the conversation, show and ask report back script errors and failed Mermaid diagrams on their pages so you can fix them.${pluginsOnRequest(plugins.onRequest)}${pluginToolLines(plugins)}`;
 }
 
 /** Claude Code and Codex publish a title after their first turn; the others are asked to name their conversation instead. */

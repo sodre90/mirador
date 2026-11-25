@@ -70,6 +70,7 @@ import type {
   Pastel,
   ConversationPlace,
 } from "./model.ts";
+import type { AskPage } from "./ask.ts";
 import type { ChangeList, ChangeScope, Committable, FileChanges, Landable, Landed, MadeCommit, ProjectFiles } from "./changes.ts";
 import type { ConversationOrder } from "./conversation-order.ts";
 import type { ConfigFileStatus, SettingsImportReport, SettingsPlan } from "./settings-file.ts";
@@ -337,7 +338,8 @@ export type ClientMessage =
   | { type: "conversation.set-config"; conversationId: string; configId: string; value: string | boolean }
   | { type: "permission.respond"; conversationId: string; permissionId: string; optionId: string | null }
   | { type: "ask.answer"; itemId: string; label: string; picked?: PickedSeveral; note?: string; answers?: AskAnswerEntry[] }
-  | { type: "canvas.report"; itemId: string; errors: string[] }
+  /** How a page rendered: one the agent showed, or a question's `askPage`. */
+  | { type: "canvas.report"; itemId: string; errors: string[]; askPage?: AskPage }
   /**
    * The page shows this app's document, and gets its state on every change until it unsubscribes. A phone from before each
    * conversation had a document of its own names no document in this or the view's other messages, and gets the one a
