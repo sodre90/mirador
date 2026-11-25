@@ -60,6 +60,12 @@ export const settings = {
     whileAgentWorks: "Sending while the agent works",
     whileAgentWorksHint: "⌥Enter (Alt+Enter) does the other; each queued message shows which way it goes out. Remembered in this browser.",
     enter: "Enter",
+    spellCheck: "Check spelling",
+    spellingLanguages: "Spelling languages",
+    spellingLanguagesHint: "The desktop app checks the languages chosen here. With none chosen, it checks your system's language if it has a dictionary for it, and nothing otherwise.",
+    addSpellingLanguage: "Add a language…",
+    addSpellingLanguageButton: "Add",
+    removeSpellingLanguage: (language: string) => `Remove ${language}`,
   },
   terminal: {
     title: "Terminal",
@@ -186,7 +192,7 @@ export const settings = {
   },
   typing: {
     title: "Typing",
-    hint: "What macOS may do to your words in the desktop app: fix them as you type a space, and offer the rest of a word in grey. Misspellings stay underlined either way; right-click one to fix it.",
+    hint: "What macOS may do to your words in the desktop app: fix them as you type a space, and offer the rest of a word in grey. With Check spelling on, misspellings stay underlined either way; right-click one to fix it.",
     autocorrect: "Correct spelling automatically",
     predictions: "Inline predictions",
   },

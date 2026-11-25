@@ -338,6 +338,7 @@ export const hints: Messages["hints"] = {
   steerMessage:
     "Fügt die Nachricht der laufenden Runde hinzu: Claude Code liest sie sofort und unterbricht, was es gerade schreibt, oder, während es Tools ausführt, sobald diese fertig sind. Ein Subagent, auf den es wartet, hält die Nachricht nicht auf: Der Subagent arbeitet im Hintergrund weiter. pi liest sie, sobald es mit dem Schreiben oder dem Ausführen seiner Tools fertig ist.",
   afterTurnMessage: "Behält die Nachricht, bis die laufende Runde endet (oder du Stoppen drückst), und sendet sie dann als deine nächste Nachricht.",
+  spellCheck: "Unterstreicht falsch geschriebene Wörter in den Nachrichtenfeldern. Mit Rechtsklick auf eins zeigt es Vorschläge. In den Desktop-Apps für macOS und Linux schaltet es außerdem die Rechtschreibprüfung für die anderen Textfelder der App ein oder aus. Außerhalb der Linux-Desktop-App wählen dein Browser oder dein System die Rechtschreibsprachen.",
   messageBox:
     "Formatiert beim Tippen wandelt **fett**, *kursiv*, ~~durchgestrichen~~, `Code`, Codeblöcke mit ```, Zitate mit > und Listen mit - beim Tippen in Formatierung um, wie in Slack; ⌘B, ⌘I, ⌘⇧X und ⌘E formatieren eine Auswahl. Der Agent bekommt so oder so dasselbe Markdown.",
   formatBar: "Formatierungsbuttons über dem Nachrichtenfeld. Unter Einstellungen › Unterhaltungen kannst du sie dauerhaft anzeigen.",

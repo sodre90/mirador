@@ -328,6 +328,7 @@ export const hints: Messages["hints"] = {
   steerMessage:
     "Az üzenetet a futó körhöz adja: a Claude Code azonnal elolvassa, megszakítva, amit éppen ír, vagy ha eszközöket futtat, amint azok végeztek. Egy alágens, amelyre vár, nem tartja vissza az üzenetet: az alágens a háttérben dolgozik tovább. A pi akkor olvassa el, amikor befejezte az írást vagy az eszközei futtatását.",
   afterTurnMessage: "Megtartja az üzenetet, amíg a futó kör véget nem ér (vagy meg nem nyomod a Leállítás gombot), majd a következő üzenetedként küldi el.",
+  spellCheck: "Aláhúzza a hibásan írt szavakat az üzenetmezőkben. Jobb kattintással javaslatokat ad. A macOS-es és Linuxos asztali alkalmazásban az alkalmazás többi szövegmezőjében is be- vagy kikapcsolja a helyesírás-ellenőrzést. A Linuxos asztali alkalmazáson kívül a böngésző vagy a rendszer választja a helyesírási nyelveket.",
   messageBox:
     "A „Formáz gépelés közben” a **félkövér**, *dőlt*, ~~áthúzott~~, `kód`, ``` kódblokk, > idézet és - lista jelöléseket menet közben formázássá alakítja, mint a Slackben; a ⌘B, ⌘I, ⌘⇧X és ⌘E egy kijelölést formáz. Az ágens mindkét esetben ugyanazt a markdownt kapja.",
   formatBar: "Formázógombok az üzenetmező fölött. A Beállítások › Beszélgetések részben állandóan láthatóvá teheted őket.",

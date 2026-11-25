@@ -8,11 +8,13 @@ import {
   type DesktopAppearance,
   type DesktopMenu,
   type DesktopMenuItem,
+  type DesktopSpellCheck,
   type DesktopUpdate,
 } from "../../../shared/desktop-menu.ts";
 import { isLanguage, type Language } from "../../../shared/i18n/languages.ts";
 import { isPluginName, type ItemWindowRoute } from "../../../shared/item-window.ts";
 import { namesThisComputer } from "../../../shared/this-computer.ts";
+import { parseSpellCheck } from "./spell-check.ts";
 import { webUrl } from "./navigation.ts";
 import type { UpdateOffer } from "./self-update.ts";
 import { isTrayAction, trayMenu, type TrayAction, type TrayState } from "./tray-menu.ts";
@@ -58,6 +60,7 @@ export type PageRequest =
   | { type: "close-window" }
   | { type: "appearance"; appearance: DesktopAppearance }
   | { type: "language"; language: Language }
+  | { type: "spell-check"; spellCheck: DesktopSpellCheck }
   | { type: "open-item-window"; route: ItemWindowRoute; title: string }
   | { type: "open-plugin-window"; plugin: string }
   | { type: "window-title"; title: string };
@@ -78,6 +81,9 @@ export function pageRequest(detail: unknown, nonce: string): PageRequest | null 
   if (message.type === "desktop-close-window") return { type: "close-window" };
   if (message.type === "desktop-appearance" && isDesktopAppearance(message.appearance)) return { type: "appearance", appearance: message.appearance };
   if (message.type === "desktop-language" && isLanguage(message.language)) return { type: "language", language: message.language };
+  if (message.type === "desktop-spell-check" && typeof message.enabled === "boolean" && Array.isArray(message.languages)) {
+    return { type: "spell-check", spellCheck: parseSpellCheck(message, { enabled: true, languages: [] }) };
+  }
   if (message.type === "desktop-open-item-window" && isId(message.conversationId) && isId(message.itemId) && typeof message.title === "string") {
     return { type: "open-item-window", route: { conversationId: message.conversationId, itemId: message.itemId }, title: message.title };
   }

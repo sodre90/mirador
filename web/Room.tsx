@@ -70,6 +70,7 @@ import { HeldChangeCard } from "./Sandbox.tsx";
 import { JoinerAtTheDoor, RemovePerson, WaitingToJoin } from "./RoomSettings.tsx";
 import { RoomVote } from "./RoomVote.tsx";
 import { WorkspaceAccessApproval, WorkspaceAccessLine, WorkspaceCallApproval, WorkspaceCalls } from "./RoomWorkspace.tsx";
+import { useSpellCheck } from "./spell-check.ts";
 import { useTypingAidAttributes } from "./typing-aids.ts";
 import type { WorkspacePluginTab } from "./WorkspaceTabView.tsx";
 
@@ -249,6 +250,7 @@ function RoomComposer({
   const textarea = useRef<HTMLTextAreaElement>(null);
   const messageBox = useMessageBox();
   const typingAidAttributes = useTypingAidAttributes();
+  const { enabled: spellCheck } = useSpellCheck();
   const [writingSignals] = useState(() => new WritingSignals(tellWriting));
   useEffect(() => () => writingSignals.stopped(), []);
   const write = (next: { text: string; caret: number }, taggedAgent: RoomAgentShown | null) => {
@@ -264,7 +266,7 @@ function RoomComposer({
   const take = (taken: Taggable) => write(withMention(text, caret, { path: nameToTag(taken), directory: false }), "agent" in taken ? taken.agent : null);
   useImperativeHandle(ref, () => ({ tag: (agent) => write(withTagAtCaret(text, caret, agent.name), agent) }));
   const tagMenu = useTagMenu({ taggable: [...agents.map((agent) => ({ agent })), ...people.map((person) => ({ person }))], text, caret, take });
-  const boxAttributes = { ...typingAidAttributes, ...tagMenu.textareaAttributes };
+  const boxAttributes = { ...typingAidAttributes, spellCheck, ...tagMenu.textareaAttributes };
   const length = roomMessageLength(text);
   const tooLong = length > ROOM_MESSAGE_MOST_CHARACTERS;
   const typed = (value: string, caretAfter: number) => {

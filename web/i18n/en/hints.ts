@@ -310,6 +310,7 @@ export const hints = {
   queuedDelivery: "How this message goes out: into the running turn once the agent's tools finish, or after the turn ends. Click to switch.",
   steerMessage: "Adds the message to the running turn: Claude Code reads it at once, cutting off what it is writing, or, while it runs tools, as soon as they finish. A subagent it waits for doesn't hold the message back: the subagent goes on in the background. pi reads it once it finishes writing or running its tools.",
   afterTurnMessage: "Keeps the message until the running turn ends (or you press Stop), then sends it as your next message.",
+  spellCheck: "Underlines misspelled words in the message boxes. Right-click one for suggestions. In the macOS and Linux desktop apps it also turns spell checking on or off for the app's other text fields. Outside the Linux desktop app, your browser or system chooses the spelling languages.",
   messageBox: "Formats as you type turns **bold**, *italic*, ~~strike~~, `code`, ``` code blocks, > quotes and - lists into formatting as you type them, as in Slack; ⌘B, ⌘I, ⌘⇧X and ⌘E format a selection. The agent gets the same markdown either way.",
   formatBar: "Formatting buttons over the message box. Settings › Conversations can keep them shown.",
   formatBarSetting: "Whether the formatting buttons show over the formatted message box from the start, or only after Aa beside it is clicked. Aa shows and hides them either way.",

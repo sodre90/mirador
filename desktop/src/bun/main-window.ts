@@ -31,6 +31,8 @@ export class MainWindow {
     private readonly frameFile: string,
     /** Windows of the app's other than this one, which keep the Dock icon while they are open. */
     private readonly otherWindowsOpen: () => boolean,
+    /** macOS checks spelling in a window from the start when this says so; elsewhere the option does nothing. */
+    private readonly spellCheckEnabled: () => boolean,
   ) {
     this.frameKeeper = new WindowFrameKeeper(frameFile);
     Electrobun.events.on("before-quit", () => this.frameKeeper.flush());
@@ -53,7 +55,7 @@ export class MainWindow {
     setDockIconVisible(true);
     if (this.window) return this.bringToFront();
     // sandbox keeps Electrobun's bridge secret out of every frame, including the agents' canvas iframes.
-    const window = new BrowserWindow({ title: this.title, url, frame: this.openingFrame(), sandbox: true });
+    const window = new BrowserWindow({ title: this.title, url, frame: this.openingFrame(), sandbox: true, spellCheck: this.spellCheckEnabled() });
     showAppIcon(window);
     // The navigationRules constructor option is ignored by Electrobun 2.0.2; only this call takes effect.
     window.webview.setNavigationRules(navigationRules([this.appOrigin, ...this.framedOrigins]));
@@ -95,6 +97,10 @@ export class MainWindow {
     });
     const closeChosen = response === 0;
     if (closeChosen) this.window?.close();
+  }
+
+  setSpellCheck(enabled: boolean) {
+    this.window?.setSpellCheck(enabled);
   }
 
   runInPage(script: string) {

@@ -1,6 +1,6 @@
 import { Utils } from "electrobun/main";
 import { readFileSync } from "node:fs";
-import { SETTINGS_ROUTE } from "../../../shared/desktop-menu.ts";
+import { SETTINGS_ROUTE, type DesktopSpellCheck } from "../../../shared/desktop-menu.ts";
 import type { Language } from "../../../shared/i18n/languages.ts";
 import type { NewerVersion } from "../../../shared/newer-version.ts";
 import type { WaitingConversation } from "../../../shared/waiting.ts";
@@ -15,6 +15,7 @@ import { PidFileOnDisk, systemProcesses } from "../core/processes.ts";
 import { authUrl, hostEnvironmentOverrides, type DataPaths, type Runtime } from "../core/runtime.ts";
 import { desktopWords, notificationWords } from "../core/desktop-words.ts";
 import type { SettingsStore } from "../core/settings.ts";
+import { giveSpellCheckLanguagesScript, sameSpellCheck } from "../core/spell-check.ts";
 import { restartDetail, type TrayAction, type TrayState } from "../core/tray-menu.ts";
 import { hostRunsReplacedFiles, markUpdatePending, takePendingUpdate, updateRestartStopsTheHost } from "../core/update-checks.ts";
 import {
@@ -36,6 +37,7 @@ import { AppTray } from "./app-tray.ts";
 import { selfUpdateFromReleases } from "./app-updates.ts";
 import { setDockIconVisible } from "./dock.ts";
 import { ItemWindows } from "./item-windows.ts";
+import type { LinuxSpellChecker } from "./linux-spell-check.ts";
 import { MainWindow } from "./main-window.ts";
 
 const STATUS_POLL_MILLISECONDS = 10_000;
@@ -71,6 +73,8 @@ export class DesktopApp {
   private runningTurns = 0;
   private waiting: WaitingConversation[] = [];
   private busy = false;
+  /** Linux only: WebKitGTK is told its spelling languages through the dictionaries the system has. */
+  private linuxSpellChecker: LinuxSpellChecker | null = null;
   /** Only the window's own page gets it, never a frame in it, so only that page makes the app act. */
   private readonly pageNonce = crypto.randomUUID();
 
@@ -108,8 +112,9 @@ export class DesktopApp {
       this.pageNonce,
       (route) => `${authUrl(runtime, this.browserToken())}${route}`,
       () => setDockIconVisible(this.window.isOpen),
+      () => this.environment.settings.current().spellCheck.enabled,
     );
-    this.window = new MainWindow(environment.appName, runtime.origin, framedOrigins, (detail) => this.answerPage(detail), paths.windowFrame, () => this.itemWindows.anyOpen);
+    this.window = new MainWindow(environment.appName, runtime.origin, framedOrigins, (detail) => this.answerPage(detail), paths.windowFrame, () => this.itemWindows.anyOpen, () => this.environment.settings.current().spellCheck.enabled);
     this.tray = new AppTray(environment.appName, (action, conversationId) => void this.handle(action, conversationId));
     this.notifications = new HostNotifications({
       origin: runtime.origin,
@@ -134,12 +139,34 @@ export class DesktopApp {
   }
 
   async start() {
+    await this.startLinuxSpellChecking();
     this.showApplicationMenu();
     await this.reconcileOpenAtLogin();
     this.notifications.start();
     await this.openWindow();
     setInterval(() => void this.refreshStatus(), STATUS_POLL_MILLISECONDS);
     await this.startSelfUpdate();
+  }
+
+  private async startLinuxSpellChecking() {
+    if (process.platform !== "linux") return;
+    try {
+      const { linuxSpellChecker } = await import("./linux-spell-check.ts");
+      this.linuxSpellChecker = linuxSpellChecker();
+    } catch (error) {
+      console.error("Spell checking languages unavailable:", error);
+    }
+    this.linuxSpellChecker?.apply(this.environment.settings.current().spellCheck);
+  }
+
+  private takeSpellCheck(spellCheck: DesktopSpellCheck) {
+    if (sameSpellCheck(spellCheck, this.environment.settings.current().spellCheck)) return;
+    this.environment.settings.update({ spellCheck });
+    this.linuxSpellChecker?.apply(spellCheck);
+    if (process.platform === "darwin") {
+      this.window.setSpellCheck(spellCheck.enabled);
+      this.itemWindows.setSpellCheck(spellCheck.enabled);
+    }
   }
 
   private async startSelfUpdate() {
@@ -356,12 +383,14 @@ export class DesktopApp {
     const request = pageRequest(detail, this.pageNonce);
     if (request?.type === "nonce") {
       this.window.runInPage(giveNonceScript(this.pageNonce));
+      if (this.linuxSpellChecker?.languages.length) this.window.runInPage(giveSpellCheckLanguagesScript(this.linuxSpellChecker.languages));
       this.showUpdateInWindow();
     }
     if (request?.type === "open-link") this.window.openInBrowser(request.url);
     if (request?.type === "close-window") void this.window.closeAfterAsking(this.words());
     if (request?.type === "appearance") giveAppAppearance(request.appearance);
     if (request?.type === "language") this.takeLanguage(request.language);
+    if (request?.type === "spell-check") this.takeSpellCheck(request.spellCheck);
     if (request?.type === "action" && pageMayRun(request.action, showsMenuInWindow)) void this.handle(request.action);
     if (request?.type === "menu") this.showMenuInWindow();
     if (request?.type === "open-item-window") this.itemWindows.openItem(request.route, request.title);

@@ -60,6 +60,12 @@ export const settings: Messages["settings"] = {
     whileAgentWorks: "Senden, während der Agent arbeitet",
     whileAgentWorksHint: "⌥Enter (Alt+Enter) macht das andere; jede Nachricht in der Warteschlange zeigt, auf welchem Weg sie rausgeht. Wird in diesem Browser gespeichert.",
     enter: "Enter",
+    spellCheck: "Rechtschreibung prüfen",
+    spellingLanguages: "Sprachen für die Rechtschreibung",
+    spellingLanguagesHint: "Die Desktop-App prüft die hier gewählten Sprachen. Ist keine gewählt, prüft sie die Sprache deines Systems, falls es dafür ein Wörterbuch gibt, sonst nichts.",
+    addSpellingLanguage: "Sprache hinzufügen…",
+    addSpellingLanguageButton: "Hinzufügen",
+    removeSpellingLanguage: (language: string) => `${language} entfernen`,
   },
   terminal: {
     title: "Terminal",
@@ -186,7 +192,7 @@ export const settings: Messages["settings"] = {
   },
   typing: {
     title: "Tippen",
-    hint: "Was macOS in der Desktop-App mit deinen Wörtern tun darf: sie korrigieren, wenn du ein Leerzeichen tippst, und den Rest eines Wortes in Grau vorschlagen. Tippfehler bleiben in jedem Fall unterstrichen; klicke mit rechts auf einen, um ihn zu korrigieren.",
+    hint: "Was macOS in der Desktop-App mit deinen Wörtern tun darf: sie korrigieren, wenn du ein Leerzeichen tippst, und den Rest eines Wortes in Grau vorschlagen. Ist „Rechtschreibung prüfen“ an, bleiben Tippfehler in jedem Fall unterstrichen; klicke mit rechts auf einen, um ihn zu korrigieren.",
     autocorrect: "Rechtschreibung automatisch korrigieren",
     predictions: "Inline-Vorschläge",
   },
