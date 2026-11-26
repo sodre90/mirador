@@ -3,6 +3,9 @@
  * What a Claude Code session in this repository starts with from beads, as the SessionStart hook's JSON: the workflow,
  * the few memories that hold for any task in full, and every other memory by its key alone. `bd prime` by itself
  * writes all memories out in full, which had grown past 100 KB for every session and every subagent.
+ *
+ * Its matcher in .claude/settings.json leaves out resumed sessions, such as a profile switch or a restart in Mirador: their
+ * transcript holds this context already, and Claude Code answers the resume only once its SessionStart hooks have ended.
  */
 import { $ } from "bun";
 import { dirname } from "node:path";

@@ -8,7 +8,7 @@
             "type": "command"
           }
         ],
-        "matcher": ""
+        "matcher": "startup|clear|compact"
       }
     ]
   }
