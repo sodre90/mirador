@@ -309,10 +309,14 @@ export function startServer(services: HostServices) {
   const hasAllowedHost = (request: Request) => tunnelEnds.has(request) || allowedHosts.has(request.headers.get("host") ?? "");
   const pageOrigins = ownPageOrigins(config, certificate);
   const isOwnOrigin = (origin: string, host: string | null) => origin === `http://${host}` || origin === `https://${host}`;
-  /** Through the tunnel, a page is served from whatever address the device's proxy listens on, so its origin matches its Host. */
+  /**
+   * Through the tunnel, a page is served from whatever address the device's proxy listens on, so its origin matches its Host.
+   * With no Origin at all, a request still counts as from this host's own page when the browser says, in Sec-Fetch-Site,
+   * that it is same-origin: WebView2 on Windows can leave Origin off a same-origin POST, and page scripts cannot set that header.
+   */
   const isPageOrigin = (request: Request) => {
     const origin = request.headers.get("origin");
-    if (origin === null) return false;
+    if (origin === null) return request.headers.get("sec-fetch-site") === "same-origin";
     return tunnelEnds.has(request) ? isOwnOrigin(origin, request.headers.get("host")) : pageOrigins.includes(origin);
   };
   const localCanvasAssetsOrigin = `http://127.0.0.1:${config.canvasAssetsPort}`;
@@ -886,7 +890,11 @@ export function startServer(services: HostServices) {
     }
   }
 
-  /** Only the owner's own pages, signed in with the browser cookie, may read or add a conversation's images and dropped files, or read an app's files. */
+  /**
+   * Only the owner's own pages, signed in with the browser cookie, may read or add a conversation's images and dropped files,
+   * or read an app's files. A page's POST needs this host's origin, or no Origin with Sec-Fetch-Site same-origin, which is how
+   * WebView2 on Windows can send a same-origin POST.
+   */
   function refusedPageRequest(request: Request) {
     if (!hasAllowedHost(request)) return new Response("forbidden host", { status: 403 });
     const caller = signedInCaller(request, { openToPeople: false });

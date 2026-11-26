@@ -183,9 +183,10 @@ export function pageSocketOpened(socket: Bun.ServerWebSocket<RelayedSocket>) {
   if (socket.data.closedBeforeOpen) socket.close(socket.data.closedBeforeOpen.code, socket.data.closedBeforeOpen.reason);
 }
 
-export function forwardedHeaders(incoming: Headers, machineOrigin: string, token: string | null, canvasAssetsOrigin: string) {
+export function forwardedHeaders(incoming: Headers, machineOrigin: string, token: string | null, canvasAssetsOrigin: string, method = "GET", fillsInMissingOrigin = false) {
   const headers = new Headers([...incoming].filter(([name]) => !UNFORWARDED_REQUEST_HEADERS.has(name) && !name.startsWith("sec-websocket-")));
-  if (incoming.has("origin")) headers.set("origin", machineOrigin);
+  const sameOriginWithoutOrigin = fillsInMissingOrigin && sendsBody(method) && incoming.get("sec-fetch-site") === "same-origin";
+  if (incoming.has("origin") || sameOriginWithoutOrigin) headers.set("origin", machineOrigin);
   if (token) headers.set("cookie", `${TOKEN_COOKIE}=${token}`);
   headers.set(CANVAS_ASSETS_ORIGIN_HEADER, canvasAssetsOrigin);
   return headers;
@@ -605,7 +606,7 @@ export class MachineRelays {
     if (!machine) return didNotAnswer(known);
     const opensSocket = request.headers.get("upgrade")?.toLowerCase() === "websocket";
     if (opensSocket) await this.machineCanvasWay(machine, true);
-    const headers = forwardedHeaders(request.headers, machine.origin, this.store.machineDeviceToken(machine.id), await this.canvasAssetsOriginFor(machine));
+    const headers = forwardedHeaders(request.headers, machine.origin, this.store.machineDeviceToken(machine.id), await this.canvasAssetsOriginFor(machine), request.method, true);
     if (opensSocket) return this.relaySocket(machine, `${url.pathname}${url.search}`, headers, request, server);
 
     const response = await this.fetchFromMachine(machine, `${url.pathname}${url.search}`, request, headers);

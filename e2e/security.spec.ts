@@ -57,6 +57,9 @@ test("rejects browsers and clients without the right credentials", async ({ page
   expect(await addImage({ Origin: host.origin })).toBe(401);
   expect(await addImage({ Origin: "http://evil.example", Cookie: cookie })).toBe(403);
   expect(await addImage({ Cookie: cookie })).toBe(403);
+  expect(await addImage({ Cookie: cookie, "Sec-Fetch-Site": "same-origin" }), "no Origin, as WebView2 can send a same-origin POST").toBe(404);
+  expect(await addImage({ Cookie: cookie, "Sec-Fetch-Site": "same-site" })).toBe(403);
+  expect(await addImage({ Cookie: cookie, "Sec-Fetch-Site": "cross-site" })).toBe(403);
   expect(await readImage({})).toBe(401);
   expect(await readImage({ Cookie: cookie, "Sec-Fetch-Site": "cross-site" })).toBe(403);
   expect(await readImage({ Cookie: cookie })).toBe(404);
