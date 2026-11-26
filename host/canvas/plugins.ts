@@ -24,10 +24,12 @@ import {
   type ConversationReply,
   type PluginItemType,
   type PluginNotificationText,
+  type ReadsTimes,
   type StartedConversation,
   type ToolCaller,
   type WorkspaceConversationStart,
 } from "../../shared/canvas-plugins.ts";
+import { parseReminderTime } from "../../shared/reminders.ts";
 import type { PluginCommand } from "../../shared/slash-commands.ts";
 import { argumentsHint, commandInput } from "../../shared/command-arguments.ts";
 import { worksForARoom, type Conversation, type PluginCanvasItem, type PluginContextHint, type PluginStatuslineChips, type Profile, type StartedBy } from "../../shared/model.ts";
@@ -573,6 +575,7 @@ export class CanvasPlugins {
     const shared = this.storageOf(plugin);
     const keyed = (key: string) => `workspace:${workspaceId}:${key}`;
     return {
+      ...this.readsTimes(),
       workspace: { id: workspace.id, name: workspace.name, folder: workspace.path },
       storage: { get: (key) => shared.get(keyed(key)), set: (key, value) => shared.set(keyed(key), value) },
       sharedStorage: shared,
@@ -933,6 +936,7 @@ export class CanvasPlugins {
       return { id: workspace.id, name: workspace.name, folder: workspace.path };
     };
     return {
+      ...this.readsTimes(),
       conversationId,
       get workspace() {
         return workspaceOf();
@@ -944,6 +948,16 @@ export class CanvasPlugins {
       profiles: () => this.pluginProfiles(),
       usageOf: (startedId) => this.readUsage(conversationId, plugin.manifest.name, startedId),
       usageHistory: usageHistoryOf(this.store, conversationId),
+    };
+  }
+
+  private readsTimes(): ReadsTimes {
+    return {
+      readTime: (text, now = new Date()) => {
+        if (typeof text !== "string" || !(now instanceof Date)) throw new Error("readTime takes the words as text, and now as a Date if given.");
+        return parseReminderTime(text, now, this.store.reminderMorning());
+      },
+      morningMinutes: () => this.store.reminderMorning(),
     };
   }
 

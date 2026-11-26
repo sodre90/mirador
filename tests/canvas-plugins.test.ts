@@ -1011,6 +1011,21 @@ describe("CanvasPlugins", () => {
     expect(new TextDecoder().decode(plugins.viewCode(path)!)).toBe(readFileSync(join(FIXTURES, "board", "canvas.js"), "utf8"));
     expect(plugins.viewCode("/apps/board/0000000000000000/canvas.js")).toBeNull();
   });
+
+  test("a tool reads times in plain words as /remind does, with the user's morning", async () => {
+    const store = storeWithConversation();
+    store.setReminderMorning(8 * 60);
+    const thursdayNoon = new Date(2026, 10, 26, 12, 0);
+    const when = {
+      description: "Say when the words mean.",
+      input: { type: "object", properties: { text: { type: "string" } }, required: ["text"] },
+      run: (input: unknown, { readTime, morningMinutes }: CanvasToolContext) =>
+        JSON.stringify({ at: readTime((input as { text: string }).text, thursdayNoon)?.at.getTime() ?? null, morning: morningMinutes() }),
+    };
+    const { callTool } = await canvasPluginHost(FIXTURES, store, { board: { ...board, tools: { ...board.tools, when } } });
+    expect(JSON.parse((await callTool("when", { text: "fri" })).text)).toEqual({ at: new Date(2026, 10, 27, 8, 0).getTime(), morning: 480 });
+    expect(JSON.parse((await callTool("when", { text: "send the report" })).text)).toEqual({ at: null, morning: 480 });
+  });
 });
 
 describe("loading canvas plugins", () => {

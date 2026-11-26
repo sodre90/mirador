@@ -58,8 +58,26 @@ export const pluginItemOf = (item: PluginCanvasItem): PluginItem => ({
   agentEditedAt: item.agentEditedAt ?? null,
 });
 
+/** A time read from plain words, and the words after it. */
+export interface TimeInWords {
+  at: Date;
+  rest: string;
+}
+
+/** Times in plain words, read as Mirador's /remind reads them. Plugin API 25 brought them. */
+export interface ReadsTimes {
+  /**
+   * The time a phrase starts with, such as "9", "tomorrow 9", "mon", "fri 14:30", "3h" or "in 30 min", and the words
+   * after it; null when it names no time still ahead. The words are English only. Without a time, "morning",
+   * "tomorrow", a weekday and "next week" mean the user's morning; "today" and "tonight" mean 18:00.
+   */
+  readTime(text: string, now?: Date): TimeInWords | null;
+  /** When the user's morning starts, in minutes after midnight, as their reminders take it. */
+  morningMinutes(): number;
+}
+
 /** The conversation a plugin's code runs for, and its items in the canvas there. */
-export interface CanvasPluginContext<Data = unknown> {
+export interface CanvasPluginContext<Data = unknown> extends ReadsTimes {
   conversationId: string;
   /** The workspace the conversation works in: its id, name and project folder (not a worktree's). Plugin API 14 brought it. */
   workspace: PluginWorkspace;
@@ -350,7 +368,7 @@ export interface WorkspaceConversationStart extends ConversationChoices {
 }
 
 /** What a plugin's workspace tab reaches: its workspace, what it keeps for that workspace, and a way to say its state changed. */
-export interface WorkspaceTabContext {
+export interface WorkspaceTabContext extends ReadsTimes {
   workspace: PluginWorkspace;
   /** What the plugin keeps for this workspace alone, across restarts; values are JSON. */
   storage: CanvasPluginStorage;

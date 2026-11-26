@@ -28,9 +28,10 @@ import { newestFirst } from "./newer-version.ts";
  * plugin a conversation's turns, and its profile's, as Mirador recorded them, and lets it give advice on the
  * conversation's context for its context meter, with Compact now; API 23 gives each profile its id, which a workspace
  * tab and background work start conversations on and ask choices of, so a renamed profile stays theirs; API 24 lets a
- * workspace tab and background work notify the user, on this computer and on phones.
+ * workspace tab and background work notify the user, on this computer and on phones; API 25 reads times in plain words
+ * for a canvas plugin and a workspace tab, as /remind does, with the user's morning.
  */
-export const APP_PLUGIN_API = 24;
+export const APP_PLUGIN_API = 25;
 
 /**
  * The first plugin API whose profile settings may be typed or toggled, and whose canvas host may draw statusline chips,

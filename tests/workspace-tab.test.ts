@@ -60,6 +60,17 @@ describe("a plugin's workspace tab", () => {
     await expect(plugins.actInWorkspaceTab("tally", "w1", { kind: "remind", title: " " })).rejects.toThrow("notify takes { title, body }: a title that isn't empty, and a body, both text.");
   });
 
+  test("reads times in plain words as /remind does, with the user's morning", async () => {
+    const store = storeWithConversation();
+    store.setReminderMorning(7 * 60 + 30);
+    const thursdayNoon = new Date(2026, 10, 26, 12, 0);
+    const reading: CanvasHost = { ...tally, workspaceTab: { ...tally.workspaceTab!, action: (text, { readTime, morningMinutes }) => ({ read: readTime(text as string, thursdayNoon), morning: morningMinutes() }) } };
+    const { plugins } = await canvasPluginHost(FIXTURES, store, { tally: reading });
+    expect(await plugins.actInWorkspaceTab("tally", "w1", "tomorrow call the bank")).toEqual({ read: { at: new Date(2026, 10, 27, 7, 30), rest: "call the bank" }, morning: 450 });
+    expect(await plugins.actInWorkspaceTab("tally", "w1", "call the bank")).toEqual({ read: null, morning: 450 });
+    await expect(plugins.actInWorkspaceTab("tally", "w1", 9)).rejects.toThrow("readTime takes the words as text, and now as a Date if given.");
+  });
+
   test("says what went wrong: an action it refuses, a workspace that isn't open, a plugin without a tab", async () => {
     const { plugins } = await canvasPluginHost(FIXTURES);
     expect(plugins.actInWorkspaceTab("tally", "w1", { kind: "other" })).rejects.toThrow("The tally can only count.");
