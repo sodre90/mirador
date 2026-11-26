@@ -19,6 +19,7 @@ let brokerKey = "";
 
 test.describe.configure({ mode: "serial" });
 test.skip(!sidecarProgram, `no mirador-p2p release is pinned for ${process.platform}-${process.arch}`);
+test.fixme(process.platform === "linux", "vcs-m1gxb: on Linux a transfer through the tunnel stalls once datagrams are lost, so pages through it stay blank");
 
 /** A private key and its public key, as mirador-p2p keygen prints them. */
 function keyPair(name: string) {

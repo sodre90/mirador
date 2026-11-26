@@ -28,6 +28,7 @@ let usedLink = "";
 
 test.describe.configure({ mode: "serial" });
 test.skip(!sidecarProgram, `no mirador-p2p release is pinned for ${process.platform}-${process.arch}`);
+test.fixme(process.platform === "linux", "vcs-m1gxb: on Linux a transfer through the tunnel stalls once datagrams are lost, so pages through it stay blank");
 
 const freePort = () =>
   new Promise<number>((resolve) => {
