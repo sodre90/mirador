@@ -511,4 +511,6 @@ export const rooms: Messages["rooms"] = {
   tagItInTheRoom: "Ha feladatot adnál neki, jelöld meg a szobában.",
   settingsOf: (agent) => `${agent} beállításai`,
   broughtSettingsNote: "A profilod csak a kezdőértékeiket adja meg: amit itt változtatsz, csak erre az ágensre vonatkozik ebben a szobában.",
+  taskFromRoom: "Feladat a szobából",
+  allItWasSent: "Minden, amit kapott",
 };

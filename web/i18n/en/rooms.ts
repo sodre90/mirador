@@ -525,4 +525,6 @@ export const rooms = {
   tagItInTheRoom: "To give it a task, tag it in the room.",
   settingsOf: (agent: string) => `Settings of ${agent}`,
   broughtSettingsNote: "Your profile only gives them their first values: changes here are for this agent in this room alone.",
+  taskFromRoom: "Task from the room",
+  allItWasSent: "All it was sent",
 };

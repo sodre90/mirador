@@ -512,4 +512,6 @@ export const rooms: Messages["rooms"] = {
   tagItInTheRoom: "Um ihm eine Aufgabe zu geben, markiere ihn im Raum.",
   settingsOf: (agent) => `Einstellungen von ${agent}`,
   broughtSettingsNote: "Dein Profil gibt nur ihre Anfangswerte vor: Was du hier änderst, gilt nur für diesen Agenten in diesem Raum.",
+  taskFromRoom: "Aufgabe aus dem Raum",
+  allItWasSent: "Alles, was er bekam",
 };

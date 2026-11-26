@@ -24,6 +24,8 @@ import { inLanguage } from "../web/notification-text.ts";
 import { initialState, initialStateFor, reducer, type AppState } from "../web/state.ts";
 import {
   AGENT_TAGGED_TURNS_AFTER_A_PERSON,
+  askedInBroughtTask,
+  broughtTaskPrompt,
   canvasItemsOfAnswers,
   catchUpPrompt,
   eventsAnswering,
@@ -322,6 +324,14 @@ describe("the prompt that catches an agent up on a room", () => {
     expect(prompt).toEndWith(
       `${ROOM_MESSAGES_HEADING}\n#1 [owner] Ann, 2026-11-20 09:01 UTC:\n> the plan\n#2 [agent] Builder, 2026-11-20 09:02 UTC:\n> done\n#3 [owner] Ann, 2026-11-20 09:03 UTC:\n> @Reviewer check it`,
     );
+  });
+
+  test("passed on to an agent brought from another machine, says in short the words of the message it answers", () => {
+    const unseen = [message(1, "the plan"), message(2, "@Reviewer check it\n\nand the tests\n> quoted too")];
+    const roomText = catchUpPrompt({ roomName: "Launch", unseen, authorOf, introducedAs: "Reviewer", otherAgents: ["Builder"] });
+    const prompt = (inRoomsWorkspace: boolean) => broughtTaskPrompt({ roomName: "Launch", machineName: "Ann's machine", by: { role: "owner", name: "Ann" }, text: roomText, inRoomsWorkspace });
+    expect([false, true].map((inRoomsWorkspace) => askedInBroughtTask(prompt(inRoomsWorkspace)))).toEqual(Array(2).fill("@Reviewer check it\n\nand the tests\n> quoted too"));
+    expect(askedInBroughtTask("A line of no task")).toBe("");
   });
 
   test("makes the square brackets of every name round, so that only the roles Mirador writes are in brackets", () => {

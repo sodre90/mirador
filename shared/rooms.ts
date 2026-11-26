@@ -643,6 +643,13 @@ export function broughtTaskPrompt({ roomName, machineName, by, text, inRoomsWork
   ].join("\n");
 }
 
+const isQuoted = (line: string) => line === ">" || line.startsWith("> ");
+const unquoted = (line: string) => (line === ">" ? "" : line.slice(2));
+const lastQuotedOf = (lines: string[]) => lines.slice(lines.findLastIndex((line) => !isQuoted(line)) + 1).map(unquoted);
+
+/** Of a task's prompt as `broughtTaskPrompt` writes it, the words of the room's last message, the one it asks the agent to answer. */
+export const askedInBroughtTask = (prompt: string) => lastQuotedOf(lastQuotedOf(prompt.split("\n"))).join("\n").trim();
+
 /** What Mirador ends a prompt of others' words with, in a block of its own, for an agent that would otherwise act on the last of theirs. */
 export const END_OF_OTHERS_WORDS = "End of the message.";
 

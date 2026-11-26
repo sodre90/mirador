@@ -512,4 +512,6 @@ export const rooms: Messages["rooms"] = {
   tagItInTheRoom: "Para darle una tarea, etiquétalo en la sala.",
   settingsOf: (agent) => `Ajustes de ${agent}`,
   broughtSettingsNote: "Tu perfil solo les da sus valores iniciales: lo que cambies aquí vale solo para este agente en esta sala.",
+  taskFromRoom: "Tarea de la sala",
+  allItWasSent: "Todo lo que se le envió",
 };

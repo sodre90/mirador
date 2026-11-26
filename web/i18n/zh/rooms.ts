@@ -501,4 +501,6 @@ export const rooms: Messages["rooms"] = {
   tagItInTheRoom: "要给它任务，请在房间里标记它。",
   settingsOf: (agent) => `${agent} 的设置`,
   broughtSettingsNote: "你的配置只提供它们的初始值：在这里的更改只对这个房间里的这个 Agent 有效。",
+  taskFromRoom: "来自房间的任务",
+  allItWasSent: "发给它的全部内容",
 };

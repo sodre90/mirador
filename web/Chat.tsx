@@ -69,7 +69,7 @@ import { FormatBarToggle } from "./FormatBar.tsx";
 import { ReadAloud, ReadsRepliesAloud } from "./ReadAloud.tsx";
 import { CopyReply, TimelineNow } from "./CopyReply.tsx";
 import { replyEnds, type ReplyEnd } from "../shared/replies.ts";
-import { BROUGHT_AGENT_ROLE } from "../shared/rooms.ts";
+import { askedInBroughtTask, BROUGHT_AGENT_ROLE } from "../shared/rooms.ts";
 import { awaitSpokenReply, forgetSpokenReply, readWhenSpokenTurnEnds, stopReading, stopReadingIn } from "./reply-player.ts";
 import { canFork } from "./actions.ts";
 import { hints, statusHints } from "./hints.ts";
@@ -829,6 +829,23 @@ export function BroughtTaskCard({ task }: { task: BroughtTaskWaiting }) {
   );
 }
 
+/** A task a room of another machine sent an agent you brought, in short: the words of the room's message it answers, and all it was sent on asking. */
+function BroughtTaskSent({ text, conversationId }: { text: string; conversationId: string | undefined }) {
+  const roomWords = t.rooms;
+  return (
+    <div className="message user brought-task-sent">
+      <div className="brought-task-sent-asked">
+        <span className="hint">{roomWords.taskFromRoom}</span>
+        <SlackMessageText text={askedInBroughtTask(text)} conversationId={conversationId} />
+      </div>
+      <details className="brought-task-sent-whole">
+        <summary>{roomWords.allItWasSent}</summary>
+        <SlackMessageText text={text} conversationId={conversationId} />
+      </details>
+    </div>
+  );
+}
+
 /** What the agent of a conversation waits for you to allow, as the conversation's timeline asks it, for showing apart from it. */
 export function PendingApprovals({ conversationId, events }: { conversationId: string; events: StoredEvent[] }) {
   const timeline = useTimeline(events);
@@ -1075,10 +1092,14 @@ function TimelineEntry({ block, conversationId, harness, canRewind, endsReply }:
     case "user":
       return (
         <>
-          <div className="message user">
-            <SlackMessageText text={block.text} conversationId={filesOpenIn} />
-            <MessageImages conversationId={conversationId} imageIds={block.imageIds} carried={block.images} />
-          </div>
+          {block.broughtTaskId ? (
+            <BroughtTaskSent text={block.text} conversationId={filesOpenIn} />
+          ) : (
+            <div className="message user">
+              <SlackMessageText text={block.text} conversationId={filesOpenIn} />
+              <MessageImages conversationId={conversationId} imageIds={block.imageIds} carried={block.images} />
+            </div>
+          )}
           {block.turnSeq !== undefined && (block.filesKept || canRewind) && (
             <div className="turn-actions">
               <UndoButton turn={{ seq: block.turnSeq, text: block.text }} rewind={canRewind} ask={askToRevert} />

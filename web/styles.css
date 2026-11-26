@@ -3106,6 +3106,22 @@ input.picker-search {
   white-space: pre-wrap;
 }
 
+.brought-task-sent-asked {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.brought-task-sent-whole {
+  margin-top: 4px;
+}
+
+.brought-task-sent-whole > summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: calc(12px * var(--font-scale));
+}
+
 .terminal-command {
   margin-top: 8px;
 }

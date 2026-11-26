@@ -153,9 +153,14 @@ test("Mia brings an agent of hers into Ann's room: Ann's tasks for it wait for M
     await expect(joinedCard(mia)).not.toHaveClass(/\bwaiting\b/);
   });
 
-  await test.step("its work beside the room shows the task and what it answered", async () => {
+  await test.step("its work beside the room shows the task in short, all it was sent on asking, and what it answered", async () => {
     await workToggle(mia).click();
-    await expect(workPanel(mia)).toContainText("Weeded the beds");
+    const task = workPanel(mia).locator(".brought-task-sent");
+    await expect(task.locator(".brought-task-sent-asked")).toHaveText("Task from the room@Coder (Mia) SAY Weeded the beds");
+    await expect(task.getByText("You are an attendee of the room")).toBeHidden();
+    await task.getByText("All it was sent").click();
+    await expect(task.getByText("You are an attendee of the room")).toBeVisible();
+    await expect(workPanel(mia).locator(".message.agent")).toHaveText("Weeded the beds");
     await screenshot(mia, "brought-agent-work");
     await workToggle(mia).click();
     await expect(workPanel(mia)).toHaveCount(0);

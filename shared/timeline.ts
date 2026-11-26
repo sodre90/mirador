@@ -196,6 +196,8 @@ export type TimelineBlock =
       fromScript?: true;
       fromMirador?: true;
       fromPlugin?: string;
+      /** Only on a task a room of another machine sent an agent you brought there. */
+      broughtTaskId?: string;
       turnSeq?: number;
       filesKept?: true;
     } & CarriedImages)
@@ -448,6 +450,7 @@ class TimelineBuilder {
           ...(event.fromScript && { fromScript: event.fromScript }),
           ...(event.fromMirador && { fromMirador: event.fromMirador }),
           ...(event.fromPlugin && { fromPlugin: event.fromPlugin }),
+          ...(event.broughtTaskId && { broughtTaskId: event.broughtTaskId }),
           ...(seq > 0 && { turnSeq: seq }),
           ...(event.checkpoint && { filesKept: true as const }),
         });
