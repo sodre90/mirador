@@ -70,7 +70,9 @@ describe("mirador import-settings", () => {
   const store = aStore();
   const settingsImport = importInto(store);
   const authorized: (string | null)[] = [];
+  // Bound to the address it is fetched at: on its default one, another test's server binding 127.0.0.1 on the same port takes its requests.
   const server = Bun.serve({
+    hostname: "127.0.0.1",
     port: 0,
     routes: {
       "/settings-import/plan": { POST: async (request) => Response.json(await settingsImport.plan(await request.text())) },
