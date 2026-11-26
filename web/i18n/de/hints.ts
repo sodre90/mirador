@@ -141,6 +141,7 @@ export const hints: Messages["hints"] = {
     "An: Eine Änderung, deren Erlaubnis der Agent von dir erwartet, nimmt den Canvas ein, mit einem Umschalter Vereint / Geteilt und den Zeilennummern der Datei, und der Chat behält eine kleine Karte. Aus: Die Karte im Chat zeigt den Diff, und der Canvas bleibt, wie er ist.",
   askPageBefore:
     "Der Agent hat diese Seite direkt vor der Frage gezeigt, in derselben Runde. Sie bleibt über der Frage, damit du beides lesen kannst; sie steht auch für sich im Verlauf.",
+  askDiscuss: "Nichts passt? Schließe die Frage und sprich mit dem Agenten darüber.",
   canvasToggle: "Blendet den Canvas-Bereich aus oder ein. Zeichnungen und Fragen kommen weiter an, solange er ausgeblendet ist, und bleiben im Verlauf.",
   runCommand:
     "Führt den Befehl nach ! im Ordner dieses Arbeitsbereichs mit deiner Login-Shell aus, ohne Eingabe. Seine Ausgabe erscheint hier und geht mit deiner nächsten Nachricht an den Agenten, wie bei ! in Claude Code. Für interaktive Programme nutze das Terminal.",

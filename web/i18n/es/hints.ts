@@ -141,6 +141,7 @@ export const hints: Messages["hints"] = {
     "Activado, una edición que el agente espera que permitas ocupa el lienzo, con un selector Unificada / Dividida y los números de línea del archivo, y el chat conserva una tarjeta pequeña. Desactivado, la tarjeta del chat muestra el diff y el lienzo se queda como está.",
   askPageBefore:
     "El agente mostró esta página justo antes de preguntar, en el mismo turno. Se queda sobre la pregunta para que puedas leer ambas; también está en el Historial por sí sola.",
+  askDiscuss: "¿Ninguna encaja? Cierra la pregunta y habla con el agente.",
   canvasToggle: "Oculta o muestra el panel del lienzo. Los dibujos y las preguntas siguen llegando mientras está oculto y se quedan en el Historial.",
   runCommand:
     "Ejecuta el comando que sigue a ! en la carpeta de este espacio de trabajo, con tu shell de inicio de sesión, sin entrada. Su salida se muestra aquí y va al agente con tu siguiente mensaje, como con ! en Claude Code. Para programas interactivos, usa la terminal.",

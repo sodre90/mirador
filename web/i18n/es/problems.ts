@@ -95,6 +95,7 @@ export const problems: Messages["problems"] = {
     "unknown-question": "Pregunta desconocida.",
     "question-already-answered": "Esta pregunta ya se respondió o se retiró.",
     "question-takes-one-answer": "Esta pregunta admite una sola respuesta.",
+    "discuss-takes-no-answers": "Pedir hablarlo no admite respuestas elegidas.",
     "only-shown-pages-saved": "Solo se puede copiar o guardar una página que mostró el agente.",
     "only-tab-items-dismissed": "Solo se puede descartar un elemento de la pestaña.",
     "unknown-item": "Elemento desconocido.",

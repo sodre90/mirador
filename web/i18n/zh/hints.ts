@@ -128,6 +128,7 @@ export const hints: Messages["hints"] = {
   editsInCanvasSetting:
     "开启时，Agent 等你允许的编辑会占用画布，带有“统一 / 并排”切换和文件的行号，聊天里只保留一张小卡片。关闭时，聊天卡片显示差异，画布保持不变。",
   askPageBefore: "Agent 在提问前、同一轮次中展示了这个页面。它保留在问题上方，方便你同时阅读两者；它也单独保存在历史中。",
+  askDiscuss: "都不合适？关闭这个问题，和 Agent 聊一聊。",
   canvasToggle: "隐藏或显示画布窗格。画布被隐藏时，绘图和问题仍会送达，并保留在历史中。",
   runCommand: "用你的登录 shell 在这个工作区的文件夹中运行 ! 后面的命令，不提供输入。输出显示在这里，并随你的下一条消息发给 Agent，就像 Claude Code 中的 ! 一样。交互式程序请使用终端。",
   undoFiles:

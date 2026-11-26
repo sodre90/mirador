@@ -95,6 +95,7 @@ export const problems: Messages["problems"] = {
     "unknown-question": "Unbekannte Frage.",
     "question-already-answered": "Diese Frage wurde schon beantwortet oder zurückgezogen.",
     "question-takes-one-answer": "Diese Frage nimmt nur eine Antwort an.",
+    "discuss-takes-no-answers": "Beim Besprechen werden keine gewählten Antworten mitgeschickt.",
     "only-shown-pages-saved": "Nur eine Seite, die der Agent gezeigt hat, lässt sich kopieren oder speichern.",
     "only-tab-items-dismissed": "Nur ein Element im Tab lässt sich verwerfen.",
     "unknown-item": "Unbekanntes Element.",

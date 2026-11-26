@@ -7,9 +7,9 @@ export function questionsOf(item: AskItem): AskQuestion[] {
   return [{ question: item.question, html: item.html, options: item.options, allowOther: item.allowOther, multiple: item.multiple, optionWidth: item.optionWidth }];
 }
 
-/** What the user answered to the question at `index` of an answered ask: their answer to one of several, or the one answer of a single question. */
+/** What the user answered to the question at `index` of an answered ask: their answer to one of several, or the one answer of a single question; none for a discuss answer, which picked nothing. */
 export function answerTo(item: AskItem, index: number): AskAnswerEntry | undefined {
-  if (!item.answer) return undefined;
+  if (!item.answer || item.answer.discuss) return undefined;
   if (item.questions) return item.answer.answers?.[index];
   return index === 0 ? { label: item.answer.label, picked: item.answer.picked, note: item.answer.note } : undefined;
 }

@@ -26,6 +26,9 @@ export const canvas: Messages["canvas"] = {
     pickAnOption: "选一个选项来回答",
     tickOptions: "勾选一个或多个选项来回答",
     submit: "提交",
+    discuss: "讨论",
+    youAskedToDiscuss: "你想先讨论这个问题",
+    discussSent: "✓ 已发给 Agent 讨论",
     back: "返回",
     next: "下一步",
     answerSent: (answer) => `✓ 回答已发送：“${answer}”`,
@@ -34,6 +37,7 @@ export const canvas: Messages["canvas"] = {
   outcome: {
     needsYourAnswer: "需要你的回答",
     withdrawn: "已撤回",
+    discussing: "讨论中",
   },
   bar: {
     history: "画布历史",

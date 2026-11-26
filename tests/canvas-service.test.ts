@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ConversationService } from "../host/conversations.ts";
-import { answerAsToolResult, CanvasService, severalQuestionsRequest } from "../host/canvas/service.ts";
+import { answerAsToolResult, CanvasService, pastAnswerOf, severalQuestionsRequest } from "../host/canvas/service.ts";
 import { Hub } from "../host/hub.ts";
 import { Store } from "../host/store.ts";
 import type { SystemNotifications } from "../host/system-notifications.ts";
@@ -319,6 +319,80 @@ describe("CanvasService", () => {
     const { canvas } = setUp();
     const { render } = await canvas.show("c1", { title: "x", html: "<p>" });
     expect(render).toBe("no-viewer");
+  });
+
+  describe("discussing a question", () => {
+    const DISCUSS_RESULT = "The user didn't choose an answer: they want to discuss this question with you first.";
+    const TALK_IT_OVER = "Talk it over with them in the conversation, and ask again with the ask tool once it is settled, if it still needs a decision.";
+
+    test("returns to the agent that the user wants to talk first, with their words when there are any", async () => {
+      const { canvas, store, ask } = setUp();
+      const withoutWords = ask();
+      const first = canvas.waitForAnswer(withoutWords, new AbortController().signal);
+      canvas.answer(withoutWords.id, { label: "ignored", discuss: true });
+      const given = await first;
+      expect(answerAsToolResult(given)).toBe([DISCUSS_RESULT, TALK_IT_OVER].join("\n"));
+      expect(asAsk(store.findCanvasItem(withoutWords.id))?.answer).toMatchObject({ label: "Discuss", discuss: true, deliveredAs: "tool-result" });
+
+      const withWords = ask();
+      const second = canvas.waitForAnswer(withWords, new AbortController().signal);
+      canvas.answer(withWords.id, { label: "ignored", discuss: true, note: " Neither fits,\nwhat about green? " });
+      expect(answerAsToolResult(await second)).toBe([DISCUSS_RESULT, "Their words: Neither fits,\nwhat about green?", TALK_IT_OVER].join("\n"));
+    });
+
+    test("goes to the agent as the next message when it no longer waits, naming the question", () => {
+      const { canvas, nextMessages, ask, askSeveral } = setUp();
+      canvas.answer(ask().id, { label: "", discuss: true });
+      canvas.answer(ask().id, { label: "", discuss: true, note: "Something else, really" });
+      canvas.answer(askSeveral().id, { label: "", discuss: true, note: "Too many" });
+      expect(nextMessages).toEqual([
+        'I\'d like to discuss your question "Color?" before answering.',
+        'I\'d like to discuss your question "Color?" before answering.\nSomething else, really',
+        'I\'d like to discuss your questions, starting with "Color?", before answering.\nToo many',
+      ]);
+    });
+
+    test("is read back from the history of a resumed session, in both formats", () => {
+      const { ask, askSeveral } = setUp();
+      const single = ask();
+      const several = askSeveral();
+      const toolResult = (note?: string) => [DISCUSS_RESULT, ...(note ? [`Their words: ${note}`] : []), TALK_IT_OVER].join("\n");
+      expect(pastAnswerOf(single, toolResult(), null)).toEqual({ label: "Discuss", discuss: true, deliveredAs: "tool-result" });
+      expect(pastAnswerOf(single, toolResult("Line one\nLine two"), null)).toEqual({ label: "Discuss", discuss: true, note: "Line one\nLine two", deliveredAs: "tool-result" });
+      expect(pastAnswerOf(several, toolResult("Too many"), null)).toMatchObject({ discuss: true, note: "Too many" });
+      const message = 'I\'d like to discuss your question "Color?" before answering.';
+      expect(pastAnswerOf(single, "", message)).toEqual({ label: "Discuss", discuss: true, deliveredAs: "next-message" });
+      expect(pastAnswerOf(single, "", `${message}\nLine one\nLine two`)).toEqual({ label: "Discuss", discuss: true, note: "Line one\nLine two", deliveredAs: "next-message" });
+      const severalMessage = 'I\'d like to discuss your questions, starting with "Color?", before answering.\nToo many';
+      expect(pastAnswerOf(several, "", severalMessage)).toEqual({ label: "Discuss", discuss: true, note: "Too many", deliveredAs: "next-message" });
+      expect(pastAnswerOf(single, "", severalMessage)).toBeNull();
+    });
+
+    test("is refused together with picked answers", () => {
+      const { canvas, store, askSeveral } = setUp();
+      const item = askSeveral();
+      expect(() => canvas.answer(item.id, { label: "", discuss: true }, [{ label: "Blue" }, { label: "Huge" }])).toThrow();
+      expect(asAsk(store.findCanvasItem(item.id))?.status).toBe("waiting");
+    });
+
+    test("does not install the plugin an install question offers: it counts as not now", async () => {
+      const { canvas, nextMessages } = setUp();
+      const settled: [string, boolean][] = [];
+      canvas.installsPluginsWith({
+        offer: async () => {
+          throw new Error("not offered here");
+        },
+        settle: async (offerId, accepted) => {
+          settled.push([offerId, accepted]);
+          return accepted ? "Mirador installed the Media plugin." : "Nothing was installed.";
+        },
+      });
+      const item = canvas.openAsk("c1", { question: "Install the Media plugin?", options: [{ label: "Install" }, { label: "Not now" }] }, { installsPluginOffer: "offered" });
+      canvas.answer(item.id, { label: "Install", discuss: true, note: "What does it add?" });
+      await Bun.sleep(0);
+      expect(settled).toEqual([["offered", false]]);
+      expect(nextMessages).toEqual(['Nothing was installed.\n\nI\'d like to discuss your question "Install the Media plugin?" before answering.\nWhat does it add?']);
+    });
   });
 });
 

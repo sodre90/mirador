@@ -62,6 +62,7 @@ export type HostProblem =
   | { code: "machine-already-added"; origin: string }
   | { code: "unknown-machine-colour"; value: string }
   | { code: "answer-all-questions"; count: number }
+  | { code: "discuss-takes-no-answers" }
   | { code: "tab-terminal-limit"; count: number }
   | { code: "room-message-too-long"; most: number }
   | { code: "workspace-has-rooms"; rooms: string[] }

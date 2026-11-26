@@ -6,6 +6,7 @@ import { answerPicking, answersSummary, answerTo, pickedIn, questionsOf, type As
 import type { AskAnswerEntry, AskItem, AskQuestion, CanvasItem, ShowItem } from "../shared/model.ts";
 import { AppView } from "./AppView.tsx";
 import { BarMenu, type BarMenuEntry } from "./BarMenu.tsx";
+import { focusPane } from "./actions.ts";
 import { connection } from "./connection.ts";
 import { settledEditNote, type EditRequest } from "./edit-approval.ts";
 import { ChangesView } from "./Changes.tsx";
@@ -503,6 +504,12 @@ function AskView({
     if (answer) connection.send({ type: "ask.answer", itemId: item.id, ...answer });
   };
 
+  const discuss = () => {
+    const noteToSend = (onReviewPage ? note : drafts[questionIndex]?.note ?? "").trim();
+    connection.send({ type: "ask.answer", itemId: item.id, label: words.ask.discuss, discuss: true, note: noteToSend || undefined });
+    focusPane("chat");
+  };
+
   if (!shownQuestion) return null;
   const pagesBeforeShown = !several || page === 0 ? pagesBefore : [];
   const currentAnswer = answers[questionIndex];
@@ -520,14 +527,21 @@ function AskView({
       {several && waiting && !onReviewPage && <p className="ask-progress">{words.ask.questionOf(page + 1, questions.length)}</p>}
       {several && waiting && onReviewPage && <p className="ask-progress">{words.ask.review}</p>}
       <h3>{several ? (waiting ? (onReviewPage ? words.ask.isThisRight : shownQuestion.question) : item.title) : item.question}</h3>
-      {item.status === "answered" && item.answer && !several && !inRoom && (
+      {item.status === "answered" && item.answer?.discuss && !inRoom && (
+        <div className="ask-answer">
+          {words.ask.youAskedToDiscuss}
+          {item.answer.note && <> — “{item.answer.note}”</>}
+          <span className="delivered">{deliveredNote(item.answer)}</span>
+        </div>
+      )}
+      {item.status === "answered" && item.answer && !item.answer.discuss && !several && !inRoom && (
         <div className="ask-answer">
           {words.ask.youChose} <strong>{item.answer.label}</strong>
           {item.answer.note && <> — “{item.answer.note}”</>}
           <span className="delivered">{deliveredNote(item.answer)}</span>
         </div>
       )}
-      {item.status === "answered" && item.answer && several && !inRoom && <AnsweredSeveral answer={item.answer} count={questions.length} />}
+      {item.status === "answered" && item.answer && !item.answer.discuss && several && !inRoom && <AnsweredSeveral answer={item.answer} count={questions.length} />}
       {item.status === "answered" && item.answer && inRoom && <div className="ask-answer">{t.rooms.vote.answered(item.answer.label)}</div>}
       {item.status === "cancelled" && <div className="ask-answer">{words.ask.withdrawn}</div>}
       {item.status === "waiting" && inRoom && <div className="ask-answer">{t.rooms.vote.voteInRoom}</div>}
@@ -591,6 +605,9 @@ function AskView({
       {waiting && !several && (
         <div className="ask-submit">
           <span className="ask-selection">{answerSoFar}</span>
+          <button type="button" data-hint={hints.askDiscuss} onClick={discuss}>
+            {words.ask.discuss}
+          </button>
           <button type="submit" className="primary" disabled={!currentAnswer}>
             {words.ask.submit}
           </button>
@@ -614,6 +631,9 @@ function AskView({
             {words.ask.back}
           </button>
           <span className="ask-selection">{onReviewPage ? "" : answerSoFar}</span>
+          <button type="button" data-hint={hints.askDiscuss} onClick={discuss}>
+            {words.ask.discuss}
+          </button>
           {onReviewPage ? (
             <button key="submit" type="submit" className="primary" disabled={!answers.every(isGiven)}>
               {words.ask.submit}
@@ -640,7 +660,7 @@ function outcomeOf(item: CanvasItem) {
   if (item.kind === "plugin" && item.outcome) return item.outcome;
   if (item.status === "waiting") return words.outcome.needsYourAnswer;
   if (item.status === "cancelled") return words.outcome.withdrawn;
-  if (item.kind === "ask" && item.status === "answered" && item.answer) return `→ ${item.answer.label}`;
+  if (item.kind === "ask" && item.status === "answered" && item.answer) return `→ ${item.answer.discuss ? words.outcome.discussing : item.answer.label}`;
   return "";
 }
 
@@ -653,7 +673,7 @@ const outcomeIsFreeText = (item: CanvasItem) => isVerdict(item) || item.status =
 const isSettledQuestion = (item: CanvasItem): item is AskItem => item.kind === "ask" && item.status !== "waiting";
 
 function settledMessage(item: AskItem): SettledNote {
-  return item.status === "answered" ? { text: words.ask.answerSent(item.answer?.label ?? ""), tone: "done" } : { text: words.ask.agentWithdrew, tone: "neutral" };
+  return item.status === "answered" ? { text: item.answer?.discuss ? words.ask.discussSent : words.ask.answerSent(item.answer?.label ?? ""), tone: "done" } : { text: words.ask.agentWithdrew, tone: "neutral" };
 }
 
 /** A note that goes away by itself a few seconds after it is set. */

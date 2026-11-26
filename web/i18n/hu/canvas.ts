@@ -26,6 +26,9 @@ export const canvas: Messages["canvas"] = {
     pickAnOption: "Válassz egy lehetőséget a válaszhoz",
     tickOptions: "Jelölj be egy vagy több lehetőséget a válaszhoz",
     submit: "Beküldés",
+    discuss: "Megbeszélés",
+    youAskedToDiscuss: "Megbeszélést kértél erről",
+    discussSent: "✓ Elküldve az ágensnek megbeszélésre",
     back: "Vissza",
     next: "Tovább",
     answerSent: (answer) => `✓ Válasz elküldve: „${answer}”`,
@@ -34,6 +37,7 @@ export const canvas: Messages["canvas"] = {
   outcome: {
     needsYourAnswer: "a válaszodra vár",
     withdrawn: "visszavonva",
+    discussing: "Megbeszélés",
   },
   bar: {
     history: "A vászon előzményei",

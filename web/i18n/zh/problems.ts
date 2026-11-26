@@ -95,6 +95,7 @@ export const problems: Messages["problems"] = {
     "unknown-question": "未知问题。",
     "question-already-answered": "此问题已被回答或已撤回。",
     "question-takes-one-answer": "此问题只接受一个回答。",
+    "discuss-takes-no-answers": "选择讨论时不能同时带有选定的回答。",
     "only-shown-pages-saved": "只有 Agent 展示过的页面才能复制或保存。",
     "only-tab-items-dismissed": "只有标签页中的项目可以忽略。",
     "unknown-item": "未知项目。",

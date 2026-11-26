@@ -475,3 +475,115 @@ test("of several questions one can take several, whose answer the review page an
   await expect(ask.getByRole("checkbox", { name: "Blue", exact: true })).not.toBeChecked();
   await expect(ask.getByRole("radio", { name: "Large", exact: true })).toBeChecked();
 });
+
+const DISCUSS_RESULT = "The user didn't choose an answer: they want to discuss this question with you first.";
+const TALK_IT_OVER = "Talk it over with them in the conversation, and ask again with the ask tool once it is settled, if it still needs a decision.";
+
+test("Discuss closes a single question with nothing picked, sends the note as the user's words, and moves focus to the message box", async ({ page }) => {
+  await signIn(page, host);
+  await page.goto(host.origin);
+  const conversationId = await startConversation(page);
+  const ask = page.locator(".ask");
+  const toolResult = callCanvasTool(host, conversationId, "ask", { question: "Which database?", options: [{ label: "Postgres" }, { label: "SQLite" }] });
+
+  await ask.getByRole("textbox", { name: /note/i }).fill("Neither fits: we need to sync offline");
+  await ask.getByRole("button", { name: "Discuss" }).click();
+
+  expect(await toolResult).toBe([DISCUSS_RESULT, "Their words: Neither fits: we need to sync offline", TALK_IT_OVER].join("\n"));
+  await expect(page.locator(".composer textarea")).toBeFocused();
+  await openFromCanvasHistory(page, "Which database?");
+  await expect(ask.locator(".ask-answer")).toContainText("You asked to discuss this — “Neither fits: we need to sync offline”");
+  await expect(ask.locator(".ask-answer")).not.toContainText("You chose");
+  await expect(page.locator(".canvas-outcome").last()).toHaveText("→ Discussing");
+});
+
+test("Discuss without a note sends no words", async ({ page }) => {
+  await signIn(page, host);
+  await page.goto(host.origin);
+  const conversationId = await startConversation(page);
+  const toolResult = callCanvasTool(host, conversationId, "ask", { question: "Which cache?", options: [{ label: "Redis" }, { label: "None" }] });
+  await page.locator(".ask").getByRole("button", { name: "Discuss" }).click();
+  expect(await toolResult).toBe([DISCUSS_RESULT, TALK_IT_OVER].join("\n"));
+});
+
+test("Discuss on the first page of several questions closes them all with the note of that page", async ({ page }) => {
+  await signIn(page, host);
+  await page.goto(host.origin);
+  const conversationId = await startConversation(page);
+  const ask = page.locator(".ask");
+  const toolResult = callCanvasTool(host, conversationId, "ask", {
+    questions: [
+      { question: "Which color?", options: [{ label: "Red" }, { label: "Blue" }] },
+      { question: "Which size?", options: [{ label: "Small" }, { label: "Large" }] },
+    ],
+  });
+
+  await ask.getByRole("textbox", { name: /note/i }).fill("Let's talk about the palette");
+  await ask.getByRole("button", { name: "Discuss" }).click();
+
+  expect(await toolResult).toBe([DISCUSS_RESULT, "Their words: Let's talk about the palette", TALK_IT_OVER].join("\n"));
+  await expect(page.locator(".composer textarea")).toBeFocused();
+  await openFromCanvasHistory(page, "2 questions: Which color?");
+  await expect(ask.locator(".ask-answer")).toContainText("You asked to discuss this");
+});
+
+test("Discuss on the review page sends the note on all the answers", async ({ page }) => {
+  await signIn(page, host);
+  await page.goto(host.origin);
+  const conversationId = await startConversation(page);
+  const ask = page.locator(".ask");
+  const toolResult = callCanvasTool(host, conversationId, "ask", {
+    questions: [
+      { question: "Which color?", options: [{ label: "Red" }, { label: "Blue" }] },
+      { question: "Which size?", options: [{ label: "Small" }, { label: "Large" }] },
+    ],
+  });
+  await ask.getByRole("radio", { name: "Red", exact: true }).check();
+  await ask.getByRole("button", { name: "Next" }).click();
+  await ask.getByRole("radio", { name: "Large", exact: true }).check();
+  await ask.getByRole("button", { name: "Next" }).click();
+  await ask.getByRole("textbox", { name: "Note for the agent on all the answers" }).fill("Actually, can we rethink both?");
+  await ask.getByRole("button", { name: "Discuss" }).click();
+  expect(await toolResult).toBe([DISCUSS_RESULT, "Their words: Actually, can we rethink both?", TALK_IT_OVER].join("\n"));
+});
+
+test("the Discuss button sits immediately left of Submit", async ({ page }) => {
+  await signIn(page, host);
+  await page.goto(host.origin);
+  const conversationId = await startConversation(page);
+  const ask = page.locator(".ask");
+  const toolResult = callCanvasTool(host, conversationId, "ask", { question: "Ship it?", options: [{ label: "Yes" }, { label: "No" }] });
+  const discuss = await ask.getByRole("button", { name: "Discuss" }).boundingBox();
+  const submit = await ask.getByRole("button", { name: "Submit" }).boundingBox();
+  expect(discuss!.x + discuss!.width).toBeLessThanOrEqual(submit!.x);
+  expect(submit!.x - (discuss!.x + discuss!.width)).toBeLessThan(40);
+  await ask.getByRole("button", { name: "Discuss" }).click();
+  await toolResult;
+});
+
+test("the Discuss button sits immediately left of Next with several questions, and Submit on the review page", async ({ page }) => {
+  await signIn(page, host);
+  await page.goto(host.origin);
+  const conversationId = await startConversation(page);
+  const ask = page.locator(".ask");
+  const toolResult = callCanvasTool(host, conversationId, "ask", {
+    questions: [
+      { question: "Which color?", options: [{ label: "Red" }, { label: "Blue" }] },
+      { question: "Which size?", options: [{ label: "Small" }, { label: "Large" }] },
+    ],
+  });
+  const leftOf = async (right: string) => {
+    const discuss = await ask.getByRole("button", { name: "Discuss" }).boundingBox();
+    const other = await ask.getByRole("button", { name: right, exact: true }).boundingBox();
+    expect(discuss!.x + discuss!.width).toBeLessThanOrEqual(other!.x);
+    expect(other!.x - (discuss!.x + discuss!.width)).toBeLessThan(40);
+  };
+  await leftOf("Next");
+  await ask.getByRole("radio", { name: "Red", exact: true }).check();
+  await ask.getByRole("button", { name: "Next" }).click();
+  await ask.getByRole("radio", { name: "Large", exact: true }).check();
+  await ask.getByRole("button", { name: "Next" }).click();
+  await leftOf("Submit");
+  await ask.getByRole("button", { name: "Discuss" }).click();
+  await toolResult;
+});

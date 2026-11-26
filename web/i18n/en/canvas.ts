@@ -29,6 +29,9 @@ export const canvas = {
     pickAnOption: "Pick an option to answer",
     tickOptions: "Tick one or more options to answer",
     submit: "Submit",
+    discuss: "Discuss",
+    youAskedToDiscuss: "You asked to discuss this",
+    discussSent: "✓ Sent to the agent to talk over",
     back: "Back",
     next: "Next",
     answerSent: (answer: string) => `✓ Answer sent: “${answer}”`,
@@ -37,6 +40,7 @@ export const canvas = {
   outcome: {
     needsYourAnswer: "needs your answer",
     withdrawn: "withdrawn",
+    discussing: "Discussing",
   },
   bar: {
     history: "Canvas history",

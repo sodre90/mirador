@@ -95,6 +95,7 @@ export const problems: Messages["problems"] = {
     "unknown-question": "Ismeretlen kérdés.",
     "question-already-answered": "Erre a kérdésre már válaszoltak, vagy visszavonták.",
     "question-takes-one-answer": "Erre a kérdésre egy válasz adható.",
+    "discuss-takes-no-answers": "A megbeszélés nem fogad el kiválasztott válaszokat.",
     "only-shown-pages-saved": "Csak az ágens által megjelenített oldal másolható vagy menthető.",
     "only-tab-items-dismissed": "Csak a lapon lévő elem vethető el.",
     "unknown-item": "Ismeretlen elem.",

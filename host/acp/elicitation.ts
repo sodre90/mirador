@@ -89,7 +89,8 @@ export async function askFormOnCanvas(
   if (!asked) return { action: "decline" };
   const item = canvas.openAsk(conversationId, asked.ask, { answerFillsForm: true });
   try {
-    return { action: "accept", content: elicitationContent(asked, await canvas.waitForAnswer(item, signal)) };
+    const answer = await canvas.waitForAnswer(item, signal);
+    return answer.discuss ? { action: "decline" } : { action: "accept", content: elicitationContent(asked, answer) };
   } catch {
     canvas.cancelAsk(item.id);
     return { action: "cancel" };

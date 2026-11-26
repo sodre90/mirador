@@ -66,7 +66,7 @@ export interface RoomAnswerer {
 }
 
 /** An answer as it goes to the agent: what was chosen, and who chose it where that was not the owner. */
-export type GivenAnswer = Pick<CanvasAnswer, "label" | "picked" | "note" | "answers"> & { answerer?: RoomAnswerer };
+export type GivenAnswer = Pick<CanvasAnswer, "label" | "picked" | "note" | "answers" | "discuss"> & { answerer?: RoomAnswerer };
 
 interface AnswerWaiter {
   answered(answer: GivenAnswer): void;
@@ -268,7 +268,7 @@ export class CanvasService {
    * agent hears it after the turn it may be in, as going on with the room message whose turn asked, so that its answer
    * goes into that message's thread. One a person other than the owner confirmed for a room tells the agent who they are.
    */
-  answer(itemId: string, answer: AskAnswerEntry, answers?: AskAnswerEntry[], authorId?: string, answerer?: RoomAnswerer) {
+  answer(itemId: string, answer: AskAnswerEntry & { discuss?: true }, answers?: AskAnswerEntry[], authorId?: string, answerer?: RoomAnswerer) {
     const item = this.store.findCanvasItem(itemId);
     if (!item || item.kind !== "ask") throw new HostProblemError({ code: "unknown-question" });
     if (item.status !== "waiting") throw new HostProblemError({ code: "question-already-answered" });
@@ -479,8 +479,12 @@ const severalQuestionsAsked = (questions: AskQuestion[]): AskedFields => ({
 });
 
 /** What the user sent, checked against what was asked: one answer for a question, one for each of several. */
-function answersFor(item: AskItem, answer: AskAnswerEntry, answers: AskAnswerEntry[] | undefined): GivenAnswer {
+function answersFor(item: AskItem, answer: AskAnswerEntry & { discuss?: true }, answers: AskAnswerEntry[] | undefined): GivenAnswer {
   const questions = questionsOf(item);
+  if (answer.discuss) {
+    if (answers) throw new HostProblemError({ code: "discuss-takes-no-answers" });
+    return { label: DISCUSS_LABEL, discuss: true, note: answer.note?.trim() || undefined };
+  }
   if (!item.questions) {
     if (answers) throw new HostProblemError({ code: "question-takes-one-answer" });
     return entryFor(questions[0], answer);
@@ -523,7 +527,35 @@ function roomPersonsAnswerAsToolResult({ label, answers }: GivenAnswer, { author
   return [`${who} answered ${answers.length} questions:`, ...each].join("\n");
 }
 
+/** What a discuss answer is called where a label is shown, in English; the web shows its own words for it. */
+export const DISCUSS_LABEL = "Discuss";
+
+const DISCUSS_TOOL_RESULT = "The user didn't choose an answer: they want to discuss this question with you first.";
+const DISCUSS_NEXT_STEP = "Talk it over with them in the conversation, and ask again with the ask tool once it is settled, if it still needs a decision.";
+
+const discussToolResult = (note: string | undefined) => [DISCUSS_TOOL_RESULT, ...noteLine(note, "Their words: "), DISCUSS_NEXT_STEP].join("\n");
+
+const discussMessageOpening = (item: AskItem) =>
+  item.questions ? `I'd like to discuss your questions, starting with "${item.questions[0]?.question}", before answering.` : `I'd like to discuss your question "${item.question}" before answering.`;
+
+const discussMessage = (item: AskItem, note: string | undefined) => [discussMessageOpening(item), ...noteLine(note, "")].join("\n");
+
+const THEIR_WORDS = "Their words: ";
+
+function discussInToolResult(text: string): { note?: string } | null {
+  if (!text.startsWith(DISCUSS_TOOL_RESULT) || !text.endsWith(DISCUSS_NEXT_STEP)) return null;
+  const between = text.slice(DISCUSS_TOOL_RESULT.length, text.length - DISCUSS_NEXT_STEP.length).replace(/^\n/, "").replace(/\n$/, "");
+  return between.startsWith(THEIR_WORDS) ? { note: between.slice(THEIR_WORDS.length) || undefined } : {};
+}
+
+function discussInMessage(item: AskItem, text: string): { note?: string } | null {
+  const opening = discussMessageOpening(item);
+  if (text !== opening && !text.startsWith(`${opening}\n`)) return null;
+  return { note: text.slice(opening.length + 1).trimEnd() || undefined };
+}
+
 export function answerAsToolResult(given: GivenAnswer) {
+  if (given.discuss) return discussToolResult(given.note);
   if (given.answerer) return roomPersonsAnswerAsToolResult(given, given.answerer);
   const { note, answers } = given;
   if (answers) {
@@ -561,6 +593,10 @@ interface ReadAnswer {
 
 /** The answer `answerAsToolResult` or `answerAsMessage` wrote for the question, read back; null when neither holds one. */
 export function pastAnswerOf(item: AskItem, toolResult: string, nextUserMessage: string | null): CanvasAnswer | null {
+  const discussed = discussInToolResult(toolResult);
+  if (discussed) return { label: DISCUSS_LABEL, discuss: true, ...discussed, deliveredAs: "tool-result" };
+  const discussedNext = nextUserMessage === null ? null : discussInMessage(item, nextUserMessage);
+  if (discussedNext) return { label: DISCUSS_LABEL, discuss: true, ...discussedNext, deliveredAs: "next-message" };
   const questions = questionsOf(item);
   const questionLine = (index: number) => new RegExp(`^${index + 1}\\. ${escapeRegExp(questions[index]?.question.split("\n")[0] ?? "")}`);
   const fromToolResult = readAnswer(toolResult, {
@@ -666,6 +702,7 @@ function roomPersonsAnswerAsMessage(item: AskItem, { label, answers }: GivenAnsw
 }
 
 function answerAsMessage(item: AskItem, given: GivenAnswer) {
+  if (given.discuss) return discussMessage(item, given.note);
   if (given.answerer) return roomPersonsAnswerAsMessage(item, given, given.answerer);
   const { note, answers } = given;
   if (answers) {

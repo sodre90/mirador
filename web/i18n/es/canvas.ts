@@ -28,6 +28,9 @@ export const canvas: Messages["canvas"] = {
     pickAnOption: "Elige una opción para responder",
     tickOptions: "Marca una o más opciones para responder",
     submit: "Enviar",
+    discuss: "Hablarlo",
+    youAskedToDiscuss: "Pediste hablar de esto",
+    discussSent: "✓ Enviado al agente para hablarlo",
     back: "Atrás",
     next: "Siguiente",
     answerSent: (answer) => `✓ Respuesta enviada: “${answer}”`,
@@ -36,6 +39,7 @@ export const canvas: Messages["canvas"] = {
   outcome: {
     needsYourAnswer: "necesita tu respuesta",
     withdrawn: "retirada",
+    discussing: "Hablándolo",
   },
   bar: {
     history: "Historial del lienzo",

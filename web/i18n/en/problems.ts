@@ -95,6 +95,7 @@ export const problems = {
     "unknown-question": "Unknown question.",
     "question-already-answered": "This question was already answered or withdrawn.",
     "question-takes-one-answer": "This question takes one answer.",
+    "discuss-takes-no-answers": "A discuss answer takes no picked answers.",
     "only-shown-pages-saved": "Only a page the agent showed can be copied or saved.",
     "only-tab-items-dismissed": "Only an item in the tab can be dismissed.",
     "unknown-item": "Unknown item.",

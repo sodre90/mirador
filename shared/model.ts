@@ -934,6 +934,8 @@ export interface CanvasAnswer {
   /** For a single question that takes several. */
   picked?: PickedSeveral;
   note?: string;
+  /** The user closed the question to talk it over first: `label` is then a display label from the host, and `note` their opening words. */
+  discuss?: true;
   /** For an ask of several questions: each answer beside its question. */
   answers?: (AskAnswerEntry & { question: string })[];
   deliveredAs: "tool-result" | "next-message";

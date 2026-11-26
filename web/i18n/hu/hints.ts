@@ -134,6 +134,7 @@ export const hints: Messages["hints"] = {
     "Bekapcsolva egy szerkesztés, amelynek engedélyezésére az ágens vár, elfoglalja a vásznat, Egyesített / Osztott kapcsolóval és a fájl sorszámaival, a chatben pedig egy kis kártya marad. Kikapcsolva a chatkártya mutatja a diffet, a vászon pedig változatlan marad.",
   askPageBefore:
     "Az ágens közvetlenül a kérdés előtt, ugyanabban a körben mutatta ezt az oldalt. A kérdés fölött marad, hogy mindkettőt elolvashasd; az Előzményekben külön is megtalálod.",
+  askDiscuss: "Egyik sem jó? Zárd le a kérdést, és beszéld meg az ágenssel.",
   canvasToggle: "A vászon panel elrejtése vagy megjelenítése. A rajzok és kérdések rejtett állapotban is megérkeznek, és az Előzményekben maradnak.",
   runCommand:
     "Lefuttatja a ! utáni parancsot ennek a munkaterületnek a mappájában a bejelentkezési shelleddel, bemenet nélkül. A kimenete itt jelenik meg, és a következő üzeneteddel az ágenshez kerül, mint a Claude Code-ban a !-lel. Interaktív programokhoz használd a terminált.",

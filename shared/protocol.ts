@@ -337,7 +337,8 @@ export type ClientMessage =
   | { type: "conversation.set-bypass-permissions"; conversationId: string; bypassPermissions: boolean }
   | { type: "conversation.set-config"; conversationId: string; configId: string; value: string | boolean }
   | { type: "permission.respond"; conversationId: string; permissionId: string; optionId: string | null }
-  | { type: "ask.answer"; itemId: string; label: string; picked?: PickedSeveral; note?: string; answers?: AskAnswerEntry[] }
+  /** With `discuss`, the user closes the question to talk it over first: `label` is ignored and `note` holds their opening words. */
+  | { type: "ask.answer"; itemId: string; label: string; picked?: PickedSeveral; note?: string; answers?: AskAnswerEntry[]; discuss?: true }
   /** How a page rendered: one the agent showed, or a question's `askPage`. */
   | { type: "canvas.report"; itemId: string; errors: string[]; askPage?: AskPage }
   /**
