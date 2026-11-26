@@ -144,6 +144,19 @@ test("conversations deleted together leave out those gone, at work or waiting fo
   expect(conversations.stillResting([resting.id, working.id, finished.id, "gone"])).toEqual([resting.id]);
 });
 
+test("conversations deleted together leave out a favourite, which the user marked to keep, and one whose task is a favourite", () => {
+  const { conversations } = hostWithAWorkspaceOnClaude();
+  const resting = conversations.create("w1");
+  const favourite = conversations.create("w1");
+  const delegating = conversations.create("w1");
+  const favouriteTask = conversations.create("w1");
+  (conversations as any).store.recordStartedBy(favouriteTask.id, { conversationId: delegating.id, plugin: "delegate" });
+  conversations.setFavourite(favourite.id, true);
+  conversations.setFavourite(favouriteTask.id, true);
+
+  expect(conversations.stillResting([resting.id, favourite.id, delegating.id])).toEqual([resting.id]);
+});
+
 test("conversations deleted together leave out one whose task works, or that waits on a job or runs in a terminal, as deleting it would stop them", () => {
   const { conversations } = hostWithAWorkspaceOnClaude();
   const delegating = conversations.create("w1");

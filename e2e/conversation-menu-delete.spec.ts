@@ -108,6 +108,26 @@ test("A conversation's right-click menu deletes it, the conversations below it, 
     await expect(rows).toHaveCount(0);
   });
 
+  await test.step("a favourite stays when the other conversations go, and the prompt doesn't count it as staying", async () => {
+    const [asking, favourite, other] = [await startConversation(page), await startConversation(page), await startConversation(page)];
+    await row(favourite!).hover();
+    await row(favourite!).getByRole("button", { name: "Add to favourites" }).click();
+    await expect(row(favourite!).getByRole("button", { name: "Remove from favourites" })).toHaveAttribute("aria-pressed", "true");
+    await row(asking!).click({ button: "right" });
+    await menuEntry("Delete other conversations…").click();
+    await expect(prompt.getByRole("heading")).toHaveText(`Delete the other conversation in ${basename(host.projectDir)}?`);
+    await expect(prompt).not.toContainText("still at work");
+    await prompt.getByRole("button", { name: "Delete 1 conversation" }).click();
+    await expect(row(other!)).toHaveCount(0);
+    expect((await rowIds()).sort()).toEqual([asking!, favourite!].sort());
+    for (const left of [favourite!, asking!]) {
+      await row(left).click({ button: "right" });
+      await menuEntry("Delete conversation").click();
+      await menuEntry("Confirm: Delete conversation").click();
+      await expect(row(left)).toHaveCount(0);
+    }
+  });
+
   await test.step("a week on, Delete conversations below reaches those folded under Older", async () => {
     const kept = await startConversation(page);
     const folding = [await startConversation(page), await startConversation(page)];

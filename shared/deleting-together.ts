@@ -12,3 +12,8 @@ const restsItself = ({ status, waitingFor, jobWaits, openInTerminal }: Busy) => 
 export function restsWithAllItHolds<C extends Busy>(conversation: C, heldBy: (conversation: C) => C[]): boolean {
   return restsItself(conversation) && heldBy(conversation).every((held) => restsWithAllItHolds(held, heldBy));
 }
+
+/** Deleting conversations together leaves out a favourite, which the user marked to keep, and one whose tasks or side chats hold one. */
+export function holdsAFavourite<C extends Pick<Conversation, "favourite">>(conversation: C, heldBy: (conversation: C) => C[]): boolean {
+  return Boolean(conversation.favourite) || heldBy(conversation).some((held) => holdsAFavourite(held, heldBy));
+}

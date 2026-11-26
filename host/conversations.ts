@@ -153,7 +153,7 @@ import { SubagentSessions } from "./subagent-sessions.ts";
 import { SubagentUsageReader } from "./subagent-usage.ts";
 import { UnknownSessionUpdates } from "./unknown-session-updates.ts";
 import { conversationCanvasToken } from "./canvas-token.ts";
-import { restsWithAllItHolds } from "../shared/deleting-together.ts";
+import { holdsAFavourite, restsWithAllItHolds } from "../shared/deleting-together.ts";
 
 const MAX_TITLE_LENGTH = 200;
 const LISTED_SESSIONS = 30;
@@ -1772,10 +1772,11 @@ export class ConversationService {
     return repositoryHooksOff(this.store, [workspace.path, worktree.root]);
   }
 
-  /** Those of the conversations still there that rest with all deleting them takes, which deleting several together may take. */
+  /** Those of the conversations still there that rest with all deleting them takes, which deleting several together may take; none that is or holds a favourite. */
   stillResting(conversationIds: string[]) {
     const heldBy = ({ id }: Conversation) => [...this.store.conversationsStartedBy(id), ...this.store.sideChatsOf(id)].filter((held) => this.store.hasConversation(held)).map((held) => this.get(held));
-    return conversationIds.filter((id) => this.store.hasConversation(id) && restsWithAllItHolds(this.get(id), heldBy));
+    const takenTogether = (conversation: Conversation) => !holdsAFavourite(conversation, heldBy) && restsWithAllItHolds(conversation, heldBy);
+    return conversationIds.filter((id) => this.store.hasConversation(id) && takenTogether(this.get(id)));
   }
 
   /** The uncommitted files deleting the conversations removes with their worktrees and their delegated tasks'. */

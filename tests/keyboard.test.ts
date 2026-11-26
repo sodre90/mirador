@@ -503,9 +503,24 @@ describe("navigation", () => {
       expect(deletableAround(rows, conversations, "top")!.below.staying).toBe(4);
     });
 
-    test("are taken again as they are now while the prompt asks: one gone is left out, one now busy stays", () => {
-      const conversations = [activeDaysAgo("resting", 1), activeDaysAgo("now-working", 1, { status: "running" })];
-      const now = stillDeletable(["resting", "now-working", "gone"], 2, conversations);
+    test("leave out favourites and those whose task is one, without counting them as staying", () => {
+      const startedBy = (callerId: string) => ({ startedBy: { conversationId: callerId, plugin: "delegate", reply: null, dismissed: false } });
+      const resting = activeDaysAgo("resting", 3);
+      const conversations = [
+        activeDaysAgo("top", 0),
+        activeDaysAgo("favourite", 1, { favourite: true }),
+        activeDaysAgo("delegating", 2),
+        activeDaysAgo("favourite-task", 2, { ...startedBy("delegating"), favourite: true }),
+        resting,
+      ];
+      const around = deletableAround(rowsOf(conversations), conversations, "top")!;
+      expect(around.below).toEqual({ going: [resting], staying: 0 });
+      expect(around.others).toEqual({ going: [resting], staying: 0 });
+    });
+
+    test("are taken again as they are now while the prompt asks: one gone or made a favourite is left out, one now busy stays", () => {
+      const conversations = [activeDaysAgo("resting", 1), activeDaysAgo("now-working", 1, { status: "running" }), activeDaysAgo("now-favourite", 1, { favourite: true })];
+      const now = stillDeletable(["resting", "now-working", "now-favourite", "gone"], 2, conversations);
       expect(ids(now.going)).toEqual(["resting"]);
       expect(now.staying).toBe(3);
     });
