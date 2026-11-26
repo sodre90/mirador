@@ -11,6 +11,7 @@ import { agentProcessKey, type ConversationService, type WaitingPermission } fro
 import { Hub, socketData, type BrowserSocket } from "../host/hub.ts";
 import { SenderLimit } from "../host/join-requests.ts";
 import { absolutePathNamed, MOST_ROOM_MESSAGES_A_MINUTE, RoomService, type HostsHome, type RoomSessions } from "../host/rooms.ts";
+import { roomPushTarget } from "../host/push-notifications.ts";
 import { HOOKS_OFF_AFTER_SANDBOX_MS, repositoryHooksOff } from "../host/sandbox/hooks-off.ts";
 import { Store } from "../host/store.ts";
 import { SystemNotifications } from "../host/system-notifications.ts";
@@ -1483,7 +1484,7 @@ describe("telling the owner of a room's answers", () => {
     expect([hub.isRoomWatched(room.id), hub.isWatched(conversationOf("p1")), hub.isShown(conversationOf("p1"))]).toEqual([false, false, false]);
   });
 
-  test("reading the room takes from phones what they were told of its agents that waits no longer, as an answer finished or a task held", () => {
+  test("reading the room takes from phones what they were told of its agents or of the room itself that waits no longer, as an answer finished or a task held", () => {
     const { store, hub, rooms, room, ownerId, conversationOf } = machineWithRooms();
     rooms.write(room.id, ownerId, "@Builder build it", ["p1"], null);
     rooms.write(room.id, ownerId, "@Reviewer look", ["p2"], null);
@@ -1493,7 +1494,7 @@ describe("telling the owner of a room's answers", () => {
     const notifications = new SystemNotifications(store, hub, pushes as never);
     notifications.roomRead(room.id);
     notifications.roomRead("no-such-room");
-    expect(read).toEqual([[builder, reviewer], []]);
+    expect(read).toEqual([[builder, reviewer, roomPushTarget(room.id)], [roomPushTarget("no-such-room")]]);
   });
 });
 
