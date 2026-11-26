@@ -116,6 +116,7 @@ describe("a brought opencode agent working in a room's workspace", () => {
     expect(opencodeMajorVersion("opencode v2.2.6")).toBe(2);
     expect(opencodeMajorVersion("2.0.0")).toBe(2);
     expect(opencodeMajorVersion("opencode v1.9.3")).toBe(1);
+    expect(opencodeMajorVersion("\x1b[1mopencode\x1b[0m \x1b[2mv\x1b[0m\x1b[1m2.2.6\x1b[0m")).toBe(2);
     expect(opencodeMajorVersion("unknown")).toBeNull();
     expect(opencodeMajorVersion(null)).toBeNull();
   });

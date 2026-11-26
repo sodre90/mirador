@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
+import { stripVTControlCharacters } from "node:util";
 import type * as acp from "@agentclientprotocol/sdk/unstable";
 import { ROOMS_WORKSPACE_CANVAS_TOOLS } from "../canvas/tool-names.ts";
 import { CANVAS_SERVER_NAME, findOpencode, opencodeCanvasPlugin } from "./harnesses.ts";
@@ -131,9 +132,9 @@ function deepMergeObjects(base: JsonObject, override: JsonObject): JsonObject {
   return merged;
 }
 
-/** Extracts opencode's major version from `opencode --version` output, or null when unrecognized. */
+/** Extracts opencode's major version from `opencode --version` output, coloured where FORCE_COLOR is set, or null when unrecognized. */
 export function opencodeMajorVersion(versionOutput: string | null): number | null {
-  const match = /(?:^|\bv)(\d+)\.\d+\.\d+/.exec(versionOutput ?? "");
+  const match = /(?:^|\bv)(\d+)\.\d+\.\d+/.exec(stripVTControlCharacters(versionOutput ?? ""));
   return match ? Number(match[1]) : null;
 }
 

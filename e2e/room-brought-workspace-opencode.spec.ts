@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { stripVTControlCharacters } from "node:util";
 import { expect, test, type Page } from "@playwright/test";
 import { FakeClaudeApi, fakeClaudeEnvironment } from "./fake-claude-api.ts";
 import { addWorkspace, createProfile, createRoom, inviteIntoRoom, joinRoom, nameMachine, nameOwnProfile, reachedAtOwnPort, roomCard, signIn } from "./helpers.ts";
@@ -13,7 +14,7 @@ const opencodeVersion = (() => {
   const res = spawnSync(process.platform === "win32" ? "where" : "which", ["opencode"], { encoding: "utf8" });
   if (res.status !== 0) return null;
   const ver = spawnSync("opencode", ["--version"], { encoding: "utf8" });
-  const match = /(?:^|\bv)(\d+)\.\d+\.\d+/.exec(`${ver.stdout ?? ""}\n${ver.stderr ?? ""}`);
+  const match = /(?:^|\bv)(\d+)\.\d+\.\d+/.exec(stripVTControlCharacters(`${ver.stdout ?? ""}\n${ver.stderr ?? ""}`));
   return match ? Number(match[1]) : null;
 })();
 
