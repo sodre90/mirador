@@ -203,6 +203,7 @@ test("Ann lets it in, and it reads the room's workspace, changes a file and runs
     await giveTask("COPY THE NOTES", `CALL mcp__canvas__room_run {"command":"cat notes.txt > copy.txt\\npwd\\ncat ${join(mias.projectDir, "nothing-here.txt")} || true"}\nTHEN Copied.`);
     await expect(callCard(ann)).toContainText("Coder (Mia) asks to run a command", { timeout: 60_000 });
     await expect(callCard(ann).locator(".workspace-call-text")).toContainText("cat notes.txt > copy.txt");
+    await expect(callCard(ann).locator(".workspace-call-text .token.function").first()).toHaveText("cat");
     await expect(callCard(ann)).toContainText("3 lines");
     await expect(callCard(ann)).toContainText("It runs on the room's machine with all its owner may do there, not only in the workspace.");
     await screenshot(ann, "workspace-command-card");
@@ -237,6 +238,8 @@ test("a task's thread shows what it did there and who allowed it; Ann takes the 
     await expect(changed).toContainText("Allowed by Ann");
     await expect(changed.locator(".diff-added")).toHaveText("+Sow the peas");
     const ran = await shownFor("COPY THE NOTES");
+    await expect(summaryOf(ran).locator(".workspace-call-about .token.function").first()).toHaveText("cat");
+    await expect(ran.locator(".workspace-call-text.highlighted-code .token.function").first()).toHaveText("cat");
     await expect(ran).toContainText("It exited with 0.");
     await expect(ran.locator(".workspace-call-text").last()).toContainText(owners.projectDir);
     await screenshot(ann, "workspace-thread");

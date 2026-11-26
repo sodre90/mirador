@@ -4,6 +4,7 @@ import { Timestamp, usePersonName } from "./Chat.tsx";
 import { ConfirmButton } from "./ConfirmButton.tsx";
 import { connection } from "./connection.ts";
 import { t } from "./i18n/index.ts";
+import { HighlightedText } from "./Markdown.tsx";
 import { MeaningMark } from "./RoomSection.tsx";
 
 const words = t.rooms;
@@ -22,6 +23,9 @@ const diffLineClass = (line: string, index: number) => {
   return line.startsWith("+") ? "diff-added" : line.startsWith("-") ? "diff-removed" : undefined;
 };
 
+/** A command an agent runs, coloured as shell as the conversation shows it. */
+const ShellCommand = ({ command }: { command: string }) => <HighlightedText code={command} language="bash" />;
+
 function DiffLines({ diff }: { diff: string }) {
   return diff.split("\n").map((line, index) => (
     <div key={index} className={diffLineClass(line, index)}>
@@ -35,7 +39,7 @@ function WholeOfCall({ kind, shown }: { kind: RoomWorkspaceCall["kind"]; shown: 
   const [wholeShown, setWholeShown] = useState(false);
   return (
     <>
-      <pre className={`workspace-call-text${wholeShown ? " whole" : ""}`}>{kind === "run" ? shown : <DiffLines diff={shown} />}</pre>
+      <pre className={`workspace-call-text${wholeShown ? " whole" : ""}${kind === "run" ? " highlighted-code" : ""}`}>{kind === "run" ? <ShellCommand command={shown} /> : <DiffLines diff={shown} />}</pre>
       <div className="room-approval-task-size">
         <span className="room-approval-task-lines">{words.taskLines(shown.split("\n").length)}</span>
         <button type="button" className="link" aria-expanded={wholeShown} onClick={() => setWholeShown(!wholeShown)}>
@@ -129,11 +133,23 @@ function WorkspaceCallEntry({ call }: { call: RoomWorkspaceCall }) {
       <details className="workspace-call" data-workspace-call={call.id} data-state={call.state}>
         <summary>
           <span className="workspace-call-did">{words.callDid[call.kind]}</span>
-          <code className="workspace-call-about">{call.about}</code>
+          {call.kind === "run" ? (
+            <code className="workspace-call-about highlighted-code">
+              <ShellCommand command={call.about} />
+            </code>
+          ) : (
+            <code className="workspace-call-about">{call.about}</code>
+          )}
           <span className="workspace-call-state">{words.callStates[call.state]}</span>
           <Timestamp at={call.at} />
         </summary>
-        {call.kind === "run" ? <pre className="workspace-call-text whole">{call.about}</pre> : <code className="workspace-call-path">{call.about}</code>}
+        {call.kind === "run" ? (
+          <pre className="workspace-call-text whole highlighted-code">
+            <ShellCommand command={call.about} />
+          </pre>
+        ) : (
+          <code className="workspace-call-path">{call.about}</code>
+        )}
         {call.diff !== null && (
           <pre className="workspace-call-text whole">
             <DiffLines diff={call.diff} />
