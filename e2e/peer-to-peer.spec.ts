@@ -1,18 +1,16 @@
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
-import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
-import { homedir } from "node:os";
 import { join } from "node:path";
 import { expect, test, type Locator } from "@playwright/test";
 import { joinCodeIn, tunnelIn } from "../shared/machines.ts";
 import type { DeviceTunnel, InviteTunnel } from "../shared/tunnel.ts";
 import { TOKEN_COOKIE } from "../shared/protocol.ts";
 import { addWorkspace, callCanvasTool, openSettings, signIn, startConversation } from "./helpers.ts";
+import { sidecarProgram, sidecarReady } from "./p2p-sidecar.ts";
 import { TestHost } from "./test-host.ts";
 
-/** mirador-p2p is built from its own repository, which only the owner's machines have; elsewhere this spec is skipped. */
-const binary = process.env.MIRADOR_P2P_BINARY ?? join(homedir(), "prj", "mirador-p2p", "target", "debug", "mirador-p2p");
-const sidecarBuilt = existsSync(binary);
+const binary = sidecarProgram ?? "";
 
 const host = new TestHost({ environment: () => ({ MIRADOR_P2P_BINARY: binary, MIRADOR_P2P_BROKER: `localhost:${brokerPort}`, MIRADOR_P2P_BROKER_KEY: brokerKey }) });
 const ends: ChildProcess[] = [];
@@ -20,7 +18,7 @@ let brokerPort = 0;
 let brokerKey = "";
 
 test.describe.configure({ mode: "serial" });
-test.skip(!sidecarBuilt, `needs mirador-p2p at ${binary}`);
+test.skip(!sidecarProgram, `no mirador-p2p release is pinned for ${process.platform}-${process.arch}`);
 
 /** A private key and its public key, as mirador-p2p keygen prints them. */
 function keyPair(name: string) {
@@ -90,6 +88,7 @@ async function throughTunnel(url: string, init: RequestInit = {}) {
 }
 
 test.beforeAll(async () => {
+  await sidecarReady();
   mkdirSync(join(host.root, "p2p-test"), { recursive: true });
   cpSync(join(import.meta.dirname, "..", "tests", "fixtures", "canvas-plugins", "board"), join(host.dataDir, "plugins", "board"), { recursive: true });
   const broker = keyPair("broker");

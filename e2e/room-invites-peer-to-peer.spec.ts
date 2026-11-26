@@ -1,16 +1,14 @@
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
-import { homedir } from "node:os";
 import { join } from "node:path";
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { machineAddress, roomInviteLink } from "../shared/machines.ts";
 import { addWorkspace, copiedInvite, createProfile, createRoom, inviteIntoRoom, joinRoom, nameOwnProfile, openInviteDialog, openRoomSettings, openSettings, reachedAtOwnPort, reloadFromRestartedHost, roomCard, signIn } from "./helpers.ts";
+import { sidecarProgram, sidecarReady } from "./p2p-sidecar.ts";
 import { TestHost, writeBunProgram } from "./test-host.ts";
 
-/** mirador-p2p is built from its own repository, which only the owner's machines have; elsewhere this spec is skipped. */
-const binary = process.env.MIRADOR_P2P_BINARY ?? join(homedir(), "prj", "mirador-p2p", "target", "debug", "mirador-p2p");
-const sidecarBuilt = existsSync(binary);
+const binary = sidecarProgram ?? "";
 
 let brokerPort = 0;
 let brokerKey = "";
@@ -29,7 +27,7 @@ let broker: ChildProcess | undefined;
 let usedLink = "";
 
 test.describe.configure({ mode: "serial" });
-test.skip(!sidecarBuilt, `needs mirador-p2p at ${binary}`);
+test.skip(!sidecarProgram, `no mirador-p2p release is pinned for ${process.platform}-${process.arch}`);
 
 const freePort = () =>
   new Promise<number>((resolve) => {
@@ -40,6 +38,7 @@ const freePort = () =>
   });
 
 test.beforeAll(async () => {
+  await sidecarReady();
   const folder = join(owners.root, "p2p-test");
   mkdirSync(folder, { recursive: true });
   const [privateKey, publicKey] = spawnSync(binary, ["keygen"], { encoding: "utf8" }).stdout.trim().split("\n");
