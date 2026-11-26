@@ -322,6 +322,8 @@ interface TurnInProgress {
   broughtTaskId?: string;
   /** The user stopped the turn before its prompt went out, as while the turn's files are kept. */
   stoppedBeforePrompt?: boolean;
+  /** The stop found the turn waiting for its sandbox's folders, so it must not start at all. */
+  stoppedWaitingForSandboxFolders?: boolean;
   /** The reply whose chunks last streamed, so the late chunks of a turn a stop cancelled can be recognised. */
   lastReplyMessageId: string | null;
   /** The turn waits on the user, so no reply of its own can still be on its way. */
@@ -1451,7 +1453,7 @@ export class ConversationService {
     const conversation = this.get(conversationId);
     const sandbox = conversation.broughtIntoRoom ? null : this.sandboxOf(conversation);
     const change = sandbox && this.folderChanges.get(ownerKey(sandbox.owner));
-    if (!change || runtime.turn?.stoppedBeforePrompt) return;
+    if (!change || runtime.turn?.stoppedWaitingForSandboxFolders) return;
     const stopped = new Promise<void>((resolve) => change.held.set(conversationId, resolve));
     runtime.harness = undefined;
     runtime.sessionId = undefined;
@@ -1460,7 +1462,7 @@ export class ConversationService {
     this.restartForFoldersOnceIdle(change);
     await Promise.race([change.taken, stopped]);
     change.held.delete(conversationId);
-    if (!runtime.turn?.stoppedBeforePrompt) this.setStatus(conversationId, "starting");
+    if (!runtime.turn?.stoppedWaitingForSandboxFolders) this.setStatus(conversationId, "starting");
   }
 
   private letHeldTurnGo(conversationId: string) {
@@ -2210,10 +2212,11 @@ export class ConversationService {
     let sessionOpened = false;
     try {
       await this.waitForSandboxFolders(conversationId);
-      if (turn.stoppedBeforePrompt) {
+      if (turn.stoppedWaitingForSandboxFolders) {
         this.append(conversationId, { type: "turn-end", stopReason: "cancelled", ...this.measuredTurn(conversationId, turn) });
         this.notifyTurnEnded(conversationId, { stopReason: "cancelled" });
         this.setStatus(conversationId, "idle");
+        this.turnIsOver(conversationId, turn, turnSeq, undefined);
         return;
       }
       const sessionId = await this.ensureSession(conversationId);
@@ -2278,6 +2281,11 @@ export class ConversationService {
       if (sessionOpened) this.setStatus(conversationId, "idle");
       endTurn();
     }
+    this.turnIsOver(conversationId, turn, turnSeq, endedOnItsOwn);
+  }
+
+  /** What follows a turn once it has ended, however it ended: the plugin that started it hears, and the queue moves on. */
+  private turnIsOver(conversationId: string, turn: TurnInProgress, turnSeq: number | undefined, endedOnItsOwn: acp.PromptResponse | undefined) {
     if (!this.stopping) this.deliverOwedReply(conversationId);
     if (!this.stopping && turnSeq !== undefined) this.turnsHeard.turnEnded(conversationId, turnSeq);
     this.takeUpFolderChangesAfterTurn(conversationId);
@@ -2888,6 +2896,7 @@ export class ConversationService {
     const conversation = this.get(conversationId);
     if (runtime.running && runtime.turn && !runtime.turn.promptSent) {
       runtime.turn.stoppedBeforePrompt = true;
+      if (this.statusOverrides.get(conversationId)?.busyWith === "waiting-for-sandbox-folders") runtime.turn.stoppedWaitingForSandboxFolders = true;
       this.letHeldTurnGo(conversationId);
       return;
     }
