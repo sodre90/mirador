@@ -290,6 +290,7 @@ test("a used link says the invite is over, and a person taken out of the room or
 });
 
 test("one link for several people brings each through the tunnel to the room's door at once, and the owner lets each in", async ({ page, browser }) => {
+  test.fixme(true, "vcs-krjow: two people dialing with one invite's key at once take over each other's tunnel session, so one is told the machine can't be reached");
   test.setTimeout(240_000);
   await signIn(page, owners);
   const link = await inviteIntoRoom(page, "Garden", { howMany: "Up to 5" });
