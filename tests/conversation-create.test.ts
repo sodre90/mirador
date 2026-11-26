@@ -144,6 +144,19 @@ test("conversations deleted together leave out those gone, at work or waiting fo
   expect(conversations.stillResting([resting.id, working.id, finished.id, "gone"])).toEqual([resting.id]);
 });
 
+test("conversations deleted together leave out one whose agent's background task still runs, which deleting it would stop, but not one whose task ended", () => {
+  const { conversations } = hostWithAWorkspaceOnClaude();
+  const withTaskRunning = conversations.create("w1");
+  const withTaskEnded = conversations.create("w1");
+  const asyncTasks = (conversations as any).asyncTasks;
+  const spawned = (asyncTaskId: string) => ({ sessionUpdate: "async_task_spawned", asyncTaskId, name: "sleep", taskType: "shell", description: "sleep 30", showInTranscript: false, canStop: true });
+  asyncTasks.apply(withTaskRunning.id, spawned("running"));
+  asyncTasks.apply(withTaskEnded.id, spawned("ended"));
+  asyncTasks.apply(withTaskEnded.id, { sessionUpdate: "async_task_state_update", asyncTaskId: "ended", state: "completed" });
+
+  expect(conversations.stillResting([withTaskRunning.id, withTaskEnded.id])).toEqual([withTaskEnded.id]);
+});
+
 test("conversations deleted together leave out a favourite, which the user marked to keep, and one whose task is a favourite", () => {
   const { conversations } = hostWithAWorkspaceOnClaude();
   const resting = conversations.create("w1");

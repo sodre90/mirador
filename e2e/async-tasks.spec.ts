@@ -183,3 +183,45 @@ test("/reload in one conversation takes away the background tasks of another idl
   await expect(page.locator(".timeline:visible")).toContainText("ASYNC TASK");
   await expect(tasks).toHaveCount(0);
 });
+
+test("deleting the other conversations from a row's menu leaves one whose background task still runs, and takes it once the task is stopped", async ({ page }) => {
+  await signIn(page, host);
+  await page.getByLabel("Agent", { exact: true }).selectOption({ label: "async · opencode" });
+  const startResting = async () => {
+    const before = page.url();
+    await page.getByRole("button", { name: "+ New conversation" }).click();
+    await expect(page).not.toHaveURL(before);
+    await waitForTurnToEnd(page);
+    return page.url().match(/#\/c\/(.+)$/)![1]!;
+  };
+  const row = (conversationId: string) => page.locator(`.workspace li[data-reorder-id="${conversationId}"]`);
+  const tasks = page.getByRole("region", { name: "Background tasks" });
+  const withTask = await startResting();
+  await sendMessage(page, "ASYNC TASK");
+  await waitForTurnToEnd(page);
+  await expect(tasks.locator("li")).toContainText("Running:");
+  const resting = await startResting();
+  const asking = await startResting();
+  const deleteTheOthers = async () => {
+    await row(asking).click({ button: "right" });
+    await page.getByRole("menuitem", { name: "Delete other conversations…", exact: true }).click();
+    const prompt = page.getByRole("alertdialog");
+    await prompt.getByRole("button", { name: /^Delete \d+ conversations?$/ }).click();
+    await expect(prompt).toHaveCount(0);
+  };
+
+  await test.step("while its task runs, it stays as the others go", async () => {
+    await deleteTheOthers();
+    await expect(row(resting)).toHaveCount(0);
+    await expect(row(withTask)).toHaveCount(1);
+  });
+
+  await test.step("once its task is stopped, it goes with the others", async () => {
+    await row(withTask).click();
+    await tasks.locator("li").getByRole("button", { name: "Stop" }).click();
+    await expect(tasks.locator("li")).toContainText("Stopped:");
+    await deleteTheOthers();
+    await expect(row(withTask)).toHaveCount(0);
+    await expect(row(asking)).toHaveCount(1);
+  });
+});

@@ -1,6 +1,6 @@
 import { NO_SANDBOX } from "../shared/sandbox.ts";
 import { describe, expect, test } from "bun:test";
-import type { Conversation, Workspace } from "../shared/model.ts";
+import type { AsyncTask, AsyncTaskState, Conversation, Workspace } from "../shared/model.ts";
 import {
   adjacentConversation,
   adjacentWorkspaceConversation,
@@ -268,6 +268,8 @@ describe("terminalKeyAction", () => {
 
 const workspace = (id: string): Workspace => ({ id, name: id, path: `/p/${id}`, defaultLaunch: { harness: "claude", profileId: null }, color: null, position: 0, groupId: null, newConversationsIn: "folder", worktreeSetup: "", sandbox: NO_SANDBOX, sideChatAccess: null, createdAt: 0 });
 
+const backgroundTask = (state: AsyncTaskState): AsyncTask => ({ id: `task-${state}`, taskType: "shell", description: "sleep 30", state, canStop: state === "running", summary: null, outputFilePath: null, since: 0 });
+
 const conversation = (id: string, workspaceId: string, createdAt: number, position = 0): Conversation => ({
   id,
   workspaceId,
@@ -437,6 +439,7 @@ describe("navigation", () => {
         activeDaysAgo("reminded", 6, { reminder: { at: now + DAY, mode: "keep" } }),
         activeDaysAgo("waiting-for-a-job", 6, { jobWaits: [{ id: "job", job: { kind: "process", pid: 1 }, sshHost: null, message: "Carry on", resume: true, since: now - DAY }] }),
         activeDaysAgo("in-terminal", 6, { openInTerminal: "idle" }),
+        activeDaysAgo("background-task", 6, { asyncTasks: [backgroundTask("running")] }),
       ];
       const current = [...holding, activeDaysAgo("fresh", 0)];
       expect(idsOf(apartFromMore(current, "5"))).toEqual({ listed: holding.map(({ id }) => id), more: ["fresh"] });
@@ -501,6 +504,17 @@ describe("navigation", () => {
       expect(ids(deletableAround(rows, conversations, "resting")!.others.going)).toEqual(["top"]);
       expect(deletableAround(rows, conversations, "resting")!.below).toEqual({ going: [], staying: 0 });
       expect(deletableAround(rows, conversations, "top")!.below.staying).toBe(4);
+    });
+
+    test("leave those with a background task running or paused, as deleting them would stop it, but not one whose tasks ended", () => {
+      const tasksEnded = activeDaysAgo("tasks-ended", 2, { asyncTasks: [backgroundTask("completed"), backgroundTask("failed"), backgroundTask("stopped")] });
+      const conversations = [
+        activeDaysAgo("top", 0),
+        activeDaysAgo("task-running", 1, { asyncTasks: [backgroundTask("running")] }),
+        activeDaysAgo("task-paused", 1, { asyncTasks: [backgroundTask("paused")] }),
+        tasksEnded,
+      ];
+      expect(deletableAround(rowsOf(conversations), conversations, "top")!.below).toEqual({ going: [tasksEnded], staying: 2 });
     });
 
     test("leave out favourites and those whose task is one, without counting them as staying", () => {

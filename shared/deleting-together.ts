@@ -1,9 +1,13 @@
 import type { Conversation } from "./model.ts";
 
-type Busy = Pick<Conversation, "status" | "waitingFor" | "jobWaits" | "openInTerminal">;
+type Busy = Pick<Conversation, "status" | "waitingFor" | "jobWaits" | "openInTerminal" | "asyncTasks">;
 
-/** Neither it nor its agent works, waits for the user, waits on a job or runs in a terminal. */
-const restsItself = ({ status, waitingFor, jobWaits, openInTerminal }: Busy) => status === "idle" && !waitingFor && jobWaits.length === 0 && !openInTerminal;
+/** One of its agent's background tasks still runs, or is paused and may go on: the turn has ended, but deleting the conversation stops the task. */
+export const hasBackgroundTaskUnderway = ({ asyncTasks }: Pick<Conversation, "asyncTasks">) => asyncTasks.some(({ state }) => state === "running" || state === "paused");
+
+/** Neither it nor its agent works, waits for the user, waits on a job, runs in a terminal or has a background task underway. */
+const restsItself = (conversation: Busy) =>
+  conversation.status === "idle" && !conversation.waitingFor && conversation.jobWaits.length === 0 && !conversation.openInTerminal && !hasBackgroundTaskUnderway(conversation);
 
 /**
  * Deleting conversations together, as a menu's "the others" or "those below" or the Older fold does, takes only those

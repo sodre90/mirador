@@ -2,7 +2,7 @@ import { DEFAULT_CONVERSATIONS_SHOWN, DEFAULT_OLDER_AFTER, olderAfterMs, shownAt
 import type { Conversation, Workspace } from "../shared/model.ts";
 import { isPutAway } from "../shared/reminders.ts";
 import { CUSTOM_ORDER, inConversationOrder, lastActivityOf, type ConversationOrder } from "../shared/conversation-order.ts";
-import { holdsAFavourite, restsWithAllItHolds } from "../shared/deleting-together.ts";
+import { hasBackgroundTaskUnderway, holdsAFavourite, restsWithAllItHolds } from "../shared/deleting-together.ts";
 import { isSideChat } from "../shared/side-chats.ts";
 import { waitingByUrgency } from "../shared/waiting.ts";
 
@@ -71,7 +71,8 @@ const holdsItsPlace = (conversation: Conversation) =>
   conversation.status !== "idle" ||
   Boolean(conversation.reminder) ||
   conversation.jobWaits.length > 0 ||
-  Boolean(conversation.openInTerminal);
+  Boolean(conversation.openInTerminal) ||
+  hasBackgroundTaskUnderway(conversation);
 
 /** Nobody wrote in it and the agent didn't answer for that long, and nothing about it is there for the user to come back to. */
 const restsUntouched = (conversation: Conversation, now: number, olderAfterMs: number) => now - lastActivityOf(conversation) > olderAfterMs && !holdsItsPlace(conversation);
