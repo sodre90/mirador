@@ -18,6 +18,7 @@ import {
   type Forward,
   type Way,
 } from "./p2p/dial.ts";
+import { joinerAddress, newKeyPair } from "./p2p/identity.ts";
 import { installSidecar } from "./p2p/sidecar-download.ts";
 import type { Store } from "./store.ts";
 
@@ -173,9 +174,19 @@ export class MachineTunnels {
     this.makeFolder();
     const name = `join-${randomBytes(8).toString("hex")}`;
     const keyFile = join(this.folder, `${name}.key`);
-    writeFileSync(keyFile, invite.joinKey, { mode: 0o600 });
+    let admitKeyFile: string | undefined;
+    let address = invite.joinAddress;
+    if (invite.admits) {
+      const own = newKeyPair();
+      admitKeyFile = join(this.folder, `${name}.admit.key`);
+      writeFileSync(keyFile, own.privateKey, { mode: 0o600 });
+      writeFileSync(admitKeyFile, invite.joinKey, { mode: 0o600 });
+      address = joinerAddress(invite.hostAddress, own.publicKey);
+    } else {
+      writeFileSync(keyFile, invite.joinKey, { mode: 0o600 });
+    }
     const dial = new Dial(
-      (from) => dialCommand(binary, { keyFile, address: invite.joinAddress, places: invite, from }),
+      (from) => dialCommand(binary, { keyFile, admitKeyFile, address, places: invite, from }),
       { folder: this.folder, pidFile: join(this.folder, `${name}.pid`), keyFile },
       tunnelOriginsOf(invite),
       (line) => console.error(`joining through a tunnel: ${line}`),
@@ -189,6 +200,7 @@ export class MachineTunnels {
         dial.stop();
         this.joining.delete(dial);
         rmSync(keyFile, { force: true });
+        if (admitKeyFile) rmSync(admitKeyFile, { force: true });
       },
     };
   }

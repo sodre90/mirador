@@ -22,6 +22,8 @@ export interface InviteTunnel extends TunnelPlaces {
   joinAddress: string;
   /** The host's own name, as a device lists it: its address in the tunnel says nothing to a person. */
   name?: string;
+  /** True when the host admits each joiner's own tunnel key through this invite's key, so several people can join at once. */
+  admits?: true;
 }
 
 /** Just the places, without the one-time key, the device's address or anything else an invite or an answer carries. */
@@ -94,10 +96,11 @@ export function decodedInviteTunnel(encoded: string): InviteTunnel | null {
     const given: unknown = JSON.parse(fromBase64Url(encoded));
     if (!isRecord(given)) return null;
     const places = checkedPlaces(given);
-    const { joinKey, joinAddress, name } = given;
+    const { joinKey, joinAddress, name, admits } = given;
     if (!places || !isTunnelKeyText(joinKey) || !isTunnelAddress(joinAddress)) return null;
     if (name !== undefined && (typeof name !== "string" || name.length > LONGEST_NAME_IN_INVITE)) return null;
-    return { ...places, joinKey, joinAddress, ...(name !== undefined && { name }) };
+    if (admits !== undefined && typeof admits !== "boolean") return null;
+    return { ...places, joinKey, joinAddress, ...(name !== undefined && { name }), ...(admits === true && { admits: true }) };
   } catch {
     return null;
   }

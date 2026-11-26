@@ -7,15 +7,27 @@ export interface SidecarPin {
   socket: string;
   /** The key reaches its socket and none of what every other key shares, such as the canvas server. */
   socket_only?: true;
+  /** Introductions sealed with this key may name another key, which the sidecar reports on stdout for the host to pin. */
+  admits?: true;
 }
 
-function parsedLine(line: string): { broker?: unknown } | null {
+/** A joiner's own key admitted through an invite's key, reported by the sidecar on stdout. */
+export interface AdmittedJoiner {
+  invite: string;
+  key: string;
+}
+
+function parsedLine(line: string): { broker?: unknown; admitted?: unknown } | null {
   try {
     const parsed: unknown = JSON.parse(line);
     return typeof parsed === "object" && parsed !== null ? parsed : null;
   } catch {
     return null;
   }
+}
+
+function isAdmittedJoiner(value: unknown): value is AdmittedJoiner {
+  return typeof value === "object" && value !== null && typeof (value as AdmittedJoiner).invite === "string" && typeof (value as AdmittedJoiner).key === "string";
 }
 
 const FIRST_RESTART_AFTER_MS = 1000;
@@ -40,6 +52,8 @@ export class Sidecar {
     private readonly log: (line: string) => void = (line) => console.log(`p2p: ${line}`),
     /** Called each time the sidecar says the broker started or stopped answering, and with false when it exits. */
     private readonly brokerContact: (reached: boolean) => void = () => {},
+    /** Called when an introduction sealed with an admitting invite key names a joiner's own key. */
+    private readonly admitted: (joiner: AdmittedJoiner) => void = () => {},
   ) {}
 
   start() {
@@ -108,6 +122,7 @@ export class Sidecar {
   private heard(line: string) {
     const told = parsedLine(line);
     if (told?.broker === "reached" || told?.broker === "lost") this.brokerContact(told.broker === "reached");
+    else if (isAdmittedJoiner(told?.admitted)) this.admitted(told.admitted);
     else this.log(line);
   }
 

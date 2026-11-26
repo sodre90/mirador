@@ -1172,12 +1172,12 @@ describe("Store", () => {
     store.setInviteJoinKey("device code", { key: "device key", address: "fd00::1" });
     store.setInviteJoinKey("room code", { key: "room key", address: "fd00::2" });
     expect(store.waitingInviteJoinKeys(50)).toEqual([
-      { codeKey: "device code", key: "device key", address: "fd00::1", expiresAt: 100 },
-      { codeKey: "room code", key: "room key", address: "fd00::2", expiresAt: 200 },
+      { codeKey: "device code", key: "device key", address: "fd00::1", expiresAt: 100, admits: false },
+      { codeKey: "room code", key: "room key", address: "fd00::2", expiresAt: 200, admits: true },
     ]);
     expect(store.takeExpiredInviteJoinKeys(150)).toEqual([{ key: "device key", address: "fd00::1" }]);
     expect(store.takeExpiredInviteJoinKeys(150)).toEqual([]);
-    expect(store.waitingInviteJoinKeys(150)).toEqual([{ codeKey: "room code", key: "room key", address: "fd00::2", expiresAt: 200 }]);
+    expect(store.waitingInviteJoinKeys(150)).toEqual([{ codeKey: "room code", key: "room key", address: "fd00::2", expiresAt: 200, admits: true }]);
     expect(store.deleteRoomInvite("i1")).toBe("room code");
     expect(store.waitingInviteJoinKeys(150)).toEqual([]);
   });

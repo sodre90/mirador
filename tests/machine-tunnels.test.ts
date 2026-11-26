@@ -18,6 +18,7 @@ import {
   type DialProgram,
   type ForwardsFrom,
 } from "../host/p2p/dial.ts";
+import { isTunnelKey, joinerAddress } from "../host/p2p/identity.ts";
 import { Store } from "../host/store.ts";
 import type { HostProblemError } from "../shared/host-problems.ts";
 import type { TunnelPlaces } from "../shared/tunnel.ts";
@@ -493,6 +494,48 @@ describe.skipIf(onWindows)("MachineTunnels", () => {
     expect(await problemJoiningWith({ path })).toEqual({ code: "peer-to-peer-did-not-start-here", environmentBinary: path });
     const download = { url: "http://127.0.0.1:9/never-asked", sha256: createHash("sha256").update(program).digest("hex") };
     expect(await problemJoiningWith({ path, download })).toEqual({ code: "peer-to-peer-did-not-start-here", environmentBinary: null });
+  });
+
+  test("dialToJoin with an admitting room invite generates a fresh joiner key, keeps the invite key in a separate file, derives the address, and removes both when stopped", async () => {
+    const dials = join(folder(), "dials");
+    const argsFile = join(folder(), "args.json");
+    const binary = join(folder(), "recording-dial");
+    writeFileSync(
+      binary,
+      `#!/usr/bin/env bun
+import { chmodSync, rmSync, writeFileSync } from "node:fs";
+writeFileSync(${JSON.stringify(argsFile)}, JSON.stringify(process.argv.slice(2)));
+const sockets = process.argv.flatMap((argument) => /^--forward=unix:(.+)=\\d+$/.exec(argument)?.slice(1) ?? []);
+process.on("SIGTERM", () => {
+  sockets.forEach((socket) => rmSync(socket, { force: true }));
+  process.exit(0);
+});
+sockets.forEach((socket) => {
+  Bun.serve({ unix: socket, fetch: () => new Response("ok") });
+  chmodSync(socket, 0o600);
+});
+`,
+    );
+    chmodSync(binary, 0o755);
+    const tunnels = new MachineTunnels(new Store(":memory:"), dials, { path: binary }, []);
+    cleanUp.push(() => tunnels.stopAll());
+    const joining = await tunnels.dialToJoin({ ...places, joinKey: PRIVATE_KEY, joinAddress: "fd12:3456:789a:1::9", admits: true });
+    await joining.forward;
+    const args = JSON.parse(readFileSync(argsFile, "utf8")) as string[];
+    const keyFile = args.find((arg) => arg.startsWith("--key-file="))!.slice("--key-file=".length);
+    const admitKeyFile = args.find((arg) => arg.startsWith("--admit-key-file="))!.slice("--admit-key-file=".length);
+    const address = args.find((arg) => arg.startsWith("--address="))!.slice("--address=".length);
+    const ownPrivateKey = readFileSync(keyFile, "utf8");
+    expect(isTunnelKey(ownPrivateKey)).toBe(true);
+    expect(ownPrivateKey).not.toBe(PRIVATE_KEY);
+    expect(readFileSync(admitKeyFile, "utf8")).toBe(PRIVATE_KEY);
+    expect(await statMode(keyFile)).toBe(0o600);
+    expect(await statMode(admitKeyFile)).toBe(0o600);
+    expect(address.startsWith("fd12:3456:789a:1:")).toBe(true);
+    expect(address).not.toBe("fd12:3456:789a:1::9");
+    expect(joinerAddress(places.hostAddress, places.hostKey).startsWith("fd12:3456:789a:1:")).toBe(true);
+    joining.stop();
+    expect(readdirSync(dials)).toEqual([]);
   });
 
   test("an address is reached as it is, and a host without tunnels reaches no machine joined peer to peer", async () => {

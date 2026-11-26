@@ -88,6 +88,8 @@ export type ForwardsFrom = { sockets: { web: string; canvas: string } } | { port
 /** This end of a machine's tunnel: the file its private key is in, its address there, and where the dial forwards from. */
 export interface DialEnd {
   keyFile: string;
+  /** The invite's private key file when joining with a key of this dial's own admitted through that invite. */
+  admitKeyFile?: string;
   address: string;
   places: TunnelPlaces;
   from: ForwardsFrom;
@@ -109,13 +111,14 @@ const listenedAt = (from: ForwardsFrom) =>
  * through the tunnel to load canvas pages from it. Every value is one argument with its flag, never one of its own, and
  * the private key stays in its file.
  */
-export function dialCommand(binary: string, { keyFile, address, places, from }: DialEnd) {
+export function dialCommand(binary: string, { keyFile, admitKeyFile, address, places, from }: DialEnd) {
   const [web, canvas] = listenedAt(from);
   return [
     binary,
     "dial",
     "--udp=0.0.0.0:0",
     `--key-file=${keyFile}`,
+    ...(admitKeyFile ? [`--admit-key-file=${admitKeyFile}`] : []),
     `--address=${address}`,
     `--peer=${places.hostKey}`,
     `--peer-address=${places.hostAddress}`,

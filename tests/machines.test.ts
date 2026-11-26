@@ -26,7 +26,7 @@ import {
 } from "../shared/machines.ts";
 import { MOST_COUNTED } from "../shared/room-reading.ts";
 import type { Machine, MachineSeen } from "../shared/model.ts";
-import { checkedDeviceTunnel, tunnelOrigin, type InviteTunnel } from "../shared/tunnel.ts";
+import { base64UrlOf, checkedDeviceTunnel, tunnelOrigin, type InviteTunnel } from "../shared/tunnel.ts";
 
 test("a machine's name is kept on one line, trimmed, and no longer than a device's lists fit", () => {
   expect(fittedMachineName("  Home\nserver  ")).toBe("Home server");
@@ -238,6 +238,15 @@ test.each(["Zoë’s Café", "Műhely", "书房", "Studio 🎛️"])("an invite 
   const computerLink = deviceTunnelInviteLink("ABCD-EFGH-JKLM", named);
   expect([phoneLink, computerLink].map(readOneCharacterAByte)).toEqual([named, named]);
   expect([phoneLink, computerLink].map((link) => machineAddress(link)?.tunnel)).toEqual([named, named]);
+});
+
+test("a room invite's tunnel carries admits when true and drops false or non-boolean values", () => {
+  const admitting: InviteTunnel = { ...tunnel, admits: true };
+  expect(machineAddress(`mirador://room-invite/ROOM-ABCD-EFGH-JKLM?tunnel=${encoded(admitting)}`)?.tunnel).toEqual(admitting);
+  const withFalse = base64UrlOf(JSON.stringify({ ...tunnel, admits: false }));
+  expect(machineAddress(`mirador://room-invite/ROOM-ABCD-EFGH-JKLM?tunnel=${withFalse}`)?.tunnel).toEqual(tunnel);
+  const bad = base64UrlOf(JSON.stringify({ ...tunnel, admits: "yes" }));
+  expect(machineAddress(`mirador://room-invite/ROOM-ABCD-EFGH-JKLM?tunnel=${bad}`)).toBeNull();
 });
 
 test("what is not a web address is not a machine", () => {

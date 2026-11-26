@@ -4,12 +4,12 @@ import { networkInterfaces } from "node:os";
 import { join } from "node:path";
 import type { PeerToPeerStatus } from "../../shared/protocol.ts";
 import type { DeviceTunnel, InviteTunnel, TunnelPlaces } from "../../shared/tunnel.ts";
-import { inviteKey } from "../devices.ts";
+import { inviteKey, isRoomInviteCode } from "../devices.ts";
 import { SenderLimit } from "../join-requests.ts";
 import { problemResponse } from "../problem-response.ts";
 import type { KeyOverKind, PublicTunnelKey, Store } from "../store.ts";
-import { hostAddressIn, isTunnelKey, newDeviceAddress, newKeyPair, tunnelIdentity, type TunnelIdentity } from "./identity.ts";
-import { Sidecar } from "./sidecar.ts";
+import { canonicalTunnelAddress, hostAddressIn, isTunnelKey, joinerAddress, newDeviceAddress, newKeyPair, tunnelIdentity, type TunnelIdentity } from "./identity.ts";
+import { Sidecar, type AdmittedJoiner } from "./sidecar.ts";
 import { installSidecar, type DownloadedSidecar, type SidecarDownload } from "./sidecar-download.ts";
 
 /** Inside the tunnel, devices reach the host's web server at this port of its tunnel address. */
@@ -28,6 +28,12 @@ const JOIN_KEY_KEPT_AFTER_USE_MS = 10_000;
 const KEY_OVER_FOR_MS: Record<KeyOverKind, number> = { device: 30 * 24 * 60 * 60_000, invite: 24 * 60 * 60_000 };
 /** At most this many of each kind at once, the newest kept, so invites never push out removed devices' keys: each is a pin of the sidecar and a row of the store. */
 export const MOST_KEYS_OVER_OF_A_KIND = 50;
+/** Most admitted joiner keys kept at once for one waiting room invite, oldest evicted first. */
+export const MOST_ADMITTED_PER_INVITE = 32;
+/** Most admitted joiner keys kept at once for one ended invite, so late paste-ins still learn it is over. */
+export const MOST_ADMITTED_PER_KEY_OVER = 16;
+const ADMITTED_KEY_LIFETIME_MS = 5 * 60_000;
+const ADMITTED_KEY_OVER_LIFETIME_MS = 2 * 60_000;
 /** How often the keys over whose time ran out are let go. */
 const KEYS_OVER_LET_GO_EVERY_MS = 60 * 60_000;
 
@@ -131,10 +137,27 @@ export class TunnelRefused extends Error {
   }
 }
 
+interface AdmittedKey {
+  key: string;
+  address: string;
+  expires: ReturnType<typeof setTimeout>;
+}
+
 interface JoinKey {
   pinned: PublicTunnelKey;
+  socket: string;
+  admits: boolean;
   listener: TunnelListener;
   expires: ReturnType<typeof setTimeout>;
+  admitted: Map<string, AdmittedKey>;
+}
+
+interface KeyOverEntry {
+  kind: KeyOverKind;
+  address: string;
+  socket: string;
+  listener: TunnelListener;
+  admitted: Map<string, AdmittedKey>;
 }
 
 /** Addresses on this machine's networks, where a device on the same network may reach the sidecar directly. */
@@ -162,7 +185,7 @@ export class PeerToPeer {
   private readonly listeners = new Map<string, TunnelListener>();
   private readonly joinKeys = new Map<string, JoinKey>();
   /** By the key that is over. */
-  private readonly keysOverListeners = new Map<string, TunnelListener>();
+  private readonly keysOver = new Map<string, KeyOverEntry>();
   private readonly answersToKeysOver: SenderLimit;
   private keysOverLettingGo: ReturnType<typeof setInterval> | null = null;
   private serve: ServeTunnel | null = null;
@@ -187,19 +210,20 @@ export class PeerToPeer {
     const { keyFile, prefix, udpPort } = this.identity;
     this.sidecar = new Sidecar(
       [
-      settings.binary,
-      "sidecar",
-      `--udp=0.0.0.0:${udpPort}`,
-      `--key-file=${keyFile}`,
-      `--address=${hostAddressIn(prefix)}`,
-      `--port=${TUNNEL_PORT}`,
-      `--broker=${settings.broker.address}`,
-      `--broker-key=${settings.broker.key}`,
-      ...(settings.canvasAssetsPort ? [`--forward=${CANVAS_TUNNEL_PORT}=127.0.0.1:${settings.canvasAssetsPort}`] : []),
-      ...[...localCandidates(udpPort), ...(settings.candidates ?? [])].map((candidate) => `--candidate=${candidate}`),
+        settings.binary,
+        "sidecar",
+        `--udp=0.0.0.0:${udpPort}`,
+        `--key-file=${keyFile}`,
+        `--address=${hostAddressIn(prefix)}`,
+        `--port=${TUNNEL_PORT}`,
+        `--broker=${settings.broker.address}`,
+        `--broker-key=${settings.broker.key}`,
+        ...(settings.canvasAssetsPort ? [`--forward=${CANVAS_TUNNEL_PORT}=127.0.0.1:${settings.canvasAssetsPort}`] : []),
+        ...[...localCandidates(udpPort), ...(settings.candidates ?? [])].map((candidate) => `--candidate=${candidate}`),
       ],
       undefined,
       (reached) => this.brokerContact(reached),
+      (joiner) => this.admitJoiner(joiner),
     );
   }
 
@@ -216,11 +240,11 @@ export class PeerToPeer {
     const tunnels = this.store.deviceTunnels();
     tunnels.forEach(({ deviceId, key, address }) => this.letIn(deviceId, key, address));
     const waitingJoinKeys = this.store.waitingInviteJoinKeys(this.now());
-    waitingJoinKeys.forEach(({ codeKey, key, address, expiresAt }) => this.pinJoinKey(codeKey, { key, address }, expiresAt));
+    waitingJoinKeys.forEach(({ codeKey, key, address, expiresAt, admits }) => this.pinJoinKey(codeKey, { key, address }, expiresAt, admits));
     this.store.takeExpiredInviteJoinKeys(this.now()).forEach((expired) => this.rememberKeyOver(expired, "invite"));
     const letIn = new Set([...tunnels, ...waitingJoinKeys].map(({ key }) => key));
     const keysOver = this.store.keysOver().filter(({ key }) => !letIn.has(key));
-    keysOver.forEach(({ key, address, kind }) => this.sidecar.pin({ key, address, socket: this.keyOverSocket(key, kind), socket_only: true }));
+    keysOver.forEach(({ key, address, kind }) => this.pinKeyOver({ key, address }, kind));
     this.keysOverLettingGo = setInterval(() => this.letKeysOverGo(), KEYS_OVER_LET_GO_EVERY_MS);
     if (tunnels.length + waitingJoinKeys.length + keysOver.length > 0) void this.sidecarRunning();
   }
@@ -305,13 +329,17 @@ export class PeerToPeer {
     this.sidecar.stop();
     this.listeners.forEach((listener) => listener.stop());
     this.listeners.clear();
-    this.joinKeys.forEach(({ expires, listener }) => {
+    this.joinKeys.forEach(({ expires, listener, admitted }) => {
       clearTimeout(expires);
+      admitted.forEach(({ expires: admittedExpires }) => clearTimeout(admittedExpires));
       listener.stop();
     });
     this.joinKeys.clear();
-    this.keysOverListeners.forEach((listener) => listener.stop());
-    this.keysOverListeners.clear();
+    this.keysOver.forEach(({ listener, admitted }) => {
+      admitted.forEach(({ expires: admittedExpires }) => clearTimeout(admittedExpires));
+      listener.stop();
+    });
+    this.keysOver.clear();
   }
 
   /** This host's own key in the tunnel, which every device and joiner's handshake checks it holds. */
@@ -332,8 +360,7 @@ export class PeerToPeer {
   /** Why `key` can't be a device's tunnel key, or null when it can: a key that is over stays over. */
   refusedKey(key: unknown): TunnelRefused | null {
     if (!isTunnelKey(key)) return new TunnelRefused(400, "The tunnel key is not a key: it is 32 bytes in base64.");
-    const takenByJoining = [...this.joinKeys.values()].some(({ pinned }) => pinned.key === key);
-    if (takenByJoining || this.store.isKeyOver(key) || this.store.deviceTunnels().some((tunnel) => tunnel.key === key)) return new TunnelRefused(409, "Another device already uses this tunnel key.");
+    if (this.isJoiningKey(key) || this.store.isKeyOver(key) || this.store.deviceTunnels().some((tunnel) => tunnel.key === key)) return new TunnelRefused(409, "Another device already uses this tunnel key.");
     return null;
   }
 
@@ -341,7 +368,7 @@ export class PeerToPeer {
   register(deviceId: string, key: unknown): DeviceTunnel {
     if (!isTunnelKey(key)) throw new TunnelRefused(400, "The tunnel key is not a key: it is 32 bytes in base64.");
     const holder = this.store.deviceTunnels().find((tunnel) => tunnel.key === key);
-    if ((holder && holder.deviceId !== deviceId) || this.store.isKeyOver(key)) throw new TunnelRefused(409, "Another device already uses this tunnel key.");
+    if ((holder && holder.deviceId !== deviceId) || this.isJoiningKey(key) || this.store.isKeyOver(key)) throw new TunnelRefused(409, "Another device already uses this tunnel key.");
     const current = this.store.deviceTunnel(deviceId);
     if (!current) throw new TunnelRefused(404, "This device is not paired with this Mirador.");
     const address = current.address ?? newDeviceAddress(this.identity.prefix);
@@ -365,16 +392,18 @@ export class PeerToPeer {
   /**
    * A one-time key for the invite with `code`, which reaches only a joining socket of the invite's own and the canvas
    * server, and only until the invite expires; null when the sidecar can't run or the broker doesn't answer, as devices
-   * would then find no way in, so the invite offers no tunnel that goes nowhere.
+   * would then find no way in, so the invite offers no tunnel that goes nowhere. A room invite's key also admits each
+   * joiner's own key on a session of its own, so several people pasting one link at once never collide.
    */
   async invite(code: string, expiresAt: number, waitForBrokerMs = INVITE_WAITS_FOR_BROKER_MS): Promise<InviteTunnel | null> {
     if (!this.serve || !(await this.sidecarRunning()) || !(await this.brokerReached(waitForBrokerMs))) return null;
     const { privateKey, publicKey } = newKeyPair();
     const joinKey = { key: publicKey, address: newDeviceAddress(this.identity.prefix) };
     const forInvite = inviteKey(code);
+    const admits = isRoomInviteCode(code);
     this.store.setInviteJoinKey(forInvite, joinKey);
-    this.pinJoinKey(forInvite, joinKey, expiresAt);
-    return { ...this.places(), joinKey: privateKey, joinAddress: joinKey.address, name: this.store.machineName() };
+    this.pinJoinKey(forInvite, joinKey, expiresAt, admits);
+    return { ...this.places(), joinKey: privateKey, joinAddress: joinKey.address, name: this.store.machineName(), ...(admits && { admits: true }) };
   }
 
   /** The one-time key is over from now, also after a restart, though its joining socket keeps it a little longer for the reply. */
@@ -392,22 +421,105 @@ export class PeerToPeer {
     this.letJoinKeyGo(forInvite);
   }
 
-  private pinJoinKey(forInvite: string, pinned: PublicTunnelKey, expiresAt: number) {
+  private pinJoinKey(forInvite: string, pinned: PublicTunnelKey, expiresAt: number, admits: boolean) {
     const socket = this.socketFor("invite", forInvite);
     const listener = this.listen(socket, { inviteKey: forInvite });
     const expires = setTimeout(() => this.letJoinKeyGo(forInvite), Math.max(0, expiresAt - this.now()));
-    this.joinKeys.set(forInvite, { pinned, listener, expires });
-    this.sidecar.pin({ ...pinned, socket });
+    this.joinKeys.set(forInvite, { pinned, socket, admits, listener, expires, admitted: new Map() });
+    this.sidecar.pin({ ...pinned, socket, ...(admits && { admits: true }) });
   }
 
-  /** Its joining socket closes, and the key is over. */
+  /** Its joining socket closes, any joiner keys admitted through it are unpinned, and the invite's key is over. */
   private letJoinKeyGo(forInvite: string) {
     const joinKey = this.joinKeys.get(forInvite);
     if (!joinKey) return;
     this.joinKeys.delete(forInvite);
     clearTimeout(joinKey.expires);
+    this.unpinAllAdmitted(joinKey.admitted);
     joinKey.listener.stop();
     this.keyOver(joinKey.pinned, "invite");
+  }
+
+  /**
+   * Pins a joiner's own key that the sidecar reported from an admission introduction, to that invite's joining socket
+   * (or key-over socket once the invite ended), at the address both ends derive from the key.
+   */
+  private admitJoiner({ invite, key }: AdmittedJoiner) {
+    if (!isTunnelKey(invite) || !isTunnelKey(key) || key === this.identity.publicKey) return;
+    const target = this.admittingTarget(invite);
+    if (!target || target.admitted.has(key) || this.isKeyInUse(key)) return;
+    const address = joinerAddress(hostAddressIn(this.identity.prefix), key);
+    if (this.isAddressInUse(address)) return;
+    while (target.admitted.size >= target.most) {
+      const oldest = target.admitted.values().next().value;
+      if (!oldest) break;
+      this.unpinAdmitted(target.admitted, oldest.key);
+    }
+    const expires = setTimeout(() => this.unpinAdmitted(target.admitted, key), target.lifetimeMs);
+    target.admitted.set(key, { key, address, expires });
+    this.sidecar.pin({ key, address, socket: target.socket, socket_only: true });
+  }
+
+  private admittingTarget(invite: string) {
+    for (const joinKey of this.joinKeys.values()) {
+      if (joinKey.pinned.key === invite && joinKey.admits) {
+        return { socket: joinKey.socket, admitted: joinKey.admitted, most: MOST_ADMITTED_PER_INVITE, lifetimeMs: ADMITTED_KEY_LIFETIME_MS };
+      }
+    }
+    const over = this.keysOver.get(invite);
+    if (over && over.kind === "invite") {
+      return { socket: over.socket, admitted: over.admitted, most: MOST_ADMITTED_PER_KEY_OVER, lifetimeMs: ADMITTED_KEY_OVER_LIFETIME_MS };
+    }
+    return null;
+  }
+
+  private unpinAdmitted(admitted: Map<string, AdmittedKey>, key: string) {
+    const entry = admitted.get(key);
+    if (!entry) return;
+    admitted.delete(key);
+    clearTimeout(entry.expires);
+    this.sidecar.unpin(key);
+  }
+
+  private unpinAllAdmitted(admitted: Map<string, AdmittedKey>) {
+    admitted.forEach(({ key, expires }) => {
+      clearTimeout(expires);
+      this.sidecar.unpin(key);
+    });
+    admitted.clear();
+  }
+
+  private isJoiningKey(key: string) {
+    for (const joinKey of this.joinKeys.values()) {
+      if (joinKey.pinned.key === key || joinKey.admitted.has(key)) return true;
+    }
+    for (const over of this.keysOver.values()) {
+      if (over.admitted.has(key)) return true;
+    }
+    return false;
+  }
+
+  private isKeyInUse(key: string) {
+    return this.isJoiningKey(key) || this.keysOver.has(key) || this.store.isKeyOver(key) || this.store.deviceTunnels().some((tunnel) => tunnel.key === key);
+  }
+
+  private isAddressInUse(address: string) {
+    const target = canonicalTunnelAddress(address);
+    if (target === canonicalTunnelAddress(hostAddressIn(this.identity.prefix))) return true;
+    if (this.store.deviceTunnels().some((tunnel) => canonicalTunnelAddress(tunnel.address) === target)) return true;
+    for (const joinKey of this.joinKeys.values()) {
+      if (canonicalTunnelAddress(joinKey.pinned.address) === target) return true;
+      for (const admitted of joinKey.admitted.values()) {
+        if (canonicalTunnelAddress(admitted.address) === target) return true;
+      }
+    }
+    for (const over of this.keysOver.values()) {
+      if (canonicalTunnelAddress(over.address) === target) return true;
+      for (const admitted of over.admitted.values()) {
+        if (canonicalTunnelAddress(admitted.address) === target) return true;
+      }
+    }
+    return false;
   }
 
   /**
@@ -417,7 +529,12 @@ export class PeerToPeer {
   private keyOver(over: PublicTunnelKey, kind: KeyOverKind) {
     this.rememberKeyOver(over, kind);
     this.sidecar.unpin(over.key);
-    this.sidecar.pin({ ...over, socket: this.keyOverSocket(over.key, kind), socket_only: true });
+    this.pinKeyOver(over, kind);
+  }
+
+  private pinKeyOver(over: PublicTunnelKey, kind: KeyOverKind) {
+    const socket = this.keyOverSocket(over, kind);
+    this.sidecar.pin({ ...over, socket, socket_only: true, ...(kind === "invite" && { admits: true }) });
   }
 
   /** In the store, so it is over after a restart too; the oldest of its kind past MOST_KEYS_OVER_OF_A_KIND go at once. */
@@ -432,23 +549,32 @@ export class PeerToPeer {
   /** Reaches nothing from now on, and its socket closes. */
   private letKeyOverGo(key: string) {
     this.sidecar.unpin(key);
-    this.keysOverListeners.get(key)?.stop();
-    this.keysOverListeners.delete(key);
+    const entry = this.keysOver.get(key);
+    if (!entry) return;
+    this.unpinAllAdmitted(entry.admitted);
+    entry.listener.stop();
+    this.keysOver.delete(key);
   }
 
   /** Where the key that is over reaches, listened on before it is pinned there, as the sidecar may connect at once. */
-  private keyOverSocket(key: string, kind: KeyOverKind) {
+  private keyOverSocket({ key, address }: PublicTunnelKey, kind: KeyOverKind) {
+    const existing = this.keysOver.get(key);
+    if (existing) return existing.socket;
     const socket = this.socketFor("over", key);
-    if (!this.keysOverListeners.has(key)) {
-      rmSync(socket, { force: true });
-      const server = Bun.serve({ unix: socket, fetch: () => this.answerToKeyOver(key, kind) });
-      this.keysOverListeners.set(key, {
+    rmSync(socket, { force: true });
+    const server = Bun.serve({ unix: socket, fetch: () => this.answerToKeyOver(key, kind) });
+    this.keysOver.set(key, {
+      kind,
+      address,
+      socket,
+      listener: {
         stop: () => {
           void server.stop(true);
           rmSync(socket, { force: true });
         },
-      });
-    }
+      },
+      admitted: new Map(),
+    });
     return socket;
   }
 

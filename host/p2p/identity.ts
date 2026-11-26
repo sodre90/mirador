@@ -1,4 +1,4 @@
-import { generateKeyPairSync, randomBytes, randomInt } from "node:crypto";
+import { createHash, generateKeyPairSync, randomBytes, randomInt } from "node:crypto";
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -42,6 +42,33 @@ export function newDeviceAddress(prefix: string): string {
   const groups = groupsOf(randomBytes(8));
   const address = `${prefix}:1:${groups.join(":")}`;
   return groups.every((group, index) => (index === 3 ? group === "1" : group === "0")) ? newDeviceAddress(prefix) : address;
+}
+
+const IPV6_GROUPS = 8;
+
+function ipv6Groups(address: string): number[] {
+  const [before, after] = address.split("::");
+  const parse = (part: string | undefined) => (part ? part.split(":").map((group) => parseInt(group, 16)) : []);
+  const front = parse(before);
+  const back = after === undefined ? [] : parse(after);
+  return [...front, ...Array<number>(IPV6_GROUPS - front.length - back.length).fill(0), ...back];
+}
+
+/** All eight IPv6 groups in lowercase hex, so two spellings of the same tunnel address compare equal. */
+export const canonicalTunnelAddress = (address: string) => ipv6Groups(address).map((group) => group.toString(16)).join(":");
+
+/**
+ * The tunnel IPv6 address a joiner with `publicKey` takes in the `/64` of `hostAddress`: deterministic so the joiner
+ * and the host agree on it without sending it on the wire, and never equal to `hostAddress` or its all-zero base.
+ */
+export function joinerAddress(hostAddress: string, publicKey: string): string {
+  const host = ipv6Groups(hostAddress);
+  const hash = createHash("sha256").update("mirador-p2p joiner address\0").update(Buffer.from(publicKey, "base64")).digest();
+  const suffix = [hash.readUInt16BE(0), hash.readUInt16BE(2), hash.readUInt16BE(4), hash.readUInt16BE(6)];
+  const isAllZero = suffix.every((group) => group === 0);
+  const isHost = suffix.every((group, index) => group === host[4 + index]);
+  if (isAllZero || isHost) suffix[3] = suffix[3] === 2 ? 3 : 2;
+  return [...host.slice(0, 4), ...suffix].map((group) => group.toString(16)).join(":");
 }
 
 interface StoredIdentity {

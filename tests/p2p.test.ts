@@ -5,8 +5,8 @@ import { chmodSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import { hostname, tmpdir } from "node:os";
 import { join } from "node:path";
 import { DeviceService, inviteKey } from "../host/devices.ts";
-import { hostAddressIn, isTunnelKey, newDeviceAddress, newKeyPair, tunnelIdentity } from "../host/p2p/identity.ts";
-import { BUILT_IN_BROKER, MOST_ANSWERS_TO_A_KEY_OVER_A_MINUTE, MOST_KEYS_OVER_OF_A_KIND, PeerToPeer, peerToPeerSettings, peerToPeerUnlessBuiltInFails, type PeerToPeerSettings, type TunnelEnd } from "../host/p2p/service.ts";
+import { hostAddressIn, isTunnelKey, joinerAddress, newDeviceAddress, newKeyPair, tunnelIdentity } from "../host/p2p/identity.ts";
+import { BUILT_IN_BROKER, MOST_ADMITTED_PER_INVITE, MOST_ANSWERS_TO_A_KEY_OVER_A_MINUTE, MOST_KEYS_OVER_OF_A_KIND, PeerToPeer, peerToPeerSettings, peerToPeerUnlessBuiltInFails, type PeerToPeerSettings, type TunnelEnd } from "../host/p2p/service.ts";
 import { Sidecar } from "../host/p2p/sidecar.ts";
 import type { PeerToPeerStatus } from "../shared/protocol.ts";
 import { PROBLEM_HEADER, problemInHeader } from "../shared/host-problems.ts";
@@ -357,7 +357,7 @@ unixOnlyTest("an invite keeps its one-time key in the store by its public half a
   const { code, expiresAt } = devices.invite();
   const tunnel = (await p2p.invite(code, expiresAt))!;
   const [pinned] = await commandsRead(1);
-  expect(store.waitingInviteJoinKeys(Date.now())).toEqual([{ codeKey: inviteKey(code), key: pinned!.pin!.key, address: tunnel.joinAddress, expiresAt }]);
+  expect(store.waitingInviteJoinKeys(Date.now())).toEqual([{ codeKey: inviteKey(code), key: pinned!.pin!.key, address: tunnel.joinAddress, expiresAt, admits: false }]);
   expect(JSON.stringify(store.waitingInviteJoinKeys(Date.now()))).not.toContain(tunnel.joinKey);
 });
 
@@ -531,3 +531,120 @@ unixOnlyTest("a sidecar that exits immediately on startup reports broker-unreach
   expect(statuses).toEqual(["connecting", "broker-unreachable"]);
   expect(p2p.peerToPeerStatus()).toBe("broker-unreachable");
 }, 15_000);
+
+test("joinerAddress derives the same address in the host's /64 regardless of IPv6 spelling, unique per key and never the host", () => {
+  const first = newKeyPair().publicKey;
+  const second = newKeyPair().publicKey;
+  const derived = joinerAddress("fd12:3456:789a:1::1", first);
+  expect(derived).toBe(joinerAddress("fd12:3456:789a:1:0:0:0:1", first));
+  expect(derived.startsWith("fd12:3456:789a:1:")).toBe(true);
+  expect(derived).not.toBe("fd12:3456:789a:1:0:0:0:1");
+  expect(joinerAddress("fd12:3456:789a:1::1", second)).not.toBe(derived);
+});
+
+/** A fake sidecar whose stdout lines can be pushed from the test by appending to `eventsFile`, exiting when stdin closes. */
+function interactiveFakeSidecar(eventsFile: string) {
+  writeFileSync(eventsFile, `{"broker":"reached"}\n`);
+  const binary = join(folder, "interactive-sidecar");
+  writeFileSync(
+    binary,
+    `#!/usr/bin/env bun
+import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
+writeFileSync(${JSON.stringify(argumentsFile)}, process.argv.slice(2).join("\\n") + "\\n");
+let offset = 0;
+const flush = () => {
+  const data = readFileSync(${JSON.stringify(eventsFile)}, "utf8");
+  if (data.length > offset) {
+    process.stdout.write(data.slice(offset));
+    offset = data.length;
+  }
+};
+flush();
+const timer = setInterval(flush, 10);
+for await (const chunk of Bun.stdin.stream()) appendFileSync(${JSON.stringify(commandsFile)}, Buffer.from(chunk));
+clearInterval(timer);
+`,
+  );
+  chmodSync(binary, 0o755);
+  return {
+    binary,
+    tell: (message: object) => writeFileSync(eventsFile, `${JSON.stringify(message)}\n`, { flag: "a" }),
+  };
+}
+
+unixOnlyTest("room invites admit each joiner's own key to the invite's socket at its derived address, reject collisions and device keys, and clean up when withdrawn or over", async () => {
+  const eventsFile = join(folder, "events");
+  const fake = interactiveFakeSidecar(eventsFile);
+  const { p2p, devices, listening, store } = host({ binary: fake.binary });
+
+  const deviceInvite = devices.invite();
+  const deviceTunnel = (await p2p.invite(deviceInvite.code, deviceInvite.expiresAt))!;
+  expect(deviceTunnel.admits).toBeUndefined();
+
+  const roomCode = "ROOM-ABCD-EFGH-JKLM";
+  const roomTunnel = (await p2p.invite(roomCode, Date.now() + 60_000))!;
+  expect(roomTunnel.admits).toBe(true);
+
+  const pairedKey = newKeyPair().publicKey;
+  p2p.register(devices.admit("Phone", store.ownerId()).device.id, pairedKey);
+
+  const initial = await commandsRead(3);
+  const deviceInvitePin = initial[0]!.pin!;
+  const roomInvitePin = initial[1]!.pin!;
+  expect(deviceInvitePin).not.toHaveProperty("admits");
+  expect(roomInvitePin).toMatchObject({ admits: true });
+  const roomSocket = [...listening].find(([, end]) => "inviteKey" in end && end.inviteKey === inviteKey(roomCode))![0];
+  expect(roomInvitePin.socket).toBe(roomSocket);
+
+  // Admissions through a non-admitting device invite, or naming a paired device / invite / host key, are ignored.
+  const eveKey = newKeyPair().publicKey;
+  const finnKey = newKeyPair().publicKey;
+  fake.tell({ admitted: { invite: deviceInvitePin.key, key: newKeyPair().publicKey } });
+  fake.tell({ admitted: { invite: roomInvitePin.key, key: pairedKey } });
+  fake.tell({ admitted: { invite: roomInvitePin.key, key: roomInvitePin.key } });
+  fake.tell({ admitted: { invite: roomInvitePin.key, key: p2p.publicKey } });
+  fake.tell({ admitted: { invite: roomInvitePin.key, key: eveKey } });
+  fake.tell({ admitted: { invite: roomInvitePin.key, key: finnKey } });
+
+  const afterAdmit = await commandsRead(5);
+  expect(afterAdmit[3]).toEqual({
+    pin: { key: eveKey, address: joinerAddress(roomTunnel.hostAddress, eveKey), socket: roomSocket, socket_only: true },
+  });
+  expect(afterAdmit[4]).toEqual({
+    pin: { key: finnKey, address: joinerAddress(roomTunnel.hostAddress, finnKey), socket: roomSocket, socket_only: true },
+  });
+  expect(p2p.refusedKey(eveKey)?.status).toBe(409);
+
+  // Withdrawing the room invite unpins every admitted key and moves the invite's own key to key-over with admits: true.
+  p2p.inviteWithdrawn(inviteKey(roomCode));
+  const afterWithdraw = await commandsRead(9);
+  const unpinned = afterWithdraw.slice(5, 8).map((command) => command.unpin?.key);
+  expect(unpinned).toEqual([eveKey, finnKey, roomInvitePin.key]);
+  const keyOverPin = afterWithdraw[8]!.pin!;
+  expect(keyOverPin).toMatchObject({ key: roomInvitePin.key, socket_only: true, admits: true });
+
+  // A late joiner pasting the withdrawn link is admitted to the key-over socket and told the invite is over.
+  const lateKey = newKeyPair().publicKey;
+  fake.tell({ admitted: { invite: roomInvitePin.key, key: lateKey } });
+  const afterLate = await commandsRead(10);
+  expect(afterLate[9]).toEqual({
+    pin: { key: lateKey, address: joinerAddress(roomTunnel.hostAddress, lateKey), socket: keyOverPin.socket, socket_only: true },
+  });
+  const answer = await askedThrough(keyOverPin.socket, "/join-challenges", { method: "POST" });
+  expect(answer.status).toBe(403);
+  expect(problemInHeader(answer.headers.get(PROBLEM_HEADER))).toEqual({ code: "invite-code-wrong" });
+});
+
+unixOnlyTest("a room invite caps its admitted joiner keys and evicts the oldest first", async () => {
+  const eventsFile = join(folder, "events-cap");
+  const fake = interactiveFakeSidecar(eventsFile);
+  const { p2p } = host({ binary: fake.binary });
+  const roomCode = "ROOM-BCDE-FGHJ-KLMN";
+  await p2p.invite(roomCode, Date.now() + 60_000);
+  const [invitePin] = await commandsRead(1);
+  const keys = Array.from({ length: MOST_ADMITTED_PER_INVITE + 1 }, () => newKeyPair().publicKey);
+  keys.forEach((key) => fake.tell({ admitted: { invite: invitePin!.pin!.key, key } }));
+  const commands = await commandsRead(1 + MOST_ADMITTED_PER_INVITE + 2);
+  expect(commands.at(-2)).toEqual({ unpin: { key: keys[0]! } });
+  expect(commands.at(-1)!.pin).toMatchObject({ key: keys.at(-1), socket_only: true });
+});

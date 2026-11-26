@@ -237,6 +237,8 @@ export interface InviteJoinKey extends PublicTunnelKey {
   /** The invite's code as `inviteKey` keeps it. */
   codeKey: string;
   expiresAt: number;
+  /** True for room invites, whose key admits each joiner's own key on a session of its own. */
+  admits: boolean;
 }
 
 /** Whose a key that is over was: a device's, revoked or out of every room, or an invite's, used, expired or withdrawn. */
@@ -2655,12 +2657,13 @@ export class Store {
 
   /** The one-time keys of invites still waiting at `now`, device and room invites alike. */
   waitingInviteJoinKeys(now: number): InviteJoinKey[] {
-    return this.db
+    const rows = this.db
       .query(
-        `SELECT code_hash AS codeKey, join_key AS key, join_address AS address, expires_at AS expiresAt FROM invites WHERE join_key IS NOT NULL AND expires_at > ?1
-         UNION ALL SELECT code_hash, join_key, join_address, expires_at FROM room_invites WHERE join_key IS NOT NULL AND expires_at > ?1`,
+        `SELECT code_hash AS codeKey, join_key AS key, join_address AS address, expires_at AS expiresAt, 0 AS admits FROM invites WHERE join_key IS NOT NULL AND expires_at > ?1
+         UNION ALL SELECT code_hash, join_key, join_address, expires_at, 1 AS admits FROM room_invites WHERE join_key IS NOT NULL AND expires_at > ?1`,
       )
-      .all(now) as InviteJoinKey[];
+      .all(now) as (Omit<InviteJoinKey, "admits"> & { admits: number })[];
+    return rows.map((row) => ({ ...row, admits: Boolean(row.admits) }));
   }
 
   /** The one-time keys of invites that expired by `now`, each handed out once: the invites keep them no more. */
