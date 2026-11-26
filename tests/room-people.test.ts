@@ -1608,6 +1608,8 @@ describe("joining tried quickly, as by someone guessing invite codes", () => {
     return { status: response.status, problem: decodeURIComponent(response.headers.get(PROBLEM_HEADER) ?? "") };
   };
   const tooOften = { status: 429, problem: JSON.stringify({ code: "join-too-often" }) };
+  /** A sender within the limits is answered as usual: here, as a join proxied to a loopback address, which is refused. */
+  const loopbackFromAfar = { status: 403, problem: JSON.stringify({ code: "room-invite-loopback-from-afar" }) };
   const triesFrom = async (sender: string, path: "/join" | "/join-challenges", count: number) => {
     const statuses: number[] = [];
     for (const _ of Array(count)) statuses.push((await triedFrom(sender, path)).status);
@@ -1620,7 +1622,7 @@ describe("joining tried quickly, as by someone guessing invite codes", () => {
 
     expect(await triesFrom("203.0.113.2", "/join-challenges", 60)).not.toContain(429);
     expect(await triedFrom("203.0.113.2", "/join-challenges")).toEqual(tooOften);
-    expect((await triedFrom("203.0.113.3", "/join-challenges")).status).toBe(404);
+    expect(await triedFrom("203.0.113.3", "/join-challenges")).toEqual(loopbackFromAfar);
 
     const fromOneAddressEach = await Promise.all(Array.from({ length: 60 }, (_, index) => triedFrom(`198.51.100.${index}`, "/join-challenges")));
     expect(fromOneAddressEach.map(({ status }) => status)).toContain(429);
