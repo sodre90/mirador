@@ -1,5 +1,5 @@
 import { mkdirSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { FakeClaudeApi, fakeClaudeEnvironment } from "./fake-claude-api.ts";
 import { addWorkspace, createProfile, createRoom, inviteIntoRoom, joinRoom, nameMachine, nameOwnProfile, openRoomSettings, reachedAtOwnPort, roomCard, signIn } from "./helpers.ts";
@@ -103,6 +103,7 @@ test("a file of the bringer's computer named with an @ in a task is not read for
   await mia.getByRole("menuitem", { name: "Bring an agent…" }).click();
   const dialog = mia.getByRole("dialog", { name: "Bring an agent into Garden" });
   await dialog.getByRole("combobox", { name: /^Agent/ }).selectOption({ label: "Coder" });
+  await dialog.getByRole("combobox", { name: /^Workspace/ }).selectOption({ label: basename(mias.projectDir) });
   await dialog.getByLabel("Any time").check();
   await dialog.getByRole("button", { name: "Bring", exact: true }).click();
   await expect(dialog).toHaveCount(0);

@@ -444,6 +444,8 @@ export const rooms: Messages["rooms"] = {
     "A szoba gépe mondja meg, ki írta az egyes feladatokat. A tulajdonosa a tiédnek adhatna ki egy feladatot, és az az engedélyed nélkül indulna; az engedélybeállításaid így is rákérdeznek az eszközei előtt.",
   ],
   roomsWorkspaceOf: (machine) => `A szoba munkaterülete, itt: ${machine}`,
+  roomsWorkspaceShort: "szoba munkaterülete",
+  broughtAgentPlace: (agent, place) => `${agent} (${place})`,
   onlyClaudeInRoomsWorkspace: "A szoba munkaterületén egyelőre csak Claude Code-, pi- és opencode-profil dolgozhat.",
   bringIntoWorkspaceMeaning: [
     "Az ágens ezen a gépen fut, a profilja modelljével és fiókjával, és semmi mást nem kap erről a gépről: sem fájlt, sem parancsot, sem a Claude Code-beállításaidat, hookjaidat, MCP-szervereidet, CLAUDE.md-det vagy memóriádat. A beszélgetése a többi között látszik, a szobáról elnevezett munkaterületen, amelynek a mappája üres marad.",
@@ -475,6 +477,7 @@ export const rooms: Messages["rooms"] = {
     allowed: "A szoba munkaterületén dolgozik",
     declined: "Nincs beengedve a szoba munkaterületére",
   },
+  worksInOwnWorkspaceOf: (person) => `${person} munkaterületén dolgozik`,
   takeWorkspaceAway: "Visszavonás",
   takeWorkspaceAwayOf: (agent) => `A szoba munkaterületének elvétele tőle: ${agent}`,
   takeWorkspaceAwayArmed: "Visszavonod?",

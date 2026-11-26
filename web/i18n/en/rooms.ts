@@ -458,6 +458,8 @@ export const rooms = {
     "The room's machine says who wrote each task. Its owner could pass a task off as yours, and it would start without your OK; your permission settings still ask before its tools.",
   ],
   roomsWorkspaceOf: (machine: string) => `The room's workspace, on ${machine}`,
+  roomsWorkspaceShort: "room's workspace",
+  broughtAgentPlace: (agent: string, place: string) => `${agent} (${place})`,
   onlyClaudeInRoomsWorkspace: "Only Claude Code, pi and opencode profiles can work in the room's workspace so far.",
   bringIntoWorkspaceMeaning: [
     "The agent runs on this computer, on its profile's model and account, and has nothing else of this computer: no files, no commands, and none of your Claude Code settings, hooks, MCP servers, CLAUDE.md or memory. Its conversation shows with your others, in a workspace named after the room, whose folder stays empty.",
@@ -489,6 +491,7 @@ export const rooms = {
     allowed: "Works in this room's workspace",
     declined: "Not let into this room's workspace",
   } satisfies Record<RoomWorkspaceAccess, string>,
+  worksInOwnWorkspaceOf: (person: string) => `Works in ${person}'s workspace`,
   takeWorkspaceAway: "Take away",
   takeWorkspaceAwayOf: (agent: string) => `Take this room's workspace away from ${agent}`,
   takeWorkspaceAwayArmed: "Take it away?",

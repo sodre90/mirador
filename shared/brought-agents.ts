@@ -10,6 +10,10 @@ export type OthersTasks = "after-ok" | "any-time";
  */
 export const worksInRoomsWorkspaces = (harness: HarnessId) => harness === "claude" || harness === "pi" || harness === "opencode";
 
+/** The profile chosen first when bringing an agent into a room: one that can work in the room's workspace, else the first profile. */
+export const defaultBroughtProfileId = (profiles: readonly { id: string; harness: HarnessId }[]) =>
+  profiles.find(({ harness }) => worksInRoomsWorkspaces(harness))?.id ?? profiles[0]?.id ?? "";
+
 export const OTHERS_TASKS: OthersTasks[] = ["after-ok", "any-time"];
 
 export const isOthersTasks = (value: unknown): value is OthersTasks => OTHERS_TASKS.includes(value as OthersTasks);

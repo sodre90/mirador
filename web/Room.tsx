@@ -565,7 +565,11 @@ function ThreadColumn({
           ×
         </button>
       </header>
-      {access && <WorkspaceAccessLine roomId={thread.roomId} agentId={agent.profileId} agentName={agent.name} access={access} answers={answersWorkspace} />}
+      {access ? (
+        <WorkspaceAccessLine roomId={thread.roomId} agentId={agent.profileId} agentName={agent.name} access={access} answers={answersWorkspace} />
+      ) : (
+        agent.brought && <div className="workspace-access">{words.worksInOwnWorkspaceOf(agent.brought.bringer)}</div>
+      )}
       <div className="timeline" ref={threadTimeline} onScroll={onScroll}>
         {agent.conversation && opened?.loaded && firstReached && <HistoryReachingBack opened={opened} messageId={firstReached.id} />}
         {shownHere.map((message, index) => (
@@ -646,12 +650,16 @@ function modelNameOf(agent: RoomAgentShown) {
   return value ? (categoryChoices(listed, "model").find((choice) => choice.value === value)?.name ?? value) : null;
 }
 
+/** Which workspace a brought agent works in, as the room knows it: this room's (with its access state), or its bringer's own. */
+const broughtWorkspaceOf = (brought: BroughtAgent & { bringer: string }) =>
+  brought.workspace ? words.workspaceAccess[brought.workspace] : words.worksInOwnWorkspaceOf(brought.bringer);
+
 /** An agent in the room's bar: its mark and name, and for the owner its model quietly beside them; cut short where the bar is narrow, whole in a hint then. */
 function AgentChip({ agent, showsModel }: { agent: RoomAgentShown; showsModel: boolean }) {
   const model = showsModel ? modelNameOf(agent) : null;
   const whereItRuns =
     agent.brought &&
-    [agent.brought.here ? words.onComputerOf(agent.brought.bringer) : words.awayFrom(agent.brought.bringer), agent.brought.workspace && words.workspaceAccess[agent.brought.workspace]].filter(Boolean).join(" · ");
+    [agent.brought.here ? words.onComputerOf(agent.brought.bringer) : words.awayFrom(agent.brought.bringer), broughtWorkspaceOf(agent.brought)].join(" · ");
   return (
     <li className={`agent-chip${agent.brought && !agent.brought.here ? " away" : ""}`} data-hint={whereItRuns || undefined}>
       <HintedWhenCutShort className="room-agent-label" whole={[agent.name, model, whereItRuns].filter(Boolean).join(" · ")}>
@@ -865,6 +873,7 @@ function RoomPeople({
                       {brought && <BroughtMark brought={brought} />}
                       {answering !== null && <span className="room-agent-working">{words.agentWorking}</span>}
                     </div>
+                    {brought && <div className="room-people-agent-workspace">{broughtWorkspaceOf(brought)}</div>}
                     {owns && !brought && (
                       <div className="room-people-agent-choices">
                         <ModelChoice

@@ -435,6 +435,8 @@ export const rooms: Messages["rooms"] = {
     "房间所在的机器会说明每个任务是谁写的。它的所有者可以把一个任务冒充成你的，这样它会在没有你同意的情况下开始；不过你的权限设置仍会在它使用工具前询问你。",
   ],
   roomsWorkspaceOf: (machine) => `房间的工作区，在 ${machine} 上`,
+  roomsWorkspaceShort: "房间的工作区",
+  broughtAgentPlace: (agent, place) => `${agent}（${place}）`,
   onlyClaudeInRoomsWorkspace: "目前只有 Claude Code、pi 和 opencode 配置能在房间的工作区里工作。",
   bringIntoWorkspaceMeaning: [
     "这个 Agent 在这台电脑上运行，使用它的配置的模型和账户，除此之外得不到这台电脑上的任何东西：没有文件，没有命令，也没有你的 Claude Code 设置、Hook、MCP 服务器、CLAUDE.md 或记忆。它的对话和你的其他对话显示在一起，在一个以房间命名的工作区里，该工作区的文件夹始终是空的。",
@@ -465,6 +467,7 @@ export const rooms: Messages["rooms"] = {
     allowed: "在这个房间的工作区里工作",
     declined: "未获准进入这个房间的工作区",
   },
+  worksInOwnWorkspaceOf: (person) => `在 ${person} 的工作区里工作`,
   takeWorkspaceAway: "收回",
   takeWorkspaceAwayOf: (agent) => `收回 ${agent} 对这个房间工作区的使用`,
   takeWorkspaceAwayArmed: "确定收回？",

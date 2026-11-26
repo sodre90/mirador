@@ -445,6 +445,8 @@ export const rooms: Messages["rooms"] = {
     "Der Rechner des Raums sagt, wer jede Aufgabe geschrieben hat. Sein Besitzer könnte eine Aufgabe als deine ausgeben, und sie würde ohne dein OK starten; deine Berechtigungseinstellungen fragen trotzdem, bevor er Tools nutzt.",
   ],
   roomsWorkspaceOf: (machine) => `Der Arbeitsbereich des Raums, auf ${machine}`,
+  roomsWorkspaceShort: "Arbeitsbereich des Raums",
+  broughtAgentPlace: (agent, place) => `${agent} (${place})`,
   onlyClaudeInRoomsWorkspace: "Bisher können nur Claude-Code-, pi- und opencode-Profile im Arbeitsbereich des Raums arbeiten.",
   bringIntoWorkspaceMeaning: [
     "Der Agent läuft auf diesem Computer, mit dem Modell und dem Konto seines Profils, und hat sonst nichts von diesem Computer: keine Dateien, keine Befehle und nichts von deinen Claude-Code-Einstellungen, Hooks, MCP-Servern, CLAUDE.md oder deinem Memory. Seine Unterhaltung steht bei deinen anderen, in einem nach dem Raum benannten Arbeitsbereich, dessen Ordner leer bleibt.",
@@ -476,6 +478,7 @@ export const rooms: Messages["rooms"] = {
     allowed: "Arbeitet im Arbeitsbereich dieses Raums",
     declined: "Nicht in den Arbeitsbereich dieses Raums gelassen",
   },
+  worksInOwnWorkspaceOf: (person) => `Arbeitet im Arbeitsbereich von ${person}`,
   takeWorkspaceAway: "Zurücknehmen",
   takeWorkspaceAwayOf: (agent) => `${agent} den Arbeitsbereich dieses Raums wieder nehmen`,
   takeWorkspaceAwayArmed: "Zurücknehmen?",

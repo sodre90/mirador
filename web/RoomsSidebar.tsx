@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState, type CSSProperties, type Dispatch, type RefObject } from "react";
 import { workspaceMarkColor } from "../shared/marks.ts";
 import type { BroughtAgentHere } from "../shared/brought-agents.ts";
-import type { JoinedRoom, Machine, MachineStatus, Person, Profile, RoomKnock } from "../shared/model.ts";
+import type { JoinedRoom, Machine, MachineStatus, Person, Profile, RoomKnock, Workspace } from "../shared/model.ts";
 import { personGoesBy } from "../shared/people.ts";
 import type { RoomReading } from "../shared/room-reading.ts";
 import { broughtAgentName, type Room } from "../shared/rooms.ts";
@@ -9,6 +9,7 @@ import { placedBelow, useClosing } from "./BarMenu.tsx";
 import { ConfirmButton } from "./ConfirmButton.tsx";
 import { connection } from "./connection.ts";
 import { useClosingWhenFocusLeavesPage } from "./ContextMenu.tsx";
+import { HintedWhenCutShort } from "./cut-short.tsx";
 import { formatNumber, t } from "./i18n/index.ts";
 import { LayoutToggles } from "./LayoutToggles.tsx";
 import { LineIcon } from "./LineIcon.tsx";
@@ -338,6 +339,7 @@ function JoinedRoomCard({
   selected,
   broughtAgents,
   profiles,
+  workspaces,
   dispatch,
   onOpen,
 }: {
@@ -345,12 +347,18 @@ function JoinedRoomCard({
   selected: boolean;
   broughtAgents: BroughtAgentHere[];
   profiles: Profile[];
+  workspaces: Workspace[];
   dispatch: Dispatch<AppAction>;
   onOpen: () => void;
 }) {
   const { machine, status, room } = joined;
   const away = status?.reachable === false;
-  const agentNames = broughtInto(joined, broughtAgents).map(({ profileId }) => profiles.find(({ id }) => id === profileId)?.name ?? words.agentGone);
+  const agentLabels = broughtInto(joined, broughtAgents).map(({ profileId, workspaceId }) => {
+    const name = profiles.find(({ id }) => id === profileId)?.name ?? words.agentGone;
+    const place = workspaceId === null ? words.roomsWorkspaceShort : workspaces.find(({ id }) => id === workspaceId)?.name;
+    return place ? words.broughtAgentPlace(name, place) : name;
+  });
+  const subline = [ownerAndMachine(machine), away && t.shell.machines.notAnswering, ...agentLabels].filter(Boolean).join(" · ");
   return (
     <li
       className={["room-card", "joined-room", selected && "selected", away && "away", needsYou(undefined, room) && "waiting", ...readingClasses({ ...room, muted: room.muted || isMutedHere(joined) })].filter(Boolean).join(" ")}
@@ -361,7 +369,9 @@ function JoinedRoomCard({
       <JoinedRoomMark machine={machine} />
       <span className="room-card-text">
         <span className="room-card-name">{room.name}</span>
-        <span className="room-card-subline">{[ownerAndMachine(machine), away && t.shell.machines.notAnswering, ...agentNames].filter(Boolean).join(" · ")}</span>
+        <HintedWhenCutShort className="room-card-subline" whole={subline}>
+          {subline}
+        </HintedWhenCutShort>
       </span>
       <ReadingMarks reading={room} />
       <MuteHereToggle joined={joined} />
@@ -418,6 +428,7 @@ function InvitedRooms({
   selectedJoinedRoom,
   broughtAgents,
   profiles,
+  workspaces,
   dispatch,
   onOpenJoinedRoom,
 }: {
@@ -426,6 +437,7 @@ function InvitedRooms({
   selectedJoinedRoom: AppState["selectedJoinedRoom"];
   broughtAgents: BroughtAgentHere[];
   profiles: Profile[];
+  workspaces: Workspace[];
   dispatch: Dispatch<AppAction>;
   onOpenJoinedRoom: (machineId: string, roomId: string | null) => void;
 }) {
@@ -445,6 +457,7 @@ function InvitedRooms({
             selected={joined === joinedShown}
             broughtAgents={broughtAgents}
             profiles={profiles}
+            workspaces={workspaces}
             dispatch={dispatch}
             onOpen={() => onOpenJoinedRoom(joined.machine.id, joined.room.id)}
           />
@@ -469,6 +482,7 @@ function InvitedRooms({
 export function RoomsSection({
   rooms,
   profiles,
+  workspaces = [],
   selectedRoomId,
   roomsWaiting,
   readings,
@@ -484,6 +498,7 @@ export function RoomsSection({
 }: {
   rooms: Room[];
   profiles: Profile[];
+  workspaces?: Workspace[];
   selectedRoomId: string | null;
   roomsWaiting: ReadonlyMap<string, RoomWait>;
   /** How far you have read each room, and what waits for you there. */
@@ -542,6 +557,7 @@ export function RoomsSection({
           selectedJoinedRoom={selectedJoinedRoom}
           broughtAgents={broughtAgents}
           profiles={profiles}
+          workspaces={workspaces}
           dispatch={dispatch}
           onOpenJoinedRoom={onOpenJoinedRoom}
         />

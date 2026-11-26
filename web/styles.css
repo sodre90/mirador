@@ -10610,6 +10610,13 @@ button.link.more-rows {
   gap: 2px;
 }
 
+.room-people-agent-workspace {
+  padding-left: 30px;
+  color: var(--muted);
+  font-size: calc(12px * var(--font-scale));
+  overflow-wrap: anywhere;
+}
+
 .room-people-agent-choices {
   display: flex;
   flex-wrap: wrap;

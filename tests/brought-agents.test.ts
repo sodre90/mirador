@@ -5,7 +5,7 @@ import { join } from "node:path";
 import type { SessionUpdate } from "@agentclientprotocol/sdk/unstable";
 import { ANSWERS_KEPT_MS, BroughtAgents, broughtAgentsFolder, isForBroughtAgents, refusalIn, taskAuthorIn, type BroughtSessions } from "../host/brought-agents.ts";
 import { Store } from "../host/store.ts";
-import { BROUGHT_TASK_MOST_CHARACTERS, MOST_BROUGHT_TASKS_A_MINUTE, MOST_BROUGHT_TASKS_QUEUED, type OthersTasks } from "../shared/brought-agents.ts";
+import { BROUGHT_TASK_MOST_CHARACTERS, defaultBroughtProfileId, MOST_BROUGHT_TASKS_A_MINUTE, MOST_BROUGHT_TASKS_QUEUED, type OthersTasks } from "../shared/brought-agents.ts";
 import { HostProblemError } from "../shared/host-problems.ts";
 import { MOST_ROOMS_READ } from "../shared/machines.ts";
 import type { Conversation, ConversationEvent, Launch, Profile } from "../shared/model.ts";
@@ -783,5 +783,25 @@ describe("a call in the room's workspace", () => {
     const { settled } = asked();
     brought.takeOut(agent.id);
     expect((await settled).text).toBe("You are no longer in the room.");
+  });
+});
+
+describe("defaultBroughtProfileId", () => {
+  test("prefers the first profile that can work in a room's workspace, falling back to the first profile", () => {
+    expect(
+      defaultBroughtProfileId([
+        { id: "ag", harness: "antigravity" },
+        { id: "cx", harness: "codex" },
+        { id: "oc", harness: "opencode" },
+        { id: "cl", harness: "claude" },
+      ]),
+    ).toBe("oc");
+    expect(
+      defaultBroughtProfileId([
+        { id: "ag", harness: "antigravity" },
+        { id: "cx", harness: "codex" },
+      ]),
+    ).toBe("ag");
+    expect(defaultBroughtProfileId([])).toBe("");
   });
 });

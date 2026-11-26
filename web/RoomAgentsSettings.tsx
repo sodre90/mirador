@@ -218,7 +218,11 @@ function BroughtAgents({ room, people }: { room: Room; people: Person[] }) {
                 >
                   {words.takeOut}
                 </ConfirmButton>
-                {workspace && <WorkspaceAccessLine roomId={room.id} agentId={agentId} agentName={shownName} access={workspace} answers />}
+                {workspace ? (
+                  <WorkspaceAccessLine roomId={room.id} agentId={agentId} agentName={shownName} access={workspace} answers />
+                ) : (
+                  <div className="workspace-access">{words.worksInOwnWorkspaceOf(bringer)}</div>
+                )}
               </li>
             );
           })}

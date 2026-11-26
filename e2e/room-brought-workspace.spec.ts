@@ -112,15 +112,21 @@ test("Mia brings her Claude agent to work in the room's workspace, and nothing o
   await signIn(mia, mias);
   await nameOwnProfile(mia, "Mia");
   await addWorkspace(mia, mias.projectDir);
-  await makeProfile(mia, "Coder");
   await makeProfile(mia, "Other", "Codex");
+  await makeProfile(mia, "Coder");
   await expect(await joinRoom(mia, invite)).toHaveCount(0);
 
-  await test.step("the dialog offers it for Claude Code alone, and says what it means", async () => {
-    const dialog = await bringDialog("Other");
+  await test.step("the dialog defaults to the room's workspace and a profile that works there, and says what it means", async () => {
+    await chooseInMenuOfJoinedRoom("Bring an agent…");
+    const dialog = mia.getByRole("dialog", { name: "Bring an agent into Garden" });
+    await expect(dialog.getByRole("combobox", { name: /^Workspace/ })).toHaveValue("");
+    await expect(dialog.getByRole("combobox", { name: /^Agent/ }).locator("option:checked")).toHaveText("Claude Code");
+    await expect(dialog.getByRole("button", { name: "Bring", exact: true })).toBeEnabled();
+    await dialog.getByRole("combobox", { name: /^Agent/ }).selectOption({ label: "Other" });
     await expect(dialog).toContainText("Only Claude Code, pi and opencode profiles can work in the room's workspace so far.");
     await expect(dialog.getByRole("button", { name: "Bring", exact: true })).toBeDisabled();
     await dialog.getByRole("combobox", { name: /^Agent/ }).selectOption({ label: "Coder" });
+    await dialog.getByLabel("Any time").check();
     await expect(dialog).not.toContainText("Only Claude Code, pi and opencode profiles");
     const meaning = (await whatItMeans(mia, dialog)).join("\n");
     expect(meaning).toContain("has nothing else of this computer: no files, no commands");
@@ -129,6 +135,7 @@ test("Mia brings her Claude agent to work in the room's workspace, and nothing o
     await screenshot(mia, "workspace-bring-dialog");
     await dialog.getByRole("button", { name: "Bring", exact: true }).click();
     await expect(dialog).toHaveCount(0);
+    await expect(joinedCard()).toContainText("Coder (room's workspace)");
   });
 
   await test.step("its conversation is in a workspace named after the room, with an empty folder", async () => {
@@ -139,7 +146,7 @@ test("Mia brings her Claude agent to work in the room's workspace, and nothing o
 
   await test.step("which is no workspace of hers to bring another agent to work in", async () => {
     const dialog = await bringDialog("Coder");
-    await expect(dialog.getByRole("combobox", { name: /^Workspace/ }).locator("option")).toHaveText([basename(mias.projectDir), "The room's workspace, on Ann's machine"]);
+    await expect(dialog.getByRole("combobox", { name: /^Workspace/ }).locator("option")).toHaveText(["The room's workspace, on Ann's machine", basename(mias.projectDir)]);
     await dialog.getByRole("button", { name: "Cancel" }).click();
     await expect(dialog).toHaveCount(0);
   });
@@ -151,6 +158,9 @@ test("Ann lets it in, and it reads the room's workspace, changes a file and runs
     await expect(accessCard(ann)).toContainText("Coder (Mia) asks to work in this room's workspace");
     await expect(accessCard(ann)).toContainText("each change and each command asks first");
     await expect(agentChip(ann)).toHaveAttribute("data-hint", "On Mia's computer · Waits to be let into this room's workspace");
+    await ann.locator(".room-here-count").click();
+    await expect(ann.locator(".room-people .room-people-agent-workspace")).toHaveText("Waits to be let into this room's workspace");
+    await ann.keyboard.press("Escape");
     await screenshot(ann, "workspace-access-card");
     await giveTask("COUNT THE BEDS", 'CALL mcp__canvas__room_read {"path":"notes.txt"}');
     await expect(lastAnswer(ann)).toContainText("has not let you work in its workspace", { timeout: 60_000 });
@@ -165,6 +175,9 @@ test("Ann lets it in, and it reads the room's workspace, changes a file and runs
     await accessCard(ann).getByRole("button", { name: "Let it work here" }).click();
     await expect(accessCard(ann)).toHaveCount(0);
     await expect(agentChip(ann)).toHaveAttribute("data-hint", "On Mia's computer · Works in this room's workspace");
+    await ann.locator(".room-here-count").click();
+    await expect(ann.locator(".room-people .room-people-agent-workspace")).toHaveText("Works in this room's workspace");
+    await ann.keyboard.press("Escape");
     await giveTask("READ THE NOTES", 'CALL mcp__canvas__room_read {"path":"notes.txt"}');
     await expect(lastAnswer(ann)).toContainText("Sow the beets", { timeout: 60_000 });
     await expect(callCard(ann)).toHaveCount(0);

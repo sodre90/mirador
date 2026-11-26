@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { OTHERS_TASKS, worksInRoomsWorkspaces, type OthersTasks } from "../shared/brought-agents.ts";
+import { defaultBroughtProfileId, OTHERS_TASKS, worksInRoomsWorkspaces, type OthersTasks } from "../shared/brought-agents.ts";
 import type { JoinedRoom, Machine, Profile, Workspace } from "../shared/model.ts";
 import { connection } from "./connection.ts";
 import { replyProblemText } from "./host-error.ts";
@@ -26,8 +26,8 @@ export function BringAgentDialog({
   onClose: () => void;
 }) {
   const ownWorkspaces = workspaces.filter(({ forBroughtAgents }) => !forBroughtAgents);
-  const [profileId, setProfileId] = useState(profiles[0]?.id ?? "");
-  const [workspaceId, setWorkspaceId] = useState(ownWorkspaces[0]?.id ?? THE_ROOMS_WORKSPACE);
+  const [profileId, setProfileId] = useState(() => defaultBroughtProfileId(profiles));
+  const [workspaceId, setWorkspaceId] = useState(THE_ROOMS_WORKSPACE);
   const [othersTasks, setOthersTasks] = useState<OthersTasks>("after-ok");
   const [bringing, setBringing] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
@@ -70,12 +70,12 @@ export function BringAgentDialog({
         <label className="room-field">
           {words.workspace}
           <select value={workspaceId} onChange={(event) => setWorkspaceId(event.target.value)}>
+            <option value={THE_ROOMS_WORKSPACE}>{words.roomsWorkspaceOf(machine.name)}</option>
             {ownWorkspaces.map((workspace) => (
               <option key={workspace.id} value={workspace.id}>
                 {workspace.name}
               </option>
             ))}
-            <option value={THE_ROOMS_WORKSPACE}>{words.roomsWorkspaceOf(machine.name)}</option>
           </select>
         </label>
         {profile && !worksThere && <p className="hint">{words.onlyClaudeInRoomsWorkspace}</p>}

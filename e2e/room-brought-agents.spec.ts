@@ -1,5 +1,5 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { addWorkspace, createProfile, createRoom, inviteIntoRoom, joinRoom, nameMachine, nameOwnProfile, openRoomSettings, primaryModifier, reachedAtOwnPort, reloadFromRestartedHost, roomCard, signIn, whatItMeans } from "./helpers.ts";
 import { TestHost, writeBunProgram } from "./test-host.ts";
@@ -62,6 +62,7 @@ async function chooseToBring(agent: string, othersTasks: "Only after my OK" | "A
   await mia.getByRole("menuitem", { name: "Bring an agent…" }).click();
   const dialog = mia.getByRole("dialog", { name: "Bring an agent into Garden" });
   await dialog.getByRole("combobox", { name: /^Agent/ }).selectOption({ label: agent });
+  await dialog.getByRole("combobox", { name: /^Workspace/ }).selectOption({ label: basename(mias.projectDir) });
   await dialog.getByLabel(othersTasks).check();
   return dialog;
 }
@@ -93,7 +94,7 @@ test("Mia brings an agent of hers into Ann's room: Ann's tasks for it wait for M
     await screenshot(mia, "bring-dialog");
     await dialog.getByRole("button", { name: "Bring", exact: true }).click();
     await expect(dialog).toHaveCount(0);
-    await expect(joinedCard(mia)).toContainText("Coder");
+    await expect(joinedCard(mia)).toContainText(`Coder (${basename(mias.projectDir)})`);
     await expect(coderConversation(mia)).toHaveCount(1);
   });
 
@@ -101,7 +102,7 @@ test("Mia brings an agent of hers into Ann's room: Ann's tasks for it wait for M
     await roomCard(ann, "Garden").click();
     await expect(agentChip(ann)).toBeVisible();
     await expect(agentChip(ann)).not.toHaveClass(/\baway\b/);
-    await expect(agentChip(ann)).toHaveAttribute("data-hint", "On Mia's computer");
+    await expect(agentChip(ann)).toHaveAttribute("data-hint", "On Mia's computer · Works in Mia's workspace");
   });
 
   await test.step("Ann's list of who is here shows it as Mia's, and fits it without scrolling sideways", async () => {
@@ -109,6 +110,7 @@ test("Mia brings an agent of hers into Ann's room: Ann's tasks for it wait for M
     const popover = ann.locator(".room-people");
     await expect(popover).toContainText("Coder (Mia)");
     await expect(popover.locator(".room-agent-brought")).toBeVisible();
+    await expect(popover.locator(".room-people-agent-workspace")).toHaveText("Works in Mia's workspace");
     expect(await popover.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
     await screenshot(ann, "people-here-with-brought-agent");
     await ann.keyboard.press("Escape");
@@ -281,12 +283,13 @@ test("Mia's Builder beside Ann's: the name the @ menu put in tags the one it nam
 test("while Mia's Mirador is away, the room says so at once, and Ann takes the agent out", async () => {
   await mias.stop();
   await expect(agentChip(ann)).toHaveClass(/\baway\b/);
-  await expect(agentChip(ann)).toHaveAttribute("data-hint", "Away: Mia's Mirador is not connected");
+  await expect(agentChip(ann)).toHaveAttribute("data-hint", "Away: Mia's Mirador is not connected · Works in Mia's workspace");
   await tagCoder("SAY Picked the apples");
   await expect(answersOfCoder(ann).last()).toContainText("Its bringer's Mirador was not connected, so it did not get the task.");
   const settings = await openRoomSettings(ann, "Garden", "Agents");
   const brought = settings.getByRole("list", { name: "Agents people brought" });
   await expect(brought).toContainText("Away: Mia's Mirador is not connected");
+  await expect(brought).toContainText("Works in Mia's workspace");
   await brought.getByRole("button", { name: "Take out Coder (Mia)" }).click();
   await brought.getByRole("button", { name: "Take out Coder (Mia)" }).click();
   await expect(brought).toHaveCount(0);

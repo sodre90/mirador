@@ -1012,6 +1012,7 @@ export function Sidebar({
         <RoomsSection
           rooms={state.rooms}
           profiles={state.profiles}
+          workspaces={state.workspaces}
           selectedRoomId={state.selectedRoomId}
           roomsWaiting={roomsWaitingFor(state)}
           readings={state.roomReadings}

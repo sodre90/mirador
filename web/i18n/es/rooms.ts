@@ -445,6 +445,8 @@ export const rooms: Messages["rooms"] = {
     "La máquina de la sala dice quién escribió cada tarea. Su dueño podría hacer pasar una tarea por tuya, y empezaría sin tu visto bueno; tus ajustes de permisos siguen preguntando antes de usar sus herramientas.",
   ],
   roomsWorkspaceOf: (machine) => `El espacio de trabajo de la sala, en ${machine}`,
+  roomsWorkspaceShort: "espacio de trabajo de la sala",
+  broughtAgentPlace: (agent, place) => `${agent} (${place})`,
   onlyClaudeInRoomsWorkspace: "De momento, solo los perfiles de Claude Code, pi y opencode pueden trabajar en el espacio de trabajo de la sala.",
   bringIntoWorkspaceMeaning: [
     "El agente se ejecuta en este equipo, con el modelo y la cuenta de su perfil, y no tiene nada más de este equipo: ni archivos, ni comandos, ni tus ajustes, hooks, servidores MCP, CLAUDE.md o memoria de Claude Code. Su conversación aparece con las demás, en un espacio de trabajo con el nombre de la sala cuya carpeta queda vacía.",
@@ -476,6 +478,7 @@ export const rooms: Messages["rooms"] = {
     allowed: "Trabaja en el espacio de trabajo de esta sala",
     declined: "Sin acceso al espacio de trabajo de esta sala",
   },
+  worksInOwnWorkspaceOf: (person) => `Trabaja en el espacio de trabajo de ${person}`,
   takeWorkspaceAway: "Retirar",
   takeWorkspaceAwayOf: (agent) => `Retirar a ${agent} el espacio de trabajo de esta sala`,
   takeWorkspaceAwayArmed: "¿Retirárselo?",
