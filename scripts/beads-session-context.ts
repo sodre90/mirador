@@ -34,7 +34,11 @@ function memoriesSection(stored: Record<string, unknown>) {
   ].join("\n\n");
 }
 
-const workflow = await bd("prime", "--no-memories");
+// `bd prime --no-memories` prints this file when there is one, but only after opening bd's embedded database, which
+// waits behind any other bd, as in every session Mirador starts at once.
+const workflow = await Bun.file(`${REPOSITORY}/.beads/PRIME.md`)
+  .text()
+  .catch(() => bd("prime", "--no-memories"));
 if (workflow !== null) {
   let stored: Record<string, unknown> = {};
   const rawMemories = await bd("memories", "--json");
