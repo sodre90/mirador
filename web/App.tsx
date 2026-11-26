@@ -66,7 +66,7 @@ import { TerminalPane } from "./Terminals.tsx";
 import { useShortcuts } from "./useShortcuts.ts";
 import { WorkspaceArea } from "./Workspace.tsx";
 import { RoomCanvas, RoomView } from "./Room.tsx";
-import { RoomsOnlyApp, seesOnlyTheirRooms } from "./RoomsOnly.tsx";
+import { knowsWhoSignedIn, RoomsOnlyApp, seesOnlyTheirRooms } from "./RoomsOnly.tsx";
 import { newRoomWorkspace, NewRoomDialog } from "./NewRoom.tsx";
 import { JoinRoomDialog, RoomInviteDialog } from "./RoomInvite.tsx";
 import { BringAgentDialog } from "./BringAgent.tsx";
@@ -741,6 +741,12 @@ export function App() {
   }, [state.selectedConversationId, state.selectedRoomId, state.selectedJoinedRoom, state.conversationsPicked, machines.shownId]);
 
   if (status === "unauthorized") return <JoinMachine />;
+  if (!knowsWhoSignedIn(state))
+    return (
+      <div className="app">
+        <HostBanner status={status} state={state} />
+      </div>
+    );
   if (seesOnlyTheirRooms(state))
     return (
       <RoomsOnlyApp

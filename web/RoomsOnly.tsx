@@ -17,6 +17,9 @@ import { WorkspaceArea } from "./Workspace.tsx";
 const words = t.rooms;
 const NO_ROOMS_WAITING: ReadonlyMap<string, RoomWait> = new Map();
 
+/** The host's snapshot says who the page signed in as; until it comes, the page may be a person's, and shows none of the owner's. */
+export const knowsWhoSignedIn = ({ you }: Pick<AppState, "you">) => you !== null;
+
 /** Signed in as a person other than the machine's owner, the page shows the rooms they are in, and nothing else of the machine. */
 export const seesOnlyTheirRooms = ({ you, ownerId }: Pick<AppState, "you" | "ownerId">) => you !== null && ownerId !== null && you !== ownerId;
 
