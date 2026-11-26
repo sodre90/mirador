@@ -33,6 +33,31 @@ describe("forwardedHeaders", () => {
     const forwarded = forwardedHeaders(new Headers({ cookie: "mirador_token=x", accept: "*/*" }), machine, null, "http://127.0.0.1:4601");
     expect(forwarded.has("cookie") || forwarded.has("origin")).toBe(false);
   });
+
+  describe("for a request of the owner's own device that has no Origin", () => {
+    const originOf = (headers: Record<string, string>, method: string) =>
+      forwardedHeaders(new Headers(headers), machine, "device-token", "http://127.0.0.1:4601", { method, fillsInMissingOrigin: true }).get("origin");
+
+    test("sets the machine's origin on a same-origin POST, which WebView2 sends without one", () => {
+      expect(originOf({ "sec-fetch-site": "same-origin" }, "POST")).toBe(machine);
+    });
+
+    test("adds none to a GET", () => {
+      expect(originOf({ "sec-fetch-site": "same-origin" }, "GET")).toBeNull();
+    });
+
+    test("adds none to a POST that says nothing of where it came from", () => {
+      expect(originOf({}, "POST")).toBeNull();
+    });
+
+    test("adds none to a POST from another site", () => {
+      expect(originOf({ "sec-fetch-site": "cross-site" }, "POST")).toBeNull();
+    });
+
+    test("adds none where the caller does not ask for it", () => {
+      expect(forwardedHeaders(new Headers({ "sec-fetch-site": "same-origin" }), machine, null, "http://127.0.0.1:4601", { method: "POST" }).has("origin")).toBe(false);
+    });
+  });
 });
 
 const freePorts = (count: number) =>

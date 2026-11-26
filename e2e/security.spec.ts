@@ -26,6 +26,7 @@ test("rejects browsers and clients without the right credentials", async ({ page
     const upgrade = (headers: Record<string, string>) => fetch(`${host.origin}${socketPath}`, { headers }).then(({ status }) => status);
     expect(await upgrade({ Origin: "http://evil.example", Cookie: cookie })).toBe(403);
     expect(await upgrade({ Origin: "null", Cookie: cookie })).toBe(403);
+    expect(await upgrade({ Cookie: cookie, "Sec-Fetch-Site": "same-origin" }), "a socket needs an Origin, which browsers always send").toBe(403);
     expect(await upgrade({ Origin: host.origin })).toBe(401);
   }
 
@@ -54,6 +55,9 @@ test("rejects browsers and clients without the right credentials", async ({ page
   expect(await addImage({ Origin: host.origin })).toBe(401);
   expect(await addImage({ Origin: "http://evil.example", Cookie: cookie })).toBe(403);
   expect(await addImage({ Cookie: cookie })).toBe(403);
+  expect(await addImage({ Cookie: cookie, "Sec-Fetch-Site": "same-origin" }), "no Origin, as WebView2 can send a same-origin POST").toBe(404);
+  expect(await addImage({ Cookie: cookie, "Sec-Fetch-Site": "same-site" })).toBe(403);
+  expect(await addImage({ Cookie: cookie, "Sec-Fetch-Site": "cross-site" })).toBe(403);
   expect(await readImage({})).toBe(401);
   expect(await readImage({ Cookie: cookie, "Sec-Fetch-Site": "cross-site" })).toBe(403);
   expect(await readImage({ Cookie: cookie })).toBe(404);

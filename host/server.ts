@@ -622,13 +622,18 @@ export function startServer(services: HostServices) {
     }
   }
 
-  /** Only the app's own pages, signed in with the browser cookie, may read or add a conversation's images and dropped files, or read an app's files. */
+  /**
+   * Only the app's own pages, signed in with the browser cookie, may read or add a conversation's images and dropped files,
+   * or read an app's files. WebView2 on Windows can send a page's same-origin POST without an Origin; Sec-Fetch-Site, which
+   * page scripts cannot set, then says it is same-origin instead.
+   */
   function refusedPageRequest(request: Request) {
     if (!hasAllowedHost(request)) return new Response("forbidden host", { status: 403 });
     if (!signedInAs(request)) return new Response("unauthorized", { status: 401 });
     const site = request.headers.get("sec-fetch-site");
     if (site && site !== "same-origin") return new Response("forbidden", { status: 403 });
-    if (request.method !== "GET" && !isPageOrigin(request)) return new Response("forbidden origin", { status: 403 });
+    const sameOriginWithoutOrigin = site === "same-origin" && !request.headers.has("origin");
+    if (request.method !== "GET" && !sameOriginWithoutOrigin && !isPageOrigin(request)) return new Response("forbidden origin", { status: 403 });
     return null;
   }
 
