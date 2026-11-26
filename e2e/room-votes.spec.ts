@@ -249,3 +249,31 @@ test("tagging a person in a room highlights it for everyone and most for them, c
     expect((await notificationsShown(page)).length).toBe(shownBefore);
   });
 });
+
+test("an agent's answer has a faint colour of its own, and stands out for whom it tags unless it answers their own task", async ({ page, browser }) => {
+  await signIn(page, host);
+  await createRoom(page, "Beds", ["Builder"]);
+  await letIn(page, "Beds", "Mia", "Member");
+  const mia = await openAs(browser, people.mia);
+  const backgroundOf = (entry: Locator) => entry.evaluate((element) => getComputedStyle(element).backgroundColor);
+
+  await test.step("answering the owner's own task, the agent's tag of her is marked, but the answer does not stand out for her", async () => {
+    await writeTagging(memberComposer(page, "Beds"), tagMenu(page), "Bu", "Builder", "SAY @Olivia the beds are dug");
+    const answer = answerSaying(page, "the beds are dug");
+    await expect(answer.locator(".room-mention.you")).toHaveText("@Olivia");
+    await expect(answer).not.toHaveClass(/\btags-you\b/);
+    await expect(answer).toHaveClass(/\bagent-opencode\b/);
+    expect(await backgroundOf(answer)).not.toBe("rgba(0, 0, 0, 0)");
+    await screenshot(roomEntries(page).last(), "answer-to-own-task");
+  });
+
+  await test.step("answering the owner's task with a tag of Mia, the answer stands out for Mia", async () => {
+    await writeTagging(memberComposer(page, "Beds"), tagMenu(page), "Bu", "Builder", "SAY @Mia please water them");
+    await expect(answerSaying(page, "please water them")).toHaveCount(1);
+    await roomCard(mia, "Beds").click();
+    const answer = answerSaying(mia, "please water them");
+    await expect(answer.locator(".room-mention.you")).toHaveText("@Mia");
+    await expect(answer).toHaveClass(/\btags-you\b/);
+    await expect(answerSaying(mia, "the beds are dug")).not.toHaveClass(/\btags-you\b/);
+  });
+});

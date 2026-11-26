@@ -166,6 +166,20 @@ test("brought to take others' tasks any time, the agent answers without a card; 
     await expect(okCard(mia)).toHaveCount(0);
   });
 
+  await test.step("its answer to Ann's own task marks its tag of her, in the room and in its thread, without standing out for her", async () => {
+    await tagCoder("SAY @Ann the beans are up");
+    const answer = answersOfCoder(ann).last();
+    await expect(answer.locator(".room-mention.you")).toHaveText("@Ann");
+    await expect(answer).not.toHaveClass(/\btags-you\b/);
+    await expect(answer).toHaveClass(/\bagent-opencode\b/);
+    await answer.getByRole("button", { name: "Open thread" }).click();
+    const inThread = ann.locator(".room-thread .room-entry").filter({ has: ann.locator(".message.agent", { hasText: "the beans are up" }) });
+    await expect(inThread.locator(".room-mention.you")).toHaveText("@Ann");
+    await expect(inThread).not.toHaveClass(/\btags-you\b/);
+    await expect(inThread).toHaveClass(/\bagent-opencode\b/);
+    await ann.locator(".room-thread").getByRole("button", { name: "Close thread" }).click();
+  });
+
   await test.step("its answer tagging Ann's Builder waits for Ann's OK as Mia's task, given by her agent, and reaches Builder once allowed", async () => {
     await tagCoder("SAY @Builder please check the beans");
     await expect(taskCard(ann)).toContainText("Coder (Mia) gives Builder a task on behalf of Mia (Member)");

@@ -2898,16 +2898,36 @@ input.picker-search {
   background: #6e56cf;
 }
 
-.avatar.agent-claude {
-  background: #d97757;
+.agent-claude {
+  --agent-colour: #d97757;
 }
 
-.avatar.agent-opencode {
-  background: #2f3542;
+.agent-opencode {
+  --agent-colour: light-dark(#2f3542, #5b6478);
 }
 
-.avatar.agent-pi {
-  background: #3d5a99;
+.agent-pi {
+  --agent-colour: #3d5a99;
+}
+
+.agent-codex {
+  --agent-colour: #10a37f;
+}
+
+.agent-copilot {
+  --agent-colour: #8957e5;
+}
+
+.agent-antigravity {
+  --agent-colour: #1a73e8;
+}
+
+.agent-gone {
+  --agent-colour: #8a8f98;
+}
+
+.avatar:is(.agent-claude, .agent-opencode, .agent-pi, .agent-codex, .agent-copilot, .agent-antigravity, .agent-gone) {
+  background: var(--agent-colour);
 }
 
 .avatar svg {
@@ -11247,6 +11267,10 @@ button.link.more-rows {
 .room-mention.you {
   background: color-mix(in srgb, var(--warn) 28%, transparent);
   color: color-mix(in srgb, var(--warn) 55%, var(--text));
+}
+
+.room-entry.by-agent {
+  background: color-mix(in srgb, var(--agent-colour) 7%, transparent);
 }
 
 .room-entry.tags-you {

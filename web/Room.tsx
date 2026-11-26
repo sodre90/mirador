@@ -123,13 +123,36 @@ function answerEnding(message: RoomMessage) {
 
 const tagsYou = (message: RoomMessage, you: string | null) => message.mentions?.some(({ personId }) => personId === you) === true;
 
-function RoomEntry({ message, quoted, agentsById, children }: { message: RoomMessage; quoted?: RoomMessage; agentsById: Map<string, RoomAgentShown>; children?: ReactNode }) {
+const writtenBy = (message: RoomMessage | undefined, you: string | null) => message !== undefined && !writtenByAgent(message.author) && message.author.personId === you;
+
+/** Whether the whole entry stands out for you: it tags you, and is not merely an agent answering what you wrote, whose tag of you alone shows. */
+const callsOnYou = (message: RoomMessage, answered: RoomMessage | undefined, you: string | null) => tagsYou(message, you) && !writtenBy(answered, you);
+
+const entryClasses = (message: RoomMessage, answered: RoomMessage | undefined, agentsById: Map<string, RoomAgentShown>, you: string | null) => {
+  const harness = writtenByAgent(message.author) ? (agentsById.get(message.author.profileId)?.harness ?? "gone") : null;
+  return ["timeline-entry", "group-start", "room-entry", ...(harness ? ["by-agent", `agent-${harness}`] : []), ...(callsOnYou(message, answered, you) ? ["tags-you"] : [])].join(" ");
+};
+
+function RoomEntry({
+  message,
+  answered,
+  quoted,
+  agentsById,
+  children,
+}: {
+  message: RoomMessage;
+  /** The message it answers, where it is loaded. */
+  answered: RoomMessage | undefined;
+  quoted?: RoomMessage;
+  agentsById: Map<string, RoomAgentShown>;
+  children?: ReactNode;
+}) {
   const ending = answerEnding(message);
   const byAgent = writtenByAgent(message.author);
   const { you } = useContext(MessageWriters);
   const mentionsRead = useMemo(() => (message.mentions ? { mentions: message.mentions, you } : null), [message.mentions, you]);
   return (
-    <div className={`timeline-entry group-start room-entry${tagsYou(message, you) ? " tags-you" : ""}`} data-room-message={message.id}>
+    <div className={entryClasses(message, answered, agentsById, you)} data-room-message={message.id}>
       <div className="gutter">
         <AuthorMark author={message.author} agentsById={agentsById} />
       </div>
@@ -545,6 +568,7 @@ function ThreadColumn({
   onClose: () => void;
 }) {
   const shownHere = threadMessagesShown(timeline, thread, agent);
+  const messagesById = useMemo(() => new Map(timeline.messages.map((message) => [message.id, message])), [timeline.messages]);
   const firstReached = firstReachingTheAgent(timeline, thread, agent.answering);
   const workingLine = workUnderWay(pending, agentsById, waitedIn).find((work) => work.thread.id === thread.id)?.text;
   const callsHere = workspaceCalls.filter(({ threadId }) => threadId === thread.id);
@@ -574,7 +598,7 @@ function ThreadColumn({
         {agent.conversation && opened?.loaded && firstReached && <HistoryReachingBack opened={opened} messageId={firstReached.id} />}
         {shownHere.map((message, index) => (
           <div key={message.id} className="room-thread-turn">
-            <RoomEntry message={message} agentsById={agentsById} />
+            <RoomEntry message={message} answered={message.answers === undefined ? undefined : messagesById.get(message.answers)} agentsById={agentsById} />
             <WorkspaceCalls calls={callsAfter(callsHere, message, shownHere[index + 1])} />
             {agent.conversation && opened?.loaded && <TimelineOfEvents conversation={agent.conversation} events={eventsAnswering(opened.events, message.id)} agentName={agent.name} onlyReads={onlyReads} />}
           </div>
@@ -1032,8 +1056,9 @@ export function RoomView({
         {timeline && shown.length === 0 && <EmptyRoom tagsAgents={tagsAgents} agentsToTag={agentsToTag} onTag={(agent) => composer.current?.tag(agent)} onInvite={owns ? invite : null} />}
         {shown.map((message) => {
           const madeOnCanvas = canvasOfAnswers.get(message.id) ?? [];
+          const answered = message.answers === undefined ? undefined : messagesById.get(message.answers);
           return (
-            <RoomEntry key={message.id} message={message} quoted={message.answers === undefined ? undefined : messagesById.get(message.answers)} agentsById={agentsById}>
+            <RoomEntry key={message.id} message={message} answered={answered} quoted={answered} agentsById={agentsById}>
               {madeOnCanvas.length > 0 && <CanvasLine items={madeOnCanvas} onOpen={onOpenOnCanvas} />}
               {madeOnCanvas.filter(isAsk).map(voteOn)}
               {message.answers !== undefined && message.threadId && <ThreadLink onOpen={() => setThreadId(message.threadId)} />}
