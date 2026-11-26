@@ -4578,7 +4578,7 @@ export class ConversationService {
       holdsQueue: runtime.holdingQueue || this.holdsQueue(runtime),
     });
     if (!reason || this.stopping) return;
-    if (this.itsPluginTellsTheCaller(conversationId) || this.get(conversationId).roomId) return;
+    if (this.itsPluginTellsTheCaller(conversationId) || worksForARoom(this.get(conversationId))) return;
     this.notifications.notify(conversationId, reason);
     if (this.hub.isWatched(conversationId)) return;
     this.unseenTurnEnds.set(conversationId, reason.kind);

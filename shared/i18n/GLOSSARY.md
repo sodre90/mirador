@@ -77,6 +77,7 @@ These terms stay the same everywhere:
 | start clean (a room's Claude agents, without the owner's setup) | tiszta lappal indul | empezar en limpio | 全新开始 | sauber starten |
 | bring (an agent of your own into a room of someone else's machine) | behoz | traer | 带入 | mitbringen |
 | take out (an agent someone brought, out of the room) | kivisz | sacar | 带出 | herausnehmen |
+| its work (what an agent you brought did, beside its room on your own Mirador) | munkája | su trabajo | 它的工作 | seine Arbeit |
 | leave (a room you were invited to) | kilép | salir | 退出 | verlassen |
 | Invited (the rooms you were invited to, as a heading) | Ahová meghívtak | Por invitación | 受邀加入 | Eingeladen |
 | member's agent (the role of an agent a member brought) | tag ágense | agente de un miembro | 成员的 Agent | Agent eines Mitglieds |

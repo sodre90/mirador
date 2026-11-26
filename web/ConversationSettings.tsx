@@ -58,6 +58,10 @@ function ConfigControl({ conversationId, option }: { conversationId: string; opt
   );
 }
 
+/** The model, effort, mode and the like its agent offers; a room's tasks drive one that works for a room, so it gets these alone. */
+const ConfigControls = ({ conversation }: { conversation: Conversation }) =>
+  conversation.configOptions.map((option) => <ConfigControl key={option.id} conversationId={conversation.id} option={offeredConfigOption(conversation, option)} />);
+
 /**
  * Profiles of the conversation's own agent, then the other agents', which can be picked only until the conversation has
  * begun: another agent cannot continue its session. One that has no profile to run on asks for one.
@@ -272,25 +276,34 @@ export function ConversationSettingsPopover({
   profiles,
   begun,
   settings,
+  title = words.header.settingsTitle,
+  note = words.header.settingsNote,
 }: {
   conversation: Conversation;
   profiles: Profile[];
   begun: boolean;
   settings: SettingsState;
+  /** Where the conversation stands for something else, such as an agent you brought into a room, what they are the settings of. */
+  title?: string;
+  note?: string;
 }) {
   if (!settings.placement) return null;
   return (
-    <div ref={settings.popover as RefObject<HTMLDivElement>} className="conversation-settings" role="dialog" aria-label={words.header.settingsTitle} style={settings.placement}>
-      <h3>{words.header.settingsTitle}</h3>
-      <p className="conversation-settings-note">{words.header.settingsNote}</p>
+    <div ref={settings.popover as RefObject<HTMLDivElement>} className="conversation-settings" role="dialog" aria-label={title} style={settings.placement}>
+      <h3>{title}</h3>
+      <p className="conversation-settings-note">{note}</p>
       <div className="controls">
-        <ProfilePicker conversation={conversation} profiles={profiles} begun={begun} />
-        {conversation.configOptions.map((option) => (
-          <ConfigControl key={option.id} conversationId={conversation.id} option={offeredConfigOption(conversation, option)} />
-        ))}
-        {!worksForARoom(conversation) && <YoloSwitch conversation={conversation} />}
-        <PluginSettingMenus conversation={conversation} profiles={profiles} />
-        <QuestionsMenu conversation={conversation} />
+        {worksForARoom(conversation) ? (
+          <ConfigControls conversation={conversation} />
+        ) : (
+          <>
+            <ProfilePicker conversation={conversation} profiles={profiles} begun={begun} />
+            <ConfigControls conversation={conversation} />
+            <YoloSwitch conversation={conversation} />
+            <PluginSettingMenus conversation={conversation} profiles={profiles} />
+            <QuestionsMenu conversation={conversation} />
+          </>
+        )}
       </div>
     </div>
   );

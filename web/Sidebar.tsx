@@ -13,6 +13,7 @@ import { BarMenu, type BarMenuEntry } from "./BarMenu.tsx";
 import { ColorSwatches } from "./ColorSwatches.tsx";
 import { ConfirmButton } from "./ConfirmButton.tsx";
 import { ContextMenu, type ContextMenuEntry } from "./ContextMenu.tsx";
+import { broughtWaitingOnYou, roomsYourAgentsWaitIn } from "./brought-waiting.ts";
 import { invitedOf, RoomsSection } from "./RoomsSidebar.tsx";
 import { LineIcon } from "./LineIcon.tsx";
 import { connectedDevicesLabel, useConnectedDevicesInSidebar } from "./connected-devices.ts";
@@ -272,9 +273,12 @@ function WaitingCount({ conversations, hint = hints.waitingCount }: { conversati
 
 const profileOf = (profiles: Profile[], { profileId }: Conversation) => profiles.find(({ id }) => id === profileId);
 
-/** Every conversation waiting for you, across the workspaces; the stylesheet shows it only when chosen in Settings. */
+/** The workspaces the sidebar lists: not those made for agents you brought into rooms, which show there. */
+const workspacesListed = ({ workspaces, broughtShownInRooms }: AppState) => (broughtShownInRooms ? workspaces.filter(({ forBroughtAgents }) => !forBroughtAgents) : workspaces);
+
+/** Every conversation waiting for you, across the workspaces and the rooms you brought agents into; the stylesheet shows it only when chosen in Settings. */
 function WaitingList({ state, dispatch }: { state: AppState; dispatch: Dispatch<AppAction> }) {
-  const waiting = waitingByUrgency(state.workspaces.flatMap((workspace) => conversationsIn(state, workspace.id)));
+  const waiting = waitingByUrgency([...state.workspaces.flatMap((workspace) => conversationsIn(state, workspace.id)), ...broughtWaitingOnYou(state)]);
   if (waiting.length === 0) return null;
   const workspaceName = (workspaceId: string) => state.workspaces.find(({ id }) => id === workspaceId)?.name ?? "";
   return (
@@ -917,7 +921,7 @@ export function Sidebar({
   useUnfoldAroundOpenConversation(state);
   useFoldsOfDeletedForgotten(state);
   useWorkspaceIconsFound(state.workspaces);
-  const items = sidebarItems(state.workspaces, state.workspaceGroups);
+  const items = sidebarItems(workspacesListed(state), state.workspaceGroups);
   const [conversationMenu, setConversationMenu] = useState<{ conversationId: string; x: number; y: number } | null>(null);
   const openConversationMenu = (conversation: Conversation, event: ReactMouseEvent) => {
     event.preventDefault();
@@ -1022,6 +1026,7 @@ export function Sidebar({
           selectedJoinedRoom={state.selectedJoinedRoom}
           people={state.people}
           broughtAgents={state.broughtAgents}
+          agentsWaitIn={roomsYourAgentsWaitIn(state)}
           manages
           dispatch={dispatch}
           onOpenJoinedRoom={onOpenJoinedRoom}

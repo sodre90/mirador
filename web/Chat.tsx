@@ -136,7 +136,7 @@ const words = t.chat;
 /** A command Claude Code opens a panel for only in its own terminal gets one there, on the conversation's profile. */
 const requestPanelCommand = (conversationId: string, line: string) => requestProgram({ type: "terminal.open-panel-command", conversationId, line });
 
-const isBusy = (conversation: Conversation) => conversation.status === "running" || conversation.status === "starting";
+export const isBusy = (conversation: Conversation) => conversation.status === "running" || conversation.status === "starting";
 
 /** How long a graceful stop is given before the button offers to kill the wedged agent process. */
 const STOP_FORCE_GRACE_MS = 3000;
@@ -808,7 +808,7 @@ function PermissionCard({ block, conversationId }: { block: PermissionBlock; con
  * A task someone gave an agent you brought into a room of someone else's machine, waiting for your OK: who gave it, in
  * what role, in which room, and all the agent would be sent.
  */
-function BroughtTaskCard({ task }: { task: BroughtTaskWaiting }) {
+export function BroughtTaskCard({ task }: { task: BroughtTaskWaiting }) {
   const roomWords = t.rooms;
   const { byName, byRole, roomName, machineName } = task;
   const title = byRole === BROUGHT_AGENT_ROLE ? roomWords.broughtTaskOfMembersAgent(byName, roomName, machineName) : roomWords.broughtTask(byName, roomWords.authorRoles[byRole], roomName, machineName);
@@ -827,6 +827,13 @@ function BroughtTaskCard({ task }: { task: BroughtTaskWaiting }) {
       </div>
     </div>
   );
+}
+
+/** What the agent of a conversation waits for you to allow, as the conversation's timeline asks it, for showing apart from it. */
+export function PendingApprovals({ conversationId, events }: { conversationId: string; events: StoredEvent[] }) {
+  const timeline = useTimeline(events);
+  const waiting = useMemo(() => approvalsWaiting(timeline), [timeline]);
+  return waiting.map((block) => <PermissionCard key={block.permissionId} block={block} conversationId={conversationId} />);
 }
 
 const agentNames: Record<HarnessId, string> = { claude: "Claude", opencode: "opencode", pi: "pi", codex: "Codex", copilot: "Copilot", antigravity: "Antigravity" };
@@ -1389,7 +1396,7 @@ function DeliveryTag({ conversationId, message }: { conversationId: string; mess
   );
 }
 
-function QueuedMessages({
+export function QueuedMessages({
   conversationId,
   harness,
   messages,
@@ -1399,7 +1406,8 @@ function QueuedMessages({
   conversationId: string;
   harness: HarnessId;
   messages: QueuedMessage[];
-  onEdit: (message: QueuedMessage) => void;
+  /** Where there is no message box to take one back into, there is no editing it. */
+  onEdit?: (message: QueuedMessage) => void;
   onRemove: (message: QueuedMessage) => void;
 }) {
   const list = useRef<HTMLOListElement>(null);
@@ -1435,9 +1443,11 @@ function QueuedMessages({
             {harnessSteers[harness] && <DeliveryTag conversationId={conversationId} message={message} />}
             <span className="queued-text">{message.text}</span>
             <MessageImages conversationId={conversationId} imageIds={message.imageIds} />
-            <button type="button" className="link" onClick={() => onEdit(message)}>
-              {words.queue.edit}
-            </button>
+            {onEdit && (
+              <button type="button" className="link" onClick={() => onEdit(message)}>
+                {words.queue.edit}
+              </button>
+            )}
             <button type="button" className="link" onClick={() => onRemove(message)}>
               {words.queue.remove}
             </button>

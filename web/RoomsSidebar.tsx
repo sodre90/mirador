@@ -6,6 +6,7 @@ import { personGoesBy } from "../shared/people.ts";
 import type { RoomReading } from "../shared/room-reading.ts";
 import { broughtAgentName, type Room } from "../shared/rooms.ts";
 import { placedBelow, useClosing } from "./BarMenu.tsx";
+import { joinedRoomKey } from "./brought-waiting.ts";
 import { ConfirmButton } from "./ConfirmButton.tsx";
 import { connection } from "./connection.ts";
 import { useClosingWhenFocusLeavesPage } from "./ContextMenu.tsx";
@@ -338,6 +339,7 @@ function JoinedRoomCard({
   joined,
   selected,
   broughtAgents,
+  agentsWait,
   profiles,
   workspaces,
   dispatch,
@@ -346,6 +348,8 @@ function JoinedRoomCard({
   joined: JoinedRoomShown;
   selected: boolean;
   broughtAgents: BroughtAgentHere[];
+  /** An agent you brought there waits on you. */
+  agentsWait: boolean;
   profiles: Profile[];
   workspaces: Workspace[];
   dispatch: Dispatch<AppAction>;
@@ -359,10 +363,11 @@ function JoinedRoomCard({
     return place ? words.broughtAgentPlace(name, place) : name;
   });
   const subline = [ownerAndMachine(machine), away && t.shell.machines.notAnswering, ...agentLabels].filter(Boolean).join(" · ");
+  const waiting = agentsWait || needsYou(undefined, room);
   return (
     <li
-      className={["room-card", "joined-room", selected && "selected", away && "away", needsYou(undefined, room) && "waiting", ...readingClasses({ ...room, muted: room.muted || isMutedHere(joined) })].filter(Boolean).join(" ")}
-      data-waiting-tone={needsYou(undefined, room) ? "decision" : undefined}
+      className={["room-card", "joined-room", selected && "selected", away && "away", waiting && "waiting", ...readingClasses({ ...room, muted: room.muted || isMutedHere(joined) })].filter(Boolean).join(" ")}
+      data-waiting-tone={waiting ? "decision" : undefined}
       data-machine={machine.id}
       onClick={onOpen}
     >
@@ -427,6 +432,7 @@ function InvitedRooms({
   selectedKnock,
   selectedJoinedRoom,
   broughtAgents,
+  agentsWaitIn,
   profiles,
   workspaces,
   dispatch,
@@ -436,6 +442,7 @@ function InvitedRooms({
   selectedKnock: AppState["selectedKnock"];
   selectedJoinedRoom: AppState["selectedJoinedRoom"];
   broughtAgents: BroughtAgentHere[];
+  agentsWaitIn: ReadonlySet<string>;
   profiles: Profile[];
   workspaces: Workspace[];
   dispatch: Dispatch<AppAction>;
@@ -456,6 +463,7 @@ function InvitedRooms({
             joined={joined}
             selected={joined === joinedShown}
             broughtAgents={broughtAgents}
+            agentsWait={agentsWaitIn.has(joinedRoomKey(joined.machine.id, joined.room.id))}
             profiles={profiles}
             workspaces={workspaces}
             dispatch={dispatch}
@@ -492,6 +500,7 @@ export function RoomsSection({
   selectedJoinedRoom = null,
   people,
   broughtAgents = [],
+  agentsWaitIn = new Set(),
   manages,
   dispatch,
   onOpenJoinedRoom,
@@ -514,6 +523,8 @@ export function RoomsSection({
   people: Person[];
   /** The agents this computer's owner brought into rooms of other machines. */
   broughtAgents?: BroughtAgentHere[];
+  /** The rooms of other machines an agent of theirs waits on them in, by `joinedRoomKey`. */
+  agentsWaitIn?: ReadonlySet<string>;
   /** The machine's owner makes rooms and changes them; anyone else only opens the ones they are in. */
   manages: boolean;
   dispatch: Dispatch<AppAction>;
@@ -556,6 +567,7 @@ export function RoomsSection({
           selectedKnock={selectedKnock}
           selectedJoinedRoom={selectedJoinedRoom}
           broughtAgents={broughtAgents}
+          agentsWaitIn={agentsWaitIn}
           profiles={profiles}
           workspaces={workspaces}
           dispatch={dispatch}

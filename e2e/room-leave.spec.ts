@@ -23,7 +23,9 @@ const openInvitedRoom = (visitor: Page) => visitor.getByRole("region", { name: "
 
 const subline = (page: Page, room: string) => roomCard(page, room).locator(".room-card-subline");
 
-const coderConversation = (visitor: Page) => visitor.locator(".sidebar li").filter({ has: visitor.locator(".conversation-title", { hasText: "Shed · Ann's machine" }) });
+const coderWork = (visitor: Page) => visitor.locator(".invited-room-bar").getByRole("button", { name: "Show the work of Coder" });
+/** The sidebar's places named after the room its agent works for: none, since the room's line holds it. */
+const listedForTheRoom = (visitor: Page) => visitor.locator(".sidebar").getByText("Shed · Ann's machine");
 
 const shownRoom = (visitor: Page, room: string) => visitor.frameLocator('iframe[title="Ann\'s machine"]').getByRole("heading", { name: `# ${room}` });
 
@@ -84,9 +86,10 @@ test("a person leaves a room they were invited to from their list, and the last 
 
   await test.step("left once confirmed on that line, the open room closes and goes from their list, and they and the agent they brought from the owner's room", async () => {
     await bringsCoder(visitor, "Shed");
-    await expect(coderConversation(visitor)).toHaveCount(1);
     await expect(subline(page, "Shed")).toHaveText("1 person · Coder (Dora)");
     await roomCard(visitor, "Shed").click();
+    await expect(coderWork(visitor)).toBeVisible();
+    await expect(listedForTheRoom(visitor)).toHaveCount(0);
     await leaves(visitor, "Shed", await openMenuOfLine(visitor, "Shed"));
     await expect(openInvitedRoom(visitor)).toHaveCount(0);
     await expect(invitedRooms(visitor)).toHaveText(["Garden"]);

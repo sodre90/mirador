@@ -116,6 +116,14 @@ export interface AppState {
   /** The agents you brought into rooms of other machines, and the tasks of others that wait for your OK. */
   broughtAgents: BroughtAgentHere[];
   broughtTasks: BroughtTaskWaiting[];
+  /** Whether this page shows the rooms of other machines, and so the conversations of the agents you brought there in their rooms rather than in any list. */
+  broughtShownInRooms: boolean;
+  /** The conversations of the agents you brought, and of what was forked or asked beside them, while `broughtShownInRooms`; no list of conversations shows them. */
+  broughtConversations: Conversation[];
+  /** The conversations of the agents you brought into the room of another machine that is shown, subscribed as the kept conversations are. */
+  broughtWork: OpenConversation[];
+  /** The agent you brought whose work shows beside its room, by its conversation. */
+  broughtWorkShown: string | null;
   /** The rooms someone other than the owner is in now. */
   roomsWithPeopleHere: string[];
   /** How far you have read each of your rooms, and what waits for you there. */
@@ -237,6 +245,8 @@ export type AppAction =
   | { type: "select-joined-room"; machineId: string; roomId: string | null }
   | { type: "leave-joined-room"; machineId: string; roomId: string }
   | { type: "keep-thread-conversations"; conversationIds: string[] }
+  | { type: "keep-brought-work"; conversationIds: string[] }
+  | { type: "show-brought-work"; conversationId: string | null }
   | { type: "awaiting-conversation"; workspaceId: string }
   | { type: "open-overlay"; overlay: Overlay }
   | { type: "close-overlay" }
@@ -249,7 +259,7 @@ export type AppAction =
   | { type: "dismiss-reminder-undo" };
 
 /** Nothing of someone else's machine is shown in the main pane. */
-const NOTHING_ELSEWHERE = { selectedKnock: null, selectedJoinedRoom: null } satisfies Partial<AppState>;
+const NOTHING_ELSEWHERE = { selectedKnock: null, selectedJoinedRoom: null, broughtWorkShown: null } satisfies Partial<AppState>;
 
 export const initialState: AppState = {
   workspaces: [],
@@ -258,6 +268,9 @@ export const initialState: AppState = {
   conversations: [],
   rooms: [],
   roomConversations: [],
+  broughtShownInRooms: false,
+  broughtConversations: [],
+  broughtWork: [],
   roomApprovals: [],
   roomTasksWaiting: [],
   roomWorkspaceWaiting: [],
@@ -342,10 +355,15 @@ export const initialState: AppState = {
   conversationsToDelete: null,
 };
 
-export function initialStateFor(conversationId: string | null, roomId: string | null = null, joinedRoom: AppState["selectedJoinedRoom"] = null): AppState {
-  if (joinedRoom) return selectJoinedRoom(initialState, joinedRoom);
-  return roomId ? selectRoom(initialState, roomId) : select(initialState, conversationId);
+export function initialStateFor(conversationId: string | null, roomId: string | null = null, joinedRoom: AppState["selectedJoinedRoom"] = null, broughtShownInRooms = false): AppState {
+  const start = { ...initialState, broughtShownInRooms };
+  if (joinedRoom) return selectJoinedRoom(start, joinedRoom);
+  return roomId ? selectRoom(start, roomId) : select(start, conversationId);
 }
+
+/** Whether the conversation shows in its room rather than in any list: an agent's of a room here, or, where this page shows other machines' rooms, one you brought. */
+const shownInRoom = ({ broughtShownInRooms }: Pick<AppState, "broughtShownInRooms">, conversation: Conversation) =>
+  conversation.roomId !== undefined || (broughtShownInRooms && (conversation.broughtIntoRoom === true || conversation.worksInRoomsWorkspace === true));
 
 function upsert<T extends { id: string }>(items: T[], item: T) {
   return items.some((existing) => existing.id === item.id)
@@ -404,10 +422,17 @@ function withMachineStatus(state: AppState, status: MachineStatus): AppState {
   return joinedRoomShownIsListed(state) ? withoutJoinedRoomGone(next) : next;
 }
 
-/** An agent's conversation in a room opens as its room, which is where it shows, as a notification about it does; a page loaded on one does so once the snapshot says which room it is in. */
+/**
+ * An agent's conversation in a room opens as its room, which is where it shows, as a notification about it does; a page
+ * loaded on one does so once the snapshot says which room it is in. One of an agent you brought opens its room on the
+ * other machine with its work beside it; what was forked or asked beside it has no room to open, so nothing changes.
+ */
 function selectShowing(state: AppState, conversationId: string | null): AppState {
   const roomId = state.roomConversations.find(({ id }) => id === conversationId)?.roomId;
-  return roomId ? selectRoom(state, roomId) : select(state, conversationId);
+  if (roomId) return selectRoom(state, roomId);
+  if (!state.broughtConversations.some(({ id }) => id === conversationId)) return select(state, conversationId);
+  const brought = state.broughtAgents.find((agent) => agent.conversationId === conversationId);
+  return brought ? { ...selectJoinedRoom(state, { machineId: brought.machineId, roomId: brought.roomId }), broughtWorkShown: conversationId } : state;
 }
 
 function selectRoom(state: AppState, roomId: string): AppState {
@@ -422,6 +447,12 @@ function keepingThreadConversations(state: AppState, conversationIds: string[]):
   if (conversationIds.join(" ") === state.threadConversations.map(({ conversationId }) => conversationId).join(" ")) return state;
   const alreadyOpen = (conversationId: string) => state.threadConversations.find((open) => open.conversationId === conversationId);
   return { ...state, threadConversations: conversationIds.map((conversationId) => alreadyOpen(conversationId) ?? notLoaded(conversationId)) };
+}
+
+function keepingBroughtWork(state: AppState, conversationIds: string[]): AppState {
+  if (conversationIds.join(" ") === state.broughtWork.map(({ conversationId }) => conversationId).join(" ")) return state;
+  const alreadyOpen = (conversationId: string) => state.broughtWork.find((open) => open.conversationId === conversationId);
+  return { ...state, broughtWork: conversationIds.map((conversationId) => alreadyOpen(conversationId) ?? notLoaded(conversationId)) };
 }
 
 function withRoomTimeline(state: AppState, roomId: string, change: (timeline: RoomTimelineWithCanvas) => RoomTimelineWithCanvas): AppState {
@@ -452,7 +483,10 @@ function withOpen(state: AppState, conversationId: string, change: (open: OpenCo
   const kept = changed(state.kept);
   const sideChats = changed(state.sideChats);
   const threadConversations = changed(state.threadConversations);
-  return kept === state.kept && sideChats === state.sideChats && threadConversations === state.threadConversations ? state : { ...state, kept, sideChats, threadConversations };
+  const broughtWork = changed(state.broughtWork);
+  return kept === state.kept && sideChats === state.sideChats && threadConversations === state.threadConversations && broughtWork === state.broughtWork
+    ? state
+    : { ...state, kept, sideChats, threadConversations, broughtWork };
 }
 
 /** Keeps the history of these side chats, and lets go of the rest; a conversation already kept brings the history it has. */
@@ -496,8 +530,9 @@ function applyServerMessage(state: AppState, message: ServerMessage): AppState {
         ...state,
         workspaces: [...message.workspaces].sort(inSidebarOrder),
         workspaceGroups: [...message.workspaceGroups].sort(inSidebarOrder),
-        conversations: message.conversations.filter(({ roomId }) => !roomId),
+        conversations: message.conversations.filter((conversation) => !shownInRoom(state, conversation)),
         roomConversations: message.conversations.filter(({ roomId }) => roomId),
+        broughtConversations: message.conversations.filter((conversation) => !conversation.roomId && shownInRoom(state, conversation)),
         rooms: message.rooms,
         roomApprovals: message.roomApprovals,
         roomTasksWaiting: message.roomTasksWaiting,
@@ -555,11 +590,16 @@ function applyServerMessage(state: AppState, message: ServerMessage): AppState {
         kept: state.kept.filter(({ conversationId }) => exists(conversationId)),
         sideChats: state.sideChats.filter(({ conversationId }) => exists(conversationId)),
         threadConversations: state.threadConversations.filter(({ conversationId }) => exists(conversationId)),
+        broughtWork: state.broughtWork.filter(({ conversationId }) => exists(conversationId)),
       };
       const roomStays = message.rooms.some(({ id }) => id === state.selectedRoomId);
       const withRoom = withoutJoinedRoomGone(withoutJoinedRoomOfNoMachine(roomStays ? next : leavingRoom(next)));
-      const roomOfSelected = next.roomConversations.find(({ id }) => id === state.selectedConversationId)?.roomId;
-      if (roomOfSelected) return selectRoom({ ...withRoom, kept: withRoom.kept.filter(({ conversationId }) => conversationId !== state.selectedConversationId) }, roomOfSelected);
+      const shownElsewhere = [...next.roomConversations, ...next.broughtConversations].some(({ id }) => id === state.selectedConversationId);
+      if (shownElsewhere) {
+        const leaving = { ...withRoom, kept: withRoom.kept.filter(({ conversationId }) => conversationId !== state.selectedConversationId) };
+        const shown = selectShowing(leaving, state.selectedConversationId);
+        return shown.selectedConversationId === state.selectedConversationId ? { ...shown, selectedConversationId: null } : shown;
+      }
       return exists(state.selectedConversationId) ? withRoom : { ...withRoom, selectedConversationId: null };
     }
     case "plugin-tab.state": {
@@ -590,6 +630,7 @@ function applyServerMessage(state: AppState, message: ServerMessage): AppState {
       return { ...state, workspaceGroups: state.workspaceGroups.filter(({ id }) => id !== message.groupId) };
     case "conversation.upserted": {
       if (message.conversation.roomId) return { ...state, roomConversations: upsert(state.roomConversations, message.conversation) };
+      if (shownInRoom(state, message.conversation)) return { ...state, broughtConversations: upsert(state.broughtConversations, message.conversation) };
       const isNew = !state.conversations.some(({ id }) => id === message.conversation.id);
       const next = { ...state, conversations: upsert(state.conversations, message.conversation) };
       if (isNew && state.awaitingConversationIn === message.conversation.workspaceId) {
@@ -602,6 +643,9 @@ function applyServerMessage(state: AppState, message: ServerMessage): AppState {
         ...state,
         conversations: state.conversations.filter(({ id }) => id !== message.conversationId),
         roomConversations: state.roomConversations.filter(({ id }) => id !== message.conversationId),
+        broughtConversations: state.broughtConversations.filter(({ id }) => id !== message.conversationId),
+        broughtWork: state.broughtWork.filter(({ conversationId }) => conversationId !== message.conversationId),
+        broughtWorkShown: state.broughtWorkShown === message.conversationId ? null : state.broughtWorkShown,
         kept: state.kept.filter(({ conversationId }) => conversationId !== message.conversationId),
         sideChats: state.sideChats.filter(({ conversationId }) => conversationId !== message.conversationId),
         threadConversations: state.threadConversations.filter(({ conversationId }) => conversationId !== message.conversationId),
@@ -892,6 +936,10 @@ export function reducer(state: AppState, action: AppAction): AppState {
       return state.selectedJoinedRoom?.machineId === action.machineId && [null, action.roomId].includes(state.selectedJoinedRoom.roomId) ? { ...state, selectedJoinedRoom: null } : state;
     case "keep-thread-conversations":
       return keepingThreadConversations(state, action.conversationIds);
+    case "keep-brought-work":
+      return keepingBroughtWork(state, action.conversationIds);
+    case "show-brought-work":
+      return { ...state, broughtWorkShown: action.conversationId };
     case "awaiting-conversation":
       return { ...state, awaitingConversationIn: action.workspaceId };
     case "open-overlay":

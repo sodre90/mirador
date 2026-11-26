@@ -138,9 +138,9 @@ test("Mia brings her Claude agent to work in the room's workspace, and nothing o
     await expect(joinedCard()).toContainText("Coder (room's workspace)");
   });
 
-  await test.step("its conversation is in a workspace named after the room, with an empty folder", async () => {
-    await expect(mia.locator(".sidebar .workspace", { hasText: "Garden · Ann's machine" })).toBeVisible();
-    expect(coderFolders()).toHaveLength(1);
+  await test.step("its conversation is in a workspace of its own with an empty folder, which no list shows, as the room is where it works", async () => {
+    await expect(mia.locator(".sidebar .workspace", { hasText: "Garden · Ann's machine" })).toHaveCount(0);
+    await expect.poll(() => coderFolders()).toHaveLength(1);
     expect(readdirSync(join(mias.dataDir, "brought-agents", coderFolders()[0]!))).toEqual([]);
   });
 
@@ -357,9 +357,10 @@ test("brought to work in a workspace of hers, it runs in the mode that asks, tho
     await mia.keyboard.press("Escape");
   });
 
-  await hers.locator(".conversation-title", { hasText: "Garden · Ann's machine" }).click();
-  await expect(mia.locator(".chat-header:visible h2")).toHaveText("Garden · Ann's machine");
-  const mode = await modeOfOpenConversation();
+  await expect(hers.locator(".conversation-title", { hasText: "Garden · Ann's machine" })).toHaveCount(0);
+  await joinedCard().click();
+  await mia.locator(".invited-room-bar .conversation-settings-toggle").click();
+  const mode = mia.getByRole("dialog", { name: "Settings of Coder" }).getByLabel("Mode", { exact: true });
   await expect(mode).toHaveValue("default", { timeout: 60_000 });
   const offered = await mode.locator("option").evaluateAll((options) => options.map((option) => (option as HTMLOptionElement).value));
   expect(offered).toEqual(["default", "acceptEdits"]);

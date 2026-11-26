@@ -1,5 +1,5 @@
 import { MIN_SEARCH_LENGTH, matchCount, matchOffsets, textsOf, type MatchOptions } from "../shared/find.ts";
-import type { ConversationMatches, EntryMatchCount, SearchHit, StoredEvent } from "../shared/model.ts";
+import { worksForARoom, type ConversationMatches, type EntryMatchCount, type SearchHit, type StoredEvent } from "../shared/model.ts";
 import { buildTimeline, withChunksCoalesced } from "../shared/timeline.ts";
 import { pageEvent } from "./low-data.ts";
 import type { Store } from "./store.ts";
@@ -52,7 +52,7 @@ export class ConversationSearch {
     this.forgetLater();
     return this.store
       .listConversations()
-      .filter(({ roomId }) => !roomId)
+      .filter((conversation) => !worksForARoom(conversation))
       .map(({ id }) => this.matchesIn(id, query))
       .filter((found) => found.matches > 0)
       .toSorted((a, b) => b.hits[0]!.at - a.hits[0]!.at);

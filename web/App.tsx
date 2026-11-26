@@ -433,8 +433,17 @@ function useKeptConversationsSubscribed(status: ConnectionStatus, kept: OpenConv
   }, [status, keptIds.join(" ")]);
 }
 
+/** Tells the host each room of another machine this page comes to show, also by opening an agent you brought there, so that room may call you again. */
+function useJoinedRoomOpenedTold(status: ConnectionStatus, opened: AppState["selectedJoinedRoom"]) {
+  const machineId = opened?.machineId ?? null;
+  const roomId = opened?.roomId ?? null;
+  useEffect(() => {
+    if (status === "open" && machineId && roomId) connection.send({ type: "machine.room-opened", machineId, roomId });
+  }, [status, machineId, roomId]);
+}
+
 export function App() {
-  const [state, dispatchToState] = useReducer(reducer, null, () => initialStateFor(conversationFromHash(), roomFromHash(), joinedRoomFromHash()));
+  const [state, dispatchToState] = useReducer(reducer, null, () => initialStateFor(conversationFromHash(), roomFromHash(), joinedRoomFromHash(), showsMachinesHere()));
   /** Someone else's machines show in this computer's own panes instead, room by room. */
   const ownMachines = state.machines.filter(({ asPerson }) => !asPerson);
   const machines = useShownMachine(ownMachines, state.hostRunId !== null);
@@ -641,7 +650,7 @@ export function App() {
   useEffect(() => {
     if (state.hostRunId !== null) forgetSideChatsOfDeleted(state.conversations);
   }, [state.hostRunId, conversationIds]);
-  useKeptConversationsSubscribed(status, [...state.kept, ...state.sideChats, ...state.threadConversations]);
+  useKeptConversationsSubscribed(status, [...state.kept, ...state.sideChats, ...state.threadConversations, ...state.broughtWork]);
   useRoomSubscribed(status, state.rooms.some(({ id }) => id === state.selectedRoomId) ? state.selectedRoomId : null);
 
   const openJoinedRoom = (machineId: string, roomId: string | null) => {
@@ -650,6 +659,7 @@ export function App() {
     if (opened) connection.send({ type: "machine.room-opened", machineId, roomId: opened });
     dispatch({ type: "select-joined-room", machineId, roomId: opened });
   };
+  useJoinedRoomOpenedTold(status, state.selectedJoinedRoom);
   useOpenedWhenLetIn(state.machines, state.machineStatuses, openJoinedRoom);
   /** A room joined with an invite opens at once, or, where its owner lets people in, shows its door until they do. */
   const joinedRoom = (machineId: string, roomId: string | null, waiting: boolean) => {
@@ -993,6 +1003,10 @@ export function App() {
             person={owner}
             sidebar={{ visible: !sidebarHidden, toggle: toggleSidebar }}
             broughtAgents={state.broughtAgents}
+            broughtConversations={state.broughtConversations}
+            broughtWork={state.broughtWork}
+            broughtWorkShown={state.broughtWorkShown}
+            broughtTasks={state.broughtTasks}
             profiles={state.profiles}
             banner={<HostBanner status={status} state={state} />}
             onJoinedRoom={joinedRoom}
