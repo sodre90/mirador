@@ -1072,6 +1072,14 @@ describe("a page that shows a room", () => {
     expect(reducer(atTheDoor, { type: "select-joined-room", ...elsewhere })).toMatchObject({ selectedKnock: null, selectedJoinedRoom: elsewhere });
   });
 
+  test("counts each opening of a room of someone else's machine, of the one shown already too, for the host to hear of each", () => {
+    const elsewhere = { machineId: "m1", roomId: "elsewhere" };
+    const opened = reducer(showingRoom([]), { type: "select-joined-room", ...elsewhere });
+    const openedAgain = reducer(opened, { type: "select-joined-room", ...elsewhere });
+    expect([opened, openedAgain].map(({ joinedRoomOpenings }) => joinedRoomOpenings)).toEqual([1, 2]);
+    expect(reducer(openedAgain, { type: "select-room", roomId: "r1" }).joinedRoomOpenings).toBe(2);
+  });
+
   test("keeps showing a room of someone else's machine as its page reconnects and other machines change, until it is left, its machine stops listing it or that machine goes", () => {
     const machines = ["m1", "m2"].map((id): Machine => ({ id, name: id, origin: `https://${id}.example.ts.net`, createdAt: 1, relayPort: 4620, joined: true, color: null, hostId: null, outOfRooms: false, asPerson: true, relayKey: null, peerToPeer: false, knocks: [], ownerName: null }));
     const loadedOn = initialStateFor(null, null, { machineId: "m1", roomId: "elsewhere" });

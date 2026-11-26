@@ -433,13 +433,13 @@ function useKeptConversationsSubscribed(status: ConnectionStatus, kept: OpenConv
   }, [status, keptIds.join(" ")]);
 }
 
-/** Tells the host each room of another machine this page comes to show, also by opening an agent you brought there, so that room may call you again. */
-function useJoinedRoomOpenedTold(status: ConnectionStatus, opened: AppState["selectedJoinedRoom"]) {
-  const machineId = opened?.machineId ?? null;
-  const roomId = opened?.roomId ?? null;
+/** Tells the host each time a room of another machine is opened, the one shown already too or by opening an agent you brought there, so that room may call you again. */
+function useJoinedRoomOpenedTold(status: ConnectionStatus, { selectedJoinedRoom, joinedRoomOpenings }: Pick<AppState, "selectedJoinedRoom" | "joinedRoomOpenings">) {
+  const machineId = selectedJoinedRoom?.machineId ?? null;
+  const roomId = selectedJoinedRoom?.roomId ?? null;
   useEffect(() => {
     if (status === "open" && machineId && roomId) connection.send({ type: "machine.room-opened", machineId, roomId });
-  }, [status, machineId, roomId]);
+  }, [status, machineId, roomId, joinedRoomOpenings]);
 }
 
 export function App() {
@@ -656,10 +656,9 @@ export function App() {
   const openJoinedRoom = (machineId: string, roomId: string | null) => {
     if (!showsMachinesHere()) return;
     const opened = roomId ?? joinedRoomShown({ machineId, roomId }, joinedRoomsOf(state.machines, state.machineStatuses))?.room.id ?? null;
-    if (opened) connection.send({ type: "machine.room-opened", machineId, roomId: opened });
     dispatch({ type: "select-joined-room", machineId, roomId: opened });
   };
-  useJoinedRoomOpenedTold(status, state.selectedJoinedRoom);
+  useJoinedRoomOpenedTold(status, state);
   useOpenedWhenLetIn(state.machines, state.machineStatuses, openJoinedRoom);
   /** A room joined with an invite opens at once, or, where its owner lets people in, shows its door until they do. */
   const joinedRoom = (machineId: string, roomId: string | null, waiting: boolean) => {

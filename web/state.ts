@@ -124,6 +124,8 @@ export interface AppState {
   broughtWork: OpenConversation[];
   /** The agent you brought whose work shows beside its room, by its conversation. */
   broughtWorkShown: string | null;
+  /** Counts the openings of rooms of other machines, so each is told to the host, also of the room shown already. */
+  joinedRoomOpenings: number;
   /** The rooms someone other than the owner is in now. */
   roomsWithPeopleHere: string[];
   /** How far you have read each of your rooms, and what waits for you there. */
@@ -271,6 +273,7 @@ export const initialState: AppState = {
   broughtShownInRooms: false,
   broughtConversations: [],
   broughtWork: [],
+  joinedRoomOpenings: 0,
   roomApprovals: [],
   roomTasksWaiting: [],
   roomWorkspaceWaiting: [],
@@ -404,6 +407,7 @@ const selectJoinedRoom = (state: AppState, joinedRoom: NonNullable<AppState["sel
   ...NOTHING_ELSEWHERE,
   selectedConversationId: null,
   selectedJoinedRoom: joinedRoom,
+  joinedRoomOpenings: state.joinedRoomOpenings + 1,
 });
 
 const withoutJoinedRoomOfNoMachine = (state: AppState): AppState =>
