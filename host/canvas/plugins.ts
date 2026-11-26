@@ -23,6 +23,7 @@ import {
   type WorkspaceTabContext,
   type ConversationReply,
   type PluginItemType,
+  type PluginNotificationText,
   type StartedConversation,
   type ToolCaller,
   type WorkspaceConversationStart,
@@ -105,6 +106,18 @@ export type StartInWorkspace = (workspaceId: string, pluginTitle: string, start:
 /** What the agent of the profile with that id offers, null when it didn't answer; rejects when no profile has the id. */
 export type AskProfileChoices = (profileId: string) => Promise<Conversation["configOptions"] | null>;
 
+/** What a plugin tells the user of its own, as a system notification about one of the workspaces. */
+export type TellUser = (workspace: string, said: PluginNotificationText) => void;
+
+/** The title and body of a plugin's notification, checked; throws, saying what works, for anything else. */
+function pluginNotificationText(said: unknown): PluginNotificationText {
+  const { title, body } = (typeof said === "object" && said !== null ? said : {}) as Partial<Record<keyof PluginNotificationText, unknown>>;
+  if (typeof title !== "string" || title.trim() === "" || typeof body !== "string") {
+    throw new Error("notify takes { title, body }: a title that isn't empty, and a body, both text.");
+  }
+  return { title, body };
+}
+
 /** What a plugin for an API before profile ids gives to start a conversation. */
 type StartOnNamedProfile = Omit<WorkspaceConversationStart, "profileId"> & { profile: string };
 
@@ -152,6 +165,10 @@ export class CanvasPlugins {
     throw new Error("Mirador can't ask agents what they offer yet.");
   };
 
+  private tellUser: TellUser = () => {
+    throw new Error("Mirador can't notify yet.");
+  };
+
   constructor(
     private readonly store: Store,
     private readonly hub: Hub,
@@ -177,6 +194,10 @@ export class CanvasPlugins {
 
   promptsStartedWith(prompt: PromptStarted) {
     this.promptStarted = prompt;
+  }
+
+  notifiesWith(tell: TellUser) {
+    this.tellUser = tell;
   }
 
   readsUsageWith(read: ReadUsage) {
@@ -570,6 +591,7 @@ export class CanvasPlugins {
         const options = await this.askProfileChoices(namesProfiles(plugin) ? profileNamed(this.store, profile).id : profile);
         return options && offeredChoices(options);
       },
+      notify: (said) => this.tellUser(workspace.name, pluginNotificationText(said)),
     };
   }
 

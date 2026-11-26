@@ -377,6 +377,19 @@ export interface WorkspaceTabContext {
    * it take the profile's id, where a plugin for an older API gives its name.
    */
   profileChoices(profileId: string): Promise<ProfileChoices | null>;
+  /**
+   * Tells the user something of the plugin's own about the workspace, such as a to-do coming due, as a system
+   * notification: on this computer whatever its pages show, and on the phones that let plugins' notifications through.
+   * It reads `title`, then the workspace's name and `body`, in the plugin's own words, which Mirador doesn't translate.
+   * A long title or body is cut. Throws for a title that's empty. Plugin API 24 brought it.
+   */
+  notify(said: PluginNotificationText): void;
+}
+
+/** What a plugin's notification says: a line for its title, and a sentence or two under it. */
+export interface PluginNotificationText {
+  title: string;
+  body: string;
 }
 
 /** What a profile's agent offers a conversation, each by the id `startConversation` takes and the name the agent gives it. */

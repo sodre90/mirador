@@ -21,7 +21,7 @@ import type { Store } from "./store.ts";
 /** How long a phone with a connection gets to say it showed a notification before the Mac pushes it too. */
 export const SHOWN_WAIT_MS = 5_000;
 const RELAY_TIMEOUT_MS = 20_000;
-export const NOTIFICATION_KINDS = new Set<NotificationKind>(["question", "permission", "finished", "error", "job-ended", "join-request", "reminder"]);
+export const NOTIFICATION_KINDS = new Set<NotificationKind>(["question", "permission", "finished", "error", "job-ended", "join-request", "reminder", "plugin"]);
 /** Prefix under which room-level notifications are tracked in `toldOf` / `push_told` beside conversation ids. */
 const ROOM_PUSH_PREFIX = "room:";
 

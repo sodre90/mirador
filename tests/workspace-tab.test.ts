@@ -50,6 +50,16 @@ describe("a plugin's workspace tab", () => {
     ]);
   });
 
+  test("notifies the user of its own, in its words, naming its workspace", async () => {
+    const { plugins } = await canvasPluginHost(FIXTURES);
+    const told: unknown[] = [];
+    plugins.notifiesWith((workspace, said) => void told.push({ workspace, said }));
+    await plugins.actInWorkspaceTab("tally", "w1", { kind: "count" });
+    await plugins.actInWorkspaceTab("tally", "w1", { kind: "remind" });
+    expect(told).toEqual([{ workspace: "p", said: { title: "Time to count", body: "Counted 1 so far" } }]);
+    await expect(plugins.actInWorkspaceTab("tally", "w1", { kind: "remind", title: " " })).rejects.toThrow("notify takes { title, body }: a title that isn't empty, and a body, both text.");
+  });
+
   test("says what went wrong: an action it refuses, a workspace that isn't open, a plugin without a tab", async () => {
     const { plugins } = await canvasPluginHost(FIXTURES);
     expect(plugins.actInWorkspaceTab("tally", "w1", { kind: "other" })).rejects.toThrow("The tally can only count.");

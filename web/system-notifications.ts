@@ -54,7 +54,7 @@ function show(received: SystemNotification, open: OpenConversation, openRoom: Op
   refresh();
   if (!notifies(setting)) return;
   const notification = inLanguage(received, t);
-  const shown = new Notification(notification.title, { body: bodyWithWorkspace(notification), tag: notification.conversationId ?? notification.roomId ?? "about-this-machine" });
+  const shown = new Notification(notification.title, { body: bodyWithWorkspace(notification), tag: notification.conversationId ?? notification.roomId ?? notification.id ?? "about-this-machine" });
   shown.onclick = () => {
     window.focus();
     if (notification.conversationId) open(notification.conversationId, notification.machineId);

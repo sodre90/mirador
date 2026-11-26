@@ -25,8 +25,8 @@ export type NotificationAbout =
   | { kind: "join-request"; request: Pick<JoinRequest, "name" | "fromAddress" | "tailscaleUser"> }
   | { kind: "room"; alert: RoomAlert };
 
-/** What a notification is about, so a device can let through only the kinds its owner wants. */
-export type NotificationKind = NotificationReason["kind"] | "join-request";
+/** What a notification is about, so a device can let through only the kinds its owner wants; "plugin" is one a plugin sends of its own. */
+export type NotificationKind = NotificationReason["kind"] | "join-request" | "plugin";
 
 export interface SystemNotification {
   /** Set on the ones phones may also get as pushes; a phone answers notification.shown with it. */
@@ -140,6 +140,16 @@ export const roomNotification = (roomId: string, roomName: string, place: string
   workspace: place,
   body: notificationBody(roomAlertText(alert)),
   about: { kind: "room", alert },
+});
+
+const TITLE_LENGTH = 120;
+
+/** What a plugin tells the user, in its own words: the title and body it wrote, and the workspace it's about. */
+export const pluginNotification = (workspace: string, { title, body }: { title: string; body: string }): SystemNotification => ({
+  kind: "plugin",
+  title: cutWithEllipsis(oneLine(title), TITLE_LENGTH - 1, TITLE_LENGTH),
+  workspace,
+  body: notificationBody(body),
 });
 
 /** Where a notification has no subtitle line (browsers, Linux), the workspace leads the body. */

@@ -1,6 +1,6 @@
 import type { RoomAlert } from "../shared/room-reading.ts";
 import type { Room } from "../shared/rooms.ts";
-import { roomNotification, roomWaitingNotification, systemNotification, type NotificationReason, type SystemNotification } from "../shared/system-notifications.ts";
+import { pluginNotification, roomNotification, roomWaitingNotification, systemNotification, type NotificationReason, type SystemNotification } from "../shared/system-notifications.ts";
 import type { Hub } from "./hub.ts";
 import { roomPushTarget, type PushNotifications } from "./push-notifications.ts";
 import type { Store } from "./store.ts";
@@ -46,6 +46,11 @@ export class SystemNotifications {
   roomKnock(room: Room, by: string) {
     if (this.store.roomMuted(room.id, this.store.ownerId())) return;
     this.roomAlert(room, { about: "knock", by });
+  }
+
+  /** A plugin tells the user something of its own about a workspace, such as a to-do coming due, whatever page shows what. */
+  fromPlugin(workspace: string, said: { title: string; body: string }) {
+    this.tell({ ...pluginNotification(workspace, said), id: crypto.randomUUID() });
   }
 
   /** A room this computer's owner joined on someone else's machine calls them: phones get it too, as they never join that machine. */

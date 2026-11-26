@@ -6,7 +6,7 @@ import { loadConfig } from "../host/config.ts";
 import { pushRegistrationProblem, PushNotifications, roomPushTarget } from "../host/push-notifications.ts";
 import { Store } from "../host/store.ts";
 import { DEFAULT_PUSH_RELAY, openedPushBlob, PUSH_BLOB_BYTES, pushRelayAddressProblem, pushRelayChoiceOf, pushRelayHost, sealedPushBlob, type ClearMessage, type PushKey, type PushMessage, type PushRegistration, type PushRelayRequest, type PushRequest } from "../shared/push.ts";
-import type { SystemNotification } from "../shared/system-notifications.ts";
+import { pluginNotification, type SystemNotification } from "../shared/system-notifications.ts";
 import vector from "../shared/push-test-vector.json";
 import { storeWithConversation } from "./canvas-plugin-host.ts";
 
@@ -301,6 +301,25 @@ describe("pushing notifications", () => {
     await pushes.waitingChanged(new Set(["c1"]));
     await pushes.waitingChanged(new Set());
     expect(posted.map(({ request }) => request.kind)).toEqual(["alert"]);
+  });
+
+  const dueTodo = { ...pluginNotification("kernel", { title: "Send the summary", body: "Due now" }), id: "p1" };
+
+  test("a plugin's notification, about no conversation, goes to a phone that lets plugins' through, and is never cleared", async () => {
+    const { pushes, posted } = pushingHost();
+    pushes.register("phone", registration(["plugin"]));
+    await pushes.notify(dueTodo);
+    await pushes.read(["c1"]);
+    expect(posted.map(({ request }) => request.kind)).toEqual(["alert"]);
+    const opened = await openedPushBlob(pushKey, posted[0]!.request.blob!);
+    expect(opened.notification).toEqual({ kind: "plugin", title: "Send the summary", workspace: "kernel", body: "Due now" });
+  });
+
+  test("a phone that doesn't let plugins' notifications through gets none", async () => {
+    const { pushes, posted } = pushingHost();
+    pushes.register("phone", registration(["question", "reminder"]));
+    await pushes.notify(dueTodo);
+    expect(posted).toHaveLength(0);
   });
 
   test("a notification read elsewhere, as on a page showing its room, is cleared at once unless its conversation still waits", async () => {

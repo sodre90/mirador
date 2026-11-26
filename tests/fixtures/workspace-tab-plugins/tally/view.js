@@ -3,7 +3,8 @@ page.innerHTML = `<h1>Tally</h1><p id="place"></p><p id="workspace"></p><p id="c
 <button id="count-up">Count</button><p id="reply"></p><button id="refused">Do what tallies don't</button>
 <button id="ask">Ask the agent</button><button id="start">Start a conversation</button><button id="compose">Add to the composer</button>
 <a id="link" href="#">Open the tally's site</a><p id="handed"></p>
-<input id="conversation" aria-label="Conversation"><button id="open">Open the conversation</button>`;
+<input id="conversation" aria-label="Conversation"><button id="open">Open the conversation</button>
+<button id="remind">Remind me</button>`;
 document.body.append(page);
 const show = (id, text) => (document.getElementById(id).textContent = text);
 const handOff = (promise, done) => promise.then(() => show("handed", done), (error) => show("handed", error.message));
@@ -22,3 +23,4 @@ document.getElementById("link").addEventListener("click", (event) => {
   window.mirador.openLink("https://example.invalid/tally");
 });
 document.getElementById("open").addEventListener("click", () => handOff(window.mirador.openConversation(document.getElementById("conversation").value), "Opened"));
+document.getElementById("remind").addEventListener("click", () => window.mirador.send({ kind: "remind" }));

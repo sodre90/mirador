@@ -1,7 +1,7 @@
 import { cpSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
-import { addWorkspace, createProfile, signIn, untilFramePainted } from "./helpers.ts";
+import { addWorkspace, allowNotifications, createProfile, notificationsShown, signIn, untilFramePainted } from "./helpers.ts";
 import { TestHost, writeBunProgram } from "./test-host.ts";
 
 const host = new TestHost({ fakePrograms: true });
@@ -37,6 +37,7 @@ async function startConversation(page: Page) {
 }
 
 test("a plugin's workspace tab shows its state, takes the user's actions, and hands work to the agent", async ({ page }) => {
+  await allowNotifications(page);
   await signIn(page, host);
   await startConversation(page);
   const firstConversation = shownConversation(page);
@@ -104,5 +105,17 @@ test("a plugin's workspace tab shows its state, takes the user's actions, and ha
     await tabView(page).getByRole("button", { name: "Open the conversation" }).click();
     await expect(page).toHaveURL(new RegExp(`#/c/${firstConversation}$`));
     expect(firstConversation).not.toBe(tabsConversation);
+  });
+
+  await test.step("the plugin notifies the user in its own words, naming the workspace, even while its workspace shows", async () => {
+    await expect(tabToggle(page), "the conversation keeps its tab open").toHaveAttribute("aria-pressed", "true");
+    await tabView(page).getByRole("button", { name: "Remind me" }).click();
+    await tabView(page).getByRole("button", { name: "Remind me" }).click();
+    await expect.poll(() => notificationsShown(page)).toEqual([
+      { title: "Time to count", body: "project · Counted 1 so far", tag: expect.stringMatching(/^[0-9a-f-]{36}$/), closed: false },
+      { title: "Time to count", body: "project · Counted 1 so far", tag: expect.stringMatching(/^[0-9a-f-]{36}$/), closed: false },
+    ]);
+    const [first, second] = await notificationsShown(page);
+    expect(first!.tag, "a second notification doesn't take the place of the first").not.toBe(second!.tag);
   });
 });
