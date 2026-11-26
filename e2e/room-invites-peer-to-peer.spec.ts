@@ -4,7 +4,7 @@ import { createServer } from "node:net";
 import { join } from "node:path";
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { machineAddress, roomInviteLink } from "../shared/machines.ts";
-import { addWorkspace, copiedInvite, createProfile, createRoom, inviteIntoRoom, joinRoom, nameOwnProfile, openInviteDialog, openRoomSettings, openSettings, reachedAtOwnPort, reloadFromRestartedHost, roomCard, signIn } from "./helpers.ts";
+import { addWorkspace, copiedInvite, createProfile, createRoom, expectPopoverFits, inviteIntoRoom, joinRoom, nameOwnProfile, openInviteDialog, openRoomSettings, openSettings, reloadFromRestartedHost, roomCard, signIn } from "./helpers.ts";
 import { sidecarProgram, sidecarReady } from "./p2p-sidecar.ts";
 import { TestHost, writeBunProgram } from "./test-host.ts";
 
@@ -16,7 +16,11 @@ const peerToPeer = () => ({ MIRADOR_P2P_BINARY: binary, MIRADOR_P2P_BROKER: `loc
 /** The owner's machine, which other machines reach at no address: only through its peer-to-peer tunnel. */
 const owners = new TestHost({ fakePrograms: true, environment: peerToPeer });
 /** A machine reached both ways, through its tunnel and at an address of its own, whose Settings pick the way its room invites connect. */
-const reachedBothWays = new TestHost({ environment: (port) => ({ ...peerToPeer(), ...reachedAtOwnPort(port) }) });
+const reachedBothWaysHost = "ann-workstation.tailnet.example.invalid";
+const reachedBothWaysOrigin = `https://${reachedBothWaysHost}`;
+const reachedBothWays = new TestHost({
+  environment: () => ({ ...peerToPeer(), MIRADOR_PUBLIC_ORIGIN: reachedBothWaysOrigin, MIRADOR_PUBLIC_CANVAS_ORIGIN: `${reachedBothWaysOrigin}:8443` }),
+});
 /** The invited person's own Mirador, which dials the owner's tunnel itself. */
 const visitors = new TestHost({ environment: peerToPeer });
 /** Two more people's own Miradors, which come through the tunnel with one invite for several people. */
@@ -336,10 +340,11 @@ test("on a machine reached both ways, room invites connect peer to peer until Se
   await test.step("an invite connects peer to peer at first, with no address in it", async () => {
     const dialog = await openInviteDialog(page, "Porch");
     await expect(connectsBy(dialog)).toHaveText("Directly, peer to peer");
+    await expectPopoverFits(dialog);
     const text = await copiedInvite(dialog);
     expect(machineAddress(text)).toMatchObject({ forRoom: true, name: null });
     expect(machineAddress(text)!.tunnel).not.toBeNull();
-    expect(machineAddress(text)!.origin).not.toBe(reachedBothWays.origin);
+    expect(machineAddress(text)!.origin).not.toBe(reachedBothWaysOrigin);
     await dialog.getByRole("button", { name: "Done" }).click();
   });
 
@@ -357,10 +362,11 @@ test("on a machine reached both ways, room invites connect peer to peer until Se
   await test.step("a new invite connects at the address, with no tunnel in it", async () => {
     await roomCard(page, "Porch").click();
     const dialog = await openInviteDialog(page, "Porch");
-    await expect(connectsBy(dialog)).toHaveText(`At this machine's address (127.0.0.1:${reachedBothWays.port})`);
+    await expect(connectsBy(dialog)).toHaveText(`At this machine's address (${reachedBothWaysHost})`);
     await expect(dialog.getByRole("option", { name: "Directly, peer to peer" })).toHaveCount(1);
+    await expectPopoverFits(dialog);
     const text = await copiedInvite(dialog);
-    expect(machineAddress(text)).toMatchObject({ origin: reachedBothWays.origin, forRoom: true, tunnel: null });
+    expect(machineAddress(text)).toMatchObject({ origin: reachedBothWaysOrigin, forRoom: true, tunnel: null });
     await dialog.getByRole("button", { name: "Done" }).click();
   });
 });

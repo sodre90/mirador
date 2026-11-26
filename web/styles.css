@@ -12016,6 +12016,7 @@ button.room-meaning:hover {
 
 .room-invite-dialog :is(.hint, .warning) {
   margin: 0;
+  overflow-wrap: anywhere;
 }
 
 .room-invite-dialog .form-actions {
@@ -12106,7 +12107,8 @@ button.room-meaning:hover {
 }
 
 .room-invite-rows {
-  display: grid;
+  display: flex;
+  flex-direction: column;
 }
 
 .room-invite-rows > * {
@@ -12131,6 +12133,7 @@ button.room-meaning:hover {
   min-width: 0;
   max-width: 65%;
   padding-block: 4px;
+  overflow: hidden;
   text-overflow: ellipsis;
 }
 
