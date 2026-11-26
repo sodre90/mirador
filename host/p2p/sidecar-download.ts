@@ -10,13 +10,13 @@ export interface SidecarDownload {
 }
 
 /** The sidecar the host downloads the first time it needs peer to peer, from a prerelease of the public repository. */
-export const SIDECAR_RELEASE = "p2p-sidecar-7bb4c2d";
+export const SIDECAR_RELEASE = "p2p-sidecar-27ddcb2";
 /** By `${process.platform}-${process.arch}`; scripts/publish-sidecar.ts writes them when it publishes a release. */
 export const SIDECAR_SHA256: Partial<Record<string, string>> = {
-  "darwin-arm64": "fa947683fba75cee0c09d834d4dfa7bd90bf9ddd4a29fa050fec0ffb737b7e77",
-  "win32-x64": "2d931879fc472ae2f71960654b4bd2b899356d62317226d021510aa7788ba48a",
-  "linux-x64": "5d282ccf90fcf8be6335c5438f9bbfb7bf83167392fa491f7f992fe6b8ae2928",
-  "linux-arm64": "5f319c5bf0afe50fcbf48f33f1b018dcaced3ca1d89de25965084d89bb7fa416",
+  "darwin-arm64": "f0fb860510fe1ef2d961a8cd758609f7cce1d9e7700f408989fe12be5e6f58cd",
+  "win32-x64": "fd116c2121c1c906478397ab68ce2063cc74e613a0535e3223e5c2ba8e7f2fe2",
+  "linux-x64": "52f9e3ccecdcc5437dd4b375202bb8065b852319bce606ee0633bca0bd00a237",
+  "linux-arm64": "4cca49e7f0499e9b231c6ab5315f11a7a669591f6eb00eefa54085a9ed958ff7",
 };
 
 const sidecarAsset = (platformAndCpu: string) => `mirador-p2p-${platformAndCpu}${platformAndCpu.startsWith("win32") ? ".exe" : ""}`;
