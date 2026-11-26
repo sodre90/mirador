@@ -74,6 +74,8 @@ export const shell: Messages["shell"] = {
     deleteOlder: "Régebbi beszélgetések törlése",
     deleteAll: "Összes törlése",
     deleteOlderArmed: (count) => `${count} törlése?`,
+    deleteOthers: "A többi beszélgetés törlése…",
+    deleteBelow: "Az alatta lévő beszélgetések törlése…",
     newConversationLabel: "+ Új beszélgetés",
     continueSessionLabel: "Munkamenet folytatása…",
     settings: "Beállítások…",
@@ -155,6 +157,13 @@ export const shell: Messages["shell"] = {
     loses: (count) => `A worktree-jeiben legalább ${count} nem commitolt fájl van, ez is törlődik velük.`,
     keeps: "A projektkönyvtár és a worktree-kben készült commitok megmaradnak.",
     removeAnyway: "Eltávolítás mindenképp",
+  },
+  deleteTogether: {
+    titleOthers: (count, workspace) => (count === 1 ? `Törlöd a másik beszélgetést itt: ${workspace}?` : `Törlöd a többi ${count} beszélgetést itt: ${workspace}?`),
+    titleBelow: (count, above) => (count === 1 ? `„${above}” alatt 1 beszélgetés van. Törlöd?` : `„${above}” alatt ${count} beszélgetés van. Törlöd őket?`),
+    staying: (count) => `${count} marad, mert még dolgozik vagy rád vár.`,
+    goesWithThem: "A mellékszálaik és az átadott feladataik velük együtt törlődnek. Az ágensek saját munkamenetfájljai a lemezen maradnak.",
+    confirm: (count) => `${count} beszélgetés törlése`,
   },
   olderDelete: {
     title: "Törlöd a régebbi beszélgetéseket és a worktree-jeiket?",

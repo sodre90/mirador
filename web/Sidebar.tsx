@@ -12,10 +12,10 @@ import {
 import { BarMenu, type BarMenuEntry } from "./BarMenu.tsx";
 import { ColorSwatches } from "./ColorSwatches.tsx";
 import { ConfirmButton } from "./ConfirmButton.tsx";
-import { ContextMenu, type ContextMenuEntry } from "./ContextMenu.tsx";
+import { ContextMenu, type AnyMenuEntry, type ContextMenuEntry } from "./ContextMenu.tsx";
 import { broughtWaitingOnYou, roomsYourAgentsWaitIn } from "./brought-waiting.ts";
 import { invitedOf, RoomsSection } from "./RoomsSidebar.tsx";
-import { LineIcon } from "./LineIcon.tsx";
+import { LineIcon, type LineIconShape } from "./LineIcon.tsx";
 import { connectedDevicesLabel, useConnectedDevicesInSidebar } from "./connected-devices.ts";
 import { connection } from "./connection.ts";
 import { useDirectoryCompletions } from "./directory-completions.ts";
@@ -30,7 +30,7 @@ import { hints, statusHints, waitingHints } from "./hints.ts";
 import { t } from "./i18n/index.ts";
 import { waitingOnJobsHint } from "./job-waits.ts";
 import { launchLabel } from "./launch-label.ts";
-import { callerIdOf, conversationsIn, isUnderCaller, putAwayIn, showsInSidebar, sidebarParts } from "./navigation.ts";
+import { callerIdOf, conversationsIn, deletableAround, type Deletable, isUnderCaller, putAwayIn, rowsTopToBottom, showsInSidebar, sidebarParts } from "./navigation.ts";
 import { isPending } from "../shared/reminders.ts";
 import { openReminderPicker, removeReminder } from "./reminders.ts";
 import { LaterGroup, ReminderChip } from "./ReminderViews.tsx";
@@ -303,7 +303,23 @@ function WaitingList({ state, dispatch }: { state: AppState; dispatch: Dispatch<
 }
 
 /** Outside the row, so choosing an entry does not also click the row and open the conversation, which would clear its mark. */
-function ConversationMenu({ conversation, at, dispatch, onClose }: { conversation: Conversation; at: { x: number; y: number }; dispatch: Dispatch<AppAction>; onClose: () => void }) {
+function ConversationMenu({
+  conversation,
+  rows,
+  everyConversation,
+  at,
+  dispatch,
+  onClose,
+}: {
+  conversation: Conversation;
+  /** Its workspace's rows from top to bottom, for deleting the others or those below it. */
+  rows: Conversation[];
+  /** Deleting a conversation takes the tasks it started and its side chats, wherever they are listed. */
+  everyConversation: Conversation[];
+  at: { x: number; y: number };
+  dispatch: Dispatch<AppAction>;
+  onClose: () => void;
+}) {
   const forkable = useHostSaysForkable(conversation.id);
   const readEntry: ContextMenuEntry = lastsUntilOpened(conversation.waitingFor)
     ? { label: words.markRead, icon: "mailOpen", onChoose: () => markRead(conversation.id) }
@@ -315,7 +331,44 @@ function ConversationMenu({ conversation, at, dispatch, onClose }: { conversatio
     ...(conversation.reminder ? [{ label: conversation.reminder.due ? t.reminders.dismiss : t.reminders.remove, icon: "bellOff" as const, onChoose: () => removeReminder(conversation.id) }] : []),
   ];
   const favouriteEntry: ContextMenuEntry = { label: favouriteLabel(conversation), icon: "star", onChoose: () => setFavourite(conversation.id, !conversation.favourite) };
-  return <ContextMenu name={shownTitle(conversation)} at={at} entries={[readEntry, favouriteEntry, ...reminderEntries, forkEntry]} onClose={onClose} />;
+  const deleteEntries = deleteEntriesFor(conversation, deletableAround(rows, everyConversation, conversation.id), dispatch);
+  return <ContextMenu name={shownTitle(conversation)} at={at} entries={[readEntry, favouriteEntry, ...reminderEntries, forkEntry, ...deleteEntries]} onClose={onClose} />;
+}
+
+/** As a browser tab's menu closes it, the other tabs or those to its right; deleting several asks in a prompt that names them. */
+function deleteEntriesFor(conversation: Conversation, around: ReturnType<typeof deletableAround>, dispatch: Dispatch<AppAction>): AnyMenuEntry[] {
+  const deleteSome = (label: string, icon: LineIconShape, which: "others" | "below", some: Deletable | undefined): ContextMenuEntry[] =>
+    !some || some.going.length === 0
+      ? []
+      : [
+          {
+            label,
+            icon,
+            onChoose: () =>
+              dispatch({
+                type: "delete-together",
+                deleting: {
+                  fromConversationId: conversation.id,
+                  fromTitle: shownTitle(conversation),
+                  workspaceId: conversation.workspaceId,
+                  which,
+                  conversationIds: some.going.map(({ id }) => id),
+                  staying: some.staying,
+                },
+              }),
+          },
+        ];
+  return [
+    {
+      label: words.deleteConversation,
+      icon: "trash",
+      plain: true,
+      asked: { label: words.deleteConversation, armedText: words.deleteArmed, armedHint: hints.deleteConversationArmed },
+      onChoose: () => connection.send({ type: "conversation.delete", conversationId: conversation.id }),
+    },
+    ...deleteSome(words.deleteOthers, "trashMany", "others", around?.others),
+    ...deleteSome(words.deleteBelow, "trashBelow", "below", around?.below),
+  ];
 }
 
 /** A sidebar row may not have its history in the page, so the host, which has it, says whether it can be forked yet. */
@@ -1055,7 +1108,14 @@ export function Sidebar({
         <WaitingEdge side="below" hidden={outOfView.below} onClick={() => scrollToWaiting("below")} />
       </div>
       {conversationMenu && conversationInMenu && (
-        <ConversationMenu conversation={conversationInMenu} at={conversationMenu} dispatch={dispatch} onClose={() => setConversationMenu(null)} />
+        <ConversationMenu
+          conversation={conversationInMenu}
+          rows={rowsTopToBottom(conversationsIn(state, conversationInMenu.workspaceId), Date.now(), state.olderAfter, state.conversationsShown)}
+          everyConversation={state.conversations}
+          at={conversationMenu}
+          dispatch={dispatch}
+          onClose={() => setConversationMenu(null)}
+        />
       )}
       <footer>
         <ConnectedDevices listed={state.devices} ownerId={state.ownerId} onOpen={() => openOverlay({ kind: "settings", page: "devices" })} />

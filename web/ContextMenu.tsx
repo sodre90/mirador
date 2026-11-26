@@ -13,9 +13,11 @@ export interface ContextMenuEntry {
 /** Asks again in place, as a ConfirmButton does, before it is chosen. */
 export interface ConfirmedMenuEntry extends Omit<ContextMenuEntry, "disabled"> {
   asked: { label: string; armedText: string; armedHint: string };
+  /** Red only once it asks, for an entry beside others of its kind, such as a conversation's deletes. */
+  plain?: boolean;
 }
 
-type AnyMenuEntry = ContextMenuEntry | ConfirmedMenuEntry;
+export type AnyMenuEntry = ContextMenuEntry | ConfirmedMenuEntry;
 
 const asksAgain = (entry: AnyMenuEntry): entry is ConfirmedMenuEntry => "asked" in entry;
 
@@ -29,7 +31,7 @@ function MenuEntryButton({ entry, onChoose }: { entry: AnyMenuEntry; onChoose: (
   if (asksAgain(entry)) {
     const { label, armedText, armedHint } = entry.asked;
     return (
-      <ConfirmButton role="menuitem" className="danger" label={label} armedText={withIcon(armedText)} armedHint={armedHint} onConfirm={onChoose}>
+      <ConfirmButton role="menuitem" className={entry.plain ? "" : "danger"} label={label} armedText={withIcon(armedText)} armedHint={armedHint} onConfirm={onChoose}>
         {withIcon(entry.label)}
       </ConfirmButton>
     );

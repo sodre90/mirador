@@ -13,6 +13,31 @@ const lineIconShapes = {
       <path d="M5.75 4V2.75a1 1 0 0 1 1-1h2.5a1 1 0 0 1 1 1V4" />
     </>
   ),
+  trashMany: (
+    <>
+      {/* The can in front hides what is behind it: a fixed id, as every copy of this mask is the same. */}
+      <mask id="line-icon-trash-behind">
+        <rect width="16" height="16" fill="white" stroke="none" />
+        <path d="M0.4 5.4h10.2v10.2H0.4zM3.2 3.8h3.8v1.6H3.2z" fill="black" stroke="none" />
+      </mask>
+      <g mask="url(#line-icon-trash-behind)">
+        <path d="M6.5 2.5h8" />
+        <path d="M13.75 2.5v6.75a1.25 1.25 0 0 1-1.25 1.25h-4a1.25 1.25 0 0 1-1.25-1.25V2.5" />
+        <path d="M9.25 2.5v-.9a.75.75 0 0 1 .75-.75h1a.75.75 0 0 1 .75.75v.9" />
+      </g>
+      <path d="M1.5 6.5h8" />
+      <path d="M8.75 6.5v6.75a1.25 1.25 0 0 1-1.25 1.25h-4a1.25 1.25 0 0 1-1.25-1.25V6.5" />
+      <path d="M4.25 6.5v-.9a.75.75 0 0 1 .75-.75h1a.75.75 0 0 1 .75.75v.9" />
+    </>
+  ),
+  trashBelow: (
+    <>
+      <path d="M2.5 4h11" />
+      <path d="M12.5 4v9a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 13V4" />
+      <path d="M5.75 4V2.75a1 1 0 0 1 1-1h2.5a1 1 0 0 1 1 1V4" />
+      <path d="M8 6.5v5M6.25 9.75 8 11.5l1.75-1.75" />
+    </>
+  ),
   star: <path d="M8 2l1.53 4.4 4.65.09-3.71 2.81 1.35 4.46L8 11.1l-3.82 2.66 1.35-4.46-3.71-2.81 4.65-.09z" />,
   bell: (
     <>

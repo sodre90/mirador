@@ -84,6 +84,30 @@ export interface PluginTabState {
   problem: string | null;
 }
 
+export interface DeletingTogether {
+  /** The row whose menu asked, which the prompt sits beside. */
+  fromConversationId: string;
+  /** Its title as the menu opened, which names it while the prompt asks, even once it is gone. */
+  fromTitle: string;
+  /** Kept apart from the row, so the prompt still names the workspace once that row is gone. */
+  workspaceId: string;
+  which: "others" | "below";
+  conversationIds: string[];
+  /** Those left out, as they or what they hold are at work or wait for the user. */
+  staying: number;
+  /** Sent to the host, which deletes them, or first asks about the uncommitted files their worktrees hold. */
+  sent: boolean;
+  /** What the host asked before deleting them: the uncommitted files their worktrees hold. */
+  asked: { conversationIds: string[]; uncommittedFiles: number; branches: string[] } | null;
+}
+
+/** The host deleted one of those it was sent, so the prompt's work is done. */
+const deletedTogether = (deleting: DeletingTogether | null, conversationId: string) => Boolean(deleting?.sent && deleting.conversationIds.includes(conversationId));
+
+/** The host's ask names no request, so it answers the prompt's only when the prompt sent and it names none but the prompt's. */
+const answersDeletingTogether = (deleting: DeletingTogether | null, conversationIds: string[]): deleting is DeletingTogether =>
+  Boolean(deleting?.sent && conversationIds.every((id) => deleting.conversationIds.includes(id)));
+
 export interface AppState {
   workspaces: Workspace[];
   workspaceGroups: WorkspaceGroup[];
@@ -211,6 +235,8 @@ export interface AppState {
   workspaceToDelete: { workspaceId: string; uncommittedFiles: number } | null;
   /** A workspace's older conversations the user asked to delete together, whose worktrees hold uncommitted files that would go with them. */
   conversationsToDelete: { conversationIds: string[]; uncommittedFiles: number; branches: string[] } | null;
+  /** Conversations a row's menu would delete together, listed for the user to confirm. */
+  deletingTogether: DeletingTogether | null;
   /** The host process run this page last heard from; another one means the host restarted, maybe with new code. */
   hostRunId: string | null;
   hostCodeChanged: boolean;
@@ -257,6 +283,9 @@ export type AppAction =
   | { type: "dismiss-worktree-to-delete" }
   | { type: "dismiss-workspace-to-delete" }
   | { type: "dismiss-conversations-to-delete" }
+  | { type: "delete-together"; deleting: Omit<DeletingTogether, "sent" | "asked"> }
+  | { type: "deleting-together-sent" }
+  | { type: "dismiss-deleting-together" }
   | { type: "reminder-set"; undo: ReminderUndo }
   | { type: "dismiss-reminder-undo" };
 
@@ -356,6 +385,7 @@ export const initialState: AppState = {
   worktreeToDelete: null,
   workspaceToDelete: null,
   conversationsToDelete: null,
+  deletingTogether: null,
 };
 
 export function initialStateFor(conversationId: string | null, roomId: string | null = null, joinedRoom: AppState["selectedJoinedRoom"] = null, broughtShownInRooms = false): AppState {
@@ -653,6 +683,7 @@ function applyServerMessage(state: AppState, message: ServerMessage): AppState {
         kept: state.kept.filter(({ conversationId }) => conversationId !== message.conversationId),
         sideChats: state.sideChats.filter(({ conversationId }) => conversationId !== message.conversationId),
         threadConversations: state.threadConversations.filter(({ conversationId }) => conversationId !== message.conversationId),
+        deletingTogether: deletedTogether(state.deletingTogether, message.conversationId) ? null : state.deletingTogether,
       };
       return state.selectedConversationId === message.conversationId ? select(next, null) : next;
     }
@@ -737,8 +768,12 @@ function applyServerMessage(state: AppState, message: ServerMessage): AppState {
       return { ...state, worktreeToDelete: { conversationId: message.conversationId, uncommittedFiles: message.uncommittedFiles, branches: message.branches } };
     case "workspace.delete-asks":
       return { ...state, workspaceToDelete: { workspaceId: message.workspaceId, uncommittedFiles: message.uncommittedFiles } };
-    case "conversations.delete-asks":
-      return { ...state, conversationsToDelete: { conversationIds: message.conversationIds, uncommittedFiles: message.uncommittedFiles, branches: message.branches } };
+    case "conversations.delete-asks": {
+      const asked = { conversationIds: message.conversationIds, uncommittedFiles: message.uncommittedFiles, branches: message.branches };
+      return answersDeletingTogether(state.deletingTogether, message.conversationIds)
+        ? { ...state, deletingTogether: { ...state.deletingTogether, sent: false, asked } }
+        : { ...state, conversationsToDelete: asked };
+    }
     case "fs.completions":
     case "pong":
     case "profile.saved":
@@ -960,6 +995,12 @@ export function reducer(state: AppState, action: AppAction): AppState {
       return { ...state, workspaceToDelete: null };
     case "dismiss-conversations-to-delete":
       return { ...state, conversationsToDelete: null };
+    case "delete-together":
+      return { ...state, deletingTogether: { ...action.deleting, sent: false, asked: null } };
+    case "deleting-together-sent":
+      return state.deletingTogether ? { ...state, deletingTogether: { ...state.deletingTogether, sent: true } } : state;
+    case "dismiss-deleting-together":
+      return { ...state, deletingTogether: null };
     case "reminder-set":
       return { ...state, reminderUndo: { ...action.undo, id: (state.reminderUndo?.id ?? 0) + 1 } };
     case "dismiss-reminder-undo":

@@ -76,6 +76,8 @@ export const shell: Messages["shell"] = {
     deleteOlder: "Ältere Unterhaltungen löschen",
     deleteAll: "Alle löschen",
     deleteOlderArmed: (count) => `${count} löschen?`,
+    deleteOthers: "Andere Unterhaltungen löschen…",
+    deleteBelow: "Unterhaltungen darunter löschen…",
     newConversationLabel: "+ Neue Unterhaltung",
     continueSessionLabel: "Sitzung fortsetzen…",
     settings: "Einstellungen…",
@@ -179,6 +181,14 @@ export const shell: Messages["shell"] = {
       ),
     keeps: "Der Projektordner und die in den Worktrees gemachten Commits bleiben erhalten.",
     removeAnyway: "Trotzdem entfernen",
+  },
+  deleteTogether: {
+    titleOthers: (count, workspace) => plural(count, `Die andere Unterhaltung in ${workspace} löschen?`, `Die ${count} anderen Unterhaltungen in ${workspace} löschen?`),
+    titleBelow: (count, above) => plural(count, `Die Unterhaltung unter „${above}“ löschen?`, `Die ${count} Unterhaltungen unter „${above}“ löschen?`),
+    staying: (count) =>
+      plural(count, "1 Unterhaltung, die noch arbeitet oder auf dich wartet, bleibt.", `${count} Unterhaltungen, die noch arbeiten oder auf dich warten, bleiben.`),
+    goesWithThem: "Ihre Nebenchats und delegierten Aufgaben werden mit gelöscht. Die eigenen Sitzungsdateien der Agenten bleiben auf der Festplatte.",
+    confirm: (count) => plural(count, "1 Unterhaltung löschen", `${count} Unterhaltungen löschen`),
   },
   olderDelete: {
     title: "Die älteren Unterhaltungen und ihre Worktrees löschen?",

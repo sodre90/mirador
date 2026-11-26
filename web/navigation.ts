@@ -2,6 +2,7 @@ import { DEFAULT_CONVERSATIONS_SHOWN, DEFAULT_OLDER_AFTER, olderAfterMs, shownAt
 import type { Conversation, Workspace } from "../shared/model.ts";
 import { isPutAway } from "../shared/reminders.ts";
 import { CUSTOM_ORDER, inConversationOrder, lastActivityOf, type ConversationOrder } from "../shared/conversation-order.ts";
+import { restsWithAllItHolds } from "../shared/deleting-together.ts";
 import { isSideChat } from "../shared/side-chats.ts";
 import { waitingByUrgency } from "../shared/waiting.ts";
 
@@ -113,6 +114,43 @@ export function apartFromMore(current: Conversation[], conversationsShown: Conve
 export function sidebarParts(listed: Conversation[], now: number, olderAfter: OlderAfter, conversationsShown: ConversationsShown) {
   const { current, older } = apartFromOlder(listed, now, olderAfter);
   return { ...apartFromMore(current, conversationsShown), older };
+}
+
+/** A workspace's rows from top to bottom, those folded under More and Older too. One listed under another is no row of its own: it goes with that one. */
+export function rowsTopToBottom(conversations: Conversation[], now: number, olderAfter: OlderAfter, conversationsShown: ConversationsShown): Conversation[] {
+  const { listed, more, older } = sidebarParts(conversations, now, olderAfter, conversationsShown);
+  return [...listed, ...more, ...older].filter((conversation) => !isUnderCaller(conversation, conversations));
+}
+
+/** Those deleting goes through, and how many it leaves because they or what they hold are at work or wait for the user. */
+export interface Deletable {
+  going: Conversation[];
+  staying: number;
+}
+
+const heldByIn = (everyConversation: Conversation[]) => (caller: Conversation) => everyConversation.filter((conversation) => callerIdOf(conversation) === caller.id);
+
+/** Those listed for deleting as they are now: one gone is left out, and one now at work or waiting for the user stays. */
+export function stillDeletable(conversationIds: string[], stayingBefore: number, everyConversation: Conversation[]): Deletable {
+  const listed = conversationIds.flatMap((id) => everyConversation.find((conversation) => conversation.id === id) ?? []);
+  const going = listed.filter((conversation) => restsWithAllItHolds(conversation, heldByIn(everyConversation)));
+  return { going, staying: stayingBefore + listed.length - going.length };
+}
+
+/**
+ * What a row's menu deletes besides the row, as a browser tab's menu closes the other tabs or those to its right: the
+ * other rows of its workspace, and the rows below it. Only those at rest with all they hold, out of `everyConversation`,
+ * as the host deletes no others. Null for a conversation that is no row of the list, such as one put away for later.
+ */
+export function deletableAround(rows: Conversation[], everyConversation: Conversation[], conversationId: string): { others: Deletable; below: Deletable } | null {
+  const index = rows.findIndex(({ id }) => id === conversationId);
+  if (index === -1) return null;
+  const heldBy = heldByIn(everyConversation);
+  const deletable = (some: Conversation[]): Deletable => {
+    const going = some.filter((row) => restsWithAllItHolds(row, heldBy));
+    return { going, staying: some.length - going.length };
+  };
+  return { others: deletable(rows.filter((_, each) => each !== index)), below: deletable(rows.slice(index + 1)) };
 }
 
 const newest = (conversations: Conversation[]) => conversations.reduce((newest, each) => (each.createdAt > newest.createdAt ? each : newest));

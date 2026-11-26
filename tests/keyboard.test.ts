@@ -8,8 +8,11 @@ import {
   apartFromOlder,
   conversationsIn,
   currentWorkspace,
+  deletableAround,
   nextWaitingConversation,
   numberedConversation,
+  rowsTopToBottom,
+  stillDeletable,
   type NavigationState,
 } from "../web/navigation.ts";
 import { matchesQuery } from "../web/Palette.tsx";
@@ -462,6 +465,65 @@ describe("navigation", () => {
       expect(numberedConversation(capped, 6)).toBeNull();
       expect(adjacentConversation({ ...capped, selectedConversationId: "four" }, -1)).toBe("zero");
       expect(numberedConversation({ ...capped, conversationsShown: "all" }, 1)).toBe("five");
+    });
+  });
+
+  describe("deleting from a row's menu, as a browser tab's menu closes other tabs or those to its right", () => {
+    const DAY = 24 * 60 * 60 * 1000;
+    const now = 100 * DAY;
+    const activeDaysAgo = (id: string, days: number, more: Partial<Conversation> = {}) => ({ ...conversation(id, "a", now - days * DAY), ...more });
+    const ids = (some: Conversation[]) => some.map(({ id }) => id);
+    const rowsOf = (conversations: Conversation[]) => rowsTopToBottom(conversations, now, "1-week", "5");
+
+    test("go through the rows top to bottom, those under More and Older too, and leave out those listed under another", () => {
+      const task = activeDaysAgo("task", 0, { startedBy: { conversationId: "one", plugin: "delegate", reply: null, dismissed: false } });
+      const listed = [activeDaysAgo("one", 1), task, ...["two", "three", "four", "five"].map((id, days) => activeDaysAgo(id, days + 2))];
+      const conversations = [activeDaysAgo("stale", 30), activeDaysAgo("past-five", 6), ...listed];
+      const rows = rowsOf(conversations);
+      expect(ids(rows)).toEqual(["one", "two", "three", "four", "five", "past-five", "stale"]);
+      expect(ids(deletableAround(rows, conversations, "four")!.below.going)).toEqual(["five", "past-five", "stale"]);
+      expect(ids(deletableAround(rows, conversations, "four")!.others.going)).toEqual(["one", "two", "three", "five", "past-five", "stale"]);
+      expect(deletableAround(rows, conversations, "task")).toBeNull();
+    });
+
+    test("leave those working, waiting for you, waiting on a job or in a terminal, as the host does", () => {
+      const jobWait = { id: "job", job: { kind: "process" as const, pid: 1 }, sshHost: null, message: "Carry on", resume: true, since: now };
+      const conversations = [
+        activeDaysAgo("top", 0),
+        activeDaysAgo("working", 1, { status: "running" }),
+        activeDaysAgo("waiting", 1, { waitingFor: "finished" }),
+        activeDaysAgo("on-a-job", 1, { jobWaits: [jobWait] }),
+        activeDaysAgo("in-terminal", 1, { openInTerminal: "idle" }),
+        activeDaysAgo("resting", 2),
+      ];
+      const rows = rowsOf(conversations);
+      expect(ids(deletableAround(rows, conversations, "top")!.below.going)).toEqual(["resting"]);
+      expect(ids(deletableAround(rows, conversations, "resting")!.others.going)).toEqual(["top"]);
+      expect(deletableAround(rows, conversations, "resting")!.below).toEqual({ going: [], staying: 0 });
+      expect(deletableAround(rows, conversations, "top")!.below.staying).toBe(4);
+    });
+
+    test("are taken again as they are now while the prompt asks: one gone is left out, one now busy stays", () => {
+      const conversations = [activeDaysAgo("resting", 1), activeDaysAgo("now-working", 1, { status: "running" })];
+      const now = stillDeletable(["resting", "now-working", "gone"], 2, conversations);
+      expect(ids(now.going)).toEqual(["resting"]);
+      expect(now.staying).toBe(3);
+    });
+
+    test("leave a resting conversation whose task or side chat is busy, even one listed elsewhere, as deleting it would take them", () => {
+      const startedBy = (callerId: string) => ({ startedBy: { conversationId: callerId, plugin: "delegate", reply: null, dismissed: false } });
+      const conversations = [
+        activeDaysAgo("top", 0),
+        activeDaysAgo("delegating", 1),
+        activeDaysAgo("task", 1, { ...startedBy("delegating"), status: "running" }),
+        activeDaysAgo("asked-about", 2),
+        activeDaysAgo("side-chat", 2, { sideChatOf: "asked-about", waitingFor: "finished" }),
+        activeDaysAgo("resting", 3),
+        activeDaysAgo("resting-task", 3, startedBy("resting")),
+      ];
+      const nested = { ...conversation("nested", "elsewhere", now), ...startedBy("resting-task"), status: "running" as const };
+      expect(ids(deletableAround(rowsOf(conversations), conversations, "top")!.below.going)).toEqual(["resting"]);
+      expect(ids(deletableAround(rowsOf(conversations), [...conversations, nested], "top")!.below.going)).toEqual([]);
     });
   });
 

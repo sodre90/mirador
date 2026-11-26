@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState, type Dispatch } from "react";
-import { conversationPlaces, placeOfNewConversation, SIDE_CHAT_ACCESS_CHOICES, type ConversationPlace, type SideChatAccess, type Workspace } from "../shared/model.ts";
+import { conversationPlaces, placeOfNewConversation, SIDE_CHAT_ACCESS_CHOICES, type Conversation, type ConversationPlace, type SideChatAccess, type Workspace } from "../shared/model.ts";
 import { startConversationIn } from "./actions.ts";
 import { connection } from "./connection.ts";
 import { t } from "./i18n/index.ts";
 import { Modal } from "./Palette.tsx";
 import { usePlacedBeside } from "./placed-beside.ts";
+import { stillDeletable } from "./navigation.ts";
+import { shownTitle } from "./shown-title.ts";
 import { sideChatAccessLabels } from "./SideChat.tsx";
 import type { AppAction, AppState } from "./state.ts";
 import { useTypingAidAttributes } from "./typing-aids.ts";
@@ -258,6 +260,77 @@ export function OlderDeletePrompt({
         <button type="button" className="danger" onClick={deleteAnyway}>
           {promptWords.deleteAnyway}
         </button>
+        <button ref={cancelButton} type="button" onClick={cancel}>
+          {words.cancel}
+        </button>
+      </div>
+    </section>
+  );
+}
+
+/**
+ * Before a row's menu deletes the other conversations of its workspace, or those below it: it names each as it is now,
+ * says how many stay as they are busy, and asks again here when their worktrees hold uncommitted files. It takes the
+ * focus on Cancel, so a stray Enter deletes nothing.
+ */
+export function DeleteTogetherPrompt({
+  deleting,
+  conversations,
+  workspaceName,
+  dispatch,
+}: {
+  deleting: AppState["deletingTogether"];
+  conversations: Conversation[];
+  workspaceName: string;
+  dispatch: Dispatch<AppAction>;
+}) {
+  const cancelButton = useRef<HTMLButtonElement>(null);
+  useEffect(() => cancelButton.current?.focus(), [deleting?.fromConversationId, deleting?.which, deleting?.asked]);
+  const prompt = usePlacedBeside<HTMLElement>(deleting, () => deleting && inSidebar(conversationRow(deleting.fromConversationId)));
+  const { going, staying } = deleting ? stillDeletable(deleting.conversationIds, deleting.staying, conversations) : { going: [], staying: 0 };
+  const nothingLeftToDelete = Boolean(deleting) && going.length === 0;
+  useEffect(() => {
+    if (nothingLeftToDelete) dispatch({ type: "dismiss-deleting-together" });
+  }, [nothingLeftToDelete]);
+  if (!deleting) return null;
+  const promptWords = t.shell.deleteTogether;
+  const title = deleting.which === "others" ? promptWords.titleOthers(going.length, workspaceName) : promptWords.titleBelow(going.length, deleting.fromTitle);
+  const cancel = () => dispatch({ type: "dismiss-deleting-together" });
+  const confirm = () => {
+    connection.send({ type: "conversations.delete", conversationIds: going.map(({ id }) => id) });
+    dispatch({ type: "deleting-together-sent" });
+    cancelButton.current?.focus();
+  };
+  const deleteAnyway = () => {
+    if (deleting.asked) connection.send({ type: "conversations.delete", conversationIds: deleting.asked.conversationIds, discardsUncommitted: true });
+    cancel();
+  };
+  return (
+    <section ref={prompt} className="file-to-open delete-together" role="alertdialog" aria-label={title} onKeyDown={(event) => event.key === "Escape" && cancel()}>
+      <h2>{title}</h2>
+      <ul>
+        {going.map((conversation) => (
+          <li key={conversation.id}>{shownTitle(conversation)}</li>
+        ))}
+      </ul>
+      {staying > 0 && <p>{promptWords.staying(staying)}</p>}
+      {deleting.asked ? (
+        <p>
+          {t.shell.olderDelete.loses(deleting.asked.uncommittedFiles)} {words.deleteKeeps(deleting.asked.branches)}
+        </p>
+      ) : (
+        <p>{promptWords.goesWithThem}</p>
+      )}
+      <div className="actions">
+        {deleting.asked ? (
+          <button type="button" className="danger" onClick={deleteAnyway}>
+            {t.shell.olderDelete.deleteAnyway}
+          </button>
+        ) : (
+          <button type="button" className="danger" disabled={deleting.sent} onClick={confirm}>
+            {promptWords.confirm(going.length)}
+          </button>
+        )}
         <button ref={cancelButton} type="button" onClick={cancel}>
           {words.cancel}
         </button>

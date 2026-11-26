@@ -22,7 +22,7 @@ import { JoinRequestPrompts } from "./JoinRequests.tsx";
 import { KeptCanvases } from "./KeptCanvases.tsx";
 import { KnownConversations } from "./known-conversations.ts";
 import { FileToOpenPrompt } from "./FileToOpenPrompt.tsx";
-import { OlderDeletePrompt, WorkspaceDeletePrompt, WorktreeDeletePrompt, WorktreesDialog } from "./Worktrees.tsx";
+import { DeleteTogetherPrompt, OlderDeletePrompt, WorkspaceDeletePrompt, WorktreeDeletePrompt, WorktreesDialog } from "./Worktrees.tsx";
 import { shownInAnotherMirador, tellTheRailThePlace } from "./machine-place.ts";
 import { LinkFromMachinePrompt } from "./LinkFromMachinePrompt.tsx";
 import { MachineFrames, MachineRail, reachedAt, showsMachinesHere, useShownMachine } from "./MachineRail.tsx";
@@ -1032,6 +1032,12 @@ export function App() {
       <FileToOpenPrompt fileToOpen={state.fileToOpen} dispatch={dispatch} />
       <WorktreeDeletePrompt worktreeToDelete={state.worktreeToDelete} dispatch={dispatch} />
       <WorkspaceDeletePrompt workspaceToDelete={state.workspaceToDelete} dispatch={dispatch} />
+      <DeleteTogetherPrompt
+        deleting={state.deletingTogether}
+        conversations={state.conversations}
+        workspaceName={state.workspaces.find(({ id }) => id === state.deletingTogether?.workspaceId)?.name ?? ""}
+        dispatch={dispatch}
+      />
       <OlderDeletePrompt
         conversationsToDelete={state.conversationsToDelete}
         workspaceId={state.conversations.find(({ id }) => id === state.conversationsToDelete?.conversationIds[0])?.workspaceId}

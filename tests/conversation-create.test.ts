@@ -144,6 +144,22 @@ test("conversations deleted together leave out those gone, at work or waiting fo
   expect(conversations.stillResting([resting.id, working.id, finished.id, "gone"])).toEqual([resting.id]);
 });
 
+test("conversations deleted together leave out one whose task works, or that waits on a job or runs in a terminal, as deleting it would stop them", () => {
+  const { conversations } = hostWithAWorkspaceOnClaude();
+  const delegating = conversations.create("w1");
+  const task = conversations.create("w1");
+  const restingCaller = conversations.create("w1");
+  const restingTask = conversations.create("w1");
+  const inTerminal = conversations.create("w1");
+  const store = (conversations as any).store;
+  store.recordStartedBy(task.id, { conversationId: delegating.id, plugin: "delegate" });
+  store.recordStartedBy(restingTask.id, { conversationId: restingCaller.id, plugin: "delegate" });
+  (conversations as any).statusOverrides.set(task.id, { status: "running" });
+  (conversations as any).terminalActivity.set(inTerminal.id, "idle");
+
+  expect(conversations.stillResting([delegating.id, restingCaller.id, inTerminal.id])).toEqual([restingCaller.id]);
+});
+
 function hostWithAWorktreeConversation(uncommittedFiles: number) {
   const store = storeWithConversation();
   const worktree = worktreeAt("wt1");

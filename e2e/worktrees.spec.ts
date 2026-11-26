@@ -331,6 +331,30 @@ test("deleting a workspace's older conversations together asks once before their
   });
 });
 
+test("deleting the other conversations from a row's menu asks in the same prompt before their worktrees' uncommitted files go", async ({ page }) => {
+  await signIn(page, host);
+  await startNewConversation(page, host.projectDir);
+  const withFiles = page.url().match(/#\/c\/(.+)$/)![1]!;
+  const folder = await agentFolder(page);
+  writeFileSync(join(folder, "scratch.txt"), "not committed\n");
+  await startNewConversation(page, host.projectDir);
+  const workspace = workspaceCard(page, host.projectDir);
+  const prompt = page.getByRole("alertdialog");
+
+  await selectedRow(page).click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Delete other conversations…" }).click();
+  await expect(prompt.getByRole("listitem")).not.toHaveCount(0);
+  await prompt.getByRole("button", { name: /^Delete \d+ conversations?$/ }).click();
+  await expect(prompt).toContainText(/Their worktrees hold \d+ uncommitted files?, which (?:is|are) deleted with them\./);
+  await expect(prompt.getByRole("button", { name: "Cancel" })).toBeFocused();
+  await expect(page.getByRole("alertdialog")).toHaveCount(1);
+  await prompt.getByRole("button", { name: "Delete anyway" }).click();
+  await expect(prompt).toHaveCount(0);
+  await expect(workspace.locator(`li[data-reorder-id="${withFiles}"]`)).toHaveCount(0);
+  await expect.poll(() => existsSync(folder)).toBe(false);
+  await expect(selectedRow(page)).toHaveCount(1);
+});
+
 test("removing a workspace asks before its worktrees' uncommitted files go, and a workspace with none asks nothing", async ({ page }) => {
   await signIn(page, host);
   await startNewConversation(page, host.projectDir);
