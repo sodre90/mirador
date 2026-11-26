@@ -68,6 +68,7 @@ function createShopApi(directory: string) {
       "src/services.ts": services,
       "src/services/payments.ts": paymentsClient,
       "src/types.ts": types,
+      [PAYMENT_CASES]: paymentCases,
     },
     "Checkout reserves stock, captures the payment and creates the order",
   );
@@ -79,6 +80,19 @@ function createShopApi(directory: string) {
   git(directory, "add", "README.md");
   writeFiles(directory, { [CHECKOUT_TEST]: checkoutTest });
 }
+
+/**
+ * The payment cases the side chat scene's agent runs: a run that takes 44 seconds, long enough to ask beside it.
+ * Claude Code refuses a bare long sleep in a command, so the wait sits in this script.
+ */
+export const PAYMENT_CASES = "scripts/payment-cases.sh";
+const paymentCases = `#!/bin/sh
+for done in 25 50 75 100 125 150 175 200; do
+  sleep 5.5
+  echo "$done/200 payment cases pass"
+done
+echo "200 pass, 0 fail (44.0s)"
+`;
 
 const readmeWithPayments = "# shop-api\n\n## Payments\n\nCheckout captures the card once per cart. A capture that times out is retried.\n";
 

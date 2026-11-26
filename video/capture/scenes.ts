@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import { CHECKOUT_FLOW, CHECKOUT_FLOW_QUEUED, CHECKOUT_LEAD, CHECKOUT_RISKS, CHECKOUT_RISKS_QUEUED, CHECKOUT_TITLE, MERMAID_SEQUENCE } from "./checkout-flow.ts";
 import { DEMO_VIDEO } from "./demo-video.ts";
+import { PAYMENT_CASES } from "./demo-world.ts";
 import type { Script } from "./director.ts";
 
 /** What the user types in each filmed conversation; the director's scripts answer to these. */
@@ -13,7 +14,10 @@ export const prompts = {
   questionAboutBlocker: "Is the cart id enough if the customer changes the cart?",
   fix: "Fix the blocker from the review: a retried capture must not charge the card twice.",
   fixWithTour: "Fix the double-charge blocker and walk me through the change.",
-  sideChatQuestion: "How long does the bank deduplicate an idempotency key?",
+  sideChatQuestion: "How long does the bank remember it?",
+  paymentTests: "Run the payment tests against the bank's sandbox, all 200 cases.",
+  deleteDeadFlags: "Delete the three dead flags.",
+  commitMessage: "Delete three dead feature flags",
   reproduce: "Reproduce the double charge: a failing test, and a script that replays a capture that timed out.",
   emailAfterResponse: "Send the email after the response, from a queue. How does the flow change?",
   openVideo: `Open ${DEMO_VIDEO.file} in Media.`,
@@ -34,6 +38,11 @@ export const E2E_ANSWER = "Green: all 214 e2e tests pass on build-01";
 
 export const CAR_MODE_CHOICE = "Whole screen is the button";
 export const SIDE_CHAT_ANSWER = "24 hours";
+export const PAYMENT_TESTS_ANSWER = "All 200 payment tests pass";
+/** Words of the reproduce turn's last answer that the side chat scene selects. */
+export const SIDE_CHAT_QUOTE = "idempotency key";
+const LIVE_FLAGS = ["newOnboarding", "quickReorder", "offlineCart", "biometricLogin", "darkModeToggle"];
+export const FLAGS_DELETED = "Deleted the three dead flags from";
 
 type Risk = { title: string; detail: string; slow: boolean; fixed?: boolean };
 
@@ -306,8 +315,33 @@ export function scripts({ projects, assetsOrigin }: { projects: { shopApi: strin
       steps: [
         {
           thinkMs: 650,
-          say: `**${SIDE_CHAT_ANSWER}.** \`payments.ts\` forwards \`Idempotency-Key\` directly to the bank's \`/captures\` endpoint, which deduplicates repeated keys for a full day before expiring them.`,
+          say: `**${SIDE_CHAT_ANSWER}.** \`payments.ts\` sends it as the \`Idempotency-Key\` header, and the bank answers a repeated key with the first capture for a full day.`,
         },
+      ],
+    },
+    {
+      prompt: prompts.paymentTests,
+      steps: [
+        {
+          thinkMs: 600,
+          say: "Running all 200 payment cases against the sandbox; this takes a little while.",
+          call: { tool: "Bash", input: { command: `sh ${PAYMENT_CASES} --sandbox`, description: "Run the payment tests against the bank's sandbox" } },
+        },
+        { thinkMs: 450, say: `${PAYMENT_TESTS_ANSWER} against the sandbox, the double-charge case too.` },
+      ],
+    },
+    {
+      prompt: prompts.deleteDeadFlags,
+      steps: [
+        {
+          thinkMs: 700,
+          say: "Deleting them from `src/flags.ts`, which is the only file that names them.",
+          call: {
+            tool: "Bash",
+            input: { command: `cat > src/flags.ts <<'EOF'\nexport const flags = {\n${LIVE_FLAGS.map((flag) => `  ${flag}: ${flag !== "offlineCart"},`).join("\n")}\n};\nEOF`, description: "Delete the dead flags from src/flags.ts" },
+          },
+        },
+        { thinkMs: 450, say: `${FLAGS_DELETED} \`src/flags.ts\`, in this conversation's own worktree. Commit and merge it from Changes.` },
       ],
     },
     {

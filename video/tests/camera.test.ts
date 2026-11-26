@@ -37,6 +37,11 @@ describe("the camera", () => {
     expectView(viewAt(scene, clip, 9.2), { centerX: APP.width / 2, centerY: APP.height / 2, width: APP.width });
   });
 
+  test("is at the next view at once when the key cuts to it", () => {
+    const scene = sceneLooking({ at: 0, look: "badge", zoom: 2 }, { at: ["shown", -2], look: "app", cut: true });
+    expectView(viewAt(scene, clip, 8.0), { centerX: APP.width / 2, centerY: APP.height / 2, width: APP.width });
+  });
+
   test("names the boxes a clip has when asked for another", () => {
     expect(() => viewAt(sceneLooking({ at: 0, look: "composer" }), clip, 0)).toThrow('demo has no box "composer"; it has badge, title');
   });

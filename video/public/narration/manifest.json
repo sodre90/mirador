@@ -2,88 +2,116 @@
   "voice": "am_fenrir",
   "lines": {
     "hook": {
-      "text": "Coding agents explain everything in walls of text. Mirador gives them a canvas, so they can show you.",
+      "text": "Coding agents write faster than you can read. Mirador gives the agents you already use a canvas, so they can show you.",
       "file": "hook.wav",
-      "seconds": 6.229333333333333,
+      "seconds": 6.890666666666666,
       "voice": "am_fenrir",
-      "speed": 1.05
+      "speed": 1.02,
+      "pronunciation": 2
     },
     "showPoint": {
-      "text": "Architecture, flows, and mockups, right beside your chat. Point at anything they drew, and watch it update live.",
+      "text": "Diagrams appear right beside your chat. Point at any part, and your agent redraws it live.",
       "file": "showPoint.wav",
-      "seconds": 6.549333333333333,
+      "seconds": 5.461333333333333,
       "voice": "am_fenrir",
-      "speed": 1.05
+      "speed": 1.02,
+      "pronunciation": 2
     },
     "ask": {
       "text": "When it's your call, skip numbered lists — pick from real previews with a click.",
       "file": "ask.wav",
-      "seconds": 4.117333333333334,
+      "seconds": 4.224,
       "voice": "am_fenrir",
-      "speed": 1.05
+      "speed": 1.02,
+      "pronunciation": 2
     },
     "review": {
-      "text": "Code reviews and tours walk you through changes in execution order, with findings pinned to exact lines, updated in place when you push back.",
+      "text": "Reviews and tours walk you through changes in the order they run, and update in place when you push back.",
       "file": "review.wav",
-      "seconds": 8.490666666666666,
+      "seconds": 5.888,
       "voice": "am_fenrir",
-      "speed": 1.05
+      "speed": 1.02,
+      "pronunciation": 2
     },
     "sideChat": {
-      "text": "Ask a quick side question without interrupting the turn, and inspect or commit every change right from the canvas.",
+      "text": "Select any text and ask about it in a side chat, while the main agent keeps working.",
       "file": "sideChat.wav",
-      "seconds": 6.485333333333333,
+      "seconds": 5.056,
       "voice": "am_fenrir",
-      "speed": 1.05
+      "speed": 1.02,
+      "pronunciation": 2
     },
-    "media": {
-      "text": "Install official plugins on demand — like Media: mark what drags on the frame, and your agent cuts and renders the video.",
-      "file": "media.wav",
-      "seconds": 7.381333333333333,
+    "worktree": {
+      "text": "Give each conversation its own git worktree, then inspect, commit, and merge straight from Changes.",
+      "file": "worktree.wav",
+      "seconds": 5.802666666666667,
       "voice": "am_fenrir",
-      "speed": 1.05
+      "speed": 1.02,
+      "pronunciation": 2
+    },
+    "fork": {
+      "text": "Fork from any turn to branch off and try another way.",
+      "file": "fork.wav",
+      "seconds": 2.9226666666666667,
+      "voice": "am_fenrir",
+      "speed": 1.02,
+      "pronunciation": 2
     },
     "delegate": {
-      "text": "Mirador runs the agents you already have — Claude Code, opencode, pi, Codex, Copilot, and Antigravity — and lets them delegate work to each other.",
+      "text": "Mirador runs Claude Code, opencode, pi, Codex, Copilot, and Antigravity — and lets them hand work to each other.",
       "file": "delegate.wav",
-      "seconds": 9.6,
+      "seconds": 7.616,
       "voice": "am_fenrir",
-      "speed": 1.05
+      "speed": 1.02,
+      "pronunciation": 2
     },
     "jobs": {
-      "text": "Long builds on another server? Mirador watches the job and wakes your agent the moment it finishes.",
+      "text": "Long build on another server? Mirador watches the job and wakes your agent when it's green.",
       "file": "jobs.wav",
-      "seconds": 5.717333333333333,
+      "seconds": 5.290666666666667,
       "voice": "am_fenrir",
-      "speed": 1.05
+      "speed": 1.02,
+      "pronunciation": 2
+    },
+    "media": {
+      "text": "Official plugins add apps like Media: mark what drags on the frame, and your agent cuts and renders the video.",
+      "file": "media.wav",
+      "seconds": 6.784,
+      "voice": "am_fenrir",
+      "speed": 1.02,
+      "pronunciation": 2
     },
     "p2p": {
-      "text": "And now in Mirador zero point fifteen point five, connect your phone or another computer peer to peer — encrypted end to end, with nothing to configure.",
+      "text": "Link Mirador on another computer peer to peer — encrypted end to end, with nothing to set up.",
       "file": "p2p.wav",
-      "seconds": 9.642666666666667,
+      "seconds": 5.802666666666667,
       "voice": "am_fenrir",
-      "speed": 1.05
+      "speed": 1.02,
+      "pronunciation": 2
     },
     "mirador": {
       "text": "Mirador.",
       "file": "mirador.wav",
-      "seconds": 0.7253333333333334,
+      "seconds": 0.768,
       "voice": "am_fenrir",
-      "speed": 1.05
+      "speed": 1.02,
+      "pronunciation": 2
     },
     "end": {
       "text": "See what your coding agent means.",
       "file": "end.wav",
       "seconds": 1.6853333333333333,
       "voice": "am_fenrir",
-      "speed": 1.05
+      "speed": 1.02,
+      "pronunciation": 2
     },
     "openSource": {
       "text": "Free and open source.",
       "file": "openSource.wav",
-      "seconds": 1.1306666666666667,
+      "seconds": 1.152,
       "voice": "am_fenrir",
-      "speed": 1.05
+      "speed": 1.02,
+      "pronunciation": 2
     }
   }
 }

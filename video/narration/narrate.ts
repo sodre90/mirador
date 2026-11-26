@@ -24,8 +24,11 @@ const narrationDirectory = join(video, "public", "narration");
 const manifestPath = join(narrationDirectory, "manifest.json");
 
 type Job = { text: string; voice: string; speed: number; out: string };
-type SpokenLine = { text: string; file: string; seconds: number; voice: string; speed: number };
+type SpokenLine = { text: string; file: string; seconds: number; voice: string; speed: number; pronunciation?: number };
 type Manifest = { voice: string; lines: Partial<Record<LineName, SpokenLine>> };
+
+/** Bump when speak.py's pronunciation rules change so affected lines are spoken again. */
+const PRONUNCIATION_VERSION = 2;
 
 async function sha256Of(path: string) {
   const hasher = new Bun.CryptoHasher("sha256");
@@ -74,7 +77,14 @@ async function narrate() {
   const manifest = readManifest();
   const isCurrent = (name: LineName) => {
     const line = manifest.lines[name];
-    return line && line.text === textOf(name) && line.voice === voiceOf(name) && line.speed === SPEED && existsSync(join(narrationDirectory, line.file));
+    return (
+      line &&
+      line.text === textOf(name) &&
+      line.voice === voiceOf(name) &&
+      line.speed === SPEED &&
+      line.pronunciation === PRONUNCIATION_VERSION &&
+      existsSync(join(narrationDirectory, line.file))
+    );
   };
   const stale = (Object.keys(LINES) as LineName[]).filter((name) => !isCurrent(name));
   const jobs = stale.map((name) => ({ text: textOf(name), voice: voiceOf(name), speed: SPEED, out: join(narrationDirectory, `${name}.wav`) }));
@@ -82,7 +92,9 @@ async function narrate() {
   const lines = Object.fromEntries(
     (Object.keys(LINES) as LineName[]).map((name) => [
       name,
-      stale.includes(name) ? { text: textOf(name), file: `${name}.wav`, seconds: seconds.get(join(narrationDirectory, `${name}.wav`))!, voice: voiceOf(name), speed: SPEED } : manifest.lines[name]!,
+      stale.includes(name)
+        ? { text: textOf(name), file: `${name}.wav`, seconds: seconds.get(join(narrationDirectory, `${name}.wav`))!, voice: voiceOf(name), speed: SPEED, pronunciation: PRONUNCIATION_VERSION }
+        : manifest.lines[name]!,
     ]),
   );
   writeFileSync(manifestPath, `${JSON.stringify({ voice: VOICE, lines }, null, 2)}\n`);

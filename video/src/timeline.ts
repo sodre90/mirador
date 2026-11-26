@@ -13,8 +13,11 @@ export type ClipTime = number | string | [string, number];
  */
 export type Shot = { from: ClipTime; to: ClipTime; speed?: number; fadeInFrames?: number };
 
-/** Where the camera looks from a point of the clip on: the whole app, one of the clip's boxes, or a box given here, at a zoom. */
-export type CameraKey = { at: ClipTime; look: "app" | string | Rect; zoom?: number };
+/**
+ * Where the camera looks from a point of the clip on: the whole app, one of the clip's boxes, or a box given here, at a
+ * zoom. It moves there, or with `cut` is there at once, as for a shot that cuts straight in.
+ */
+export type CameraKey = { at: ClipTime; look: "app" | string | Rect; zoom?: number; cut?: true };
 
 /** A scene's feature in a few words, shown in the floating chapter bar above (or below) the app window. */
 export type Caption = {
@@ -30,12 +33,12 @@ export type Caption = {
  * A line of narration (narration/lines.ts) and when in its scene it starts, in seconds. In a clip scene, `from` names
  * a point of the clip that `at` counts from, so a line keeps to what it goes with however the shots speed the clip up.
  * The music dips under it to `musicDipsTo` of its volume, or the trailer's usual dip: a shallower one keeps a fast
- * section's beat going.
+ * section's beat going. A line that `runsOn` goes on over the scenes after its own instead of holding its scene open.
  */
-export type Spoken = { line: string; at: number; from?: ClipTime; musicDipsTo?: number };
+export type Spoken = { line: string; at: number; from?: ClipTime; musicDipsTo?: number; runsOn?: true };
 
 /** A line of narration with its start in seconds of its scene. */
-export type PlacedLine = { line: string; at: number; musicDipsTo?: number };
+export type PlacedLine = { line: string; at: number; musicDipsTo?: number; runsOn?: true };
 
 /** How a scene comes in: over the one before it for `fadeInFrames` frames (0 cuts straight to it), the trailer's crossfade by default. */
 type Transition = { fadeInFrames?: number };
@@ -125,17 +128,19 @@ export function narrationLine(narration: Record<string, NarrationLine>, name: st
 
 /** The scene's lines of narration, each starting in seconds of the scene. */
 export function linesOf(scene: Scene, clips: Record<string, ClipInfo>): PlacedLine[] {
-  return (scene.narration ?? []).map(({ line, at, from, musicDipsTo }) => {
-    if (from === undefined) return { line, at, musicDipsTo };
+  return (scene.narration ?? []).map(({ line, at, from, musicDipsTo, runsOn }) => {
+    if (from === undefined) return { line, at, musicDipsTo, runsOn };
     if (scene.kind !== "clip") throw new Error(`${scene.id}: only a clip scene's narration can start from a point of its clip`);
-    return { line, at: sceneSecondsOf(scene, clipNamed(clips, scene.clip), from) + at, musicDipsTo };
+    return { line, at: sceneSecondsOf(scene, clipNamed(clips, scene.clip), from) + at, musicDipsTo, runsOn };
   });
 }
 
-/** A scene lasts its footage's length or its own, and longer when its narration needs it: the last frame then holds. */
+/** A scene lasts its footage's length or its own, and longer when a line of its narration that doesn't run on needs it: the last frame then holds. */
 export function sceneSeconds(scene: Scene, clips: Record<string, ClipInfo>, narration: Record<string, NarrationLine>) {
   const footage = scene.kind === "clip" ? (scene.seconds ?? shotsOf(scene, clipNamed(clips, scene.clip)).at(-1)!.sceneTo) : scene.seconds;
-  const spokenUntil = linesOf(scene, clips).map(({ line, at }) => at + narrationLine(narration, line).seconds + NARRATION_TAIL);
+  const spokenUntil = linesOf(scene, clips)
+    .filter(({ runsOn }) => !runsOn)
+    .map(({ line, at }) => at + narrationLine(narration, line).seconds + NARRATION_TAIL);
   return Math.max(footage, ...spokenUntil);
 }
 

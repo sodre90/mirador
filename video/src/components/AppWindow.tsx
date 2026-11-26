@@ -3,7 +3,7 @@ import type { CSSProperties, ReactNode } from "react";
 import { BRAND, FONT, WINDOW } from "../brand.ts";
 
 /** A sleek desktop window around the app: specular accent rim, macOS traffic lights, title bar, and deep shadow. */
-export function AppWindow({ children, style, accent = BRAND.violet, title = "Mirador 0.15.5" }: { children: ReactNode; style?: CSSProperties; accent?: string; title?: string }) {
+export function AppWindow({ children, style, accent = BRAND.violet, title = "Mirador" }: { children: ReactNode; style?: CSSProperties; accent?: string; title?: string }) {
   const { box, titleBar, radius } = WINDOW;
   return (
     <div

@@ -24,18 +24,20 @@ It needs Google Chrome, [opencode](https://opencode.ai), ffmpeg, [uv](https://do
 
 `bun run studio` opens the composition in Remotion's editor. `bun run test` checks timing, camera framing, beat/bar alignment, and narration coverage.
 
-## Structure of the 0.15.5 trailer
+## Structure of the trailer
 
 - **Hook (0:00–0:08)**: Accelerating wall of agent text and diffs with a bold kinetic headline (*"Coding agents write faster than you can read."*) flips on the beat into the live Checkout sequence diagram drawing every actor, step, glowing warning flare, and risk card.
 - **01 · Canvas (`showPoint`)**: Live checkout diagram beside the chat, clicking *Point and ask* on a bottleneck, and watching the diagram redraw with a mail queue.
 - **02 · Ask (`ask`)**: Visual iPhone car-mode previews answered with a click.
 - **03 · Review & Tours (`review`)**: Full-screen guided code review — Flow walkthrough, Findings tab, asking about a blocker, and watching it update in place.
-- **04 · Side Chat & Changes (`sideChat`)**: Asking `/btw` in a read-only side chat without interrupting the turn, then inspecting the inline diff in *Changes*.
-- **05 · Plugins & Media (`media`)**: Official *Plugins…* gallery, then Media marking a slow spinner on the frame, cutting it, and playing the rendered clip.
-- **06 · Multi-Agent (`delegate`)**: Claude Code delegating a dead-flag sweep to a local Qwen model on opencode and verifying the result.
-- **07 · Background Jobs (`jobs`)**: Watching a 214-test e2e run on `build-01`, following it live in a terminal, and waking the agent when green.
-- **08 · New in 0.15.5 (`p2p`)**: Zero-setup peer-to-peer invites in *Settings → Devices* for a phone (QR code) and another computer (`mirador://join/…`).
-- **End Card**: Animated Mirador 0.15.5 wordmark, all six supported agents, one-line `curl` install command, platforms, and website/GitHub addresses.
+- **04 · Side Chat (`sideChat`)**: Selecting any words in a reply and asking in a side chat without interrupting the main turn.
+- **05 · Worktrees (`worktree`)**: Giving each conversation its own git worktree, then inspecting the diff, committing, and merging from *Changes*.
+- **06 · Fork (`fork`)**: Zooming into *Fork from here* on any turn and branching off with the canvas copied along.
+- **07 · Multi-Agent (`delegate`)**: Claude Code delegating a dead-flag sweep to a local Qwen model on opencode and verifying the result.
+- **08 · Background Jobs (`jobs`)**: Watching a 214-test e2e run on `build-01`, following it live in a terminal, and waking the agent when green.
+- **09 · Plugins & Media (`media`)**: Official *Plugins…* gallery, then Media marking a slow spinner on the frame, cutting it, and playing the rendered clip.
+- **10 · Peer-to-Peer (`p2p`)**: Zero-setup encrypted peer-to-peer invite between computers in *Settings → Devices*, copying the link, and watching the second computer join live.
+- **End Card**: Animated Mirador wordmark, all six supported agents, concise Homebrew install command, platforms, and website/GitHub addresses.
 
 ## Changing it
 

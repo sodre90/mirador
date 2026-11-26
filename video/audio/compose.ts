@@ -11,15 +11,15 @@ import {
 } from "./synth.ts";
 
 /**
- * The Mirador 0.15.5 trailer score (120 BPM, exact 0.5 s beats):
+ * The Mirador trailer score (120 BPM, exact 0.5 s beats):
  * - Hook (0–8 s): tense pulsing bass + rising arp under the wall of text, sparkling crystalline flip at CANVAS_AT,
  *   building into a warm sub-impact on Chapter 01.
  * - Act 1 (Canvas & Ask): sleek half-time synth groove in D minor (Dm9 · Fmaj7 · Cadd9 · Gm7).
  * - Act 2 (Review & Side Chat): four-on-the-floor energy with melodic synth hook.
- * - Act 3 (Plugins/Media & Multi-Agent): driving peak with octave-doubled hook & crisp percussion.
- * - Act 4 (Jobs & P2P 0.15.5): modulates up a step to E minor (Em9 · Gmaj7 · Dadd9 · Am7), ring-out over backdrop,
- *   resolving to a luminous E major 9 on the End Card.
- * - Tactile stereo transition whooshes lead into every chapter cut.
+ * - Act 3 (Worktrees, Fork & Multi-Agent): driving peak with octave-doubled hook & crisp percussion.
+ * - Act 4 (Jobs, Plugins/Media & P2P): modulates up a step to E minor (Em9 · Gmaj7 · Dadd9 · Am7), building directly
+ *   into a luminous E major 9 resolution on the End Card with no blank pause.
+ * - Heavy sub-booms land only on major Act transitions; intra-act chapter cuts use lighter percussive lifts.
  */
 const video = join(import.meta.dirname, "..");
 const output = join(video, "public", "music", "score.wav");
@@ -44,11 +44,10 @@ function timeline() {
     flip: startOf("hook") + CANVAS_AT,
     act1: startOf("showPoint"),
     act2: startOf("review"),
-    act3: startOf("media"),
+    act3: startOf("worktree"),
     act4: startOf("jobs"),
     p2p: startOf("p2p"),
-    slams: placed.filter(({ scene }) => scene.kind === "clip" && scene.slam).map(({ from }) => from / FRAME.fps),
-    lastChord: startOf("backdrop"),
+    slams: placed.filter(({ scene }) => scene.kind === "clip" && scene.slam).map(({ scene, from }) => ({ id: scene.id, time: from / FRAME.fps })),
     ending: startOf("end"),
     spoken: spokenSpans(placed, lines, FRAME.fps).map(({ from, to }) => ({ from: from / FRAME.fps, to: to / FRAME.fps })),
   };
@@ -250,29 +249,43 @@ class Score {
     main.add(at.act4 - 2 * g.beat, swell(2 * g.beat), 0.18);
   }
 
-  /** Act 4 (Jobs & P2P 0.15.5): modulates up a whole step to E minor; last chord rings over backdrop. */
+  /** Act 4 (Jobs, Plugins/Media & P2P): modulates up a whole step to E minor and builds straight into the End Card. */
   private actFour() {
     const { at, main } = this;
-    const g = grid(at.act4, at.lastChord, TEMPO, true);
+    const g = grid(at.act4, at.ending, TEMPO, true);
     const lifted = PROGRESSION.map((chord) => up(chord, 2));
+    const lastBar = g.bars - 1;
     range(0, g.bars).forEach((bar) => {
-      const last = bar === g.bars - 1;
-      this.harmony(g, bar, lifted[bar % 4]!, { cutoff: 2800, gain: 0.25, arp: true, arpGain: 0.055, ringsOn: last ? at.ending - at.lastChord + 0.9 : 0 });
+      const last = bar === lastBar;
+      this.harmony(g, bar, lifted[bar % 4]!, {
+        cutoff: last ? (t) => 2200 * 2.4 ** (t / g.bar) : 2800,
+        gain: 0.25,
+        arp: true,
+        arpGain: 0.055,
+      });
       this.fourOnTheFloor(g, bar);
     });
-    main.add(at.p2p + 0.4, sparkle([76, 83, 88], 0.08, 1.4), 0.28, { delay: 0.3, verb: 0.35 });
+    main.add(at.p2p + 0.4, sparkle([76, 83, 88], 0.08, 1.4), 0.26, { delay: 0.3, verb: 0.35 });
+    roll(main, g, lastBar * 4 + 2, g.beats, { from: 0.05, to: 0.22 });
+    main.add(at.ending - 2 * g.beat, swell(2 * g.beat), 0.2);
   }
 
-  /** Smooth stereo whooshes + warm sub-thumps on every chapter transition instead of harsh white-noise slams. */
+  /** Heavy sub-booms land on Act boundaries; intra-act chapter cuts use lighter stereo lifts to avoid fatigue. */
   private transitions() {
     const { at, main, drums } = this;
+    const majorActs = new Set(["review", "worktree", "jobs"]);
     const slamBoom = shape(boom(SLAM_BOOM_SECONDS), (t) => Math.min(1, (SLAM_BOOM_SECONDS - t) / 0.03));
-    at.slams.filter((time) => time > at.act1).forEach((time, index) => {
+    at.slams.filter(({ time }) => time > at.act1).forEach(({ id, time }, index) => {
       const dir = index % 2 === 0 ? 1 : -1;
-      main.add(Math.max(0, time - 0.32), whoosh(0.46, -0.5 * dir, 0.5 * dir), 0.32, { verb: 0.18 });
-      main.add(time, drums.bigKick, 0.58);
-      main.add(time, crash(1.8), 0.2, { verb: 0.22 });
-      main.add(time, slamBoom, 0.38);
+      if (majorActs.has(id)) {
+        main.add(Math.max(0, time - 0.32), whoosh(0.46, -0.5 * dir, 0.5 * dir), 0.3, { verb: 0.18 });
+        main.add(time, drums.bigKick, 0.56);
+        main.add(time, crash(1.7), 0.19, { verb: 0.22 });
+        main.add(time, slamBoom, 0.36);
+      } else {
+        main.add(Math.max(0, time - 0.22), whoosh(0.28, -0.35 * dir, 0.35 * dir), 0.15, { verb: 0.12 });
+        main.add(time, drums.kick, 0.42);
+      }
     });
   }
 

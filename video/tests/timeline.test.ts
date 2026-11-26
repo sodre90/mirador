@@ -75,6 +75,10 @@ describe("a scene's length", () => {
     expect(sceneSeconds(fromShown, { demo: clip }, narration)).toBeCloseTo(5.75);
   });
 
+  test("doesn't wait for a line that runs on over the scenes after it", () => {
+    expect(sceneSeconds({ ...scene, narration: [{ line: "intro", at: 1, runsOn: true }] }, { demo: clip }, narration)).toBe(2);
+  });
+
   test("asks for the narration to be made when a line is missing", () => {
     expect(() => sceneSeconds({ ...scene, narration: [{ line: "outro", at: 0 }] }, { demo: clip }, narration)).toThrow('No narration line "outro"; run bun run narrate');
   });
@@ -138,12 +142,17 @@ describe.skipIf(!filmed)("the storyboard, with the clips filmed", () => {
   });
 
   test("gives each of the score's sections whole bars, so none bends its tempo", () => {
-    const sectionStarts = ["showPoint", "review", "media", "jobs", "backdrop"];
+    const sectionStarts = ["hook", "showPoint", "review", "worktree", "jobs", "end"];
     const placed = placeScenes(STORYBOARD, clips, lines, 60, 14);
     const startOf = (id: string) => placed.find(({ scene }) => scene.id === id)!.from / 60;
     for (const [from, to] of sectionStarts.slice(0, -1).map((id, index) => [id, sectionStarts[index + 1]!])) {
       expect({ from, bars: isWhole(wholeBeats(startOf(to!) - startOf(from!)) / 4) }).toEqual({ from, bars: true });
     }
+  });
+
+  test("runs no longer than a minute and a half", () => {
+    const last = placeScenes(STORYBOARD, clips, lines, 60, 14).at(-1)!;
+    expect((last.from + last.frames) / 60).toBeLessThanOrEqual(90);
   });
 
   test("cuts straight into a slammed scene", () => {

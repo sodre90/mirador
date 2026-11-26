@@ -32,13 +32,13 @@ function viewForKey(key: CameraKey, clip: ClipInfo): View {
   return viewOf(rect, key.zoom);
 }
 
-/** What the camera frames at a second of the scene: each key's view, reached by an eased move that starts at the key. */
+/** What the camera frames at a second of the scene: each key's view, reached by an eased move that starts at the key, or at once for a cut. */
 export function viewAt(scene: ClipScene, clip: ClipInfo, seconds: number): View {
-  const keys = scene.camera.map((key) => ({ at: sceneSecondsOf(scene, clip, key.at), view: viewForKey(key, clip) })).sort((a, b) => a.at - b.at);
+  const keys = scene.camera.map((key) => ({ at: sceneSecondsOf(scene, clip, key.at), view: viewForKey(key, clip), cut: key.cut })).sort((a, b) => a.at - b.at);
   let view = keys[0] && keys[0].at <= 0 ? keys[0].view : WHOLE_APP;
   for (const key of keys) {
     if (seconds < key.at) break;
-    const progress = easeCamera(Math.min(1, (seconds - key.at) / MOVE_SECONDS));
+    const progress = key.cut ? 1 : easeCamera(Math.min(1, (seconds - key.at) / MOVE_SECONDS));
     view = {
       centerX: interpolate(progress, [0, 1], [view.centerX, key.view.centerX]),
       centerY: interpolate(progress, [0, 1], [view.centerY, key.view.centerY]),

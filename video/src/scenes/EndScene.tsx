@@ -1,5 +1,5 @@
 import { AbsoluteFill, interpolate, spring, useCurrentFrame, useVideoConfig } from "remotion";
-import { ACCENTS, BRAND, FONT, MONO } from "../brand.ts";
+import { BRAND, FONT, MONO } from "../brand.ts";
 import { AppIcon } from "../components/AppIcon.tsx";
 import { Backdrop } from "../components/Backdrop.tsx";
 import { Reveal } from "../components/Reveal.tsx";
@@ -13,10 +13,10 @@ const AGENTS = [
   { name: "Antigravity", color: "#fbbf24" },
 ];
 
-const INSTALL_CMD = "curl -fsSL https://github.com/sodre90/mirador/releases/latest/download/install.sh | sh";
+const INSTALL_CMD = "brew install --cask sodre90/tap/mirador";
 
 /**
- * The closing brand card: Mirador 0.15.5, tagline, all six supported agents, one-line install command, platforms, and
+ * The closing brand card: Mirador wordmark, tagline, all six supported agents, concise install command, platforms, and
  * website + GitHub links.
  */
 export function EndScene({ frames, url, website }: { frames: number; url: string; website: string }) {
@@ -31,24 +31,10 @@ export function EndScene({ frames, url, website }: { frames: number; url: string
       <AbsoluteFill style={{ alignItems: "center", justifyContent: "center", fontFamily: FONT }}>
         <div style={{ display: "flex", alignItems: "center", gap: 54, transform: `scale(${1.12 - 0.12 * landed})` }}>
           <AppIcon size={250} />
-          <div style={{ display: "flex", alignItems: "baseline", gap: 36 }}>
-            <div style={{ font: `800 184px ${FONT}`, letterSpacing: "-0.04em", color: BRAND.ink }}>Mirador</div>
-            <div
-              style={{
-                padding: "12px 30px",
-                borderRadius: 999,
-                background: `${ACCENTS.violet}24`,
-                border: `2px solid ${ACCENTS.violet}88`,
-                font: `700 44px ${MONO}`,
-                color: "#c8c2ff",
-              }}
-            >
-              0.15.5
-            </div>
-          </div>
+          <div style={{ font: `800 184px ${FONT}`, letterSpacing: "-0.04em", color: BRAND.ink }}>Mirador</div>
         </div>
 
-        <Reveal at={42} style={{ marginTop: 64 }}>
+        <Reveal at={36} style={{ marginTop: 64 }}>
           <div style={{ fontSize: 112, fontWeight: 740, letterSpacing: "-0.03em", color: BRAND.ink }}>
             See what your coding agent{" "}
             <span style={{ background: `linear-gradient(90deg, ${BRAND.violet}, ${BRAND.coral})`, WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent" }}>means.</span>
@@ -57,7 +43,7 @@ export function EndScene({ frames, url, website }: { frames: number; url: string
 
         <div style={{ display: "flex", gap: 24, marginTop: 66 }}>
           {AGENTS.map(({ name, color }, index) => {
-            const pop = spring({ frame: frame - 105 - index * 6, fps, config: { damping: 17, mass: 0.6 } });
+            const pop = spring({ frame: frame - 84 - index * 5, fps, config: { damping: 17, mass: 0.6 } });
             return (
               <div
                 key={name}
@@ -82,18 +68,18 @@ export function EndScene({ frames, url, website }: { frames: number; url: string
           })}
         </div>
 
-        <Reveal at={175} style={{ marginTop: 64 }}>
+        <Reveal at={140} style={{ marginTop: 64 }}>
           <div
             style={{
               display: "flex",
               alignItems: "center",
               gap: 24,
-              padding: "30px 58px",
+              padding: "30px 64px",
               borderRadius: 24,
               border: `2px solid ${BRAND.violet}99`,
               background: "rgba(18, 16, 38, 0.88)",
               boxShadow: `0 24px 70px rgba(0, 0, 0, 0.55), 0 0 60px ${BRAND.violet}28`,
-              font: `500 42px ${MONO}`,
+              font: `500 50px ${MONO}`,
               color: BRAND.ink,
             }}
           >
@@ -102,9 +88,9 @@ export function EndScene({ frames, url, website }: { frames: number; url: string
           </div>
         </Reveal>
 
-        <Reveal at={230} style={{ marginTop: 54 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 38, font: `600 48px ${FONT}`, color: "#d6d4ee" }}>
-            <span>macOS · Linux · Windows · Mobile</span>
+        <Reveal at={180} style={{ marginTop: 58 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 38, font: `600 52px ${FONT}`, color: "#d6d4ee" }}>
+            <span>macOS · Linux · Windows</span>
             <span style={{ opacity: 0.35 }}>|</span>
             <span style={{ fontFamily: MONO, color: BRAND.ink }}>{website}</span>
             <span style={{ opacity: 0.35 }}>|</span>

@@ -26,7 +26,7 @@ function FadeIn({ children, frames }: { children: React.ReactNode; frames: numbe
 }
 
 /** When the hook flips from the wall of text to the live checkout diagram (in seconds of the 8s hook scene). */
-export const CANVAS_AT = 3.2;
+export const CANVAS_AT = 3.0;
 
 function DrawingPicture() {
   const frame = useCurrentFrame();
