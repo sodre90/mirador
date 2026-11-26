@@ -4,7 +4,7 @@ import { BRAND, FRAME, WINDOW } from "../brand.ts";
 import { cameraTransform, viewAt } from "../camera.ts";
 import { AppWindow, ClipVideo } from "../components/AppWindow.tsx";
 import { Backdrop } from "../components/Backdrop.tsx";
-import { CaptionCard } from "../components/CaptionCard.tsx";
+import { ChapterCaptions } from "../components/CaptionCard.tsx";
 import { entrance3d, Flash } from "../components/Hit.tsx";
 import type { ClipInfo, ClipScene } from "../timeline.ts";
 import { shotsOf, shotTrim } from "../timeline.ts";
@@ -58,17 +58,7 @@ export function ClipSceneView({ scene, clip, frames }: { scene: ClipScene; clip:
         </AbsoluteFill>
       </div>
       {scene.slam && <Flash color={accent} />}
-      {(scene.captions ?? []).map((caption) => (
-        <CaptionCard
-          key={caption.title}
-          kicker={caption.kicker}
-          title={caption.title}
-          position={caption.position}
-          accent={caption.accent ?? accent}
-          from={Math.round((caption.at ?? 0.2) * fps)}
-          to={caption.seconds ? Math.round(((caption.at ?? 0.2) + caption.seconds) * fps) : frames - 10}
-        />
-      ))}
+      <ChapterCaptions captions={scene.captions} accent={accent} frames={frames} />
     </AbsoluteFill>
   );
 }

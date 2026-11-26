@@ -1,5 +1,6 @@
 import { interpolate, spring, useCurrentFrame, useVideoConfig } from "remotion";
 import { BRAND, FONT } from "../brand.ts";
+import type { Caption } from "../timeline.ts";
 
 /**
  * Floating glassmorphic chapter bar positioned cleanly above (or below) the app window so it never covers the sidebar,
@@ -68,4 +69,20 @@ export function CaptionCard({
       <div style={{ color: BRAND.ink, fontSize: 48, fontWeight: 700, letterSpacing: "-0.015em", lineHeight: 1.1 }}>{title}</div>
     </div>
   );
+}
+
+/** A chapter's bars, each from its moment (a fifth of a second in by default) until it times out or the chapter ends. */
+export function ChapterCaptions({ captions = [], accent, frames }: { captions?: Caption[]; accent: string; frames: number }) {
+  const { fps } = useVideoConfig();
+  return captions.map((caption) => (
+    <CaptionCard
+      key={caption.title}
+      kicker={caption.kicker}
+      title={caption.title}
+      position={caption.position}
+      accent={caption.accent ?? accent}
+      from={Math.round((caption.at ?? 0.2) * fps)}
+      to={caption.seconds ? Math.round(((caption.at ?? 0.2) + caption.seconds) * fps) : frames - 10}
+    />
+  ));
 }

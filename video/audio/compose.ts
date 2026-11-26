@@ -47,7 +47,7 @@ function timeline() {
     act3: startOf("worktree"),
     act4: startOf("jobs"),
     p2p: startOf("p2p"),
-    slams: placed.filter(({ scene }) => scene.kind === "clip" && scene.slam).map(({ scene, from }) => ({ id: scene.id, time: from / FRAME.fps })),
+    slams: placed.filter(({ scene }) => scene.slam).map(({ scene, from }) => ({ id: scene.id, time: from / FRAME.fps })),
     ending: startOf("end"),
     spoken: spokenSpans(placed, lines, FRAME.fps).map(({ from, to }) => ({ from: from / FRAME.fps, to: to / FRAME.fps })),
   };
@@ -112,7 +112,7 @@ class Score {
     return mix;
   }
 
-  /** Hook: tense wall-of-text pulse -> crystalline diagram flip -> build into Chapter 01. */
+  /** Hook: tense wall-of-text pulse -> crystalline flip to the car mode phones -> build into Chapter 01. */
   private intro() {
     const { at, main, drums } = this;
     const g = grid(at.hook, at.act1, TEMPO, true);

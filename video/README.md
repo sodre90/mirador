@@ -1,6 +1,6 @@
 # The Mirador trailer & README GIFs
 
-A flagship 0.15.5 trailer (~87 seconds at 4K and 60 fps, dark theme) plus 7 reproducible light-theme feature GIFs for `README.md`, all filmed from a real Mirador host running real Claude Code, opencode, official plugins, and a local peer-to-peer broker against a scripted stand-in model. Nothing is mocked by hand, and no account, conversation, or setting of yours is used.
+A flagship 0.15.5 trailer (~88 seconds at 4K and 60 fps, dark theme) plus 7 reproducible light-theme feature GIFs for `README.md`, all filmed from a real Mirador host running real Claude Code, opencode, official plugins, and a local peer-to-peer broker against a scripted stand-in model. Apart from the drawn hook and chapter 10, nothing is mocked by hand, and no account, conversation, or setting of yours is used.
 
 ```bash
 cd video
@@ -26,7 +26,7 @@ It needs Google Chrome, [opencode](https://opencode.ai), ffmpeg, [uv](https://do
 
 ## Structure of the trailer
 
-- **Hook (0:00–0:08)**: Accelerating wall of agent text and diffs with a bold kinetic headline (*"Coding agents write faster than you can read."*) flips on the beat into the live Checkout sequence diagram drawing every actor, step, glowing warning flare, and risk card.
+- **Hook (0:00–0:08)**: Accelerating wall of agent text and diffs with a bold kinetic headline (*"Coding agents write faster than you can read."*) flips on the beat into the agent asking how car mode should look, with three iPhone mockups springing in and the recommended one picked.
 - **01 · Canvas (`showPoint`)**: Live checkout diagram beside the chat, clicking *Point and ask* on a bottleneck, and watching the diagram redraw with a mail queue.
 - **02 · Ask (`ask`)**: Visual iPhone car-mode previews answered with a click.
 - **03 · Review & Tours (`review`)**: Full-screen guided code review — Flow walkthrough, Findings tab, asking about a blocker, and watching it update in place.
@@ -36,7 +36,7 @@ It needs Google Chrome, [opencode](https://opencode.ai), ffmpeg, [uv](https://do
 - **07 · Multi-Agent (`delegate`)**: Claude Code delegating a dead-flag sweep to a local Qwen model on opencode and verifying the result.
 - **08 · Background Jobs (`jobs`)**: Watching a 214-test e2e run on `build-01`, following it live in a terminal, and waking the agent when green.
 - **09 · Plugins & Media (`media`)**: Official *Plugins…* gallery, then Media marking a slow spinner on the frame, cutting it, and playing the rendered clip.
-- **10 · Peer-to-Peer (`p2p`)**: Zero-setup encrypted peer-to-peer invite between computers in *Settings → Devices*, copying the link, and watching the second computer join live.
+- **10 · Peer-to-Peer (`p2p`)**: A drawn motion graphic: studio-mac copies an invite from *Devices*, the link flies to ada-laptop's *Machines*, an encrypted tunnel draws between them, and studio-mac's workspaces open on the laptop.
 - **End Card**: Animated Mirador wordmark, all six supported agents, concise Homebrew install command, platforms, and website/GitHub addresses.
 
 ## Changing it

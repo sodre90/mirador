@@ -21,12 +21,6 @@ const SELECTED_WORDS = { x: 256, y: 20, width: 1024, height: 576 };
 const FORK_TRIGGER = { x: 256, y: 40, width: 580, height: 340 };
 /** The sidebar's new forked row alongside the branched conversation. */
 const FORK_RESULT = { x: 0, y: 48, width: 880, height: 500 };
-/** This machine and Devices in Settings, stopping cleanly above Connection so no heading is sliced at the edge. */
-const DEVICES = { x: 560, y: 122, width: 580, height: 220 };
-/** The "Another computer" invite card below its tab bar and above Connection, once the cursor moves toward Copy link. */
-const COMPUTER_INVITE = { x: 560, y: 400, width: 580, height: 280 };
-/** This machine, the green "ada-laptop joined" banner, and the connected device row, stopping cleanly above Connection. */
-const DEVICE_JOINED = { x: 560, y: 155, width: 580, height: 260 };
 
 const NARRATION_AT = 0.25;
 /** The music dips gently under feature chapters to preserve rhythmic drive. */
@@ -125,10 +119,10 @@ export const STORYBOARD: Scene[] = [
     tilt: -1,
     captions: chapter("04 · Side Chat", "Select any text and ask — the agent keeps working", ACCENTS.emerald),
     shots: [
-      { from: ["selecting", -0.25], to: ["selected", 0.35], speed: 2.0 },
+      { from: ["selecting", -0.25], to: ["selected", 0.35], speed: 1.6 },
       { from: ["selected", 0.35], to: ["sideOpened", 0.55], speed: 1.9 },
       { from: ["asked", -1.4], to: ["asked", 0.8], speed: 1.85, fadeInFrames: 6 },
-      { from: ["sideAnswered", -0.35], to: ["sideAnswered", 1.8], speed: 1.15, fadeInFrames: 6 },
+      { from: ["sideAnswered", -0.35], to: ["sideAnswered", 2.35], speed: 1.15, fadeInFrames: 6 },
     ],
     camera: [
       { at: ["selecting", -0.25], look: SELECTED_WORDS, zoom: 1.24 },
@@ -170,7 +164,7 @@ export const STORYBOARD: Scene[] = [
     accent: ACCENTS.sky,
     tilt: -1,
     captions: chapter("06 · Fork", "Branch off from any turn to try another way", ACCENTS.sky),
-    shots: [{ from: ["hovered", -0.4], to: ["canvasCopied", 1.8], speed: 1.05 }],
+    shots: [{ from: ["hovered", -0.4], to: ["canvasCopied", 2.1], speed: 1.0 }],
     camera: [
       { at: ["hovered", -0.4], look: FORK_TRIGGER, zoom: 1.75 },
       { at: ["forked", 0.0], look: FORK_RESULT, zoom: 1.28 },
@@ -188,9 +182,9 @@ export const STORYBOARD: Scene[] = [
     captions: chapter("07 · Multi-Agent", "Claude Code delegates a sweep to local opencode", ACCENTS.amber),
     shots: [
       { from: ["sent", -1.2], to: ["sent", 0.8], speed: 1.5 },
-      { from: ["delegated", -0.5], to: ["unfolded", 0.6], speed: 1.45, fadeInFrames: 6 },
-      { from: ["unfolded", 0.6], to: ["replied", -0.1], speed: 2.6 },
-      { from: ["replied", -0.1], to: ["checked", 1.4], speed: 1.7 },
+      { from: ["delegated", -0.5], to: ["unfolded", 0.6], speed: 1.25, fadeInFrames: 6 },
+      { from: ["unfolded", 0.6], to: ["replied", -0.1], speed: 1.8 },
+      { from: ["replied", -0.1], to: ["checked", 1.7], speed: 1.3 },
     ],
     camera: [
       { at: ["sent", -1.2], look: "timeline", zoom: 1.22 },
@@ -231,9 +225,9 @@ export const STORYBOARD: Scene[] = [
     tilt: 1,
     captions: chapter("09 · Plugins & Media", "Mark what drags on the frame — your agent cuts it", ACCENTS.pink),
     shots: [
-      { from: ["galleryOpened", 0.1], to: ["galleryOpened", 2.5], speed: 1.5 },
-      { from: ["seeked", -0.15], to: "boxed", speed: 3.4, fadeInFrames: 8 },
-      { from: "boxed", to: "markSent", speed: 3.8 },
+      { from: ["galleryOpened", 0.1], to: ["galleryOpened", 2.5], speed: 1.7 },
+      { from: ["seeked", -0.15], to: "boxed", speed: 4.0, fadeInFrames: 8 },
+      { from: "boxed", to: "markSent", speed: 4.4 },
       { from: "cut", to: "rendered", speed: 3.2 },
       { from: ["playing", -0.4], to: ["playing", 2.2], speed: 1.4 },
     ],
@@ -247,22 +241,11 @@ export const STORYBOARD: Scene[] = [
     seconds: beats(16),
   },
   {
-    kind: "clip",
+    kind: "picture",
     id: "p2p",
-    clip: "p2p",
     accent: ACCENTS.violet,
     tilt: -1,
     captions: chapter("10 · Peer-to-Peer", "Zero-setup encrypted link between computers", ACCENTS.violet),
-    shots: [
-      { from: ["opened", 0.0], to: ["opened", 1.7], speed: 1.0 },
-      { from: ["computerShown", 0.45], to: ["copied", 0.75], speed: 0.9, fadeInFrames: 6 },
-      { from: ["joined", 0.0], to: ["joined", 1.5], speed: 0.55, fadeInFrames: 6 },
-    ],
-    camera: [
-      { at: ["opened", 0.0], look: DEVICES, zoom: 2.45 },
-      { at: ["computerShown", 0.45], look: COMPUTER_INVITE, zoom: 2.5, cut: true },
-      { at: ["joined", 0.0], look: DEVICE_JOINED, zoom: 2.25, cut: true },
-    ],
     slam: true,
     narration: [{ line: "p2p", at: NARRATION_AT, musicDipsTo: FEATURE_DIP }],
     seconds: beats(14),

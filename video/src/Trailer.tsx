@@ -2,15 +2,17 @@ import { Audio } from "@remotion/media";
 import { AbsoluteFill, interpolate, Sequence, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
 import { Backdrop } from "./components/Backdrop.tsx";
 import { ChapterRail } from "./components/ChapterRail.tsx";
-import { Flash, punchScale, shake } from "./components/Hit.tsx";
+import { ChapterCaptions } from "./components/CaptionCard.tsx";
+import { entrance3d, Flash, punchScale, shake } from "./components/Hit.tsx";
 import { musicVolume, spokenSpans } from "./mix.ts";
-import { CheckoutPicture } from "./scenes/CheckoutPicture.tsx";
+import { CarModePicture } from "./scenes/CarModePicture.tsx";
 import { ClipSceneView } from "./scenes/ClipSceneView.tsx";
 import { EndScene } from "./scenes/EndScene.tsx";
+import { PeerToPeerPicture } from "./scenes/PeerToPeerPicture.tsx";
 import { WallOfText } from "./scenes/WallOfText.tsx";
 import { BRAND } from "./brand.ts";
 import { MUSIC, WEBSITE, WHERE_TO_GET_IT } from "./storyboard.ts";
-import type { ClipInfo, NarrationLine, PlacedScene, Scene } from "./timeline.ts";
+import type { CardScene, ClipInfo, NarrationLine, PlacedScene, Scene } from "./timeline.ts";
 
 export type TrailerProps = {
   placed: PlacedScene[];
@@ -25,7 +27,7 @@ function FadeIn({ children, frames }: { children: React.ReactNode; frames: numbe
   return <AbsoluteFill style={{ opacity }}>{children}</AbsoluteFill>;
 }
 
-/** When the hook flips from the wall of text to the live checkout diagram (in seconds of the 8s hook scene). */
+/** When the hook flips from the wall of text to the agent asking about car mode on iPhones (in seconds of the 8s hook scene). */
 export const CANVAS_AT = 3.0;
 
 function DrawingPicture() {
@@ -37,15 +39,38 @@ function DrawingPicture() {
   const punch = punchScale(frame, flipFrame, 0.06);
   return (
     <AbsoluteFill style={{ transform: `translate(${x}px, ${y}px) scale(${punch})` }}>
-      {seconds < CANVAS_AT ? <WallOfText seconds={seconds} until={CANVAS_AT} /> : <CheckoutPicture secondsIn={seconds - CANVAS_AT} />}
+      {seconds < CANVAS_AT ? <WallOfText seconds={seconds} until={CANVAS_AT} /> : <CarModePicture secondsIn={seconds - CANVAS_AT} />}
       <Flash from={flipFrame} frames={12} strength={0.34} color={BRAND.violet} />
+    </AbsoluteFill>
+  );
+}
+
+/** What each picture scene draws, by its id. */
+const PICTURES: Record<string, () => React.ReactNode> = { hook: DrawingPicture, p2p: PeerToPeerPicture };
+
+/** A picture, or a drawn chapter: one with captions comes in like a filmed chapter, over its backdrop under its chapter bar. */
+function PictureView({ scene, frames }: { scene: CardScene; frames: number }) {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  const Picture = PICTURES[scene.id];
+  if (!Picture) throw new Error(`No picture is drawn for the scene "${scene.id}"; there are ${Object.keys(PICTURES).join(", ")}`);
+  if (!scene.captions) return <Picture />;
+  const accent = scene.accent ?? BRAND.violet;
+  return (
+    <AbsoluteFill>
+      <Backdrop accent={accent} />
+      <AbsoluteFill style={scene.slam ? { transform: entrance3d(frame, fps, scene.tilt ?? 1) } : undefined}>
+        <Picture />
+      </AbsoluteFill>
+      {scene.slam && <Flash color={accent} />}
+      <ChapterCaptions captions={scene.captions} accent={accent} frames={frames} />
     </AbsoluteFill>
   );
 }
 
 function SceneView({ scene, clips, frames }: { scene: Scene; clips: Record<string, ClipInfo>; frames: number }) {
   if (scene.kind === "clip") return <ClipSceneView scene={scene} clip={clips[scene.clip]!} frames={frames} />;
-  if (scene.kind === "picture") return <DrawingPicture />;
+  if (scene.kind === "picture") return <PictureView scene={scene} frames={frames} />;
   if (scene.kind === "backdrop") return <Backdrop accent={scene.accent} />;
   return <EndScene frames={frames} url={WHERE_TO_GET_IT} website={WEBSITE} />;
 }

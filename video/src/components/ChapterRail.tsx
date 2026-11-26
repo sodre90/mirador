@@ -6,11 +6,12 @@ import type { PlacedScene } from "../timeline.ts";
 export function ChapterRail({ placed }: { placed: PlacedScene[] }) {
   const frame = useCurrentFrame();
   const { durationInFrames } = useVideoConfig();
-  const firstClip = placed.find(({ scene }) => scene.kind === "clip");
-  const lastClip = placed.findLast(({ scene }) => scene.kind === "clip");
-  if (!firstClip || !lastClip) return null;
-  const start = firstClip.from;
-  const end = lastClip.from + lastClip.frames;
+  const chapters = placed.filter(({ scene }) => scene.captions?.length);
+  const firstChapter = chapters[0];
+  const lastChapter = chapters.at(-1);
+  if (!firstChapter || !lastChapter) return null;
+  const start = firstChapter.from;
+  const end = lastChapter.from + lastChapter.frames;
   if (frame < start || frame > end) return null;
   const opacity = Math.min(
     interpolate(frame, [start, start + 18], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" }),
@@ -19,7 +20,7 @@ export function ChapterRail({ placed }: { placed: PlacedScene[] }) {
   const current = placed.find(({ from, frames }) => frame >= from && frame < from + frames);
   const accent = current?.scene.accent ?? BRAND.violet;
   const progress = Math.min(1, Math.max(0, (frame - start) / Math.max(1, end - start)));
-  const ticks = placed.filter(({ scene }) => scene.kind === "clip").map(({ from }) => (from - start) / Math.max(1, end - start));
+  const ticks = chapters.map(({ from }) => (from - start) / Math.max(1, end - start));
   if (durationInFrames <= 0) return null;
   return (
     <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: 8, background: "rgba(255, 255, 255, 0.08)", opacity, pointerEvents: "none" }}>

@@ -1,4 +1,4 @@
-/** The checkout diagram the agent draws in the show clip, which the trailer's opening also draws out of the wall of text. */
+/** The checkout diagram the agent draws in the show clip. */
 export const CHECKOUT_TITLE = "Checkout, end to end";
 export const CHECKOUT_LEAD = "One request, four services, in the order they run. ⚠ marks where an order can get stuck.";
 

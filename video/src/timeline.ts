@@ -61,13 +61,19 @@ export type ClipScene = Transition & {
   tilt?: -1 | 1;
 };
 
-/** The opening hook, the end card, or the backdrop alone, for a breath before the end card. */
+/**
+ * A drawn picture (the opening hook, or a chapter told better by a drawing than a clip), the end card, or the backdrop
+ * alone, for a breath before the end card. A picture with captions is a chapter, and slams in like a clip.
+ */
 export type CardScene = Transition & {
   kind: "picture" | "end" | "backdrop";
   id: string;
   seconds: number;
   narration?: Spoken[];
   accent?: string;
+  captions?: Caption[];
+  slam?: true;
+  tilt?: -1 | 1;
 };
 export type Scene = ClipScene | CardScene;
 
@@ -152,7 +158,7 @@ export function clipNamed(clips: Record<string, ClipInfo>, name: string) {
 
 /** A scene comes in over the one before by its own fade in, or cuts straight in when it slams, or crossfades by `crossfadeFrames`. */
 function fadeInFramesOf(scene: Scene, crossfadeFrames: number) {
-  return scene.fadeInFrames ?? (scene.kind === "clip" && scene.slam ? 0 : crossfadeFrames);
+  return scene.fadeInFrames ?? (scene.slam ? 0 : crossfadeFrames);
 }
 
 /** Scenes one after another, each overlapping the one before by its fade in. */

@@ -122,6 +122,19 @@ test("a shot's trim covers its last frame however its times round", () => {
 
 const video = join(import.meta.dirname, "..");
 const clipNames = [...new Set(STORYBOARD.flatMap((scene) => (scene.kind === "clip" ? [scene.clip] : [])))];
+test("a drawn chapter that slams cuts straight in, like a filmed one", () => {
+  const cards: Scene[] = [
+    { kind: "backdrop", id: "a", seconds: 1 },
+    { kind: "picture", id: "b", seconds: 2, slam: true },
+    { kind: "end", id: "c", seconds: 1 },
+  ];
+  expect(placeScenes(cards, {}, {}, 10, 3).map(({ scene, fadeInFrames }) => ({ id: scene.id, fadeInFrames }))).toEqual([
+    { id: "a", fadeInFrames: 0 },
+    { id: "b", fadeInFrames: 0 },
+    { id: "c", fadeInFrames: 3 },
+  ]);
+});
+
 const filmed = clipNames.every((name) => existsSync(join(video, "public", "clips", `${name}.json`)));
 
 describe.skipIf(!filmed)("the storyboard, with the clips filmed", () => {
@@ -134,7 +147,7 @@ describe.skipIf(!filmed)("the storyboard, with the clips filmed", () => {
     const hook = STORYBOARD.find(({ id }) => id === "hook")!;
     expect(sceneSeconds(hook, clips, lines)).toBe(hook.seconds!);
     expect(isWhole(wholeBeats(hook.seconds!) / 4)).toBe(true);
-    const slammed = STORYBOARD.filter((scene): scene is ClipScene => scene.kind === "clip" && Boolean(scene.slam));
+    const slammed = STORYBOARD.filter((scene) => scene.slam);
     for (const scene of slammed) {
       expect({ id: scene.id, seconds: sceneSeconds(scene, clips, lines) }).toEqual({ id: scene.id, seconds: scene.seconds! });
       expect({ id: scene.id, whole: isWhole(wholeBeats(scene.seconds!)) }).toEqual({ id: scene.id, whole: true });
@@ -157,6 +170,6 @@ describe.skipIf(!filmed)("the storyboard, with the clips filmed", () => {
 
   test("cuts straight into a slammed scene", () => {
     const placed = placeScenes(STORYBOARD, clips, lines, 60, 14);
-    for (const { scene, fadeInFrames } of placed.filter(({ scene }) => scene.kind === "clip" && scene.slam)) expect({ id: scene.id, fadeInFrames }).toEqual({ id: scene.id, fadeInFrames: 0 });
+    for (const { scene, fadeInFrames } of placed.filter(({ scene }) => scene.slam)) expect({ id: scene.id, fadeInFrames }).toEqual({ id: scene.id, fadeInFrames: 0 });
   });
 });
