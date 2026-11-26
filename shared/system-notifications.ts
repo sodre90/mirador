@@ -68,8 +68,7 @@ function reasonText(reason: NotificationReason) {
   }
 }
 
-/** On one line
-, and short enough for a notification to show it whole. */
+/** On one line, and short enough for a notification to show it whole. */
 export const notificationBody = (text: string) => cutWithEllipsis(oneLine(text), BODY_LENGTH - 1, BODY_LENGTH);
 
 export const systemNotification = (
