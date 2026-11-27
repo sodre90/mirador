@@ -39,7 +39,7 @@ async function subagentTranscriptsByToolCall(directory: string): Promise<Map<str
   return new Map(metas.flatMap(({ path, toolUseId }): [string, string][] => (toolUseId ? [[toolUseId, path.replace(/\.meta\.json$/, ".jsonl")]] : [])));
 }
 
-function rememberNewest<K, V>(newest: Map<K, V>, key: K, value: V, capacity: number) {
+export function rememberNewest<K, V>(newest: Map<K, V>, key: K, value: V, capacity: number) {
   newest.delete(key);
   newest.set(key, value);
   const oldest = newest.keys().next();

@@ -186,15 +186,16 @@ export class StatuslineService {
     const now = Date.now();
     const quotas = this.conversations.planQuotasOf(conversationId, now);
     const pluginChips = this.plugins.statuslineChips(conversationId);
-    const contextHints = offeringCompactWhereItCan(this.plugins.contextHints(conversationId), () => this.conversations.agentHasCommand(conversationId, COMPACT_COMMAND));
     const environment = this.environmentOf(conversation);
     const configDir = environment && claudeConfigDir(environment);
     const runsClaudeCode = conversation.harness === "claude";
-    const [gitBranch, command, promptCache] = await Promise.all([
+    const [gitBranch, command, promptCache, pluginHints] = await Promise.all([
       currentGitBranch(directory),
       configDir && this.runsUserCommands && runsClaudeCode && !this.inSandbox(conversation) ? statusLineCommandIn(configDir) : null,
       configDir && runsClaudeCode && conversation.acpSessionId ? claudeTranscriptEnd(configDir, conversation.acpSessionId).then(promptCacheOf) : null,
+      this.plugins.contextHints(conversationId),
     ]);
+    const contextHints = offeringCompactWhereItCan(pluginHints, () => this.conversations.agentHasCommand(conversationId, COMPACT_COMMAND));
     if (!command || !configDir || !environment || !runCommand) return { gitBranch, command, output: null, error: null, quotas, pluginChips, contextHints, promptCache };
     const transcriptPath = conversation.acpSessionId ? claudeTranscriptPath(configDir, directory, conversation.acpSessionId) : null;
     const result = await runStatusLineCommand(command, {

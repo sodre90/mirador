@@ -68,7 +68,7 @@ import { agentAnsweredIn, lastWordsOf, replyOf } from "../shared/last-words.ts";
 import { isRealModel } from "../shared/claude-models.ts";
 import { cutWithEllipsis, firstGraphemes } from "../shared/text-cut.ts";
 import { isInformational } from "../shared/timeline.ts";
-import type { ConversationChoices, ConversationReply, ConversationUsage, RanOn, StartedConversation, WorkspaceConversationStart } from "../shared/canvas-plugins.ts";
+import type { ConversationChoices, ConversationReply, ConversationUsage, ModelRequestSample, RanOn, StartedConversation, WorkspaceConversationStart } from "../shared/canvas-plugins.ts";
 import { canTryAgain } from "../shared/try-again.ts";
 import { currentActivity, isAgentsNextStep, OpenToolCalls } from "./activity.ts";
 import { editDiffsOf } from "./edit-diff.ts";
@@ -151,6 +151,7 @@ import { isInWorktreesDirectory, Worktrees, workingCopyOf } from "./worktrees.ts
 import { ConversationSessions } from "./conversation-sessions.ts";
 import { SubagentSessions } from "./subagent-sessions.ts";
 import { SubagentUsageReader } from "./subagent-usage.ts";
+import { ClaudeRequestLog } from "./claude-requests.ts";
 import { UnknownSessionUpdates } from "./unknown-session-updates.ts";
 import { conversationCanvasToken } from "./canvas-token.ts";
 import { holdsAFavourite, restsWithAllItHolds } from "../shared/deleting-together.ts";
@@ -558,6 +559,7 @@ export class ConversationService {
   private readonly asksWaitedOn: Map<string, PendingAsk>;
   private readonly commands = new UserCommandRunner();
   private readonly subagentUsageReader = new SubagentUsageReader();
+  private readonly claudeRequestLog = new ClaudeRequestLog();
   private readonly jobWaits: JobWaits;
   private readonly asyncTasks = new AsyncTasks();
   private readonly checkpoints: Checkpoints;
@@ -688,6 +690,14 @@ export class ConversationService {
     const conversation = this.get(conversationId);
     if (conversation.harness !== "claude" || !conversation.acpSessionId) return {};
     return this.subagentUsageReader.usageOf(this.claudeConfigDirOf(conversation), conversation.acpSessionId, toolCallIds);
+  }
+
+  /** The model requests the main thread of a conversation made from `since` on, from Claude Code's transcript of it; none for other agents. */
+  async modelRequestsOf(conversationId: string, since: number): Promise<ModelRequestSample[]> {
+    const conversation = this.store.findConversation(conversationId);
+    if (conversation?.harness !== "claude" || !conversation.acpSessionId) return [];
+    const requests = await this.claudeRequestLog.requestsOf(this.claudeConfigDirOf(conversation), conversation.acpSessionId, since);
+    return requests.map((request) => ({ conversationId, ...request }));
   }
 
   /**

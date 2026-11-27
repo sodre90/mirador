@@ -29,9 +29,11 @@ import { newestFirst } from "./newer-version.ts";
  * conversation's context for its context meter, with Compact now; API 23 gives each profile its id, which a workspace
  * tab and background work start conversations on and ask choices of, so a renamed profile stays theirs; API 24 lets a
  * workspace tab and background work notify the user, on this computer and on phones; API 25 reads times in plain words
- * for a canvas plugin and a workspace tab, as /remind does, with the user's morning.
+ * for a canvas plugin and a workspace tab, as /remind does, with the user's morning; API 26 tells a canvas plugin the
+ * model requests of a Claude Code conversation, and its profile's, each with its cache writes by how long they last, and
+ * lets its advice on the context come as a promise.
  */
-export const APP_PLUGIN_API = 25;
+export const APP_PLUGIN_API = 26;
 
 /**
  * The first plugin API whose profile settings may be typed or toggled, and whose canvas host may draw statusline chips,

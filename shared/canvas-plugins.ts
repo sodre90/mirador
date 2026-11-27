@@ -271,12 +271,32 @@ export interface TurnSample {
   costSoFar: { amount: number; currency: string } | null;
 }
 
+/** One request the main thread of a Claude Code conversation made to its model, as Claude Code's transcript of it tells. Plugin API 26 brought it. */
+export interface ModelRequestSample {
+  conversationId: string;
+  /** When the request went out: when the message or tool result it answers was written. */
+  startedAt: number;
+  model: string;
+  inputTokens: number;
+  cachedReadTokens: number;
+  /** What the request wrote to the prompt cache, by how long it stays there. */
+  cachedWriteTokens: { fiveMinutes: number; oneHour: number };
+  outputTokens: number;
+}
+
 /** A conversation's turns as Mirador recorded them, oldest first, for what a plugin tells of how they spend tokens. Plugin API 22 brought it. */
 export interface UsageHistory {
   /** The conversation's turns that ended at or after `since`, in epoch milliseconds; all of them without it. */
   turns(since?: number): TurnSample[];
   /** The turns that ended at or after `since` in every conversation on the conversation's profile: what its plan's usage limits count. */
   profileTurns(since: number): TurnSample[];
+  /**
+   * The model requests of the conversation's main thread that started at or after `since`, oldest first, as far back as
+   * eight days; none for an agent other than Claude Code. Plugin API 26 brought it.
+   */
+  requests(since?: number): Promise<ModelRequestSample[]>;
+  /** The same for every conversation on the conversation's profile with a turn that ended at or after `since`. Plugin API 26 brought it. */
+  profileRequests(since: number): Promise<ModelRequestSample[]>;
 }
 
 /**
@@ -574,10 +594,11 @@ export interface CanvasHost<Data = unknown> {
   statusline?(context: StatuslineContext): StatuslineChip[];
   /**
    * Advice on the conversation's context for its context meter, or null for none. Mirador asks when it asks for the
-   * statusline, so it answers at once, as `statusline` does. Advice never speaks up by itself: the user finds it on the
+   * statusline, and waits a second at most for an answer it gets as a promise (plugin API 26 on), so a plugin answers at
+   * once from what it already knows, or reads a little first. Advice never speaks up by itself: the user finds it on the
    * meter. Plugin API 22 brought it.
    */
-  contextHint?(context: StatuslineContext): ContextHint | null;
+  contextHint?(context: StatuslineContext): ContextHint | null | Promise<ContextHint | null>;
   /**
    * Checks what a profile set for the plugin, e.g. that a server answers at the URL and with the key given: the Profiles
    * dialog's Test connection button, before the profile is saved. `setting` reads the settings as `profileSetting` does.

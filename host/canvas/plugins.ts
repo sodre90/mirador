@@ -37,7 +37,7 @@ import type { ProfileDraft, ServerMessage } from "../../shared/protocol.ts";
 import { conversationSettingValue, type ConversationPlugin, isChoiceSetting, pluginsOffFor, isTextSetting, modelSettingsOf, PROFILE_ID_PLUGIN_API, profileSettingValue, readTextSetting, type PluginProfileSetting } from "../../shared/apps.ts";
 import { profileEnvironment } from "../acp/harnesses.ts";
 import { validContextHint, validStatuslineChips } from "./statusline-chips.ts";
-import { usageHistoryOf } from "../turn-samples.ts";
+import { usageHistoryOf, type ModelRequestsOf } from "../turn-samples.ts";
 import { categoryChoices } from "../../shared/config-options.ts";
 import { canvasViewPath, messageOf, type CanvasPlugin } from "../apps/plugins.ts";
 import type { Hub } from "../hub.ts";
@@ -128,6 +128,18 @@ const namesProfiles = ({ manifest }: CanvasPlugin) => manifest.api < PROFILE_ID_
 const namedChoices = (options: Conversation["configOptions"], category: "model" | "thought_level") =>
   categoryChoices(options, category).map(({ value, name }) => ({ id: value, name }));
 
+/** The statusline waits no longer for a plugin's advice on the context: it shows the rest in the meantime. */
+const CONTEXT_HINT_WAIT_MS = 1_000;
+const TIMED_OUT = Symbol("timed out");
+
+function settledWithin<T>(promise: Promise<T>, waitMs: number): Promise<T | typeof TIMED_OUT> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<typeof TIMED_OUT>((resolve) => {
+    timer = setTimeout(() => resolve(TIMED_OUT), waitMs);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
 const offeredChoices = (options: Conversation["configOptions"]): ProfileChoices => ({ models: namedChoices(options, "model"), efforts: namedChoices(options, "thought_level") });
 
 /**
@@ -157,6 +169,10 @@ export class CanvasPlugins {
 
   private readUsage: ReadUsage = () => {
     throw new Error("Mirador can't read usage yet.");
+  };
+
+  private readModelRequests: ModelRequestsOf = async () => {
+    throw new Error("Mirador can't read model requests yet.");
   };
 
   private startInWorkspace: StartInWorkspace = async () => {
@@ -204,6 +220,10 @@ export class CanvasPlugins {
 
   readsUsageWith(read: ReadUsage) {
     this.readUsage = read;
+  }
+
+  readsModelRequestsWith(read: ModelRequestsOf) {
+    this.readModelRequests = read;
   }
 
   startsWorkspaceConversationsWith(start: StartInWorkspace) {
@@ -404,20 +424,28 @@ export class CanvasPlugins {
     });
   }
 
-  /** Each plugin's advice on the conversation's context, as it gave it; a plugin whose hook fails or gives none is left out. */
-  contextHints(conversationId: string): PluginContextHint[] {
+  /** Each plugin's advice on the conversation's context, as it gave it; a plugin whose hook fails, gives none or doesn't answer in time is left out. */
+  async contextHints(conversationId: string, waitMs = CONTEXT_HINT_WAIT_MS): Promise<PluginContextHint[]> {
     const conversation = this.store.findConversation(conversationId);
     if (!conversation) return [];
-    return this.pluginsOf(conversationId).flatMap((plugin) => {
-      if (!plugin.host.contextHint) return [];
-      try {
-        const hint = validContextHint(plugin.host.contextHint(this.statuslineContext(plugin, conversation)));
-        return hint ? [{ plugin: plugin.manifest.name, title: plugin.manifest.title, ...hint }] : [];
-      } catch (error) {
-        console.error(`the context hint of the ${plugin.manifest.name} plugin failed for conversation ${conversation.id}:`, error);
-        return [];
-      }
-    });
+    const hints = await Promise.all(this.pluginsOf(conversationId).map((plugin) => this.contextHintOf(plugin, conversation, waitMs)));
+    return hints.flatMap((hint) => hint ?? []);
+  }
+
+  private async contextHintOf(plugin: CanvasPlugin, conversation: Conversation, waitMs: number): Promise<PluginContextHint | null> {
+    if (!plugin.host.contextHint) return null;
+    try {
+      const given = await settledWithin(Promise.resolve(plugin.host.contextHint(this.statuslineContext(plugin, conversation))), waitMs);
+      const hint = given === TIMED_OUT ? null : validContextHint(given);
+      return hint ? { plugin: plugin.manifest.name, title: plugin.manifest.title, ...hint } : null;
+    } catch (error) {
+      console.error(`the context hint of the ${plugin.manifest.name} plugin failed for conversation ${conversation.id}:`, error);
+      return null;
+    }
+  }
+
+  private usageHistoryOf(conversationId: string) {
+    return usageHistoryOf(this.store, conversationId, (id, since) => this.readModelRequests(id, since));
   }
 
   private statuslineContext(plugin: CanvasPlugin, conversation: Conversation): StatuslineContext {
@@ -431,7 +459,7 @@ export class CanvasPlugins {
       createdAt: conversation.createdAt,
       profileSetting: (id) => this.settingFor(plugin, conversation.id, id),
       storage: this.storageOf(plugin),
-      usageHistory: usageHistoryOf(this.store, conversation.id),
+      usageHistory: this.usageHistoryOf(conversation.id),
     };
   }
 
@@ -947,7 +975,7 @@ export class CanvasPlugins {
       profileSetting: (id) => this.settingFor(plugin, conversationId, id),
       profiles: () => this.pluginProfiles(),
       usageOf: (startedId) => this.readUsage(conversationId, plugin.manifest.name, startedId),
-      usageHistory: usageHistoryOf(this.store, conversationId),
+      usageHistory: this.usageHistoryOf(conversationId),
     };
   }
 

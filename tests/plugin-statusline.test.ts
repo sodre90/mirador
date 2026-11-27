@@ -108,7 +108,7 @@ describe("a plugin's advice on the context", () => {
       return { text: `${last.toolCalls} tool calls re-read ${last.context!.used} tokens`, action: "compact" };
     });
     const { plugins } = await canvasPluginHost(FIXTURES, store, { meter: advice });
-    expect(plugins.contextHints("c1")).toEqual([{ plugin: "meter", title: "Meter", text: "4 tool calls re-read 150000 tokens", action: "compact" }]);
+    expect(await plugins.contextHints("c1")).toEqual([{ plugin: "meter", title: "Meter", text: "4 tool calls re-read 150000 tokens", action: "compact" }]);
   });
 
   test("offers Compact now only where the agent has /compact, asking only when a hint would offer it", () => {
@@ -139,10 +139,19 @@ describe("a plugin's advice on the context", () => {
     expect(await hintsOf(() => ({ text: "Fine", action: "clear", extra: true }))).toEqual([{ plugin: "meter", title: "Meter", text: "Fine" }]);
   });
 
+  test("may come as a promise, and is left out when it doesn't come in time or fails", async () => {
+    const { store } = await meteredConversation({ metered: "on" });
+    const hintsOf = async (hint: (context: StatuslineContext) => unknown) => (await canvasPluginHost(FIXTURES, store, { meter: advising(hint) })).plugins.contextHints("c1", 50);
+    expect(await hintsOf(async () => ({ text: "Read first", action: "compact" }))).toEqual([{ plugin: "meter", title: "Meter", text: "Read first", action: "compact" }]);
+    expect(await hintsOf(async () => ({ text: " " }))).toEqual([]);
+    expect(await hintsOf(() => new Promise(() => {}))).toEqual([]);
+    expect(await hintsOf(async () => Promise.reject(new Error("no transcript")))).toEqual([]);
+  });
+
   test("is none for a profile that turned the plugin off", async () => {
     const { store } = await meteredConversation({});
     const { plugins } = await canvasPluginHost(FIXTURES, store, { meter: advising(() => ({ text: "Compact" })) });
-    expect(plugins.contextHints("c1")).toEqual([]);
+    expect(await plugins.contextHints("c1")).toEqual([]);
   });
 });
 

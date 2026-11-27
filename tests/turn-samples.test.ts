@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, setSystemTime, test } from "bun:test";
-import { usageHistoryOf } from "../host/turn-samples.ts";
+import { usageHistoryOf, type ModelRequestsOf } from "../host/turn-samples.ts";
+import type { ModelRequestSample } from "../shared/canvas-plugins.ts";
 import type { ConversationEvent } from "../shared/model.ts";
 import { storeWithConversation } from "./canvas-plugin-host.ts";
 
@@ -22,6 +23,8 @@ function appendAt(store: ReturnType<typeof storeWithConversation>, conversationI
 
 afterEach(() => setSystemTime());
 
+const noRequests: ModelRequestsOf = async () => [];
+
 describe("a conversation's turns, as a plugin reads them", () => {
   test("are its turn ends and the errors that ended turns, with what Mirador saw of each", () => {
     const store = storeWithThreeConversations();
@@ -40,7 +43,7 @@ describe("a conversation's turns, as a plugin reads them", () => {
     appendAt(store, "c1", 20_000, { type: "error", message: "limit", usageLimit: { resetsAt: null }, endsTurn: true, startedAt: 12_000, toolCalls: 0 });
     appendAt(store, "c1", 30_000, { type: "turn-end", stopReason: "cancelled" });
 
-    expect(usageHistoryOf(store, "c1").turns()).toEqual([
+    expect(usageHistoryOf(store, "c1", noRequests).turns()).toEqual([
       {
         conversationId: "c1",
         startedAt: 1_100,
@@ -59,7 +62,7 @@ describe("a conversation's turns, as a plugin reads them", () => {
   test("since a time, are the turns that ended then or later", () => {
     const store = storeWithThreeConversations();
     for (const at of [1_000, 2_000, 3_000]) appendAt(store, "c1", at, { type: "turn-end", stopReason: "end_turn" });
-    expect(usageHistoryOf(store, "c1").turns(2_000).map(({ endedAt }) => endedAt)).toEqual([2_000, 3_000]);
+    expect(usageHistoryOf(store, "c1", noRequests).turns(2_000).map(({ endedAt }) => endedAt)).toEqual([2_000, 3_000]);
   });
 
   test("of its profile, are every conversation's on that profile, oldest first", () => {
@@ -68,14 +71,59 @@ describe("a conversation's turns, as a plugin reads them", () => {
     appendAt(store, "c1", 2_000, { type: "turn-end", stopReason: "end_turn" });
     appendAt(store, "c3", 3_000, { type: "turn-end", stopReason: "end_turn" });
     appendAt(store, "c2", 4_000, { type: "turn-end", stopReason: "end_turn" });
-    const history = usageHistoryOf(store, "c1");
+    const history = usageHistoryOf(store, "c1", noRequests);
     expect(history.profileTurns(0).map(({ conversationId, endedAt }) => [conversationId, endedAt])).toEqual([
       ["c2", 1_000],
       ["c1", 2_000],
       ["c2", 4_000],
     ]);
     expect(history.profileTurns(2_000).map(({ endedAt }) => endedAt)).toEqual([2_000, 4_000]);
-    expect(usageHistoryOf(store, "c3").profileTurns(0).map(({ conversationId }) => conversationId)).toEqual(["c3"]);
-    expect(usageHistoryOf(store, "deleted").profileTurns(0)).toEqual([]);
+    expect(usageHistoryOf(store, "c3", noRequests).profileTurns(0).map(({ conversationId }) => conversationId)).toEqual(["c3"]);
+    expect(usageHistoryOf(store, "deleted", noRequests).profileTurns(0)).toEqual([]);
+  });
+});
+
+describe("a conversation's model requests, as a plugin reads them", () => {
+  const request = (conversationId: string, startedAt: number): ModelRequestSample => ({
+    conversationId,
+    startedAt,
+    model: "claude-opus-5-5",
+    inputTokens: 1,
+    cachedReadTokens: 0,
+    cachedWriteTokens: { fiveMinutes: 0, oneHour: 0 },
+    outputTokens: 1,
+  });
+  const requestsAt: Record<string, number[]> = { c1: [1_500, 5_000], c2: [500, 3_500], c3: [2_500] };
+  const asked: [string, number][] = [];
+  const readRequests: ModelRequestsOf = async (conversationId, since) => {
+    asked.push([conversationId, since]);
+    return (requestsAt[conversationId] ?? []).filter((startedAt) => startedAt >= since).map((startedAt) => request(conversationId, startedAt));
+  };
+
+  test("are its own, from the time asked or from its start", async () => {
+    const history = usageHistoryOf(storeWithThreeConversations(), "c1", readRequests);
+    expect((await history.requests()).map(({ startedAt }) => startedAt)).toEqual([1_500, 5_000]);
+    expect((await history.requests(2_000)).map(({ startedAt }) => startedAt)).toEqual([5_000]);
+  });
+
+  test("of its profile, are those of the profile's conversations with a turn since then, oldest first", async () => {
+    const store = storeWithThreeConversations();
+    appendAt(store, "c2", 1_000, { type: "turn-end", stopReason: "end_turn" });
+    appendAt(store, "c1", 2_000, { type: "turn-end", stopReason: "end_turn" });
+    appendAt(store, "c3", 3_000, { type: "turn-end", stopReason: "end_turn" });
+    appendAt(store, "c2", 4_000, { type: "turn-end", stopReason: "end_turn" });
+    asked.length = 0;
+    const requests = await usageHistoryOf(store, "c1", readRequests).profileRequests(0);
+    expect(requests.map(({ conversationId, startedAt }) => [conversationId, startedAt])).toEqual([
+      ["c2", 500],
+      ["c1", 1_500],
+      ["c2", 3_500],
+      ["c1", 5_000],
+    ]);
+    expect(asked.toSorted()).toEqual([
+      ["c1", 0],
+      ["c2", 0],
+    ]);
+    expect(await usageHistoryOf(store, "deleted", readRequests).profileRequests(0)).toEqual([]);
   });
 });

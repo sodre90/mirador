@@ -5,6 +5,7 @@ import type { ChangeStatus } from "../shared/changes.ts";
 import type { FileBefore } from "./edit-diff.ts";
 import { LineCountCache } from "./line-count-cache.ts";
 import { HostProblemError } from "../shared/host-problems.ts";
+import { inLimitedParallel } from "./limited-parallel.ts";
 
 /** A file that differs between two of git's trees, or between a tree and the working tree. */
 export interface TreeChange {
@@ -87,7 +88,7 @@ export async function uncommittedChanges(directory: string): Promise<TreeChange[
   const head = await headOrEmptyTree(directory);
   const diff = (format: string) => mustGit(directory, ["diff", "--ignore-submodules=dirty", "--relative", "--no-renames", "--no-ext-diff", "--no-textconv", "-z", format, head]);
   const [raw, numstat, untracked] = await Promise.all([diff("--raw"), diff("--numstat"), mustGit(directory, ["ls-files", "--others", "--exclude-standard", "-z"])]);
-  const added = await inLimitedParallel(untracked.split("\0").filter(Boolean), (path) => untrackedChange(directory, path));
+  const added = await inFilesAtOnce(untracked.split("\0").filter(Boolean), (path) => untrackedChange(directory, path));
   return [...treeChangesIn(raw, numstat), ...added];
 }
 
@@ -104,16 +105,7 @@ async function addedLinesOf(fullPath: string, size: number) {
   return text === null || text.includes("\0") ? null : lineCount(text);
 }
 
-/** Like `Promise.all(items.map(work))`, with at most FILES_HANDLED_AT_ONCE under way, so thousands of files are not opened at once. The results keep the items' order. */
-async function inLimitedParallel<T, R>(items: T[], work: (item: T) => Promise<R>): Promise<R[]> {
-  const results = new Array<R>(items.length);
-  const waiting = items.entries();
-  const workers = Array.from({ length: Math.min(FILES_HANDLED_AT_ONCE, items.length) }, async () => {
-    for (const [index, item] of waiting) results[index] = await work(item);
-  });
-  await Promise.all(workers);
-  return results;
-}
+const inFilesAtOnce = <T, R>(items: T[], work: (item: T) => Promise<R>) => inLimitedParallel(items, FILES_HANDLED_AT_ONCE, work);
 
 const TOOL_STATE_FOLDERS = [".beads", ".dolt", ".idea"];
 const SCAN_SKIPS = new Set([".git", "node_modules", ".DS_Store", ...TOOL_STATE_FOLDERS]);
@@ -182,11 +174,11 @@ export const writtenWithin =
 
 /** The times of a file decide which of the two it is: made when a write counts, or made before and rewritten then. */
 async function writtenChangesOf(directory: string, paths: string[], counts: CountsWrite): Promise<TreeChange[]> {
-  const written = await inLimitedParallel(paths, async (path) => {
+  const written = await inFilesAtOnce(paths, async (path) => {
     const stats = await lstat(join(directory, path)).catch(() => null);
     return stats?.isFile() && counts(writtenAt(stats)) ? [{ path, createdSince: counts(stats.birthtimeMs), writtenAtMs: writtenAt(stats) }] : [];
   });
-  return inLimitedParallel(written.flat(), async ({ path, createdSince, writtenAtMs }) => ({
+  return inFilesAtOnce(written.flat(), async ({ path, createdSince, writtenAtMs }) => ({
     ...(createdSince ? await untrackedChange(directory, path) : { path, status: "modified" as const, added: null, removed: null }),
     writtenAtMs,
   }));
@@ -234,7 +226,7 @@ export async function ignoredFilesWritten(
  * names an untracked folder holding a repository of its own as the folder, which is that repository's, so it is left out.
  */
 export async function changesWritten(directory: string, changes: TreeChange[], counts: CountsWrite): Promise<TreeChange[]> {
-  const kept = await inLimitedParallel(changes, async (change) => {
+  const kept = await inFilesAtOnce(changes, async (change) => {
     const stats = await lstat(join(directory, change.path)).catch(() => null);
     return stats && !stats.isDirectory() && counts(writtenAt(stats)) ? [{ ...change, writtenAtMs: writtenAt(stats) }] : [];
   });
