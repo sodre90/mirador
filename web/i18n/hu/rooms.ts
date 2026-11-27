@@ -400,6 +400,7 @@ export const rooms: Messages["rooms"] = {
   vote: {
     chosenBy: (people) => `Választók: ${people}`,
     otherAnswer: "Vagy írj másik választ…",
+    noneOfThese: "Egyik sem",
     confirm: "Megerősítés",
     pickToConfirm: "Válassz egy választ, hogy megerősíthesd.",
     confirmAnswer: (answer) => `Megerősítés: ${answer}`,

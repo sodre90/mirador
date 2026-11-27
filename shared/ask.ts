@@ -14,6 +14,9 @@ export function answerTo(item: AskItem, index: number): AskAnswerEntry | undefin
   return index === 0 ? { label: item.answer.label, picked: item.answer.picked, note: item.answer.note } : undefined;
 }
 
+/** How the agent hears that the answer is none of the question's options. */
+export const NONE_OF_THE_OPTIONS = "none of the options";
+
 /** An answer the user wrote themselves rather than picked from the question's options. */
 export const isOwnAnswer = (question: AskQuestion, answer: string) => !question.options.some(({ label }) => label === answer);
 

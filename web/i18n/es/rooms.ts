@@ -401,6 +401,7 @@ export const rooms: Messages["rooms"] = {
   vote: {
     chosenBy: (people) => `Elegido por: ${people}`,
     otherAnswer: "O escribe otra respuesta…",
+    noneOfThese: "Ninguna de estas",
     confirm: "Confirmar",
     pickToConfirm: "Elige una respuesta para confirmarla.",
     confirmAnswer: (answer) => `Confirmar: ${answer}`,

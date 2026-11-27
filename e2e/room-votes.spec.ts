@@ -143,6 +143,36 @@ test("an agent's question in a room is everyone's vote, which the person whose t
   });
 });
 
+test("a member whose tasks wait for approval can't answer in words of their own, but can confirm that none of the options fits", async ({ page, browser }) => {
+  await signIn(page, host);
+  await roomCard(page, "Launch").click();
+  const mia = await openAs(browser, people.mia);
+  await roomCard(mia, "Launch").click();
+  const question = "Which size?";
+  const ask = { question, options: [{ label: "Small" }, { label: "Large" }] };
+  await writeTagging(memberComposer(mia, "Launch"), tagMenu(mia), "Bu", "Builder", `CANVAS ask ${JSON.stringify(ask)}`);
+  await page.locator(".room-timeline ~ .room-approvals").getByRole("button", { name: "Allow", exact: true }).click();
+  const noneOfThese = vote(mia, question).getByRole("button", { name: "None of these", exact: true });
+
+  await expect(noneOfThese).toBeVisible();
+  await expect(vote(mia, question).getByRole("textbox")).toHaveCount(0);
+  await expect(vote(page, question).getByRole("button", { name: "None of these", exact: true }), "the owner writes an answer of their own instead").toHaveCount(0);
+  await option(mia, question, "Small").getByRole("button").click();
+  await noneOfThese.click();
+  await expect(noneOfThese).toHaveAttribute("aria-pressed", "true");
+  await expect(option(mia, question, "Small").getByRole("button")).toHaveAttribute("aria-pressed", "false");
+  await expect(vote(mia, question).getByRole("button", { name: "Confirm: None of these" })).toBeEnabled();
+  await option(mia, question, "Large").getByRole("button").click();
+  await expect(noneOfThese, "picking an option takes None of these back").toHaveAttribute("aria-pressed", "false");
+  await expect(vote(mia, question).getByRole("button", { name: "Confirm: Large" })).toBeVisible();
+  await noneOfThese.click();
+  await screenshot(vote(mia, question), "vote-none-of-these");
+  await vote(mia, question).getByRole("button", { name: "Confirm: None of these" }).click();
+
+  for (const each of [page, mia]) await expect(vote(each, question).locator(".room-vote-status")).toHaveText("Mia confirmed: None of these");
+  await expect.poll(() => readFileSync(builderPrompts(), "utf8")).toContain('[member] Mia answered your question "Which size?": none of the options');
+});
+
 test("an agent's several questions are each voted on and confirmed together, only as the confirmer picked them or in words of their own, and a person taken out of the room takes their picks along", async ({ page, browser }) => {
   await signIn(page, host);
   await roomCard(page, "Launch").click();

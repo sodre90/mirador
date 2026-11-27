@@ -393,6 +393,7 @@ export const rooms: Messages["rooms"] = {
   vote: {
     chosenBy: (people) => `选择者：${people}`,
     otherAnswer: "或者写下其他答案…",
+    noneOfThese: "都不是",
     confirm: "确认",
     pickToConfirm: "先选一个答案，再确认。",
     confirmAnswer: (answer) => `确认：${answer}`,

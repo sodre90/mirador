@@ -303,6 +303,17 @@ describe("an agent's question in a room, as a vote", () => {
     expect(sent.at(-1)?.text).toBe('My answer to your question "Which colour?": Mint');
   });
 
+  test("takes none of the options, where the question takes an answer of another kind, from a confirmer who may not write their own words, as it holds none", () => {
+    const { rooms, questions, room, sent, askedOnTaskOf } = roomWithPeople();
+    rooms.setPeoplesTasksWait(room.id, true);
+    const strict = askedOnTaskOf("mia", { ...COLOURS, allowOther: false }).item;
+    expect(refusal(() => questions.confirm(room.id, strict.id, [{ none: true }], "mia"))).toBe("room-own-answer-not-taken");
+
+    const open = askedOnTaskOf("mia").item;
+    questions.confirm(room.id, open.id, [{ none: true }], "mia");
+    expect(sent.at(-1)?.text).toBe('[member] Mia answered your question "Which colour?": none of the options');
+  });
+
   test("of several questions, takes one answer for each, all confirmed together", () => {
     const { questions, room, sent, askedOnTaskOf } = roomWithPeople();
     const { item } = askedOnTaskOf("mia", {
@@ -398,7 +409,7 @@ describe("what a person other than the owner may send of votes, confirmations an
   const admitted = (sent: unknown) =>
     refusal(() => admittedFromPerson(sent, inRooms)) === "refused" ? "unreadable" : refusal(() => admittedFromPerson(sent, inRooms));
   const vote = { type: "room.vote", roomId: "launch", itemId: "q1", question: 0, option: 1 };
-  const confirm = { type: "room.confirm", roomId: "launch", itemId: "q1", answers: [{ option: 0 }, { own: "Teal" }] };
+  const confirm = { type: "room.confirm", roomId: "launch", itemId: "q1", answers: [{ option: 0 }, { own: "Teal" }, { none: true }] };
   const mute = { type: "room.mute", roomId: "garden", muted: true };
 
   test("lets through each of their shape, for a room they are in", () => {
@@ -410,7 +421,7 @@ describe("what a person other than the owner may send of votes, confirmations an
     expect(admitted({ ...confirm, roomId: "garden" })).toBe("room-confirm-not-yours");
   });
 
-  test("refuses what is not of their shape: places that are no whole numbers in range, answers that are neither an option nor words, too many or too long", () => {
+  test("refuses what is not of their shape: places that are no whole numbers in range, answers that are neither an option, words nor none of the options, too many or too long", () => {
     expect(
       [
         { ...vote, itemId: 5 },
@@ -425,12 +436,14 @@ describe("what a person other than the owner may send of votes, confirmations an
         { ...confirm, answers: [{ option: 0, own: "and words" }] },
         { ...confirm, answers: [{ option: 0, note: "a note" }] },
         { ...confirm, answers: [{ own: 7 }] },
+        { ...confirm, answers: [{ none: false }] },
+        { ...confirm, answers: [{ none: true, option: 0 }] },
         { ...confirm, answers: [{ own: "x".repeat(8_001) }] },
         { ...confirm, answers: Array(101).fill({ option: 0 }) },
         { ...confirm, answers: [null] },
         { ...mute, muted: "yes" },
       ].map(admitted),
-    ).toEqual(Array(16).fill("unreadable"));
+    ).toEqual(Array(18).fill("unreadable"));
   });
 });
 

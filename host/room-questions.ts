@@ -1,4 +1,4 @@
-import { answersSummary, questionsOf } from "../shared/ask.ts";
+import { answersSummary, NONE_OF_THE_OPTIONS, questionsOf } from "../shared/ask.ts";
 import { HostProblemError } from "../shared/host-problems.ts";
 import type { AskAnswerEntry, AskItem, AskQuestion } from "../shared/model.ts";
 import { PERSON_WITHOUT_A_NAME, personGoesBy } from "../shared/people.ts";
@@ -115,13 +115,18 @@ export class RoomQuestions {
   }
 
   /**
-   * An option by its place, or the confirmer's own words where the question takes them and their own tasks wait for no
-   * approval: the owner's and an approver's never do, and nobody's in a room whose people's tasks start by themselves.
+   * An option by its place, or, where the question takes an answer of another kind, none of its options, or the
+   * confirmer's own words where their own tasks wait for no approval: the owner's and an approver's never do, and
+   * nobody's in a room whose people's tasks start by themselves. None of the options asks no approval: it holds no words.
    */
   private entryOf(room: Room, question: AskQuestion, answer: RoomConfirmedAnswer, personId: string): AskAnswerEntry {
     if ("option" in answer) {
       if (!isOptionOf(question, answer.option)) throw new Error("That question has no such option.");
       return { label: question.options[answer.option]!.label };
+    }
+    if ("none" in answer) {
+      if (!question.allowOther) throw new HostProblemError({ code: "room-own-answer-not-taken" });
+      return { label: NONE_OF_THE_OPTIONS };
     }
     const isOwner = personId === this.store.ownerId();
     if (!question.allowOther || !(isOwner || approvesIn(room, personId) || !room.peoplesTasksWait)) throw new HostProblemError({ code: "room-own-answer-not-taken" });

@@ -1,4 +1,4 @@
-import { answersSummary, askPageName, pagesOnOpening, pickedIn, pickedOnOneLine, questionsOf, type AskPage } from "../../shared/ask.ts";
+import { answersSummary, askPageName, NONE_OF_THE_OPTIONS, pagesOnOpening, pickedIn, pickedOnOneLine, questionsOf, type AskPage } from "../../shared/ask.ts";
 import type { PluginOffer } from "../../shared/apps.ts";
 import type {
   AskAnswerEntry,
@@ -512,8 +512,6 @@ function entryFor(question: AskQuestion | undefined, answer: AskAnswerEntry): As
 const noteLine = (note: string | undefined, prefix: string) => (note ? [`${prefix}${note}`] : []);
 
 const indented = (lines: string[]) => lines.map((line) => `   ${line}`);
-
-const NONE_OF_THE_OPTIONS = "none of the options";
 
 /** Each option in quotes, so the agent, and Mirador reading it back, can tell them apart whatever their labels hold. */
 const quoted = (options: string[]) => (options.length === 0 ? NONE_OF_THE_OPTIONS : options.map((option) => JSON.stringify(option)).join(", "));

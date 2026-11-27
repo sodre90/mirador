@@ -33,11 +33,11 @@ const isIdOrNone = (value: unknown) => value === null || typeof value === "strin
 const MOST_PLACES = 100;
 const isPlace = (value: unknown): value is number => Number.isInteger(value) && (value as number) >= 0 && (value as number) < MOST_PLACES;
 
-/** One option by its place, or words of the confirmer's own, nothing besides. */
+/** One option by its place, words of the confirmer's own, or none of the options, nothing besides. */
 function isConfirmedAnswer(value: unknown) {
   if (typeof value !== "object" || value === null || Object.keys(value).length !== 1) return false;
-  const { option, own } = value as { option?: unknown; own?: unknown };
-  return isPlace(option) || (typeof own === "string" && own.length <= MOST_OWN_ANSWER_CHARACTERS * 4);
+  const { option, own, none } = value as { option?: unknown; own?: unknown; none?: unknown };
+  return isPlace(option) || (typeof own === "string" && own.length <= MOST_OWN_ANSWER_CHARACTERS * 4) || none === true;
 }
 
 /** Far more than a name or an answer holds once cleaned, so that what is cleaned is never much. */

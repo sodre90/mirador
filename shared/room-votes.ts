@@ -12,8 +12,11 @@ export interface RoomQuestionVotes {
   confirmers: string[];
 }
 
-/** What a confirmer sends the agent for one question: one of its options, or, where they may, words of their own. */
-export type RoomConfirmedAnswer = { option: number } | { own: string };
+/**
+ * What a confirmer sends the agent for one question: one of its options, or, where it takes an answer of another kind,
+ * words of their own where they may write them, else that none of its options fits.
+ */
+export type RoomConfirmedAnswer = { option: number } | { own: string } | { none: true };
 
 /** The longest answer in their own words a confirmer may send an agent. */
 export const MOST_OWN_ANSWER_CHARACTERS = 2_000;

@@ -1,5 +1,5 @@
 import { useState, type KeyboardEvent } from "react";
-import { answerTo, questionsOf } from "../shared/ask.ts";
+import { answersSummary, answerTo, NONE_OF_THE_OPTIONS, questionsOf } from "../shared/ask.ts";
 import type { AskItem, AskQuestion } from "../shared/model.ts";
 import { MOST_OWN_ANSWER_CHARACTERS, pickOf, picksOf, type RoomConfirmedAnswer, type RoomQuestionVotes } from "../shared/room-votes.ts";
 import { PersonAvatar, usePersonName, usePersonNames } from "./Chat.tsx";
@@ -11,14 +11,24 @@ const words = t.rooms.vote;
 
 const NOBODY_VOTED: Pick<RoomQuestionVotes, "ballots" | "confirmers"> = { ballots: [], confirmers: [] };
 
-/** What a confirmer sends for one question: the words they wrote, where they wrote some, else the option they picked themselves. */
-function confirmedAnswer(ownWords: string, option: number | null): RoomConfirmedAnswer | null {
+/** What a confirmer sends for one question: the words they wrote, where they wrote some, else none of its options where they said so, else the option they picked themselves. */
+function confirmedAnswer(ownWords: string, noneFits: boolean, option: number | null): RoomConfirmedAnswer | null {
   const own = ownWords.trim();
   if (own) return { own };
+  if (noneFits) return { none: true };
   return option === null ? null : { option };
 }
 
-const labelOf = (question: AskQuestion, answer: RoomConfirmedAnswer) => ("own" in answer ? answer.own : question.options[answer.option]!.label);
+function labelOf(question: AskQuestion, answer: RoomConfirmedAnswer) {
+  if ("own" in answer) return answer.own;
+  if ("none" in answer) return words.noneOfThese;
+  return question.options[answer.option]!.label;
+}
+
+/** None of the options is said in the room's language, not as the agent heard it. */
+const shownLabel = (label: string) => (label === NONE_OF_THE_OPTIONS ? words.noneOfThese : label);
+
+const replacedAt = <T,>(values: T[], index: number, value: T) => values.map((each, at) => (at === index ? value : each));
 
 const isGiven = (answer: RoomConfirmedAnswer | null): answer is RoomConfirmedAnswer => answer !== null;
 
@@ -49,8 +59,10 @@ function VoteQuestion({
   yourPick,
   open,
   ownWords,
+  noneFits,
   onPick,
   onOwnWords,
+  onNoneFits,
   onEnter,
 }: {
   question: AskQuestion;
@@ -61,8 +73,11 @@ function VoteQuestion({
   open: boolean;
   /** Only where you confirm and may answer in your own words. */
   ownWords: string | null;
+  /** Only where you confirm, the question takes an answer of another kind, and you may not write your own words. */
+  noneFits: boolean | null;
   onPick: (option: number) => void;
   onOwnWords: (words: string) => void;
+  onNoneFits: (fits: boolean) => void;
   onEnter: () => void;
 }) {
   const typingAidAttributes = useTypingAidAttributes();
@@ -80,12 +95,19 @@ function VoteQuestion({
             key={optionIndex}
             label={option.label}
             voters={picksOf(ballots, index, optionIndex).map(({ personId }) => personId)}
-            picked={yourPick === optionIndex}
+            picked={yourPick === optionIndex && noneFits !== true}
             isAnswer={answered === option.label}
             open={open}
             onPick={() => onPick(optionIndex)}
           />
         ))}
+        {noneFits !== null && (
+          <li className={["room-vote-option", "room-vote-none", noneFits && "picked"].filter(Boolean).join(" ")}>
+            <button type="button" aria-pressed={noneFits} onClick={() => onNoneFits(!noneFits)}>
+              {words.noneOfThese}
+            </button>
+          </li>
+        )}
       </ul>
       {ownWords !== null && (
         <input
@@ -106,7 +128,8 @@ function VoteQuestion({
 function ConfirmedLine({ item }: { item: AskItem }) {
   const answer = item.answer!;
   const confirmer = usePersonName(answer.answeredBy ?? null);
-  return <div className="room-vote-status">{answer.answeredBy ? words.confirmed(confirmer, answer.label) : words.answered(answer.label)}</div>;
+  const label = answer.answers ? answersSummary(answer.answers.map((entry) => ({ ...entry, label: shownLabel(entry.label) }))) : shownLabel(answer.label);
+  return <div className="room-vote-status">{answer.answeredBy ? words.confirmed(confirmer, label) : words.answered(label)}</div>;
 }
 
 function WaitingLine({ confirmers }: { confirmers: string[] }) {
@@ -117,7 +140,8 @@ function WaitingLine({ confirmers }: { confirmers: string[] }) {
 /**
  * A question an agent of the room asks, which everyone there votes on: each picks one option of each of its questions
  * and sees who picked what. The person whose task it is, and the owner, confirm the answer the agent gets: their own
- * pick, or, where the question takes them, words of their own; never what others picked for them.
+ * pick, or, where the question takes an answer of another kind, words of their own, or, for whom may not write them,
+ * none of its options; never what others picked for them.
  */
 export function RoomVote({ roomId, item, votes, you, takesOwnWords }: { roomId: string; item: AskItem; votes: RoomQuestionVotes | undefined; you: string | null; takesOwnWords: boolean }) {
   const questions = questionsOf(item);
@@ -125,13 +149,21 @@ export function RoomVote({ roomId, item, votes, you, takesOwnWords }: { roomId: 
   const open = item.status === "waiting";
   const confirms = open && you !== null && confirmers.includes(you);
   const [ownWords, setOwnWords] = useState<string[]>(() => questions.map(() => ""));
-  const answers = questions.map((question, index) => confirmedAnswer(takesOwnWords && question.allowOther ? (ownWords[index] ?? "") : "", pickOf(ballots, index, you)));
+  const [noneFits, setNoneFits] = useState<boolean[]>(() => questions.map(() => false));
+  const writesOwnWords = (question: AskQuestion) => confirms && takesOwnWords && question.allowOther === true;
+  const saysNoneFits = (question: AskQuestion) => confirms && !takesOwnWords && question.allowOther === true;
+  const answers = questions.map((question, index) =>
+    confirmedAnswer(writesOwnWords(question) ? (ownWords[index] ?? "") : "", saysNoneFits(question) && noneFits[index] === true, pickOf(ballots, index, you)),
+  );
   const given = answers.filter(isGiven);
   const ready = given.length === questions.length;
   const confirm = () => {
     if (confirms && ready) connection.send({ type: "room.confirm", roomId, itemId: item.id, answers: given });
   };
-  const vote = (question: number, option: number) => connection.send({ type: "room.vote", roomId, itemId: item.id, question, option });
+  const vote = (question: number, option: number) => {
+    setNoneFits((current) => replacedAt(current, question, false));
+    connection.send({ type: "room.vote", roomId, itemId: item.id, question, option });
+  };
   return (
     <section className={`room-vote${open ? " open" : ""}`} aria-label={item.title} data-item-id={item.id}>
       {questions.map((question, index) => (
@@ -143,9 +175,11 @@ export function RoomVote({ roomId, item, votes, you, takesOwnWords }: { roomId: 
           ballots={ballots}
           yourPick={pickOf(ballots, index, you)}
           open={open}
-          ownWords={confirms && takesOwnWords && question.allowOther ? (ownWords[index] ?? "") : null}
+          ownWords={writesOwnWords(question) ? (ownWords[index] ?? "") : null}
+          noneFits={saysNoneFits(question) ? noneFits[index] === true : null}
           onPick={(option) => vote(index, option)}
-          onOwnWords={(written) => setOwnWords((current) => current.map((each, at) => (at === index ? written : each)))}
+          onOwnWords={(written) => setOwnWords((current) => replacedAt(current, index, written))}
+          onNoneFits={(fits) => setNoneFits((current) => replacedAt(current, index, fits))}
           onEnter={confirm}
         />
       ))}

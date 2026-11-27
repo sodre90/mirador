@@ -414,6 +414,7 @@ export const rooms = {
   vote: {
     chosenBy: (people: string) => `Chosen by ${people}`,
     otherAnswer: "Or write another answer…",
+    noneOfThese: "None of these",
     confirm: "Confirm",
     pickToConfirm: "Pick an answer to confirm it.",
     confirmAnswer: (answer: string) => `Confirm: ${answer}`,
