@@ -264,6 +264,7 @@ export const hints: Messages["hints"] = {
   profileEffort: "Der Denkaufwand, den eine Unterhaltung übernimmt, wenn sie mit diesem Profil startet oder zu ihm wechselt; danach ändert ihre eigene Kopfzeile ihn.\n\nDie Stufen sind die, die der Agent anbietet: Mirador fragt ihn jedes Mal, wenn du das Profil öffnest. Eine Unterhaltung, deren Modell die Stufe nicht anbietet, behält ihren eigenen Denkaufwand.",
   profileYolo: "Alles genehmigen, wofür der Agent um Erlaubnis bittet. Eine Unterhaltung übernimmt das, wenn sie mit diesem Profil startet oder zu ihm wechselt; danach ändert ihre eigene Kopfzeile es.",
   profileIdleCompaction: "Claude Code fasst eine lange Unterhaltung zusammen, die etwa eine Stunde geruht hat, kurz bevor ihr Prompt-Cache abläuft, damit deine nächste Nachricht weniger kostet. Unterhaltungen übernehmen das, wenn sie starten oder wieder geöffnet werden.",
+  profileKeepCacheWarm: "Claude Code nutzt den Fünf-Minuten-Prompt-Cache, dessen Schreiben weniger kostet als beim Ein-Stunden-Cache. Während du weg bist, hält Mirador ihn alle paar Minuten mit einer kurzen Nachricht warm, die die Unterhaltung nicht zeigt, höchstens eine Stunde lang und nur, solange das weniger kostet, als den Cache neu zu schreiben; danach verdichtet es eine lange Unterhaltung, wenn die Leerlauf-Verdichtung an ist. Deine Hooks laufen bei jeder dieser Nachrichten. Unterhaltungen übernehmen das, wenn sie starten oder wieder geöffnet werden.",
   onlyProfile: "Das ist dein einziges Profil, und jede Unterhaltung braucht eines, also bleibt es, bis du ein weiteres erstellst.",
   unsavedProfileEdits: "Noch nicht gespeicherte Änderungen. Sie bleiben, solange Profile geöffnet ist; Speichern behält sie.",
   splitter: "Ziehen zum Ändern der Größe, Doppelklick zum Zurücksetzen.",
@@ -388,6 +389,8 @@ export const hints: Messages["hints"] = {
   promptCache: (lifetime: string) =>
     `Verbleibende Zeit des Prompt-Caches: Der Modellanbieter behält die bisherige Unterhaltung nach jeder Anfrage ${lifetime} lang und liest sie von dort für etwa ein Zehntel des Preises. Läuft er ab, wird mit der nächsten Nachricht wieder alles gelesen.`,
   promptCacheCold: "Der Prompt-Cache ist abgelaufen: Mit der nächsten Nachricht liest das Modell die ganze Unterhaltung zum vollen Preis neu und beginnt einen neuen Cache.",
+  promptCacheKeptWarm: (count: number, ago: string) =>
+    `Mirador hat den Prompt-Cache warm gehalten, während du weg warst, mit ${count} ${count === 1 ? "kurzen Nachricht" : "kurzen Nachrichten"}, die die Unterhaltung nicht zeigt, die letzte vor ${ago}.`,
   quota: (limit, percent, resetsIn) =>
     `${limit}-Nutzungslimit deines Plans: ${percent} verbraucht${resetsIn ? `, beginnt von vorn in ${resetsIn}` : ""}.\n\nDer Agent meldet es nach jeder Antwort, für das Konto des Profils dieser Unterhaltung.`,
   statuslineCommand: (command) =>

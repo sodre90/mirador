@@ -395,6 +395,7 @@ export const shell: Messages["shell"] = {
     compactNow: "Tömörítés most",
     cacheLeft: (time: string) => `gyorsítótár ${time}`,
     cacheCold: "gyorsítótár lejárt",
+    keptWarm: (time: string) => `melegen tartva ${time} ezelőtt`,
     credits: (amount) => `${amount} kredit`,
     priceCategories: { low: "alacsony költség", medium: "közepes költség", high: "magas költség", very_high: "nagyon magas költség" },
     days: (count) => `${count}n`,

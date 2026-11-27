@@ -1,7 +1,8 @@
 import type { ModelRequestSample } from "../shared/canvas-plugins.ts";
 import { isRealModel } from "../shared/claude-models.ts";
 import { bytesOfRegularFileFrom, lastBytesOfRegularFile } from "./capped-file.ts";
-import { claudeTranscriptFile } from "./claude-transcript.ts";
+import { claudeTranscriptFile, textOf } from "./claude-transcript.ts";
+import { KEEP_WARM_PROMPT } from "./prompt-cache-keep-alive.ts";
 import { rememberNewest } from "./subagent-usage.ts";
 
 export type ModelRequest = Omit<ModelRequestSample, "conversationId">;
@@ -19,6 +20,8 @@ export interface TranscriptRequests {
   requests: Map<string, ModelRequest>;
   /** When the main thread last wrote a message or tool result that no request has answered yet. */
   awaitingAnswerSince: number | null;
+  /** What waits for that answer is Mirador's keep-alive message. */
+  awaitingKeepAlive: boolean;
 }
 
 interface ReadTranscript extends TranscriptRequests {
@@ -29,7 +32,7 @@ interface ReadTranscript extends TranscriptRequests {
 
 const tokens = (count: unknown) => (typeof count === "number" && Number.isFinite(count) && count > 0 ? count : 0);
 
-function requestOf(message: any, startedAt: number): ModelRequest {
+function requestOf(message: any, startedAt: number, keptWarm: boolean): ModelRequest {
   const { usage } = message;
   const written = usage.cache_creation;
   return {
@@ -42,6 +45,7 @@ function requestOf(message: any, startedAt: number): ModelRequest {
       oneHour: written ? tokens(written.ephemeral_1h_input_tokens) : 0,
     },
     outputTokens: tokens(usage.output_tokens),
+    keptWarm,
   };
 }
 
@@ -64,12 +68,17 @@ const answersWithUsage = (record: any) => record.type === "assistant" && typeof 
 export function takeRequests(transcript: TranscriptRequests, lines: string[]) {
   for (const record of lines.map(parsed).filter(isMainThread)) {
     const writtenAt = Date.parse(record.timestamp);
-    if (record.type === "user" && Number.isFinite(writtenAt)) transcript.awaitingAnswerSince = writtenAt;
+    if (record.type === "user" && Number.isFinite(writtenAt)) {
+      transcript.awaitingAnswerSince = writtenAt;
+      transcript.awaitingKeepAlive = textOf(record.message?.content).includes(KEEP_WARM_PROMPT);
+    }
     if (!answersWithUsage(record)) continue;
-    const startedAt = transcript.requests.get(record.message.id)?.startedAt ?? transcript.awaitingAnswerSince ?? writtenAt;
+    const known = transcript.requests.get(record.message.id);
+    const startedAt = known?.startedAt ?? transcript.awaitingAnswerSince ?? writtenAt;
     if (!Number.isFinite(startedAt)) continue;
-    transcript.requests.set(record.message.id, requestOf(record.message, startedAt));
+    transcript.requests.set(record.message.id, requestOf(record.message, startedAt, known?.keptWarm ?? transcript.awaitingKeepAlive));
     transcript.awaitingAnswerSince = null;
+    transcript.awaitingKeepAlive = false;
   }
 }
 
@@ -118,8 +127,8 @@ export class ClaudeRequestLog {
     if (!path) return null;
     const read = known ? await bytesOfRegularFileFrom(path, known.offset, this.readMostBytes) : await lastBytesOfRegularFile(path, this.readMostBytes);
     if (!read) return null;
-    if (known && read.size < known.offset) return this.readOn({ ...known, offset: 0, awaitingAnswerSince: null }, configDir, sessionId);
-    const transcript = known ?? { path, offset: read.size - read.bytes.length, requests: new Map(), awaitingAnswerSince: null };
+    if (known && read.size < known.offset) return this.readOn({ ...known, offset: 0, awaitingAnswerSince: null, awaitingKeepAlive: false }, configDir, sessionId);
+    const transcript = known ?? { path, offset: read.size - read.bytes.length, requests: new Map(), awaitingAnswerSince: null, awaitingKeepAlive: false };
     const wholeLines = read.bytes.subarray(0, read.bytes.lastIndexOf(NEWLINE) + 1);
     const lines = wholeLines.toString("utf8").split("\n");
     const startsMidLine = !known && transcript.offset > 0;

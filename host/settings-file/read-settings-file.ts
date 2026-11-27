@@ -69,6 +69,7 @@ const profileFields: Fields<FileProfile> = {
   bypassPermissions: isFlag,
   askMode: (value) => typeof value === "string" && Object.hasOwn(askModeLabels, value),
   idleCompaction: isFlag,
+  keepCacheWarm: isFlag,
   color: orNull(isPastel),
   prelaunch: isText,
   environment: isEnvironment,

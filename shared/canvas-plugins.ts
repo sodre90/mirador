@@ -282,6 +282,8 @@ export interface ModelRequestSample {
   /** What the request wrote to the prompt cache, by how long it stays there. */
   cachedWriteTokens: { fiveMinutes: number; oneHour: number };
   outputTokens: number;
+  /** Mirador sent it to keep the prompt cache warm while the user was away, as the profile's setting asks. */
+  keptWarm: boolean;
 }
 
 /** A conversation's turns as Mirador recorded them, oldest first, for what a plugin tells of how they spend tokens. Plugin API 22 brought it. */

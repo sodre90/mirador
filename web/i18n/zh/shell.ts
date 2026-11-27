@@ -386,6 +386,7 @@ export const shell: Messages["shell"] = {
     compactNow: "立即压缩",
     cacheLeft: (time: string) => `缓存 ${time}`,
     cacheCold: "缓存已过期",
+    keptWarm: (time: string) => `${time}前保持预热`,
     credits: (amount) => `${amount} 积分`,
     priceCategories: { low: "低成本", medium: "中等成本", high: "高成本", very_high: "极高成本" },
     days: (count) => `${count}天`,

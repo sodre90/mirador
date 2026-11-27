@@ -196,7 +196,8 @@ export class StatuslineService {
       this.plugins.contextHints(conversationId),
     ]);
     const contextHints = offeringCompactWhereItCan(pluginHints, () => this.conversations.agentHasCommand(conversationId, COMPACT_COMMAND));
-    if (!command || !configDir || !environment || !runCommand) return { gitBranch, command, output: null, error: null, quotas, pluginChips, contextHints, promptCache };
+    const facts = { gitBranch, command, quotas, pluginChips, contextHints, promptCache, keptWarm: this.conversations.keptWarmOf(conversationId) };
+    if (!command || !configDir || !environment || !runCommand) return { ...facts, output: null, error: null };
     const transcriptPath = conversation.acpSessionId ? claudeTranscriptPath(configDir, directory, conversation.acpSessionId) : null;
     const result = await runStatusLineCommand(command, {
       input: statuslineInput(conversation, directory, transcriptPath, quotas, now, costOfPluginChips(pluginChips)),
@@ -204,9 +205,7 @@ export class StatuslineService {
       environment,
       columns: clampColumns(columns),
     });
-    return "output" in result
-      ? { gitBranch, command, output: result.output, error: null, quotas, pluginChips, contextHints, promptCache }
-      : { gitBranch, command, output: null, error: result.error, errorAbout: result.errorAbout, quotas, pluginChips, contextHints, promptCache };
+    return "output" in result ? { ...facts, output: result.output, error: null } : { ...facts, output: null, error: result.error, errorAbout: result.errorAbout };
   }
 
   /** The owner's statusline command would run on this computer in a workspace that a sandboxed room's or workspace's agents write. */

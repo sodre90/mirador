@@ -181,6 +181,7 @@ interface ProfileForm {
   bypassPermissions: boolean;
   askMode: AskMode;
   idleCompaction: boolean;
+  keepCacheWarm: boolean;
   color: Pastel | null;
   pluginSettings: ProfilePluginSettings;
   pluginsOff: string[];
@@ -197,6 +198,7 @@ const savedForm = (profile: Profile): ProfileForm => ({
   bypassPermissions: profile.bypassPermissions,
   askMode: profile.askMode,
   idleCompaction: profile.idleCompaction ?? true,
+  keepCacheWarm: profile.keepCacheWarm ?? false,
   color: profile.color,
   pluginSettings: profile.pluginSettings ?? {},
   pluginsOff: profile.pluginsOff,
@@ -213,6 +215,7 @@ const blankForm = (harness: HarnessId, name: string): ProfileForm => ({
   bypassPermissions: false,
   askMode: "wait",
   idleCompaction: true,
+  keepCacheWarm: false,
   color: null,
   pluginSettings: {},
   pluginsOff: [],
@@ -225,7 +228,7 @@ type EditorTab = (typeof editorTabs)[number];
 
 const fieldsOfTab: Record<EditorTab, FormField[]> = {
   launch: ["name", "harness", "color", "environment", "prelaunch"],
-  defaults: ["model", "mode", "effort", "bypassPermissions", "askMode", "idleCompaction"],
+  defaults: ["model", "mode", "effort", "bypassPermissions", "askMode", "idleCompaction", "keepCacheWarm"],
   plugins: ["pluginSettings", "pluginsOff"],
 };
 
@@ -272,7 +275,7 @@ function ProfileEditor({
   onMoreOptions?: () => void;
   onSaved: (profileId: string) => void;
 }) {
-  const { name, harness, environment, prelaunch, model, mode, effort, bypassPermissions, askMode, idleCompaction, color, pluginSettings, pluginsOff } = form;
+  const { name, harness, environment, prelaunch, model, mode, effort, bypassPermissions, askMode, idleCompaction, keepCacheWarm, color, pluginSettings, pluginsOff } = form;
   const set = (fields: Partial<ProfileForm>) => onChange((current) => ({ ...current, ...fields }));
   const choosePluginSetting = (plugin: string, settingId: string, value: string) =>
     onChange((current) => ({ ...current, pluginSettings: { ...current.pluginSettings, [plugin]: { ...current.pluginSettings[plugin], [settingId]: value } } }));
@@ -312,6 +315,7 @@ function ProfileEditor({
     bypassPermissions,
     askMode,
     ...(harness === "claude" && !idleCompaction && { idleCompaction: false }),
+    ...(harness === "claude" && keepCacheWarm && { keepCacheWarm: true }),
     color,
     pluginSettings,
     pluginsOff,
@@ -553,6 +557,12 @@ function ProfileEditor({
             <label className="checkbox" data-hint={hints.profileIdleCompaction}>
               <input type="checkbox" aria-label={words.idleCompactionLabel} checked={idleCompaction} onChange={(event) => set({ idleCompaction: event.target.checked })} />
               <span>{words.idleCompaction}</span>
+            </label>
+          )}
+          {harness === "claude" && (
+            <label className="checkbox" data-hint={hints.profileKeepCacheWarm}>
+              <input type="checkbox" aria-label={words.keepCacheWarmLabel} checked={keepCacheWarm} onChange={(event) => set({ keepCacheWarm: event.target.checked })} />
+              <span>{words.keepCacheWarm}</span>
             </label>
           )}
         </div>

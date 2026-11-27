@@ -254,6 +254,7 @@ export const hints: Messages["hints"] = {
   profileEffort: "Az erőfeszítés, amelyet egy beszélgetés átvesz, amikor ezzel a profillal indul, vagy átkerül rá; ezután a saját fejléce módosítja.\n\nA szintek azok, amelyeket az ágens kínál: a Mirador minden alkalommal megkérdezi tőle, amikor megnyitod a profilt. Az a beszélgetés, amelynek a modellje nem kínálja a szintet, megtartja a saját erőfeszítését.",
   profileYolo: "Mindent jóváhagy, amire az ágens engedélyt kér. Egy beszélgetés akkor veszi át, amikor ezzel a profillal indul, vagy átkerül rá; ezután a saját fejléce módosítja.",
   profileIdleCompaction: "A Claude Code összefoglalja a hosszú beszélgetést, ha nagyjából egy órája tétlen, közvetlenül azelőtt, hogy a prompt gyorsítótára lejár, így a következő üzeneted kevesebbe kerül. A beszélgetések akkor veszik át, amikor elindulnak vagy újra megnyílnak.",
+  profileKeepCacheWarm: "A Claude Code az ötperces prompt gyorsítótárát használja, amelynek írása olcsóbb az egyórásénál. Amíg távol vagy, a Mirador pár percenként egy rövid, a beszélgetésben nem látszó üzenettel melegen tartja, legfeljebb egy óráig, és csak amíg ez olcsóbb, mint újraírni a gyorsítótárat; utána tömöríti a hosszú beszélgetést, ha a tétlen tömörítés be van kapcsolva. A hookjaid minden ilyen üzenetnél lefutnak. A beszélgetések akkor veszik át, amikor elindulnak vagy újra megnyílnak.",
   onlyProfile: "Ez az egyetlen profilod, és minden beszélgetésnek kell egy, ezért megmarad, amíg nem hozol létre másikat.",
   unsavedProfileEdits: "Még nem mentett módosítások. Megmaradnak, amíg a Profilok nyitva van; a Mentés őrzi meg őket.",
   splitter: "Húzd az átméretezéshez, dupla kattintással visszaáll.",
@@ -377,6 +378,8 @@ export const hints: Messages["hints"] = {
   promptCache: (lifetime: string) =>
     `A prompt gyorsítótárából hátralévő idő: a modell szolgáltatója minden kérés után ${lifetime} ideig megőrzi a beszélgetés eddigi részét, és onnan nagyjából tizedáron olvassa. Ha lejár, a következő üzenetnél újra az egészet olvassa.`,
   promptCacheCold: "A prompt gyorsítótára lejárt: a következő üzenetnél a modell teljes áron újraolvassa az egész beszélgetést, és új gyorsítótárat kezd.",
+  promptCacheKeptWarm: (count: number, ago: string) =>
+    `A Mirador melegen tartotta a prompt gyorsítótárát, amíg távol voltál: ${count} rövid, a beszélgetésben nem látszó üzenettel, az utolsóval ${ago} ezelőtt.`,
   quota: (limit, percent, resetsIn) =>
     `Az előfizetésed használati korlátja (${limit}): ${percent} felhasználva${resetsIn ? `, újraindul: ${resetsIn}` : ""}.\n\nAz ágens minden válasz után jelenti, a beszélgetés profiljához tartozó fiókra.`,
   statuslineCommand: (command) =>

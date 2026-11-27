@@ -33,6 +33,8 @@ export const profiles: Messages["profiles"] = {
   questionsLabel: "配置提问",
   idleCompactionLabel: "配置空闲压缩",
   idleCompaction: "压缩空闲对话",
+  keepCacheWarmLabel: "配置保持提示缓存预热",
+  keepCacheWarm: "保持提示缓存预热",
   environmentFormat: {
     commandHintBefore: "使用 ",
     commandHintAfter: " 从钥匙串或密码库读取令牌，而无需将其保存。",

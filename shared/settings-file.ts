@@ -32,6 +32,7 @@ export interface FileProfile {
   bypassPermissions?: boolean;
   askMode?: AskMode;
   idleCompaction?: boolean;
+  keepCacheWarm?: boolean;
   color?: Pastel | null;
   prelaunch?: string;
   environment?: Record<string, FileEnvironmentValue>;

@@ -241,6 +241,7 @@ export const hints: Messages["hints"] = {
   profileEffort: "对话在使用这个配置启动或切换到它时采用的思考强度；之后可以在对话自己的标题栏中更改。\n\n强度以 Agent 提供的为准：每次打开配置时，Mirador 都会向它询问。如果对话的模型不支持该强度，则保留对话自己的思考强度。",
   profileYolo: "Agent 请求的任何权限都批准。对话在使用这个配置启动或切换到它时采用这个设置；之后可以在对话自己的标题栏中更改。",
   profileIdleCompaction: "长对话空闲约一小时后、提示词缓存过期之前，Claude Code 会把它压缩成摘要，让你的下一条消息花费更少。对话在启动或重新打开时采用这个设置。",
+  profileKeepCacheWarm: "Claude Code 使用五分钟的提示缓存，写入它比写入一小时的缓存便宜。你离开期间，Mirador 每隔几分钟发一条对话中不显示的简短消息来保持缓存预热，最长一小时，且只在这比重新写入缓存便宜时才发；之后，如果开启了空闲压缩，它会压缩长对话。你的 Hook 会在每条这样的消息上运行。对话在启动或重新打开时采用这个设置。",
   onlyProfile: "这是你唯一的配置，而每个对话都需要一个配置，所以在你创建另一个之前它会保留。",
   unsavedProfileEdits: "尚未保存的更改。只要“配置”窗口开着，它们就会保留；点“保存”才会存下来。",
   splitter: "拖动调整大小，双击重置。",
@@ -352,6 +353,7 @@ export const hints: Messages["hints"] = {
   promptCache: (lifetime: string) =>
     `提示缓存的剩余时间：每次请求后，模型提供方会把到目前为止的对话保留 ${lifetime}，并以约十分之一的价格从缓存读取。缓存过期后，下一条消息会重新完整读取。`,
   promptCacheCold: "提示缓存已过期：下一条消息会让模型以全价重新读取整个对话，并开始新的缓存。",
+  promptCacheKeptWarm: (count: number, ago: string) => `你离开期间，Mirador 用 ${count} 条对话中不显示的简短消息保持了提示缓存预热，最近一条在 ${ago}前。`,
   quota: (limit: string, percent: string, resetsIn: string | null) =>
     `你的套餐的${limit}用量上限：已用 ${percent}${resetsIn ? `，${resetsIn}后重新开始` : ""}。\n\nAgent 在每次响应后报告它，对应这个对话所用配置的账号。`,
   statuslineCommand: (command: string) =>

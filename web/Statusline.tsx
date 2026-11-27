@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties, type RefObjec
 import { chosenModel } from "../shared/config-options.ts";
 import { withPrice } from "./model-names.ts";
 import type { StatuslineChip } from "../shared/canvas-plugins.ts";
-import type { ContextUsage, Conversation, PlanQuotas, PluginContextHint, PluginStatuslineChips, Profile, PromptCache, QuotaWindow, StatuslineRender } from "../shared/model.ts";
+import type { ContextUsage, Conversation, KeptWarm, PlanQuotas, PluginContextHint, PluginStatuslineChips, Profile, PromptCache, QuotaWindow, StatuslineRender } from "../shared/model.ts";
 import { COMPACT_COMMAND } from "../shared/slash-commands.ts";
 import { placedAbove, useClosing } from "./BarMenu.tsx";
 import { parseAnsi, plainTextOf, type AnsiRun } from "./ansi.ts";
@@ -125,19 +125,27 @@ function QuotaMeter({ name, window }: { name: QuotaName; window: QuotaWindow }) 
 
 const CACHE_CLOCK_MS = 10_000;
 
-/** How long the conversation's prompt cache still lasts, counting down by itself between the host's readings. */
-function PromptCacheChip({ cache }: { cache: PromptCache }) {
+/** How long the conversation's prompt cache still lasts, counting down by itself between the host's readings, and when Mirador last kept it warm. */
+function PromptCacheChip({ cache, keptWarm }: { cache: PromptCache; keptWarm: KeptWarm | null }) {
   const [now, setNow] = useState(Date.now);
   useEffect(() => {
     setNow(Date.now());
     const clock = setInterval(() => setNow(Date.now()), CACHE_CLOCK_MS);
     return () => clearInterval(clock);
-  }, [cache.expiresAt]);
+  }, [cache.expiresAt, keptWarm?.lastAt]);
   const cold = cache.expiresAt <= now;
+  const keptWarmAgo = keptWarm && timeUntil(now, keptWarm.lastAt);
   return (
-    <span className={`chip prompt-cache ${cold ? "cold" : ""}`} data-hint={cold ? hints.promptCacheCold : hints.promptCache(cacheLifetimeLabel(cache.lifetimeMs))}>
-      {cold ? words.cacheCold : words.cacheLeft(timeUntil(cache.expiresAt, now))}
-    </span>
+    <>
+      <span className={`chip prompt-cache ${cold ? "cold" : ""}`} data-hint={cold ? hints.promptCacheCold : hints.promptCache(cacheLifetimeLabel(cache.lifetimeMs))}>
+        {cold ? words.cacheCold : words.cacheLeft(timeUntil(cache.expiresAt, now))}
+      </span>
+      {keptWarm && keptWarmAgo && (
+        <span className="chip kept-warm" data-hint={hints.promptCacheKeptWarm(keptWarm.count, keptWarmAgo)}>
+          {words.keptWarm(keptWarmAgo)}
+        </span>
+      )}
+    </>
   );
 }
 
@@ -293,6 +301,7 @@ function BuiltInStatusline({
   gitBranch,
   quotas,
   promptCache,
+  keptWarm,
   pluginChips,
   contextHints,
 }: {
@@ -301,6 +310,7 @@ function BuiltInStatusline({
   gitBranch: string | null;
   quotas: PlanQuotas | null;
   promptCache: PromptCache | null;
+  keptWarm: KeptWarm | null;
   pluginChips: PluginStatuslineChips[];
   contextHints: PluginContextHint[];
 }) {
@@ -320,7 +330,7 @@ function BuiltInStatusline({
         </span>
       )}
       {usage && usage.size > 0 && <ContextMeter conversationId={conversation.id} usage={usage} advice={contextHints} />}
-      {promptCache && <PromptCacheChip cache={promptCache} />}
+      {promptCache && <PromptCacheChip cache={promptCache} keptWarm={keptWarm} />}
       {knownWindows(quotas).map(({ name, window }) => (
         <QuotaMeter key={name} name={name} window={window} />
       ))}
@@ -357,6 +367,7 @@ export function Statusline({ conversation, profiles }: { conversation: Conversat
   const pluginChips = render?.pluginChips ?? [];
   const contextHints = render?.contextHints ?? [];
   const promptCache = render?.promptCache ?? null;
+  const keptWarm = render?.keptWarm ?? null;
   const usage = conversation.contextUsage;
   const advisedUsage = contextHints.length > 0 && usage && usage.size > 0 ? usage : null;
 
@@ -372,6 +383,7 @@ export function Statusline({ conversation, profiles }: { conversation: Conversat
             gitBranch={render?.gitBranch ?? null}
             quotas={render?.quotas ?? null}
             promptCache={promptCache}
+            keptWarm={keptWarm}
             pluginChips={pluginChips}
             contextHints={contextHints}
           />
@@ -380,7 +392,7 @@ export function Statusline({ conversation, profiles }: { conversation: Conversat
       {commandOutput !== null && (pluginChips.length > 0 || advisedUsage || promptCache) && (
         <div className="statusline-plugins">
           {advisedUsage && <ContextMeter conversationId={conversation.id} usage={advisedUsage} advice={contextHints} />}
-          {promptCache && <PromptCacheChip cache={promptCache} />}
+          {promptCache && <PromptCacheChip cache={promptCache} keptWarm={keptWarm} />}
           <PluginChips groups={pluginChips} />
         </div>
       )}

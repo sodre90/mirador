@@ -418,6 +418,7 @@ export const shell = {
     compactNow: "Compact now",
     cacheLeft: (time: string) => `cache ${time}`,
     cacheCold: "cache cold",
+    keptWarm: (time: string) => `kept warm ${time} ago`,
     credits: (amount: string) => `${amount} credits`,
     priceCategories: { low: "low cost", medium: "medium cost", high: "high cost", very_high: "very high cost" } satisfies Record<PriceCategory, string>,
     days: (count: number) => `${count}d`,

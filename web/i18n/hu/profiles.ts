@@ -33,6 +33,8 @@ export const profiles: Messages["profiles"] = {
   questionsLabel: "Profil kérdései",
   idleCompactionLabel: "Profil tétlen tömörítése",
   idleCompaction: "Tétlen beszélgetések tömörítése",
+  keepCacheWarmLabel: "Profil melegen tartja a prompt gyorsítótárát",
+  keepCacheWarm: "Prompt gyorsítótárának melegen tartása",
   environmentFormat: {
     commandHintBefore: "Írj ",
     commandHintAfter: " sort, hogy a tokent kulcstartóból vagy széfből olvassa be tárolás helyett.",

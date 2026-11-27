@@ -243,6 +243,7 @@ export const hints = {
   profileEffort: "The effort a conversation takes when it starts with this profile or moves to it; its own header changes it after that.\n\nThe levels are the ones the agent offers: Mirador asks it each time you open the profile. A conversation whose model does not offer the level keeps its own effort.",
   profileYolo: "Approve whatever the agent asks permission for. A conversation takes this when it starts with this profile or moves to it; its own header changes it after that.",
   profileIdleCompaction: "Claude Code summarizes a long conversation that has sat idle for about an hour, just before its prompt cache expires, so your next message costs less. Conversations take this when they start or are reopened.",
+  profileKeepCacheWarm: "Claude Code uses the five-minute prompt cache, which costs less to write than the one-hour one. While you're away, Mirador keeps it warm with a short message every few minutes that the conversation doesn't show, for up to an hour and only while that costs less than writing the cache again; then it compacts a long conversation, where idle compaction is on. Your hooks run on each of these messages. Conversations take this when they start or are reopened.",
   onlyProfile: "This is your only profile, and every conversation needs one, so it stays until you create another.",
   unsavedProfileEdits: "Changes that are not saved yet. They stay while Profiles is open; Save keeps them.",
   splitter: "Drag to resize, double-click to reset.",
@@ -354,6 +355,8 @@ export const hints = {
   promptCache: (lifetime: string) =>
     `Time left on the prompt cache: the model provider keeps this conversation so far for ${lifetime} after each request, and reads it from there at about a tenth of the price. Once it runs out, the next message is read in full again.`,
   promptCacheCold: "The prompt cache ran out: with the next message the model reads the whole conversation again at full price, and starts a new cache.",
+  promptCacheKeptWarm: (count: number, ago: string) =>
+    `Mirador kept the prompt cache warm while you were away, with ${count} short ${count === 1 ? "message" : "messages"} the conversation doesn't show, the last ${ago} ago.`,
   quota: (limit: string, percent: string, resetsIn: string | null) =>
     `${limit} usage limit of your plan: ${percent} used${resetsIn ? `, starts over in ${resetsIn}` : ""}.\n\nThe agent reports it after each response, for the account of this conversation's profile.`,
   statuslineCommand: (command: string) =>

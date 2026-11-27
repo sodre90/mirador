@@ -35,6 +35,7 @@ const fieldNames: Record<string, string> = {
   bypassPermissions: t.profiles.yolo,
   askMode: t.profiles.questions,
   idleCompaction: t.profiles.idleCompaction,
+  keepCacheWarm: t.profiles.keepCacheWarm,
   color: t.profiles.colour,
   prelaunch: t.profiles.prelaunch,
   environment: t.profiles.environment,

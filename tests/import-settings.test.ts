@@ -27,7 +27,7 @@ describe("importing settings", () => {
   test("into a new Mirador gives it what the exported one has", async () => {
     const root = aFolder();
     const from = aStore();
-    const work = aProfile({ name: "work", model: "opus", mode: "plan", effort: "high", bypassPermissions: true, askMode: "next-message", idleCompaction: false, color: "mint", prelaunch: "vpn up", environment: "TOKEN=a b#c\nKEY=$(pass show key)\n-u OLD", pluginsOff: ["race"], pluginSettings: { meter: { unit: "tokens" } } });
+    const work = aProfile({ name: "work", model: "opus", mode: "plan", effort: "high", bypassPermissions: true, askMode: "next-message", idleCompaction: false, keepCacheWarm: true, color: "mint", prelaunch: "vpn up", environment: "TOKEN=a b#c\nKEY=$(pass show key)\n-u OLD", pluginsOff: ["race"], pluginSettings: { meter: { unit: "tokens" } } });
     const local = aProfile({ name: "local", harness: "pi" });
     [work, local].forEach((profile) => from.saveProfile(profile));
     from.savePromptTemplate({ id: "t1", name: "Review", text: "Review {{what}}", createdAt: 1 });

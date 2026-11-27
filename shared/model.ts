@@ -242,6 +242,11 @@ export interface Profile {
   askMode: AskMode;
   /** Claude Code only: false stops it compacting a long conversation that sits idle. Unset leaves it on, as Claude Code has it. */
   idleCompaction?: boolean;
+  /**
+   * Claude Code only: true puts its conversations on the five-minute prompt cache and keeps that warm with a short
+   * request every 4 minutes 40 seconds while the user is away, for as long as those cost less than writing it again.
+   */
+  keepCacheWarm?: boolean;
   /** Shown as a dot wherever the profile is named, so a workspace on the wrong one stands out. */
   color: Pastel | null;
   /** What it set for plugins' profile settings, by plugin and setting id; a setting it didn't set has its default. */
@@ -534,6 +539,8 @@ export interface StatuslineRender {
   contextHints: PluginContextHint[];
   /** Known for a Claude Code conversation whose session wrote a prompt cache. */
   promptCache: PromptCache | null;
+  /** Set once Mirador kept the conversation's prompt cache warm since the user's last turn. */
+  keptWarm: KeptWarm | null;
 }
 
 /** The model provider's cache of the conversation so far, which makes the next request cheaper while it lasts. */
@@ -541,6 +548,12 @@ export interface PromptCache {
   expiresAt: number;
   /** How long the cache lives after a request: 5 minutes or 1 hour, by the plan. */
   lifetimeMs: number;
+}
+
+/** The keep-alives Mirador sent to keep a conversation's prompt cache warm since the user's last turn. */
+export interface KeptWarm {
+  lastAt: number;
+  count: number;
 }
 
 /** A plugin's advice on a conversation's context. */

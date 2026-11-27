@@ -35,6 +35,8 @@ export const profiles: Messages["profiles"] = {
   questionsLabel: "Preguntas del perfil",
   idleCompactionLabel: "Compactación en reposo del perfil",
   idleCompaction: "Compactar conversaciones en reposo",
+  keepCacheWarmLabel: "El perfil mantiene caliente la caché del prompt",
+  keepCacheWarm: "Mantener caliente la caché del prompt",
   environmentFormat: {
     commandHintBefore: "Usa ",
     commandHintAfter: " para leer un token desde un llavero o una bóveda en lugar de guardarlo.",

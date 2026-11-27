@@ -122,7 +122,7 @@ export const PROFILE_LAUNCH_PARAMETER = "profile-launch";
 /** A desktop app built from a checkout opens /notifications with this query parameter naming the code it was built from. */
 export const DESKTOP_APP_CODE_PARAMETER = "desktop-app-code";
 
-export type ProfileDraft = Pick<Profile, "name" | "harness" | "environment" | "prelaunch" | "model" | "mode" | "effort" | "bypassPermissions" | "askMode" | "idleCompaction" | "color" | "pluginSettings" | "pluginsOff"> & { id?: string };
+export type ProfileDraft = Pick<Profile, "name" | "harness" | "environment" | "prelaunch" | "model" | "mode" | "effort" | "bypassPermissions" | "askMode" | "idleCompaction" | "keepCacheWarm" | "color" | "pluginSettings" | "pluginsOff"> & { id?: string };
 
 /** What a profile editor's test found: what the agent offers, or why it could not say. */
 export type ProfileTestResult =

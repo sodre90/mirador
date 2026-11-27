@@ -92,6 +92,7 @@ describe("a conversation's model requests, as a plugin reads them", () => {
     cachedReadTokens: 0,
     cachedWriteTokens: { fiveMinutes: 0, oneHour: 0 },
     outputTokens: 1,
+    keptWarm: false,
   });
   const requestsAt: Record<string, number[]> = { c1: [1_500, 5_000], c2: [500, 3_500], c3: [2_500] };
   const asked: [string, number][] = [];

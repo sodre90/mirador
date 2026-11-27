@@ -73,7 +73,7 @@ class SettingsExport {
   private ownWorkspaces = () => this.store.listWorkspaces().filter(({ forBroughtAgents }) => !forBroughtAgents);
 
   private profile(profile: Profile): FileProfile {
-    const { name, harness, model, mode, effort, bypassPermissions, askMode, idleCompaction, color, prelaunch, environment, pluginSettings, pluginsOff } = profile;
+    const { name, harness, model, mode, effort, bypassPermissions, askMode, idleCompaction, keepCacheWarm, color, prelaunch, environment, pluginSettings, pluginsOff } = profile;
     return {
       name,
       harness,
@@ -83,6 +83,7 @@ class SettingsExport {
       bypassPermissions,
       askMode,
       idleCompaction: idleCompaction ?? true,
+      keepCacheWarm: keepCacheWarm ?? false,
       color,
       prelaunch,
       environment: this.environment(environment),

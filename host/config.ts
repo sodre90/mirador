@@ -6,6 +6,7 @@ import { RELEASES_REPOSITORY } from "../shared/newer-version.ts";
 import { relayPorts } from "../shared/relay-ports.ts";
 import { englishProblem, HostProblemError } from "../shared/host-problems.ts";
 import { DEFAULT_PUSH_RELAY, pushRelayAddressProblem } from "../shared/push.ts";
+import { KEEP_WARM_EVERY_MS, KEEP_WARM_FOR_MS } from "./prompt-cache-keep-alive.ts";
 import { userConfigFilePath } from "./settings-file/user-config-file-path.ts";
 
 const PLUGIN_CATALOG_URL = "https://raw.githubusercontent.com/sodre90/mirador-plugins/main/index.json";
@@ -64,6 +65,9 @@ export interface HostConfig {
   antigravityAskWaitMs: number;
   /** How long a room's agent process stays up idle; tests shorten it with MIRADOR_ROOM_AGENT_IDLE_MS. */
   roomAgentIdleMs: number;
+  /** How often a profile that keeps the prompt cache warm sends a keep-alive, and for how long; tests shorten them with MIRADOR_KEEP_WARM_EVERY_MS and MIRADOR_KEEP_WARM_FOR_MS. */
+  keepWarmEveryMs: number;
+  keepWarmForMs: number;
   /** Hot reload makes open pages swap modules mid-conversation, so it is opt-in for working on the UI itself. */
   developmentMode: boolean;
   /** Runs the statusline command from the user's Claude Code settings; test hosts turn it off with MIRADOR_STATUSLINE=off. */
@@ -257,6 +261,8 @@ export function loadConfig(env = process.env): HostConfig {
     testSkipsUserSettings: env.MIRADOR_TEST_SKIP_USER_SETTINGS === "1",
     antigravityAskWaitMs: Number(env.MIRADOR_ANTIGRAVITY_ASK_WAIT_MS) || ANTIGRAVITY_ASK_WAIT_MS,
     roomAgentIdleMs: Number(env.MIRADOR_ROOM_AGENT_IDLE_MS) || ROOM_AGENT_IDLE_MS,
+    keepWarmEveryMs: Number(env.MIRADOR_KEEP_WARM_EVERY_MS) || KEEP_WARM_EVERY_MS,
+    keepWarmForMs: Number(env.MIRADOR_KEEP_WARM_FOR_MS) || KEEP_WARM_FOR_MS,
     developmentMode: env.MIRADOR_DEV === "1",
     runsUserStatusLine: env.MIRADOR_STATUSLINE !== "off",
     sandboxContainer: env.MIRADOR_SANDBOX,

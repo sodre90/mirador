@@ -86,3 +86,10 @@ test("Claude Code compacts idle conversations as its own settings say, unless th
     claudeCode: { options: { settings: { idleCompaction: false } } },
   });
 });
+
+test("a profile that keeps the prompt cache warm puts Claude Code on the five-minute cache, beside its idle compaction setting", () => {
+  expect(claudeSessionMeta("often", { keepCacheWarm: true }).claudeCode.options.settings).toEqual({ promptCacheTtl: "5m" });
+  expect(sessionMeta("claude", "often", { canvasAssetsOrigin: ASSETS_ORIGIN, idleCompaction: false, keepCacheWarm: true })).toMatchObject({
+    claudeCode: { options: { settings: { idleCompaction: false, promptCacheTtl: "5m" } } },
+  });
+});

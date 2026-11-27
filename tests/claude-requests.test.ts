@@ -3,6 +3,7 @@ import { appendFileSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ClaudeRequestLog, REQUESTS_KEPT_FOR_MS, takeRequests, type TranscriptRequests } from "../host/claude-requests.ts";
+import { KEEP_WARM_PROMPT } from "../host/prompt-cache-keep-alive.ts";
 
 const scratch = mkdtempSync(join(tmpdir(), "claude-requests-"));
 afterAll(() => rmSync(scratch, { recursive: true, force: true }));
@@ -15,7 +16,7 @@ const answer = (id: string, second: number, usage: object, { model = "claude-opu
   JSON.stringify({ type: "assistant", timestamp: at(second), message: { id, model, usage }, ...extra });
 const oneHourWrite = (written: number) => ({ cache_creation_input_tokens: written, cache_creation: { ephemeral_1h_input_tokens: written, ephemeral_5m_input_tokens: 0 } });
 
-const freshTranscript = (): TranscriptRequests => ({ requests: new Map(), awaitingAnswerSince: null });
+const freshTranscript = (): TranscriptRequests => ({ requests: new Map(), awaitingAnswerSince: null, awaitingKeepAlive: false });
 const requestsIn = (lines: string[]) => {
   const transcript = freshTranscript();
   takeRequests(transcript, lines);
@@ -33,8 +34,8 @@ describe("a transcript's model requests", () => {
       answer("msg_2", 12, { input_tokens: 2, cache_read_input_tokens: 21_000, output_tokens: 100 }),
     ]);
     expect(requests).toEqual([
-      { startedAt: atMs(0), model: "claude-opus-5-5", inputTokens: 3, cachedReadTokens: 20_000, cachedWriteTokens: { fiveMinutes: 0, oneHour: 1_000 }, outputTokens: 400 },
-      { startedAt: atMs(9), model: "claude-opus-5-5", inputTokens: 2, cachedReadTokens: 21_000, cachedWriteTokens: { fiveMinutes: 0, oneHour: 0 }, outputTokens: 100 },
+      { startedAt: atMs(0), model: "claude-opus-5-5", inputTokens: 3, cachedReadTokens: 20_000, cachedWriteTokens: { fiveMinutes: 0, oneHour: 1_000 }, outputTokens: 400, keptWarm: false },
+      { startedAt: atMs(9), model: "claude-opus-5-5", inputTokens: 2, cachedReadTokens: 21_000, cachedWriteTokens: { fiveMinutes: 0, oneHour: 0 }, outputTokens: 100, keptWarm: false },
     ]);
   });
 
@@ -53,6 +54,18 @@ describe("a transcript's model requests", () => {
       answer("msg_own", 4, usage),
     ]);
     expect(requests.map(({ startedAt }) => startedAt)).toEqual([atMs(0)]);
+  });
+
+  test("mark the answers to Mirador's keep-alive messages, which the user never sent", () => {
+    const usage = { output_tokens: 1 };
+    const requests = requestsIn([
+      userRecord(0, { message: { content: [{ type: "text", text: `<system-reminder>…</system-reminder>\n${KEEP_WARM_PROMPT}` }] } }),
+      answer("msg_1", 2, usage),
+      answer("msg_1", 3, usage),
+      userRecord(10),
+      answer("msg_2", 12, usage),
+    ]);
+    expect(requests.map(({ keptWarm }) => keptWarm)).toEqual([true, false]);
   });
 
   test("start at their answer when no message or tool result came before it", () => {

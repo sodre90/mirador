@@ -6,7 +6,7 @@ import type { FileEnvironmentValue, FilePluginSettingValue, FileProfile, FilePro
 import { profileReferredTo, referredName, type ImportContext, type ImportStep } from "./import-step.ts";
 import { isNeedsValue } from "./read-settings-file.ts";
 
-const comparedFields = ["model", "mode", "effort", "bypassPermissions", "askMode", "idleCompaction", "color", "prelaunch", "environment", "pluginSettings", "pluginsOff"] as const;
+const comparedFields = ["model", "mode", "effort", "bypassPermissions", "askMode", "idleCompaction", "keepCacheWarm", "color", "prelaunch", "environment", "pluginSettings", "pluginsOff"] as const;
 type ComparedField = (typeof comparedFields)[number];
 
 /** A profile is the one here of its name and agent, as an agent is fixed once a profile is made. */
@@ -55,6 +55,7 @@ function profileStep(entry: FileProfile, existing: Profile | undefined, { store,
 
 function comparable(profile: Profile | ProfileDraft, field: ComparedField) {
   if (field === "idleCompaction") return profile.idleCompaction ?? true;
+  if (field === "keepCacheWarm") return profile.keepCacheWarm ?? false;
   if (field === "pluginSettings") return profile.pluginSettings ?? {};
   if (field === "pluginsOff") return [...profile.pluginsOff].sort();
   return profile[field] || null;
@@ -88,6 +89,7 @@ function draftOf(entry: FileProfile, existing: Profile | undefined, find: Profil
       bypassPermissions: inFileOrHere(entry.bypassPermissions, existing?.bypassPermissions, false),
       askMode: inFileOrHere(entry.askMode, existing?.askMode, "wait"),
       idleCompaction: inFileOrHere(entry.idleCompaction, existing?.idleCompaction, true),
+      keepCacheWarm: inFileOrHere(entry.keepCacheWarm, existing?.keepCacheWarm, false),
       color: inFileOrHere(entry.color, existing?.color, null),
       prelaunch: inFileOrHere(entry.prelaunch, existing?.prelaunch, ""),
       environment: environment.text,

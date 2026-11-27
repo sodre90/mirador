@@ -427,6 +427,7 @@ export const shell: Messages["shell"] = {
     compactNow: "Compactar ahora",
     cacheLeft: (time: string) => `caché ${time}`,
     cacheCold: "caché caducada",
+    keptWarm: (time: string) => `mantenida caliente hace ${time}`,
     credits: (amount) => `${amount} créditos`,
     priceCategories: { low: "costo bajo", medium: "costo medio", high: "costo alto", very_high: "costo muy alto" },
     days: (count) => `${count}d`,

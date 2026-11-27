@@ -148,6 +148,7 @@ export class ProfileService {
       bypassPermissions: draft.bypassPermissions,
       askMode: draft.askMode,
       ...(draft.idleCompaction === false && { idleCompaction: false }),
+      ...(draft.keepCacheWarm && { keepCacheWarm: true }),
       color: draft.color,
       ...(draft.pluginSettings && { pluginSettings: draft.pluginSettings }),
       pluginsOff: pluginNames(draft.pluginsOff),

@@ -31,6 +31,8 @@ export const profiles = {
   questionsLabel: "Profile questions",
   idleCompactionLabel: "Profile idle compaction",
   idleCompaction: "Compact idle conversations",
+  keepCacheWarmLabel: "Profile keeps the prompt cache warm",
+  keepCacheWarm: "Keep the prompt cache warm",
   environmentFormat: {
     commandHintBefore: "Use ",
     commandHintAfter: " to read a token from a keychain or vault instead of storing it.",

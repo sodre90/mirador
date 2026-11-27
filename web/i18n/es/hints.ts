@@ -264,6 +264,7 @@ export const hints: Messages["hints"] = {
   profileEffort: "El esfuerzo que toma una conversación cuando empieza con este perfil o se mueve a él; después lo cambia su propia cabecera.\n\nLos niveles son los que ofrece el agente: Mirador se los pregunta cada vez que abres el perfil. Una conversación cuyo modelo no ofrece el nivel conserva su propio esfuerzo.",
   profileYolo: "Aprobar todo aquello para lo que el agente pida permiso. Una conversación lo toma cuando empieza con este perfil o se mueve a él; después lo cambia su propia cabecera.",
   profileIdleCompaction: "Claude Code resume una conversación larga que lleva cerca de una hora en reposo, justo antes de que caduque su caché de prompts, para que tu siguiente mensaje cueste menos. Las conversaciones lo toman cuando empiezan o se vuelven a abrir.",
+  profileKeepCacheWarm: "Claude Code usa la caché del prompt de cinco minutos, que cuesta menos escribir que la de una hora. Mientras no estás, Mirador la mantiene caliente con un mensaje corto cada pocos minutos que la conversación no muestra, hasta una hora y solo mientras cueste menos que volver a escribir la caché; después compacta una conversación larga, si la compactación en reposo está activada. Tus hooks se ejecutan con cada uno de estos mensajes. Las conversaciones lo toman cuando empiezan o se vuelven a abrir.",
   onlyProfile: "Este es tu único perfil y toda conversación necesita uno, así que se queda hasta que crees otro.",
   unsavedProfileEdits: "Cambios que aún no se han guardado. Se conservan mientras Perfiles esté abierto; Guardar los mantiene.",
   splitter: "Arrastra para cambiar el tamaño, haz doble clic para restablecerlo.",
@@ -386,6 +387,8 @@ export const hints: Messages["hints"] = {
   promptCache: (lifetime: string) =>
     `Tiempo que le queda a la caché del prompt: el proveedor del modelo guarda la conversación hasta aquí durante ${lifetime} tras cada solicitud, y la lee desde ahí a cerca de una décima parte del precio. Cuando se agota, el siguiente mensaje vuelve a leerse entero.`,
   promptCacheCold: "La caché del prompt caducó: con el siguiente mensaje el modelo vuelve a leer toda la conversación a precio completo, y empieza una caché nueva.",
+  promptCacheKeptWarm: (count: number, ago: string) =>
+    `Mirador mantuvo caliente la caché del prompt mientras no estabas, con ${count} ${count === 1 ? "mensaje corto" : "mensajes cortos"} que la conversación no muestra, el último hace ${ago}.`,
   quota: (limit, percent, resetsIn) =>
     `Límite de uso ${limit} de tu plan: ${percent} usado${resetsIn ? `, se reinicia en ${resetsIn}` : ""}.\n\nEl agente lo informa después de cada respuesta, para la cuenta del perfil de esta conversación.`,
   statuslineCommand: (command) =>

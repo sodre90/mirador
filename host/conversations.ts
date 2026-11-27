@@ -35,6 +35,7 @@ import {
   type HarnessId,
   type JobWait,
   type JobWaitEnd,
+  type KeptWarm,
   type Launch,
   type PendingAsk,
   type PendingPermissionRequest,
@@ -62,7 +63,8 @@ import { panelCommandRun } from "../shared/panel-commands.ts";
 import { historyEntry } from "../shared/prompt-history.ts";
 import { customOrderAfterDrag } from "../shared/conversation-order.ts";
 import { inSidebarOrder, movedBefore } from "../shared/sidebar-order.ts";
-import { isClearCommand, isReloadCommand, replacesSession, toSlashCommand } from "../shared/slash-commands.ts";
+import { COMPACT_COMMAND, isClearCommand, isReloadCommand, replacesSession, toSlashCommand } from "../shared/slash-commands.ts";
+import { parseEnvironment } from "../shared/profile-environment.ts";
 import { isPending, isPutAway, isReminder, reminderCommandIn, reminderFromCommand, type Reminder } from "../shared/reminders.ts";
 import { agentAnsweredIn, lastWordsOf, replyOf } from "../shared/last-words.ts";
 import { isRealModel } from "../shared/claude-models.ts";
@@ -152,6 +154,7 @@ import { ConversationSessions } from "./conversation-sessions.ts";
 import { SubagentSessions } from "./subagent-sessions.ts";
 import { SubagentUsageReader } from "./subagent-usage.ts";
 import { ClaudeRequestLog } from "./claude-requests.ts";
+import { IDLE_COMPACT_MIN_TOKENS, idleCompactionFrom, KEEP_WARM_PROMPT, PromptCacheKeepAlive, type KeepAliveHost } from "./prompt-cache-keep-alive.ts";
 import { UnknownSessionUpdates } from "./unknown-session-updates.ts";
 import { conversationCanvasToken } from "./canvas-token.ts";
 import { holdsAFavourite, restsWithAllItHolds } from "../shared/deleting-together.ts";
@@ -166,6 +169,11 @@ const CONTINUE_AFTER_INTERRUPTION = "Continue where you left off.";
 const NO_FILES_KEPT: HostProblem = { code: "no-files-kept" };
 const FILES_NO_LONGER_KEPT: HostProblem = { code: "files-no-longer-kept", turns: SNAPSHOTS_KEPT };
 const TURN_STOP_TIMEOUT_MS = 10_000;
+/** A keep-alive goes from the conversation's requests of this long back: the hour it is kept warm, and an hour to spare. */
+const RECENT_REQUESTS_FOR_KEEP_ALIVES_MS = 2 * 60 * 60_000;
+/** A keep-alive is a short answer, and a compaction a longer one: either still unanswered after this long is stopped, so messages queued behind it go on. */
+const KEEP_ALIVE_ANSWERED_WITHIN_MS = 2 * 60_000;
+const COMPACTION_ANSWERED_WITHIN_MS = 10 * 60_000;
 /** How long a Stop waits for Claude Code to record the prompt it is stopping, bounded so a wedged agent can't hang it. */
 const PROMPT_RECORD_WAIT_MS = 3_000;
 /** Letting go of a session is a courtesy to its agent; one that doesn't answer must not hold up what comes next. */
@@ -437,6 +445,8 @@ interface Runtime {
   stoppedBeforeItsFirstTurn?: boolean;
   /** The reply the last stopped turn still owes: its late chunks are dropped, or held back until another reply's id or the next turn's end tells whether they were the orphan or that turn's answer. */
   cancelledReply?: CancelledReplyChunks;
+  /** A prompt of Mirador's own between the user's turns, a keep-alive or an idle compaction, until it is answered; `shown` lets its updates show. */
+  outsideTurn?: { shown: boolean; settled: Promise<void> };
 }
 
 /** A change asked of the agent: the option as it stood, and the agent's answer, which settles without failing. */
@@ -560,6 +570,7 @@ export class ConversationService {
   private readonly commands = new UserCommandRunner();
   private readonly subagentUsageReader = new SubagentUsageReader();
   private readonly claudeRequestLog = new ClaudeRequestLog();
+  private readonly promptCacheKeepAlive: PromptCacheKeepAlive;
   private readonly jobWaits: JobWaits;
   private readonly asyncTasks = new AsyncTasks();
   private readonly checkpoints: Checkpoints;
@@ -616,6 +627,7 @@ export class ConversationService {
       changed: (conversationId) => this.republish(conversationId),
       ended: (conversationId, wait, end) => this.jobWaitEnded(conversationId, wait, end),
     });
+    this.promptCacheKeepAlive = new PromptCacheKeepAlive(this.keepAliveHost(), config.keepWarmEveryMs, config.keepWarmForMs);
   }
 
   list(): Conversation[] {
@@ -698,6 +710,77 @@ export class ConversationService {
     if (conversation?.harness !== "claude" || !conversation.acpSessionId) return [];
     const requests = await this.claudeRequestLog.requestsOf(this.claudeConfigDirOf(conversation), conversation.acpSessionId, since);
     return requests.map((request) => ({ conversationId, ...request }));
+  }
+
+  /** The keep-alives that kept the conversation's prompt cache warm since the user's last turn; null where none went. */
+  keptWarmOf(conversationId: string): KeptWarm | null {
+    return this.promptCacheKeepAlive.keptWarm(conversationId);
+  }
+
+  private keepAliveHost(): KeepAliveHost {
+    return {
+      recentRequestsOf: (conversationId) => this.modelRequestsOf(conversationId, Date.now() - RECENT_REQUESTS_FOR_KEEP_ALIVES_MS),
+      mayKeepWarm: (conversationId) => this.mayKeepCacheWarmNow(conversationId),
+      sendKeepAlive: async (conversationId) => (await this.promptOutsideTurns(conversationId, KEEP_WARM_PROMPT, { shown: false })) === "end_turn",
+      compactsAt: (conversationId, contextTokens) => this.compactsIdleAt(conversationId, contextTokens),
+      compact: async (conversationId) => void (await this.promptOutsideTurns(conversationId, `/${COMPACT_COMMAND}`, { shown: true })),
+      keptWarmChanged: (conversationId) => this.republish(conversationId),
+    };
+  }
+
+  /** Claude Code's own conversations on a profile that keeps the prompt cache warm, but not a room's agents' or side chats, which the user isn't away from. */
+  private keepsCacheWarm(conversationId: string) {
+    const conversation = this.store.findConversation(conversationId);
+    const profile = conversation?.profileId == null ? undefined : this.store.findProfile(conversation.profileId);
+    return conversation?.harness === "claude" && profile?.keepCacheWarm === true && !worksForARoom(conversation) && conversation.sideChatOf === undefined;
+  }
+
+  /** Idle on the session already open, with nothing on its way in or waiting on the user. */
+  private mayKeepCacheWarmNow(conversationId: string) {
+    const runtime = this.runtimes.get(conversationId);
+    if (this.stopping || !runtime?.harness || !runtime.sessionId || !this.keepsCacheWarm(conversationId)) return false;
+    const busy = runtime.running || runtime.outsideTurn || this.holdsQueue(runtime) || runtime.queuedMessages.length > 0 || runtime.pendingPermissions.size > 0;
+    return !busy && this.asyncTasks.in(conversationId).length === 0;
+  }
+
+  /** Where Claude Code's own idle compaction would compact it, as the profile and CLAUDE_CODE_IDLE_COMPACT_MIN_TOKENS ask. */
+  private compactsIdleAt(conversationId: string, contextTokens: number) {
+    const { profileId } = this.get(conversationId);
+    const profile = profileId === null ? undefined : this.store.findProfile(profileId);
+    const minTokensSetting = parseEnvironment(profile?.environment ?? "").set[IDLE_COMPACT_MIN_TOKENS] ?? process.env[IDLE_COMPACT_MIN_TOKENS];
+    return profile?.idleCompaction !== false && this.agentHasCommand(conversationId, COMPACT_COMMAND) && contextTokens >= idleCompactionFrom(minTokensSetting);
+  }
+
+  /**
+   * Sends Claude Code a prompt of Mirador's own between the user's turns: a keep-alive, or an idle compaction. No
+   * message, turn end or notification shows for it, and messages sent meanwhile wait for it to be answered; only a
+   * compaction's own updates show. It goes on the session already open, never opening one, and asks the user nothing,
+   * as what it asks permission for is turned down. One not answered in a while is stopped, so the queue goes on.
+   * Settles with how it ended, null where it failed.
+   */
+  private async promptOutsideTurns(conversationId: string, text: string, { shown }: { shown: boolean }): Promise<acp.StopReason | null> {
+    const runtime = this.runtime(conversationId);
+    const { harness, sessionId } = runtime;
+    if (!harness || !sessionId || runtime.outsideTurn) return null;
+    let settle = () => {};
+    runtime.outsideTurn = { shown, settled: new Promise<void>((resolve) => (settle = resolve)) };
+    let stopUnanswered: ReturnType<typeof setTimeout> | undefined;
+    try {
+      const openSession = await sessionId;
+      const answeredWithin = shown ? COMPACTION_ANSWERED_WITHIN_MS : KEEP_ALIVE_ANSWERED_WITHIN_MS;
+      stopUnanswered = setTimeout(() => void harness.cancel(openSession).catch(() => {}), answeredWithin);
+      const { stopReason } = await harness.prompt(openSession, [{ type: "text", text }]);
+      return stopReason;
+    } catch (error) {
+      console.error(`Mirador's own prompt to conversation ${conversationId} failed: ${errorMessage(error)}`);
+      return null;
+    } finally {
+      clearTimeout(stopUnanswered);
+      runtime.outsideTurn = undefined;
+      settle();
+      this.sendNextQueuedMessage(conversationId);
+      this.stopOwnProcessOnceIdle(conversationId);
+    }
   }
 
   /**
@@ -2181,6 +2264,7 @@ export class ConversationService {
       bypassPermissions: draft.bypassPermissions,
       askMode: draft.askMode,
       ...(draft.idleCompaction === false && { idleCompaction: false }),
+      ...(draft.keepCacheWarm && { keepCacheWarm: true }),
       color: draft.color,
       ...(draft.pluginSettings && { pluginSettings: draft.pluginSettings }),
       pluginsOff: draft.pluginsOff,
@@ -2233,6 +2317,8 @@ export class ConversationService {
 
   async prompt(conversationId: string, text: string, { imageIds = [], authorId, fromScript = false, fromMirador = false, fromPlugin, roomMessageId, broughtTaskId, startsTurn = false }: PromptStart = {}) {
     const runtime = this.runtime(conversationId);
+    this.promptCacheKeepAlive.disarm(conversationId);
+    if (runtime.outsideTurn) await runtime.outsideTurn.settled;
     if (runtime.running) throw new HostProblemError({ code: "agent-still-working" });
     if (isClearCommand(text)) return this.clearContext(conversationId);
     if (isReloadCommand(text)) return this.reloadAgent(conversationId);
@@ -2349,6 +2435,7 @@ export class ConversationService {
 
   /** What follows a turn once it has ended, however it ended: the plugin that started it hears, and the queue moves on. */
   private turnIsOver(conversationId: string, turn: TurnInProgress, turnSeq: number | undefined, endedOnItsOwn: acp.PromptResponse | undefined) {
+    if (endedOnItsOwn && !this.stopping && this.keepsCacheWarm(conversationId)) this.keepCacheWarmAfterTurn(conversationId);
     if (!this.stopping) this.deliverOwedReply(conversationId);
     if (!this.stopping && turnSeq !== undefined) this.turnsHeard.turnEnded(conversationId, turnSeq);
     this.takeUpFolderChangesAfterTurn(conversationId);
@@ -2357,6 +2444,11 @@ export class ConversationService {
     this.lookAtHeldFilesAgain(conversationId);
     this.leaveSandboxTurnedOff(conversationId);
     this.stopOwnProcessOnceIdle(conversationId);
+  }
+
+  /** Armed before anything that may start the next turn, which disarms it. */
+  private keepCacheWarmAfterTurn(conversationId: string) {
+    this.promptCacheKeepAlive.armAfterTurn(conversationId).catch((error: unknown) => console.error(`keeping the prompt cache of conversation ${conversationId} warm failed:`, error));
   }
 
   /**
@@ -2399,7 +2491,7 @@ export class ConversationService {
   private stopIdleOwnProcess(conversationId: string) {
     this.idleOwnProcesses.delete(conversationId);
     const runtime = this.runtimes.get(conversationId);
-    const busy = runtime?.running || runtime?.pendingPermissions.size || runtime?.queuedMessages.length;
+    const busy = runtime?.running || runtime?.outsideTurn || runtime?.pendingPermissions.size || runtime?.queuedMessages.length;
     if (this.stopping || !runtime?.harness || busy || !this.isOwnProcess(conversationId, runtime.harness)) return;
     void this.killAgent(runtime.harness, { kind: "stopped" });
   }
@@ -3543,7 +3635,9 @@ export class ConversationService {
     const canvasUse = this.store.canvasUse();
     const canvasPlugins = this.canvasPlugins(conversationId);
     const systemPrompt = sessionSystemPrompt(conversation.harness, canvasUse, canvasPlugins);
-    const idleCompaction = conversation.profileId === null || this.store.findProfile(conversation.profileId)?.idleCompaction !== false;
+    const profile = conversation.profileId === null ? undefined : this.store.findProfile(conversation.profileId);
+    const idleCompaction = profile?.idleCompaction !== false;
+    const keepCacheWarm = profile?.keepCacheWarm === true;
     const claudeSetup = conversation.roomId ? (this.store.findRoom(conversation.roomId)?.claudeSetup ?? ALL_OF_CLAUDE_SETUP) : ALL_OF_CLAUDE_SETUP;
     const cwd = await recordedDirectory(this.workspaceOf(conversationId));
     if (!this.runsInSandbox(conversation)) await this.sandboxes.settleHeldFilesFor(cwd);
@@ -3558,6 +3652,7 @@ export class ConversationService {
         withoutUserSettings,
         canvasPlugins,
         idleCompaction,
+        keepCacheWarm,
         inRoom: worksForARoom(conversation),
         inRoomsWorkspace: conversation.worksInRoomsWorkspace === true,
         claudeSetup,
@@ -3996,6 +4091,7 @@ export class ConversationService {
     if (update.sessionUpdate === "session_info_update" && update.title && !this.get(conversationId).titleSetByUser) {
       this.save({ ...this.get(conversationId), title: shownSessionTitle(this.get(conversationId).title, update.title) });
     }
+    if (this.runtimes.get(conversationId)?.outsideTurn?.shown === false && !SESSION_STATE_UPDATES.has(update.sessionUpdate)) return;
     if (this.dropsCancelledReplyChunk(conversationId, update)) return;
     if (this.handledAntigravityNoticeOutsideTurn(conversationId, update)) return;
     if (isTurnsOwnToolCall(update)) this.showHeldBackReply(conversationId);
@@ -4397,6 +4493,7 @@ export class ConversationService {
   ): Promise<acp.RequestPermissionResponse> {
     const conversationId = this.sessions.conversationOf(request.sessionId);
     if (!conversationId) return { outcome: { outcome: "cancelled" } };
+    if (this.runtimes.get(conversationId)?.outsideTurn) return turnedDown(request.options);
     const allowOptionId = optionThatAllows(request.options);
     if (allowOptionId && this.approvesEverything(this.get(conversationId))) {
       return { outcome: { outcome: "selected", optionId: allowOptionId } };
@@ -4537,6 +4634,7 @@ export class ConversationService {
     if (this.stopping) return "the host is stopping";
     if (runtime.usageLimit?.timer !== undefined) return "the queue waits for the usage limit to reset";
     if (runtime.steerInFlight) return "messages are on their way into the turn";
+    if (runtime.outsideTurn) return "the queue waits for Mirador's keep-alive or idle compaction to be answered";
     return null;
   }
 

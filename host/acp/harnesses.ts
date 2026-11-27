@@ -283,6 +283,7 @@ export function sessionMeta(
     withoutUserSettings = false,
     canvasPlugins = NO_CANVAS_PLUGINS,
     idleCompaction = true,
+    keepCacheWarm = false,
     inRoom = false,
     inRoomsWorkspace = false,
     claudeSetup = ALL_OF_CLAUDE_SETUP,
@@ -293,6 +294,7 @@ export function sessionMeta(
     withoutUserSettings?: boolean;
     canvasPlugins?: CanvasPluginGuidance;
     idleCompaction?: boolean;
+    keepCacheWarm?: boolean;
     inRoom?: boolean;
     inRoomsWorkspace?: boolean;
     claudeSetup?: ClaudeSetup;
@@ -305,7 +307,7 @@ export function sessionMeta(
   if (harness === "claude")
     return inRoom
       ? claudeRoomSessionMeta(canvasUse, { withoutUserSettings, idleCompaction, claudeSetup, keptProtections, sandbox })
-      : claudeSessionMeta(canvasUse, { withoutUserSettings, canvasPlugins, idleCompaction, sandbox });
+      : claudeSessionMeta(canvasUse, { withoutUserSettings, canvasPlugins, idleCompaction, keepCacheWarm, sandbox });
   if (harness === "pi")
     return inRoom ? { systemPrompt: { append: [roomCanvasPromptAppendix(canvasUse, canvasAssetsOrigin), ...sandboxGuidance(sandbox)].join("\n\n") } } : piSessionMeta(canvasUse, canvasAssetsOrigin, canvasPlugins, sandbox);
   if (harness === "antigravity")
@@ -353,12 +355,14 @@ const canvasPromptParts = (canvasUse: CanvasUse, canvasAssetsOrigin: string, can
 /**
  * Session options Claude Code reads from `_meta.claudeCode.options` (claude-agent-acp).
  * AskUserQuestion is disabled so questions go through the visual `ask` tool instead. Idle compaction left on sends no
- * setting, so a user's own `idleCompaction: false` in their Claude Code settings still holds.
+ * setting, so a user's own `idleCompaction: false` in their Claude Code settings still holds. Keeping the cache warm
+ * puts the conversation on the five-minute prompt cache, which Mirador's keep-alive requests renew.
  */
 export function claudeSessionMeta(
   canvasUse: CanvasUse,
-  { withoutUserSettings = false, canvasPlugins = NO_CANVAS_PLUGINS, idleCompaction = true, sandbox = null as SessionInSandbox | null } = {},
+  { withoutUserSettings = false, canvasPlugins = NO_CANVAS_PLUGINS, idleCompaction = true, keepCacheWarm = false, sandbox = null as SessionInSandbox | null } = {},
 ) {
+  const settings = { ...(!idleCompaction && { idleCompaction: false }), ...(keepCacheWarm && { promptCacheTtl: "5m" }) };
   return {
     systemPrompt: {
       append: [...(canvasUse === "often" ? [canvasUseGuidance(canvasPlugins)] : []), canvasPluginInstructions(canvasPlugins), jobWaitGuidance(), ...sandboxGuidance(sandbox)].filter(Boolean).join("\n\n"),
@@ -366,7 +370,7 @@ export function claudeSessionMeta(
     claudeCode: {
       options: {
         ...(withoutUserSettings && { settingSources: ["project", "local"] }),
-        ...(!idleCompaction && { settings: { idleCompaction: false } }),
+        ...(Object.keys(settings).length > 0 && { settings }),
         env: { CLAUDE_NOTIFIER: "0" },
         allowedTools: [...PRE_ALLOWED_CANVAS_TOOLS, ...canvasPlugins.toolNames].map((tool) => `mcp__${CANVAS_SERVER_NAME}__${tool}`),
         disallowedTools: ["AskUserQuestion"],

@@ -73,6 +73,7 @@ These terms stay the same everywhere:
 | grant (a push relay's, which a phone holds) | engedély | permiso | 授权 | Freigabe |
 | value (one of a profile's environment variables, by name) | érték | valor | 值 | Wert |
 | hook (Claude Code's) | hook | hook | Hook | Hook |
+| keep (the prompt cache) warm | melegen tart | mantener caliente | 保持预热 | warm halten |
 | start afresh (an agent, on a new session that reads the room again) | elölről kezd | empezar de nuevo | 重新开始 | neu anfangen |
 | start clean (a room's Claude agents, without the owner's setup) | tiszta lappal indul | empezar en limpio | 全新开始 | sauber starten |
 | bring (an agent of your own into a room of someone else's machine) | behoz | traer | 带入 | mitbringen |
