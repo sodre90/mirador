@@ -108,9 +108,10 @@ describe("a plan's watch", () => {
       new PlanWatch(
         { parts: NOTHING, lookedAt: await lookedAtFile() },
         async () => {
+          const lookedAt = await lookedAtFile();
           counts.planned += 1;
           const planned = now();
-          return "refused" in planned ? planned : { ...planned, lookedAt: await lookedAtFile() };
+          return "refused" in planned ? planned : { ...planned, lookedAt };
         },
         async () => void (counts.outgrown += 1),
         EVERY_MS,

@@ -26,7 +26,7 @@ function repository() {
   const folder = join(scratch, `workspace-${crypto.randomUUID()}`);
   mkdirSync(folder);
   Bun.spawnSync(["git", "init", "-q", folder]);
-  return realpathSync(folder);
+  return realpathSync.native(folder);
 }
 
 function hostFor(workspace: string, baseImage: string | null = null) {
@@ -65,7 +65,7 @@ const notReady = (why: Partial<SandboxNotReadyWhy>) => ({ problem: { code: "sand
 
 const valueAfter = (args: string[], flag: string) => args[args.indexOf(flag) + 1];
 const valuesAfter = (args: string[], flag: string) => args.flatMap((arg, index) => (args[index - 1] === flag ? [arg] : []));
-const mountedAt = (run: string[], target: string) => valuesAfter(run, "-v").find((mount) => mount.endsWith(`:${target}`))!.split(":")[0]!;
+const mountedAt = (run: string[], target: string) => mountsOfRun(run).find((mount) => mount.target === target)!.source;
 const modeOf = (path: string) => statSync(path).mode & 0o777;
 
 describe("a room's sandbox on rootless Podman", () => {
