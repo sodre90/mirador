@@ -498,7 +498,8 @@ export const problems: Messages["problems"] = {
       `Das pi von ${agent} hat keinen Schlüssel für sein Modell, oder ein Wert, den sein Schlüssel oder ein Header braucht, ist nicht gesetzt.`,
   },
   sandboxAgentSignsInElsewhere: {
-    subscription: (agent: string) => `${agent} meldet sich mit einem Claude-Abo an, das in die Sandbox müsste: Gib seinem Profil stattdessen einen API-Key.`,
+    subscription: (agent: string) =>
+      `${agent} meldet sich mit einem Claude-Abo an, das in die Sandbox müsste: Gib seinem Profil stattdessen einen API-Key oder einen CLAUDE_CODE_OAUTH_TOKEN von claude setup-token.`,
     bedrock: (agent: string) => `${agent} nutzt Amazon Bedrock, das Sandboxes noch nicht unterstützen.`,
     vertex: (agent: string) => `${agent} nutzt Google Vertex AI, das Sandboxes noch nicht unterstützen.`,
     foundry: (agent: string) => `${agent} nutzt Microsoft Foundry, das Sandboxes noch nicht unterstützen.`,

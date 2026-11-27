@@ -340,6 +340,27 @@ test("a workspace's sandbox check names the profiles that can run in it, for the
   await conversations.shutdown();
 });
 
+test("a Claude profile with CLAUDE_CODE_OAUTH_TOKEN runs in the workspace's sandbox with a placeholder token, keeping the setup token on this computer", async () => {
+  const { store, workspaceSandboxes, conversations, claude, launcher } = sandboxedWorkspace();
+  const setupToken = "sk-ant-oat01-kept-on-this-mac-9876";
+  store.saveProfile(profileOf("oauth", "OAuth", "claude", `CLAUDE_CODE_OAUTH_TOKEN=${setupToken}\nCLAUDE_CODE_EXECUTABLE=${claude.program}`));
+  store.setWorkspaceDefaultLaunch("w1", { harness: "claude", profileId: "oauth" });
+
+  expect(await workspaceSandboxes.sandboxCheck("w1")).toMatchObject({ startsOn: null, profilesThatRun: expect.arrayContaining(["builder", "oauth"]) });
+
+  const conversation = conversations.create("w1", { harness: "claude", profileId: "oauth" });
+  await conversations.send(conversation.id, "go");
+
+  const [agent] = launcher.agents.filter(({ environment }) => environment.CLAUDE_CODE_OAUTH_TOKEN !== undefined);
+  expect(agent).toBeDefined();
+  expect(agent!.environment).toMatchObject({ CLAUDE_CODE_OAUTH_TOKEN: "kept-by-mirador", ANTHROPIC_BASE_URL: "http://127.0.0.1:7702/p/oauth" });
+  expect(agent!.environment.ANTHROPIC_API_KEY).toBeUndefined();
+  expect(agent!.environment.ANTHROPIC_AUTH_TOKEN).toBeUndefined();
+  expect(JSON.stringify(agent!.environment)).not.toContain(setupToken);
+  expect(claude.ranHere()).toBe(false);
+  await conversations.shutdown();
+});
+
 test("a sandboxed workspace's side chats and forks start in its VM too", async () => {
   const { store, conversations, launcher, claude } = sandboxedWorkspace();
   const conversation = conversations.create("w1", BUILDER);

@@ -11,6 +11,7 @@ import { RUNS_SANDBOXES } from "./sandbox-computer.ts";
 
 const scratch = mkdtempSync(join(tmpdir(), "sbx-sockets-"));
 const KEY = "sk-ant-the-profiles-own-key-5678";
+const OAUTH_TOKEN = "sk-ant-oat01-the-setup-token-3456";
 const GATEWAY_KEY = "gw-the-gateways-own-key-9012";
 const MODEL_PORT = 7702;
 const CANVAS_PORT = 7701;
@@ -32,6 +33,7 @@ const statusOf = (answer: string) => Number(/^HTTP\/1\.1 (\d{3})/.exec(answer)?.
 
 interface Heard {
   path: string;
+  search: string;
   headers: Record<string, string>;
   body: string;
 }
@@ -48,12 +50,14 @@ beforeAll(async () => {
   upstream = Bun.serve({
     port: 0,
     async fetch(request) {
-      heardUpstream.push({ path: new URL(request.url).pathname, headers: Object.fromEntries(request.headers), body: await request.text() });
+      const url = new URL(request.url);
+      heardUpstream.push({ path: url.pathname, search: url.search, headers: Object.fromEntries(request.headers), body: await request.text() });
       return Response.json({ answered: true });
     },
   });
   const routes: Record<string, ModelRoute> = {
     builder: modelRouteOf({ ANTHROPIC_API_KEY: KEY, ANTHROPIC_BASE_URL: `http://127.0.0.1:${upstream.port}/base`, ANTHROPIC_CUSTOM_HEADERS: "X-Team: blue\nbroken line" })!,
+    oauth: modelRouteOf({ CLAUDE_CODE_OAUTH_TOKEN: OAUTH_TOKEN, ANTHROPIC_BASE_URL: `http://127.0.0.1:${upstream.port}` })!,
     gateway: { upstream: `http://127.0.0.1:${upstream.port}/gw/v1/`, api: "openai-responses", key: GATEWAY_KEY, keyHeader: "authorization", headers: [["X-Gateway-Team", "green"]] },
     chatter: { upstream: `http://127.0.0.1:${upstream.port}/v1`, api: "openai-completions", key: GATEWAY_KEY, keyHeader: "authorization", headers: [] },
   };
@@ -98,7 +102,7 @@ describe("a room's model proxy", () => {
     expect(heardUpstream[0]!.headers.cookie).toBeUndefined();
   });
 
-  test("puts an auth token in the header Anthropic's API reads it from", () => {
+  test("puts an auth or OAuth setup token in the header Anthropic's API reads it from, and forwards OAuth beta headers with the real Bearer token", async () => {
     expect(modelRouteOf({ ANTHROPIC_AUTH_TOKEN: " token ", ANTHROPIC_BASE_URL: "https://gateway.example/anthropic" })).toEqual({
       upstream: "https://gateway.example/anthropic",
       api: "anthropic-messages",
@@ -106,7 +110,30 @@ describe("a room's model proxy", () => {
       keyHeader: "authorization",
       headers: [],
     });
+    expect(modelRouteOf({ CLAUDE_CODE_OAUTH_TOKEN: " sk-ant-oat01-token " })).toEqual({
+      upstream: "https://api.anthropic.com",
+      api: "anthropic-messages",
+      key: "sk-ant-oat01-token",
+      keyHeader: "authorization",
+      headers: [],
+    });
     expect(modelRouteOf({ CLAUDE_CODE_USE_BEDROCK: "1" })).toBeNull();
+
+    heardUpstream.length = 0;
+    const answer = await rawRequest(
+      modelSocket,
+      `POST /p/oauth/v1/messages?beta=true HTTP/1.1\nHost: 127.0.0.1:${MODEL_PORT}\nAuthorization: Bearer kept-by-mirador\nx-api-key: forged\nanthropic-beta: claude-code-20250219,oauth-2025-04-20\nContent-Type: application/json\nContent-Length: 2\nConnection: close\n\n{}`,
+    );
+    expect(statusOf(answer)).toBe(200);
+    expect(answer).not.toContain(OAUTH_TOKEN);
+    expect(heardUpstream).toHaveLength(1);
+    expect(heardUpstream[0]).toMatchObject({
+      path: "/v1/messages",
+      search: "?beta=true",
+      body: "{}",
+      headers: { authorization: `Bearer ${OAUTH_TOKEN}`, "anthropic-beta": "claude-code-20250219,oauth-2025-04-20" },
+    });
+    expect(heardUpstream[0]!.headers["x-api-key"]).toBeUndefined();
   });
 
   test("refuses CONNECT, and any request addressed to another host", async () => {

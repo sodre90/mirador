@@ -493,7 +493,8 @@ export const problems: Messages["problems"] = {
       `El pi de ${agent} no tiene clave para su modelo, o falta un valor que necesitan su clave o un encabezado.`,
   },
   sandboxAgentSignsInElsewhere: {
-    subscription: (agent: string) => `${agent} inicia sesión con una suscripción de Claude, que tendría que entrar en el sandbox: dale a su perfil una clave de API.`,
+    subscription: (agent: string) =>
+      `${agent} inicia sesión con una suscripción de Claude, que tendría que entrar en el sandbox: dale a su perfil una clave de API o un CLAUDE_CODE_OAUTH_TOKEN de claude setup-token.`,
     bedrock: (agent: string) => `${agent} usa Amazon Bedrock, que los sandboxes aún no admiten.`,
     vertex: (agent: string) => `${agent} usa Google Vertex AI, que los sandboxes aún no admiten.`,
     foundry: (agent: string) => `${agent} usa Microsoft Foundry, que los sandboxes aún no admiten.`,

@@ -623,7 +623,7 @@ test("where none of the profiles can run in the sandbox, its settings say so and
 
   const dialog = await openSandboxOf(page, card, "project");
   await expect(dialog.locator(".workspace-sandbox-no-profile-runs")).toHaveText(
-    "None of your profiles can run in the sandbox. A Claude Code profile that signs in with an API key can, and so can a pi profile whose model pi's models.json sets up with a key.",
+    "None of your profiles can run in the sandbox. A Claude Code profile that signs in with an API key or a CLAUDE_CODE_OAUTH_TOKEN can, and so can a pi profile whose model pi's models.json sets up with a key.",
   );
   await expect(startOnPicker(dialog)).toHaveCount(0);
   await dialog.getByRole("button", { name: "Done" }).click();
@@ -782,6 +782,57 @@ test("a pi profile's agent runs in the sandbox on the pi of this computer, reach
         { path: "/v1/chat/completions", authorization: `Bearer ${PI_KEY}`, team: PI_TEAM, session: "a-session" },
       ]);
     });
+  } finally {
+    provider.close();
+  }
+});
+
+test("a Claude Code profile with CLAUDE_CODE_OAUTH_TOKEN runs in the sandbox with a placeholder token while the model proxy adds the real Bearer token", async ({ page }) => {
+  test.skip(!sandboxesRunHere, "Sandboxes run on macOS 26 on Apple silicon only.");
+  const OAUTH_TOKEN = "sk-ant-oat01-e2e-setup-token-7654";
+  const oauthWorkspace = join(host.root, "oauth-project");
+  const provider = await modelProviderHere();
+  const providerOrigin = new URL(provider.baseUrl).origin;
+  try {
+    mkdirSync(oauthWorkspace, { recursive: true });
+    execFileSync("git", ["init", "-q", oauthWorkspace]);
+
+    await signIn(page, host);
+    const profiles = await createProfile(page, "Personal", `CLAUDE_CODE_OAUTH_TOKEN=${OAUTH_TOKEN}\nANTHROPIC_BASE_URL=${providerOrigin}`, "", "Claude Code");
+    await profiles.getByRole("button", { name: "Close" }).click();
+    await addWorkspaceFromSidebar(page, oauthWorkspace);
+    const card = workspaceCard(page, oauthWorkspace);
+    await card.getByLabel("Agent", { exact: true }).selectOption({ label: "Personal · Claude Code" });
+
+    const dialog = await openSandboxOf(page, card, "oauth-project");
+    await expect(dialog.locator(".workspace-sandbox-starts-on")).toHaveCount(0);
+    await sandboxSwitch(dialog).check();
+    await expect(dialog.locator(".room-sandbox-setup")).toHaveText("Set up on this Mac.");
+    await dialog.getByRole("button", { name: "Done" }).click();
+
+    const previousUrl = page.url();
+    await card.getByRole("button", { name: "+ New conversation" }).click();
+    await expect(page).not.toHaveURL(previousUrl);
+    await expect(chatHeader(page).locator(".conversation-sandboxed")).toHaveText("Sandboxed");
+
+    const seen = join(host.root, "oauth-seen");
+    const shown = ["CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_BASE_URL", "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"].map((name) => `{{env:${name}}}`).join("\n");
+    await sendMessage(page, `WRITE ${JSON.stringify([{ edit: seen, content: shown }])}`);
+    await waitForTurnToEnd(page);
+    const [oauthInVm, baseUrlInVm, apiKeyInVm, authTokenInVm] = readFileSync(seen, "utf8").split("\n");
+    expect(oauthInVm).toBe("kept-by-mirador");
+    expect(baseUrlInVm).toMatch(/^http:\/\/127\.0\.0\.1:7702\/p\/[A-Za-z0-9-]+$/);
+    expect([apiKeyInVm, authTokenInVm]).toEqual(["", ""]);
+
+    const calls = containerCalls();
+    expect(JSON.stringify(calls)).not.toContain(OAUTH_TOKEN);
+    const run = calls.findLast(([command, ...rest]) => command === "run" && rest.some((argument) => argument.startsWith("mirador.owner=workspace:")) && JSON.stringify(rest).includes(realpathSync(oauthWorkspace)))!;
+    const socket = run.find((argument) => argument.endsWith(":/run/mirador/model.sock"))!.split(":")[0]!;
+    const routed = new URL(baseUrlInVm!).pathname;
+    expect(await askedThroughModelSocket(socket, `${routed}/v1/messages?beta=true`, { authorization: "Bearer kept-by-mirador", "anthropic-beta": "claude-code-20250219,oauth-2025-04-20" })).toBe(`200 {"answered":true}`);
+    expect(provider.requests.map(({ path, headers }) => ({ path, authorization: headers.authorization, beta: headers["anthropic-beta"], xApiKey: headers["x-api-key"] }))).toEqual([
+      { path: "/v1/messages?beta=true", authorization: `Bearer ${OAUTH_TOKEN}`, beta: "claude-code-20250219,oauth-2025-04-20", xApiKey: undefined },
+    ]);
   } finally {
     provider.close();
   }

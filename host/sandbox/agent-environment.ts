@@ -89,7 +89,7 @@ export interface AgentPlacesInVm {
 }
 
 /** Values of this computer's that mean nothing in the VM, or that the model proxy keeps on this computer. */
-const KEPT_ON_THIS_COMPUTER = [...MODEL_KEY_VARIABLES, "CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_BASE_URL", "ANTHROPIC_CUSTOM_HEADERS", "CLAUDE_CONFIG_DIR", "SSH_AUTH_SOCK", "ALL_PROXY", "all_proxy", "MIRADOR_URL", "MIRADOR_SCRIPT_TOKEN"];
+const KEPT_ON_THIS_COMPUTER = [...MODEL_KEY_VARIABLES, "ANTHROPIC_BASE_URL", "ANTHROPIC_CUSTOM_HEADERS", "CLAUDE_CONFIG_DIR", "SSH_AUTH_SOCK", "ALL_PROXY", "all_proxy", "MIRADOR_URL", "MIRADOR_SCRIPT_TOKEN"];
 
 /** What has a program load code from where it says, as the one would that drops from root to the agent user, before it has. */
 const loadsCode = (name: string) => name.startsWith("LD_") || name === "GCONV_PATH" || name === "LOCPATH";

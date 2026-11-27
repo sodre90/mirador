@@ -460,7 +460,7 @@ export const problems: Messages["problems"] = {
       `${agent} 的 pi 没有模型的密钥，或者它的密钥或请求头需要的某个值没有设置。`,
   },
   sandboxAgentSignsInElsewhere: {
-    subscription: (agent: string) => `${agent} 通过 Claude 订阅登录，这需要把登录信息放进沙箱：请改为给它的配置一个 API 密钥。`,
+    subscription: (agent: string) => `${agent} 通过 Claude 订阅登录，这需要把登录信息放进沙箱：请改为给它的配置一个 API 密钥，或用 claude setup-token 生成的 CLAUDE_CODE_OAUTH_TOKEN。`,
     bedrock: (agent: string) => `${agent} 使用 Amazon Bedrock，沙箱尚不支持。`,
     vertex: (agent: string) => `${agent} 使用 Google Vertex AI，沙箱尚不支持。`,
     foundry: (agent: string) => `${agent} 使用 Microsoft Foundry，沙箱尚不支持。`,

@@ -493,7 +493,8 @@ export const problems: Messages["problems"] = {
       `${agent} nem kap kulcsot a modelljéhez, vagy nincs beállítva egy érték, amely a kulcsához vagy egy fejlécéhez kell.`,
   },
   sandboxAgentSignsInElsewhere: {
-    subscription: (agent: string) => `${agent} Claude-előfizetéssel jelentkezik be, amelyet be kellene vinni a sandboxba: adj inkább API-kulcsot a profiljának.`,
+    subscription: (agent: string) =>
+      `${agent} Claude-előfizetéssel jelentkezik be, amelyet be kellene vinni a sandboxba: adj a profiljának inkább API-kulcsot vagy a claude setup-token parancsból kapott CLAUDE_CODE_OAUTH_TOKEN értéket.`,
     bedrock: (agent: string) => `${agent} az Amazon Bedrockot használja, amelyet a sandbox még nem támogat.`,
     vertex: (agent: string) => `${agent} a Google Vertex AI-t használja, amelyet a sandbox még nem támogat.`,
     foundry: (agent: string) => `${agent} a Microsoft Foundryt használja, amelyet a sandbox még nem támogat.`,

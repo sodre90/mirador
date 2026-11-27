@@ -32,7 +32,7 @@ const customHeaderLines = (text: string) =>
     return colon > 0 ? [[line.slice(0, colon).trim(), line.slice(colon + 1).trim()] as [string, string]] : [];
   });
 
-/** Where a Claude agent with this environment reaches its model: its own API, else Anthropic's, with its key; null where it has no key. */
+/** Where a Claude agent with this environment reaches its model: its own API, else Anthropic's, with its key or setup token; null where it has none. */
 export function modelRouteOf(environment: Record<string, string>): ModelRoute | null {
   const keyVariable = modelKeyVariableOf(environment);
   if (!keyVariable) return null;

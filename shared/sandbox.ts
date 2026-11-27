@@ -266,8 +266,8 @@ export type SandboxNotReadyWhy =
 /** How a Claude profile signs in that the sandbox's model proxy can't stand in for. */
 export type SignInElsewhere = "subscription" | "bedrock" | "vertex" | "foundry";
 
-/** The variables whose value is the key the model proxy adds, each in the header Anthropic's API reads it from. */
-export const MODEL_KEY_VARIABLES = ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"] as const;
+/** The variables whose value is the key or token the model proxy adds, each in the header Anthropic's API reads it from. */
+export const MODEL_KEY_VARIABLES = ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN"] as const;
 
 export type ModelKeyVariable = (typeof MODEL_KEY_VARIABLES)[number];
 

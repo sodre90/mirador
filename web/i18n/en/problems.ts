@@ -487,7 +487,8 @@ export const problems = {
     "no-key": (agent: string) => `${agent}'s pi has no key for its model, or a value its key or a header needs isn't set.`,
   } satisfies Record<PiModelElsewhere, (agent: string) => string>,
   sandboxAgentSignsInElsewhere: {
-    subscription: (agent: string) => `${agent} signs in with a Claude subscription, which would have to go into the sandbox: give its profile an API key instead.`,
+    subscription: (agent: string) =>
+      `${agent} signs in with a Claude subscription, which would have to go into the sandbox: give its profile an API key or a CLAUDE_CODE_OAUTH_TOKEN from claude setup-token instead.`,
     bedrock: (agent: string) => `${agent} uses Amazon Bedrock, which sandboxes don't support yet.`,
     vertex: (agent: string) => `${agent} uses Google Vertex AI, which sandboxes don't support yet.`,
     foundry: (agent: string) => `${agent} uses Microsoft Foundry, which sandboxes don't support yet.`,

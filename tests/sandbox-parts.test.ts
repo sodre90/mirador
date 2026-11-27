@@ -12,7 +12,7 @@ import { BASE_RECIPE, baseImageOf, BaseNotPulled, buildStepIn, defaultBaseTag, i
 import { GUARD_IN_VM } from "../host/sandbox/tools-folder.ts";
 import { ownBaseIn as podmansOwnBaseIn, PODMAN_READS } from "../host/sandbox/podman.ts";
 import { guardPlanOf, sandboxRefusalOf, type MiradorPlaces, type ProtectedParts } from "../host/sandbox/guarded-workspace.ts";
-import { fullImageName, isImageName, keepingNetworkOf, narrowsSandbox, NO_SANDBOX, reachesMoreThan, SANDBOX_NETWORKS, sandboxSettingIn, sameSandbox, sharesKernel, signInElsewhere, type SandboxNetwork, type SandboxSetting } from "../shared/sandbox.ts";
+import { fullImageName, isImageName, keepingNetworkOf, modelKeyVariableOf, narrowsSandbox, NO_SANDBOX, reachesMoreThan, SANDBOX_NETWORKS, sandboxSettingIn, sameSandbox, sharesKernel, signInElsewhere, type SandboxNetwork, type SandboxSetting } from "../shared/sandbox.ts";
 import { RUNS_SANDBOXES } from "./sandbox-computer.ts";
 
 const scratch = realpathSync(mkdtempSync(join(tmpdir(), "sandbox-parts-")));
@@ -197,13 +197,20 @@ test("a sandbox's network reads as closed unless it is on and reaches one known,
   expect(SANDBOX_NETWORKS.map((network) => SANDBOX_NETWORKS.filter((other) => reachesMoreThan(network, other)))).toEqual([[], ["closed"], ["closed", "internet"]]);
 });
 
-test("an agent that signs in with a key works in a sandbox; one on a subscription, Bedrock, Vertex or Foundry does not yet", () => {
+test("an agent that signs in with a key or setup token works in a sandbox; one on a plain subscription, Bedrock, Vertex or Foundry does not", () => {
   expect(signInElsewhere({ ANTHROPIC_API_KEY: "k" })).toBeNull();
   expect(signInElsewhere({ ANTHROPIC_AUTH_TOKEN: "t" })).toBeNull();
+  expect(signInElsewhere({ CLAUDE_CODE_OAUTH_TOKEN: "sk-ant-oat01-token" })).toBeNull();
   expect(signInElsewhere({})).toBe("subscription");
+  expect(signInElsewhere({ CLAUDE_CODE_OAUTH_TOKEN: "   " })).toBe("subscription");
   expect(signInElsewhere({ ANTHROPIC_API_KEY: "k", CLAUDE_CODE_USE_BEDROCK: "1" })).toBe("bedrock");
+  expect(signInElsewhere({ CLAUDE_CODE_OAUTH_TOKEN: "t", CLAUDE_CODE_USE_BEDROCK: "1" })).toBe("bedrock");
   expect(signInElsewhere({ ANTHROPIC_API_KEY: "k", CLAUDE_CODE_USE_VERTEX: "true" })).toBe("vertex");
   expect(signInElsewhere({ ANTHROPIC_API_KEY: "k", CLAUDE_CODE_USE_FOUNDRY: "on" })).toBe("foundry");
+  expect(modelKeyVariableOf({ ANTHROPIC_API_KEY: "k", ANTHROPIC_AUTH_TOKEN: "a", CLAUDE_CODE_OAUTH_TOKEN: "o" })).toBe("ANTHROPIC_API_KEY");
+  expect(modelKeyVariableOf({ ANTHROPIC_AUTH_TOKEN: "a", CLAUDE_CODE_OAUTH_TOKEN: "o" })).toBe("ANTHROPIC_AUTH_TOKEN");
+  expect(modelKeyVariableOf({ CLAUDE_CODE_OAUTH_TOKEN: "o" })).toBe("CLAUDE_CODE_OAUTH_TOKEN");
+  expect(modelKeyVariableOf({})).toBeNull();
 });
 
 test("the base image is told apart by its recipe, which builds on Debian, and its build says which step it is on; an agent's version is read from what its program says", async () => {
@@ -265,6 +272,18 @@ test("the agent's environment in the VM keeps the key, this Mac's own places and
   const { PATH, HOME, TMPDIR, USER, LOGNAME, SHELL, ...notReadByContainer } = inVm;
   expect(execProcessEnvironment(inVm, { HOME: "/Users/me", PATH: "/opt/mac/bin", SECRET_OF_THE_MAC: "s" }, CONTAINER_READS)).toEqual({ ...notReadByContainer, HOME: "/Users/me", PATH: "/opt/mac/bin" });
   expect([PATH, HOME, TMPDIR, USER, LOGNAME, SHELL].every((value) => args.join(" ").includes(`=${value}`))).toBe(true);
+
+  const oauthSecret = "sk-ant-oat01-kept-on-mac-1234";
+  const oauthInVm = environmentInVm(
+    { CLAUDE_CODE_OAUTH_TOKEN: oauthSecret, ANTHROPIC_API_KEY: "another-key", ANTHROPIC_AUTH_TOKEN: "another-token", ECHOED: `prefix ${oauthSecret}`, DEPLOY: "staging" },
+    { kind: { harness: "claude", keyVariable: "CLAUDE_CODE_OAUTH_TOKEN" }, version: "2.1.330", base: { image: "b", path: null } },
+    { configFolder: "/data/sandbox/r/claude", modelBaseUrl: "http://127.0.0.1:7702/p/p2" },
+    [oauthSecret],
+  );
+  expect(oauthInVm).toMatchObject({ CLAUDE_CODE_OAUTH_TOKEN: KEY_PLACEHOLDER, ANTHROPIC_BASE_URL: "http://127.0.0.1:7702/p/p2", DEPLOY: "staging" });
+  expect(oauthInVm.ANTHROPIC_API_KEY).toBeUndefined();
+  expect(oauthInVm.ANTHROPIC_AUTH_TOKEN).toBeUndefined();
+  expect(oauthInVm.ECHOED).toBeUndefined();
 });
 
 test("podman's exec process reads only this computer's own of the variables Podman reads, never the agent's, even where this computer has none", () => {
