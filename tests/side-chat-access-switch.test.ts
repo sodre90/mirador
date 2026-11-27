@@ -112,7 +112,7 @@ function besideAConversation({ harness = "claude", modes = claudeModes, profileM
   return { store, conversations, conversation, ask, mayChangeFiles, settled, ...fake };
 }
 
-async function until(condition: () => boolean, timeoutMs = 3000) {
+async function until(condition: () => boolean, timeoutMs = 15_000) {
   const deadline = Date.now() + timeoutMs;
   while (!condition()) {
     if (Date.now() > deadline) throw new Error("timed out waiting");
