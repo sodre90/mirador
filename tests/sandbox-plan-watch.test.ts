@@ -115,11 +115,12 @@ describe("a plan's watch", () => {
         async () => void (counts.outgrown += 1),
         EVERY_MS,
       );
+    const plansAs = (to: () => Now) => (now = to);
     const change = (to: () => Now) => {
-      now = to;
+      plansAs(to);
       writeFileSync(file, crypto.randomUUID());
     };
-    return { start, change, counts };
+    return { start, change, plansAs, counts };
   }
 
   const MORE: Now = { parts: { ...NOTHING, folders: [".husky"] } };
@@ -145,6 +146,23 @@ describe("a plan's watch", () => {
     const { outgrown } = counts;
     await afterSomeLooks();
     expect(counts.outgrown).toBe(outgrown);
+  });
+
+  test("looks through all of it when asked, though what the plan was made from stays, once for all asked while one waits, says so where there is more, and looks no more once stopped", async () => {
+    const { start, plansAs, counts } = watched();
+    const watch = await start();
+    await watch.lookThrough();
+    expect(counts).toEqual({ planned: 1, outgrown: 0 });
+    await Promise.all([watch.lookThrough(), watch.lookThrough(), watch.lookThrough()]);
+    expect(counts).toEqual({ planned: 2, outgrown: 0 });
+    plansAs(() => MORE);
+    await afterSomeLooks();
+    expect(counts).toEqual({ planned: 2, outgrown: 0 });
+    await watch.lookThrough();
+    expect(counts).toEqual({ planned: 4, outgrown: 1 });
+    watch.stop();
+    await watch.lookThrough();
+    expect(counts).toEqual({ planned: 4, outgrown: 1 });
   });
 
   test("says so once no plan can be made", async () => {

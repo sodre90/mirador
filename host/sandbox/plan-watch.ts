@@ -11,13 +11,17 @@ type PlanNow = WatchedPlan | { refused: SandboxBlocker };
 /**
  * Looks every so often, until stopped, whether git reads or runs more of a folder than the plan its guards go by protects,
  * as once the owner set a hooks folder, included a file or added a submodule, and says so each time it does. Less to
- * protect, or a look that fails, is nothing to say.
+ * protect, or a look that fails, is nothing to say. Those looks go by what the plan was made from; a repository made in
+ * the folder since is found only by a look through all of it, as at a turn's start and end, which costs too much to make
+ * every few seconds.
  */
 export class PlanWatch {
   private lookedAt: LookedAt;
   private timer?: ReturnType<typeof setTimeout>;
   private stopped = false;
   private failing = false;
+  private looking: Promise<void> = Promise.resolve();
+  private lookThroughQueued?: Promise<void>;
 
   constructor(
     private readonly plan: WatchedPlan,
@@ -34,15 +38,33 @@ export class PlanWatch {
     clearTimeout(this.timer);
   }
 
+  /**
+   * Looks through the whole folder, for repositories made in it since too, after any look under way; one asked for while
+   * another waits to start is that one.
+   */
+  lookThrough(): Promise<void> {
+    this.lookThroughQueued ??= this.lookAfterOthers(true, () => (this.lookThroughQueued = undefined));
+    return this.lookThroughQueued;
+  }
+
   private lookLater() {
     if (this.stopped) return;
-    this.timer = setTimeout(() => void this.look().finally(() => this.lookLater()), this.everyMs);
+    this.timer = setTimeout(() => void this.lookAfterOthers(false).finally(() => this.lookLater()), this.everyMs);
     this.timer.unref();
   }
 
-  private async look() {
+  private lookAfterOthers(throughAll: boolean, starting = () => {}) {
+    this.looking = this.looking.then(() => {
+      starting();
+      return this.look(throughAll);
+    });
+    return this.looking;
+  }
+
+  private async look(throughAll: boolean) {
+    if (this.stopped) return;
     try {
-      if ((await this.isOutgrownForGood()) && !this.stopped) await this.outgrown();
+      if ((await this.isOutgrownForGood(throughAll)) && !this.stopped) await this.outgrown();
       this.failing = false;
     } catch (error) {
       if (!this.failing) console.error("looking at what a sandbox's guard protects failed:", error);
@@ -51,12 +73,12 @@ export class PlanWatch {
   }
 
   /** A second look confirms the first, as a file that git or an editor replaces is missing for a moment. */
-  private async isOutgrownForGood() {
-    return (await this.isOutgrown()) && (await this.isOutgrown());
+  private async isOutgrownForGood(throughAll: boolean) {
+    return (await this.isOutgrown(throughAll)) && (await this.isOutgrown(throughAll));
   }
 
-  private async isOutgrown() {
-    if (!(await this.lookedAt.changed())) return false;
+  private async isOutgrown(throughAll: boolean) {
+    if (!throughAll && !(await this.lookedAt.changed())) return false;
     const now = await this.planNow();
     if ("refused" in now || !protects(this.plan.parts, now.parts)) return true;
     this.lookedAt = now.lookedAt;

@@ -555,10 +555,24 @@ export class Sandboxes {
     vm.stopTimer.unref();
   }
 
-  /** At each turn's end the held files are looked at again, in case a watch event was missed. */
+  /** At each turn's start the folders its VM works in are looked through. */
+  async turnStarted(owner: SandboxOwner) {
+    await this.lookThroughFolders(owner);
+  }
+
+  /** At each turn's end the held files are looked at again, in case a watch event was missed, and the folders looked through. */
   async turnEnded(owner: SandboxOwner) {
-    const helds = new Set(this.vmsOf(owner).flatMap((vm) => vm.helds));
-    await Promise.all([...helds].map((held) => held.check()));
+    await Promise.all(this.heldsOfVms(owner).map((held) => held.check()));
+    await this.lookThroughFolders(owner);
+  }
+
+  /** The folders the sandbox's VMs work in are looked through for what repositories made there since they started have git read or run. */
+  private async lookThroughFolders(owner: SandboxOwner) {
+    await Promise.all(this.heldsOfVms(owner).map((held) => this.planWatches.get(held)?.lookThrough()));
+  }
+
+  private heldsOfVms(owner: SandboxOwner) {
+    return [...new Set(this.vmsOf(owner).flatMap((vm) => vm.helds))];
   }
 
   async answerHeldChange(owner: SandboxOwner, changeId: string, answer: HeldChangeAnswer) {
@@ -1135,12 +1149,13 @@ export class Sandboxes {
 }
 
 /** What the conversations of sandboxed rooms and workspaces need of the sandboxes. */
-export type SandboxedAgents = Pick<Sandboxes, "launch" | "confirmedRunning" | "turnEnded" | "settleHeldFilesFor" | "stopSandboxesWorkingIn" | "stop" | "mountedFolders" | "runsWithOtherFolders">;
+export type SandboxedAgents = Pick<Sandboxes, "launch" | "confirmedRunning" | "turnStarted" | "turnEnded" | "settleHeldFilesFor" | "stopSandboxesWorkingIn" | "stop" | "mountedFolders" | "runsWithOtherFolders">;
 
 /** Until the host gives its conversations the sandboxes, a sandboxed room's or workspace's agent never starts. */
 export const NO_SANDBOXES: SandboxedAgents = {
   launch: () => Promise.reject(new SandboxNotReady({ kind: "unavailable", why: "turned-off" })),
   confirmedRunning: () => false,
+  turnStarted: async () => {},
   turnEnded: async () => {},
   settleHeldFilesFor: async () => {},
   stopSandboxesWorkingIn: async () => {},

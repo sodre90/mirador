@@ -631,6 +631,34 @@ describe("once git reads or runs more of a folder than the guards of the VMs tha
     await sandboxes.stopAll();
   });
 
+  test.skipIf(!RUNS_SANDBOXES)("they stop at a turn's start or end for what a repository made in the folder since has git read or run, which the looks in between don't find, and the next one guards it; a plain new one keeps them running", async () => {
+    const { launcher, sandboxes, launch } = computer({ planLookedAtMs: LOOKED_AT_MS });
+    const workspace = repository();
+    const launched = await launch(WORKSPACE, workspace);
+    const vendored = repositoryAt(join(workspace, "vendor", "lib"));
+    git(vendored, "config", "core.hooksPath", "githooks");
+    await afterSomeLooks();
+    expect(launcher.running()).toHaveLength(1);
+    await sandboxes.turnStarted(WORKSPACE);
+    expect(await settled(() => launcher.running().length === 0)).toBe(true);
+    expect(launched.goneAs!()).toEqual(OUTGROWN);
+
+    const again = await launch(WORKSPACE, workspace);
+    expect(guardedByPlan(launcher.started.at(-1)!)[0]!.parts.folders).toEqual(["vendor/lib/githooks"]);
+    const tools = repositoryAt(join(workspace, "tools"));
+    await sandboxes.turnEnded(WORKSPACE);
+    await afterSomeLooks();
+    expect(launcher.running()).toHaveLength(1);
+    writeFileSync(join(tools, "team.cfg"), "");
+    git(tools, "config", "include.path", "../team.cfg");
+    await sandboxes.turnEnded(WORKSPACE);
+    expect(await settled(() => launcher.running().length === 0)).toBe(true);
+    expect(again.goneAs!()).toEqual(OUTGROWN);
+    await launch(WORKSPACE, workspace);
+    expect(guardedByPlan(launcher.started.at(-1)!)[0]!.parts.files).toContain("tools/team.cfg");
+    await sandboxes.stopAll();
+  });
+
   test.skipIf(!RUNS_SANDBOXES)("they stop in a folder added read and write too, and one that was starting there doesn't start", async () => {
     const { launcher, sandboxes, launch, set } = computer({ planLookedAtMs: LOOKED_AT_MS });
     const [workspace, added] = [repository(), repository()];

@@ -468,6 +468,42 @@ test("a sandboxed conversation doesn't start its VM where another Mirador on thi
   await expect(lastAgentMessage(page)).toHaveText("Hello again.");
 });
 
+test("a repository the owner makes in the workspace while its VM runs, with a hooks folder of its own, stops the VM by the turn's end, and the next turn works in one that guards it", async ({ page }) => {
+  test.skip(!sandboxesRunHere, "Sandboxes run on macOS 26 on Apple silicon only.");
+  const shared = join(host.root, "shared-with-another");
+  await signIn(page, host);
+  const card = workspaceCard(page, shared);
+  const previousUrl = page.url();
+  await card.getByRole("button", { name: "+ New conversation" }).click();
+  await expect(page).not.toHaveURL(previousUrl);
+  await sendMessage(page, "SAY Ready.");
+  await waitForTurnToEnd(page);
+
+  const runs = () => containerCalls().filter(([command]) => command === "run");
+  const runsBefore = runs().length;
+  const run = runs().findLast((each) => JSON.stringify(each).includes(realpathSync(shared)))!;
+  const vm = run[run.indexOf("--name") + 1]!;
+  const vmStopped = () => containerCalls().some(([command, name]) => command === "stop" && name === vm);
+  const holdsTheTurn = join(host.root, "holds-the-turn-89");
+  await sendMessage(page, `WRITE ${JSON.stringify([{ waitFor: holdsTheTurn }])}`);
+  await expect.poll(() => promptsSoFar().includes(holdsTheTurn)).toBe(true);
+
+  const vendored = join(shared, "vendor", "lib");
+  mkdirSync(vendored, { recursive: true });
+  execFileSync("git", ["init", "-q", vendored]);
+  execFileSync("git", ["-C", vendored, "config", "core.hooksPath", "githooks"]);
+  writeFileSync(holdsTheTurn, "");
+  await expect.poll(vmStopped, { timeout: 15_000 }).toBe(true);
+  await waitForTurnToEnd(page);
+
+  await sendMessage(page, "SAY Guarded.");
+  await waitForTurnToEnd(page);
+  await expect(lastAgentMessage(page)).toHaveText("Guarded.");
+  expect(runs()).toHaveLength(runsBefore + 1);
+  const [workspaceGuarded] = guardedIn(mountsOfRun(runs().at(-1)!));
+  expect(workspaceGuarded).toMatchObject({ folder: realpathSync(shared), parts: { folders: ["vendor/lib/githooks"] } });
+});
+
 test("where none of the profiles can run in the sandbox, its settings say so and name the kind that could", async ({ page }) => {
   await signIn(page, host);
   const card = projectCard(page);

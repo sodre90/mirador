@@ -2223,6 +2223,7 @@ export class ConversationService {
         this.turnIsOver(conversationId, turn, turnSeq, undefined);
         return;
       }
+      this.lookThroughSandboxFolders(conversationId);
       const sessionId = await this.ensureSession(conversationId);
       sessionOpened = true;
       this.setStatus(conversationId, "running");
@@ -2308,6 +2309,13 @@ export class ConversationService {
     const harness = this.runtimes.get(conversationId)?.harness;
     const conversation = this.store.findConversation(conversationId);
     if (harness && conversation && this.sandboxStarts.has(harness) && !this.sandboxOf(conversation)) void this.killAgent(harness, { kind: "stopped" });
+  }
+
+  /** As a turn starts, the folders its sandbox's VM works in are looked through for repositories made there since it started, in the background. */
+  private lookThroughSandboxFolders(conversationId: string) {
+    const conversation = this.store.findConversation(conversationId);
+    const owner = conversation && !conversation.broughtIntoRoom && this.sandboxOf(conversation)?.owner;
+    if (owner) void this.sandboxes.turnStarted(owner).catch((error: unknown) => console.error(`looking through the folders of ${ownerKey(owner)} failed:`, error));
   }
 
   /** A sandbox's agent config files are looked at again as each turn ends, in case a change went unnoticed. */
