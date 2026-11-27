@@ -1,6 +1,7 @@
 import type { ContainerCli, ContainerRun, ContainerRunOptions } from "../host/sandbox/container-cli.ts";
 import { checkFinding, imageOfRun, isBaseCheck } from "./fake-container-cli.ts";
 import { runHere } from "./in-vm-here.ts";
+import { mountsOfRun } from "./guard-told.ts";
 
 const done = (output = ""): ContainerRun => ({ exitCode: 0, output, stdout: output });
 const failed = (output: string, exitCode = 125): ContainerRun => ({ exitCode, output, stdout: "" });
@@ -109,7 +110,7 @@ export class FakePodmanCli implements ContainerCli {
     this.containers.set(name, labels);
     this.mounts.set(
       name,
-      args.flatMap((arg, index) => (args[index - 1] === "-v" ? [{ Source: arg.split(":")[0]!, RW: arg.split(":")[2] !== "ro" }] : [])),
+      mountsOfRun(args).map(({ source, readOnly }) => ({ Source: source, RW: !readOnly })),
     );
     if (this.endsAtStart !== null) this.ending.set(name, this.endsAtStart);
     return done(name);

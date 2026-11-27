@@ -69,7 +69,7 @@ const agentIn = (workspace: string, changes: Partial<AgentInSandbox> = {}): Agen
 
 const notReady = (why: Partial<SandboxNotReadyWhy>) => ({ problem: { code: "sandbox-not-ready", why } });
 
-const socketsFolderOf = (run: string[]) => dirname(run.find((arg, index) => run[index - 1] === "-v" && arg.endsWith(":/run/mirador/canvas.sock"))!.split(":")[0]!);
+const socketsFolderOf = (run: string[]) => dirname(mountsOfRun(run).find(({ target }) => target === "/run/mirador/canvas.sock")!.source);
 
 describe("a room's sandbox", () => {
   test.skipIf(!RUNS_SANDBOXES)("starts an agent in the room's VM as the agent user, never root, with no network, the workspace through the guard alone, and the key nowhere in it", async () => {
