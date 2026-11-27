@@ -7,7 +7,7 @@ import { askPodman, podmanAvailability, podmanProgram, podmanStorageIn, SELINUX_
 import { containerCli, lastLineOf, type ContainerCli } from "./container-cli.ts";
 import { droppedTo, environmentFlags, execProcessEnvironment, readByTool } from "./exec-environment.ts";
 import { baseImageOf, buildArguments, buildStepIn, imagesOfKind, imageTag, mustRun, RECIPE, type AgentImage } from "./image.ts";
-import { HOST_LABEL, SandboxNotReady, VM_READY_LINE, type AgentInVm, type Mount, type VmPlan, type VmLauncher } from "./vm-launcher.ts";
+import { HOST_LABEL, isAnotherMiradors, SandboxNotReady, VM_READY_LINE, withoutTrailingSlash, type AgentInVm, type Mount, type VmPlan, type VmLauncher } from "./vm-launcher.ts";
 
 const READY_WITHIN_S = 30;
 const BUILD_TIMEOUT_MS = 30 * 60_000;
@@ -108,17 +108,36 @@ const AGENT_RUN_MOST_BYTES = 16 * 1024 * 1024;
 
 type ListedContainer = { Names?: unknown; Labels?: Record<string, unknown> | null };
 
-/** The names of the containers `podman ps --format json` lists whose label has this value. */
-export function containersLabelled(listed: string, label: string, value: string): string[] {
+function arrayIn<T>(json: string): T[] | null {
   try {
-    const containers = JSON.parse(listed) as ListedContainer[];
-    if (!Array.isArray(containers)) return [];
-    const labelled = containers.filter(({ Labels }) => Labels?.[label] === value);
-    return labelled.flatMap(({ Names }) => (Array.isArray(Names) && typeof Names[0] === "string" ? [Names[0]] : []));
+    const parsed = JSON.parse(json);
+    return Array.isArray(parsed) ? parsed : null;
   } catch {
-    return [];
+    return null;
   }
 }
+
+const nameOf = ({ Names }: ListedContainer) => (Array.isArray(Names) && typeof Names[0] === "string" ? [Names[0]] : []);
+
+/** The names of the containers `podman ps --format json` lists whose label has this value. */
+export const containersLabelled = (listed: string, label: string, value: string): string[] =>
+  (arrayIn<ListedContainer>(listed) ?? [])
+    .filter(({ Labels }) => Labels?.[label] === value)
+    .flatMap(nameOf);
+
+/** The names of the containers `podman ps --format json` lists that another Mirador on this computer started. */
+export const othersContainersIn = (listed: string, hostLabel: string): string[] =>
+  (arrayIn<ListedContainer>(listed) ?? [])
+    .filter(({ Labels }) => isAnotherMiradors(Labels?.[HOST_LABEL], hostLabel))
+    .flatMap(nameOf);
+
+type InspectedContainer = { Mounts?: { Source?: unknown; RW?: unknown }[] };
+
+/** What the containers `podman inspect --format json` gives mount read and write; null where it gives no list of them. */
+export const writableSourcesIn = (inspected: string): string[] | null =>
+  arrayIn<InspectedContainer>(inspected)?.flatMap(({ Mounts }) =>
+    (Array.isArray(Mounts) ? Mounts : []).flatMap(({ Source, RW }) => (RW === true && typeof Source === "string" ? [withoutTrailingSlash(Source)] : [])),
+  ) ?? null;
 
 /** The names `podman images --format json` lists, `localhost/mirador-room-agent:…` among them; an image without a name has none. */
 export function imageNamesIn(listed: string): string[] {
@@ -225,6 +244,19 @@ export class Podman implements VmLauncher {
   async listMiradors(hostLabel: string) {
     const listed = await this.usable().run(["ps", "--all", "--filter", `label=${HOST_LABEL}=${hostLabel}`, "--format", "json"]);
     return containersLabelled(listed.stdout, HOST_LABEL, hostLabel);
+  }
+
+  /** A container gone between the list and the look gets inspect to fail, but it still prints the others. */
+  async writtenByOtherMiradors(hostLabel: string) {
+    const cli = this.usable();
+    const listed = await cli.run(["ps", "--all", "--filter", `label=${HOST_LABEL}`, "--format", "json"]);
+    if (listed.exitCode !== 0) throw new SandboxNotReady({ kind: "could-not-start", cause: `the VMs of other Miradors here couldn't be listed: ${lastLineOf(listed.output)}` });
+    const others = othersContainersIn(listed.stdout, hostLabel);
+    if (others.length === 0) return [];
+    const inspected = await cli.run(["inspect", "--type", "container", "--format", "json", ...others]);
+    const written = writableSourcesIn(inspected.stdout);
+    if (!written) throw new SandboxNotReady({ kind: "could-not-start", cause: `the VMs of other Miradors here couldn't be looked at: ${lastLineOf(inspected.output)}` });
+    return written;
   }
 
   async removeLeftovers(hostLabel: string) {

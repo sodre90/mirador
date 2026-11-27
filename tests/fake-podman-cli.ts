@@ -18,6 +18,8 @@ export class FakePodmanCli implements ContainerCli {
   readonly calls: string[][] = [];
   readonly images = new Set<string>(["docker.io/library/postgres:16"]);
   readonly containers = new Map<string, Record<string, string>>();
+  /** What each container mounts, as `podman inspect` tells it. */
+  private readonly mounts = new Map<string, { Source: string; RW: boolean }[]>();
   /** A run whose arguments this matches fails with what it gives. */
   failing: (args: string[]) => string | null = () => null;
   /** What a container's first process says before it ends, where it ends at once and is removed. */
@@ -49,6 +51,7 @@ export class FakePodmanCli implements ContainerCli {
     if (command === "container" && sub === "exists") return this.containers.has(args[2]!) ? done() : failed("", 1);
     if (command === "exec") return this.exec(args, options);
     if (command === "ps") return done(JSON.stringify([...this.containers].map(([name, labels]) => ({ Names: [name], Labels: labels }))));
+    if (command === "inspect") return this.inspect(args.slice(1).filter((arg, index, rest) => !arg.startsWith("-") && !rest[index - 1]?.startsWith("--")));
     return failed(`unknown command ${command}`);
   }
 
@@ -73,6 +76,10 @@ export class FakePodmanCli implements ContainerCli {
     const name = valueAfter(args, "--name");
     const labels = Object.fromEntries(args.flatMap((arg, index) => (args[index - 1] === "--label" ? [arg.split("=") as [string, string]] : [])));
     this.containers.set(name, labels);
+    this.mounts.set(
+      name,
+      args.flatMap((arg, index) => (args[index - 1] === "-v" ? [{ Source: arg.split(":")[0]!, RW: arg.split(":")[2] !== "ro" }] : [])),
+    );
     if (this.endsAtStart !== null) this.ending.set(name, this.endsAtStart);
     return done(name);
   }
@@ -93,8 +100,16 @@ export class FakePodmanCli implements ContainerCli {
       .slice(1)
       .filter((arg, index, rest) => !arg.startsWith("-") && rest[index - 1] !== "--time")
       .filter((name) => !this.staying.has(name))
-      .forEach((name) => this.containers.delete(name));
+      .forEach((name) => this.containers.delete(name) && this.mounts.delete(name));
     return done();
+  }
+
+  /** As podman does, the containers it finds, and a failure where it misses one. */
+  private inspect(names: string[]) {
+    if (names.length === 0) return failed("Error: no names or ids specified");
+    const found = names.filter((name) => this.containers.has(name)).map((name) => ({ Name: name, Config: { Labels: this.containers.get(name) }, Mounts: this.mounts.get(name) }));
+    const printed = JSON.stringify(found);
+    return found.length === names.length ? done(printed) : { exitCode: 125, output: `${printed}\nError: no such container`, stdout: printed };
   }
 
   /** `exec -i --user U [-w DIR] [-e …]… CONTAINER COMMAND…`: the command, run on this computer as it would run in the sandbox. */

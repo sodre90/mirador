@@ -6,6 +6,14 @@ const failed = (output: string): ContainerRun => ({ exitCode: 1, output, stdout:
 
 const valueAfter = (args: string[], flag: string) => args[args.indexOf(flag) + 1]!;
 
+/** Each `-v source:target[:ro]` of a run, as `container list` shows a folder's: its source with a slash at its end. */
+const mountsOf = (args: string[]) =>
+  args.flatMap((arg, index) => {
+    if (args[index - 1] !== "-v") return [];
+    const [source, , access] = arg.split(":");
+    return [{ source: `${source}/`, options: access === "ro" ? ["ro"] : [] }];
+  });
+
 /** The images a build of the recipe pulls for its stages. */
 export const BASE_IMAGES = ["docker.io/library/node:22-bookworm-slim", "docker.io/oven/bun:1.4.4-slim"];
 
@@ -17,6 +25,8 @@ export class FakeContainerCli implements ContainerCli {
   builderRunning = false;
   readonly images = new Set<string>(["docker.io/library/node:22-bookworm-slim"]);
   readonly vms = new Map<string, Record<string, string>>();
+  /** What each VM mounts, as `container list` tells it. */
+  private readonly mounts = new Map<string, { source: string; options: string[] }[]>();
   /** A run whose arguments this matches fails with what it gives. */
   failing: (args: string[]) => string | null = () => null;
   buildSteps = 3;
@@ -38,11 +48,14 @@ export class FakeContainerCli implements ContainerCli {
     if (command === "run") return this.start(args);
     if (command === "logs") return this.vms.has(args.at(-1)!) ? done("relays ready\n") : failed("not found");
     if (command === "stop" || command === "delete") {
-      args.slice(1).filter((arg) => !arg.startsWith("-")).forEach((name) => this.vms.delete(name));
+      args
+        .slice(1)
+        .filter((arg) => !arg.startsWith("-"))
+        .forEach((name) => this.vms.delete(name) && this.mounts.delete(name));
       return done();
     }
     if (command === "exec") return this.exec(args, options);
-    if (command === "list") return done(JSON.stringify([...this.vms].map(([id, labels]) => ({ configuration: { id, labels }, status: "running" }))));
+    if (command === "list") return done(JSON.stringify([...this.vms].map(([id, labels]) => ({ configuration: { id, labels, mounts: this.mounts.get(id) ?? [] }, status: "running" }))));
     return failed(`unknown command ${command}`);
   }
 
@@ -84,6 +97,7 @@ export class FakeContainerCli implements ContainerCli {
     const name = valueAfter(args, "--name");
     const labels = Object.fromEntries(args.flatMap((arg, index) => (args[index - 1] === "--label" ? [arg.split("=") as [string, string]] : [])));
     this.vms.set(name, labels);
+    this.mounts.set(name, mountsOf(args));
     return done(name);
   }
 }

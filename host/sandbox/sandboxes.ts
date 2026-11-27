@@ -690,6 +690,18 @@ export class Sandboxes {
     vm.helds.forEach((held) => this.vmsAmong.get(held)?.delete(vm));
   }
 
+  /**
+   * Where the VMs of other Miradors on this computer write now, without links; throws where one writes on the way to the
+   * workspace, in it, or around or in what this VM is to mount, as that host plans nothing with this one and its agents
+   * could swap a folder for a link.
+   */
+  private async keepClearOfOtherMiradors(way: WayTo, mounted: string[]): Promise<string[]> {
+    const written = await Promise.all((await this.launcher.writtenByOtherMiradors(this.hostLabel)).map(realOrAsIs));
+    const folder = written.find((each) => isOnTheWay(each, way) || mounted.some((mount) => overlap(each, mount)));
+    if (folder) throw new SandboxNotReady({ kind: "blocked", blocker: { kind: "workspace-overlaps-other-mirador", folder } });
+    return written;
+  }
+
   /** Nothing is planned while a VM that writes on the way to the workspace stops, until it has. */
   private async untilNoneStopsOnTheWay(way: WayTo, vm: SandboxVm) {
     const stopping = () => this.othersOnTheWay(way, vm).flatMap((other) => other.stopping ?? []);
@@ -867,8 +879,9 @@ export class Sandboxes {
     if (!way || !workspace) throw new HostProblemError({ code: "workspace-gone" });
     const refused = (await this.workspaceRefusal(workspace)) ?? (await this.besideOthersRefusal(vm.workspace!, vm.owner));
     if (refused) throw new SandboxNotReady({ kind: "blocked", blocker: refused });
+    const otherMiradorsWrite = await this.keepClearOfOtherMiradors(way, []);
     const guardedWorkspace = await this.guardedIn(workspace, way, vm);
-    const folders = vm.broughtAgent === null ? await this.addedFoldersIn(vm) : null;
+    const folders = vm.broughtAgent === null ? await this.addedFoldersIn(vm, otherMiradorsWrite) : null;
     // Unix socket paths hold about a hundred bytes on macOS, so each VM's sockets live in a short private folder.
     vm.socketsFolder = await mkdtemp(join(this.socketsParent, SOCKETS_FOLDER_PREFIX));
     const mounted = [guardedWorkspace, ...(folders?.guarded ?? [])];
@@ -878,6 +891,7 @@ export class Sandboxes {
     const relays = [...seen.relays, wayOut];
     const inVm = (socket: string) => `${SOCKETS_IN_VM}/${basename(socket)}`;
     this.assertNotStopped(vm);
+    await this.keepClearOfOtherMiradors(way, [...vm.writableRoots, ...(folders?.readOnly ?? []).map(({ source }) => source)]);
     vm.launching = this.launcher.start({
       name: vm.name,
       labels: { [HOST_LABEL]: this.hostLabel, [OWNER_LABEL]: ownerKey(vm.owner) },
@@ -1040,8 +1054,8 @@ export class Sandboxes {
    * The sandbox's added folders as its VM shows them, each looked at as it stands now: a read-only one mounted at its own
    * path, and one read and write guarded as the workspace is, with held files of its own. One that fails is left out.
    */
-  private async addedFoldersIn(vm: SandboxVm): Promise<{ readOnly: Mount[]; guarded: PlannedFolder[]; started: FoldersMounted }> {
-    const checked = await foldersMounted(vm.folders, await this.surroundingsBesideRunning(vm));
+  private async addedFoldersIn(vm: SandboxVm, otherMiradorsWrite: string[]): Promise<{ readOnly: Mount[]; guarded: PlannedFolder[]; started: FoldersMounted }> {
+    const checked = await foldersMounted(vm.folders, await this.surroundingsBesideRunning(vm, otherMiradorsWrite));
     const guarded: PlannedFolder[] = [];
     for (const { path } of checked.mounted.filter(({ writable }) => writable)) {
       const planned = await this.writableFolderIn(vm, path);
@@ -1053,10 +1067,14 @@ export class Sandboxes {
     return { readOnly, guarded, started: { mounted, leftOut: checked.leftOut } };
   }
 
-  /** As the owner set the other sandboxes, and where their VMs write now, as one whose room moved to another workspace may still. */
-  private async surroundingsBesideRunning(vm: SandboxVm): Promise<FolderSurroundings> {
+  /**
+   * As the owner set the other sandboxes, and where their VMs write now, as one whose room moved to another workspace may
+   * still, or one of another Mirador on this computer.
+   */
+  private async surroundingsBesideRunning(vm: SandboxVm, otherMiradorsWrite: string[]): Promise<FolderSurroundings> {
     const surroundings = await this.folderSurroundings(vm.owner);
-    const writtenNow = [...this.vms.values(), ...this.lingering].filter((other) => other !== vm).flatMap(({ writableRoots }) => writableRoots);
+    const writtenHere = [...this.vms.values(), ...this.lingering].filter((other) => other !== vm).flatMap(({ writableRoots }) => writableRoots);
+    const writtenNow = [...writtenHere, ...otherMiradorsWrite];
     return { ...surroundings, otherSandboxes: { ...surroundings.otherSandboxes, workspaces: [...surroundings.otherSandboxes.workspaces, ...writtenNow] } };
   }
 

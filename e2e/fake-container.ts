@@ -13,6 +13,8 @@ interface State {
   builderRunning: boolean;
   images: string[];
   vms: Record<string, Record<string, string>>;
+  /** What each VM mounts, by its name, as `container list` shows it. */
+  mounts?: Record<string, { source: string; options: string[] }[]>;
 }
 
 const AGENT = join(import.meta.dirname, "fake-acp-agent.ts");
@@ -36,6 +38,11 @@ const change = (changing: (state: State) => void) => {
 };
 const valueAfter = (flag: string) => args[args.indexOf(flag) + 1]!;
 const valuesAfter = (flag: string) => args.flatMap((arg, index) => (args[index - 1] === flag ? [arg] : []));
+const mountsOfRun = () =>
+  valuesAfter("-v").map((mount) => {
+    const [source, , access] = mount.split(":");
+    return { source: `${source}/`, options: access === "ro" ? ["ro"] : [] };
+  });
 
 async function waitForFile(path: string | undefined) {
   while (path && !existsSync(path)) await Bun.sleep(100);
@@ -101,7 +108,10 @@ switch (command) {
     if (sub === "delete") change((state) => (state.images = state.images.filter((name) => !args.slice(2).includes(name))));
     break;
   case "run":
-    change((state) => (state.vms[valueAfter("--name")] = Object.fromEntries(valuesAfter("--label").map((label) => label.split("=") as [string, string]))));
+    change((state) => {
+      state.vms[valueAfter("--name")] = Object.fromEntries(valuesAfter("--label").map((label) => label.split("=") as [string, string]));
+      state.mounts = { ...state.mounts, [valueAfter("--name")]: mountsOfRun() };
+    });
     break;
   case "logs":
     if (read().vms[args.at(-1)!]) console.log("relays ready");
@@ -111,10 +121,15 @@ switch (command) {
     break;
   case "stop":
   case "delete":
-    change((state) => args.slice(1).forEach((name) => delete state.vms[name]));
+    change((state) =>
+      args.slice(1).forEach((name) => {
+        delete state.vms[name];
+        delete state.mounts?.[name];
+      }),
+    );
     break;
   case "list":
-    console.log(JSON.stringify(Object.entries(read().vms).map(([id, labels]) => ({ configuration: { id, labels } }))));
+    console.log(JSON.stringify(Object.entries(read().vms).map(([id, labels]) => ({ status: "running", configuration: { id, labels, mounts: read().mounts?.[id] ?? [] } }))));
     break;
   default:
     console.error(`fake container: no ${command}`);

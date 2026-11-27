@@ -66,6 +66,8 @@ export function sandboxBlockerText(blocker: SandboxBlocker, words: ProblemWords)
       return words.sandboxWorkspaceOverlapsSandboxWorkspace(blocker.folder);
     case "way-through-link-sandbox-left":
       return words.sandboxWayThroughLinkSandboxLeft(blocker.link);
+    case "workspace-overlaps-other-mirador":
+      return words.sandboxWorkspaceOverlapsOtherMirador(blocker.folder);
     default:
       return words.sandboxWorkspace[blocker.kind];
   }

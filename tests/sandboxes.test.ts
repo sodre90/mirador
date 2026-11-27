@@ -379,3 +379,26 @@ describe("a room's sandbox that is not ready fails the agent's start, and starts
     await failingStart({ kind: "blocked", blocker: { kind: "workspace-is-mirador" } }, (_, workspace, host) => void (host.places = { ...host.places, checkout: workspace }));
   });
 });
+
+describe("two Miradors on one computer", () => {
+  test.skipIf(!RUNS_SANDBOXES)("a VM doesn't start where another Mirador's VM writes, in the workspace or around it, and does once that one has stopped", async () => {
+    const cli = new FakeContainerCli();
+    const outer = repository();
+    const inner = join(outer, "app");
+    mkdirSync(inner);
+    Bun.spawnSync(["git", "init", "-q", inner]);
+    const first = new Sandboxes(new AppleContainer(cli, AVAILABLE), hostFor(outer).host, 60_000);
+    const second = new Sandboxes(new AppleContainer(cli, AVAILABLE), hostFor(inner).host, 60_000);
+    await first.launch(agentIn(outer));
+
+    const overlapping = notReady({ kind: "blocked", blocker: { kind: "workspace-overlaps-other-mirador", folder: outer } });
+    await expect(second.launch(agentIn(inner))).rejects.toMatchObject(overlapping);
+    expect(cli.callsOf("run")).toHaveLength(1);
+
+    await first.stopAll();
+    await second.launch(agentIn(inner));
+    expect(cli.callsOf("run")).toHaveLength(2);
+    await expect(first.launch(agentIn(outer))).rejects.toMatchObject(notReady({ kind: "blocked", blocker: { kind: "workspace-overlaps-other-mirador", folder: inner } }));
+    await second.stopAll();
+  });
+});

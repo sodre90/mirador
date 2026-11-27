@@ -3,7 +3,7 @@ import { appleContainerRuntime } from "./availability.ts";
 import { containerCli, lastLineOf, type ContainerCli } from "./container-cli.ts";
 import { droppedTo, environmentFlags, execProcessEnvironment, readByTool } from "./exec-environment.ts";
 import { buildImage, imageExists, imageTag, serviceRuns, startService, type AgentImage } from "./image.ts";
-import { HOST_LABEL, SandboxNotReady, VM_READY_LINE, type AgentInVm, type Mount, type VmPlan, type VmLauncher } from "./vm-launcher.ts";
+import { HOST_LABEL, isAnotherMiradors, SandboxNotReady, VM_READY_LINE, withoutTrailingSlash, type AgentInVm, type Mount, type VmPlan, type VmLauncher } from "./vm-launcher.ts";
 
 const READY_WITHIN_S = 30;
 
@@ -53,7 +53,9 @@ export const execArguments = ({ vm, user, workingDirectory, environment, command
   ...droppedTo(user, command),
 ];
 
-type ListedContainer = { configuration?: { id?: unknown; labels?: Record<string, unknown> } };
+type ListedMount = { source?: unknown; options?: unknown };
+
+type ListedContainer = { configuration?: { id?: unknown; labels?: Record<string, unknown>; mounts?: ListedMount[] } };
 
 function containersIn(listed: string): ListedContainer[] {
   try {
@@ -71,6 +73,17 @@ export const vmIdsIn = (listed: string): string[] => containersIn(listed).flatMa
 
 /** The ids of the containers `container list --format json` gives whose label has this value. */
 export const vmIdsLabelled = (listed: string, label: string, value: string): string[] => containersIn(listed).filter(({ configuration }) => configuration?.labels?.[label] === value).flatMap(idOf);
+
+const isReadOnly = ({ options }: ListedMount) => Array.isArray(options) && options.includes("ro");
+
+const writableSourcesOf = (mounts: unknown): string[] =>
+  (Array.isArray(mounts) ? (mounts as ListedMount[]) : []).filter((mount) => typeof mount?.source === "string" && !isReadOnly(mount)).map(({ source }) => withoutTrailingSlash(source as string));
+
+/** What the containers `container list --all --format json` gives that another Mirador started mount read and write, as this Mac spells it. */
+export function writtenByOthersIn(listed: string, hostLabel: string): string[] {
+  const othersVms = containersIn(listed).filter(({ configuration }) => isAnotherMiradors(configuration?.labels?.[HOST_LABEL], hostLabel));
+  return othersVms.flatMap(({ configuration }) => writableSourcesOf(configuration?.mounts));
+}
 
 /** Rooms' VMs on Apple's `container`, macOS 26 on Apple silicon: its service started and the image built on first use. */
 export class AppleContainer implements VmLauncher {
@@ -125,6 +138,12 @@ export class AppleContainer implements VmLauncher {
   async listMiradors(hostLabel: string) {
     const listed = await this.usable().run(["list", "--all", "--format", "json"]);
     return vmIdsLabelled(listed.stdout, HOST_LABEL, hostLabel);
+  }
+
+  async writtenByOtherMiradors(hostLabel: string) {
+    const listed = await this.usable().run(["list", "--all", "--format", "json"]);
+    if (listed.exitCode !== 0) throw new SandboxNotReady({ kind: "could-not-start", cause: `the VMs of other Miradors here couldn't be listed: ${lastLineOf(listed.output)}` });
+    return writtenByOthersIn(listed.stdout, hostLabel);
   }
 
   async removeLeftovers(hostLabel: string) {

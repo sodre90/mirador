@@ -485,6 +485,7 @@ export const problems: Messages["problems"] = {
   sandboxWorkspaceOverlapsSandboxFolder: (folder: string) => `另一个已开启的沙箱以读写方式添加了 ${folder}，它就是这个工作区、包含它或位于其中：只能有一个沙箱在那里写入。`,
   sandboxWorkspaceOverlapsSandboxWorkspace: (folder: string) => `另一个已开启的沙箱在 ${folder} 中工作，它包含这个工作区或位于其中：只能有一个沙箱在那里写入。`,
   sandboxWayThroughLinkSandboxLeft: (link: string) => `通往这个工作区的路径经过链接 ${link}，它位于某个沙箱曾经工作过的文件夹中，沙箱的智能体可能让它指向任何地方：要使用沙箱，请在链接指向的文件夹打开这个工作区。`,
+  sandboxWorkspaceOverlapsOtherMirador: (folder: string) => `这台电脑上的另一个 Mirador 有一个正在工作的沙箱，它会写入 ${folder}，也就是这个沙箱要工作的地方或通往那里的路径：要使用这个沙箱，请等那个沙箱停止，或在那个 Mirador 中停止它。`,
   sandboxTooManyHeldChanges: (most: number) => `它的 Agent 改动了超过 ${most} 个暂扣的文件，正等待你的答复：请先允许或丢弃其中一些。`,
   sandboxSetupFailed: (cause: string) => `设置沙箱失败：${cause}`,
   sandboxCouldNotStart: (cause: string) => `它无法启动：${cause}`,

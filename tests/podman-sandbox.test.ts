@@ -6,7 +6,7 @@ import { roomSandbox, type SandboxAvailability, type SandboxNotReadyWhy, type Sa
 import { KEY_PLACEHOLDER } from "../host/sandbox/agent-environment.ts";
 import { IMAGE_NAME } from "../host/sandbox/image.ts";
 import { ANTHROPIC_API } from "../host/sandbox/model-proxy.ts";
-import { computersOwnOnLinux, containersLabelled, imageNamesIn, Podman } from "../host/sandbox/podman.ts";
+import { computersOwnOnLinux, containersLabelled, imageNamesIn, othersContainersIn, Podman, writableSourcesIn } from "../host/sandbox/podman.ts";
 import { Sandboxes, type AgentInSandbox, type SandboxHost } from "../host/sandbox/sandboxes.ts";
 import { FakePodmanCli, NODE_IMAGE } from "./fake-podman-cli.ts";
 import { guardedIn, mountsOfRun } from "./guard-told.ts";
@@ -276,6 +276,16 @@ test("Podman's lists are read for what the sandboxes need of them, and nothing e
   expect(containersLabelled("garbage", "mirador.host", "abc")).toEqual([]);
   expect(imageNamesIn(JSON.stringify([{ Names: ["localhost/a:1", "localhost/a:latest"] }, { Names: null }]))).toEqual(["localhost/a:1", "localhost/a:latest"]);
   expect(imageNamesIn("{}")).toEqual([]);
+  expect(othersContainersIn(listed, "abc")).toEqual(["mirador-theirs"]);
+  expect(othersContainersIn("garbage", "abc")).toEqual([]);
+  const bind = (Source: string, Destination: string, RW: boolean) => ({ Type: "bind", Source, Destination, Driver: "", Mode: "", Options: ["nosuid", "nodev", "rbind"], RW, Propagation: "rprivate" });
+  const inspected = JSON.stringify([
+    { Name: "mirador-theirs", State: { Status: "running" }, Config: { Labels: { "mirador.host": "def" } }, Mounts: [bind("/home/me/docs", "/ro", false), bind("/home/me/project", "/workspace", true)] },
+    { Name: "mounts-nothing", Mounts: null },
+  ]);
+  expect(writableSourcesIn(inspected)).toEqual(["/home/me/project"]);
+  expect(writableSourcesIn("[]")).toEqual([]);
+  expect(writableSourcesIn("")).toBeNull();
 });
 
 test.skipIf(!runsShellScripts)("a room's VM lets the agents' user reach Mirador's sockets, then runs the relays as nobody, with no capability nor any to gain", () => {
@@ -288,4 +298,43 @@ test.skipIf(!runsShellScripts)("a room's VM lets the agents' user reach Mirador'
     "setpriv --reuid=65534 --regid=65534 --clear-groups --inh-caps=-all --bounding-set=-all --no-new-privs -- bun /mirador/sandbox/relays.mjs 7701=/run/mirador/canvas.sock",
   ]);
   expect(ran.exitCode).toBe(0);
+});
+
+describe("two Miradors on one computer, on rootless Podman", () => {
+  test("a container doesn't start where another Mirador's writes, and does once that one has stopped", async () => {
+    const cli = new FakePodmanCli();
+    const workspace = repository();
+    const first = new Sandboxes(new Podman(cli, PLAIN), hostFor(workspace).host, IDLE_STOP_MS);
+    const second = new Sandboxes(new Podman(cli, PLAIN), hostFor(workspace).host, IDLE_STOP_MS);
+    await first.launch(agentIn(workspace));
+    expect(cli.callsOf("inspect")).toEqual([]);
+
+    await expect(second.launch(agentIn(workspace))).rejects.toMatchObject(notReady({ kind: "blocked", blocker: { kind: "workspace-overlaps-other-mirador", folder: workspace } }));
+    expect(cli.callsOf("run")).toHaveLength(1);
+
+    await first.stopAll();
+    await second.launch(agentIn(workspace));
+    expect(cli.callsOf("run")).toHaveLength(2);
+    await second.stopAll();
+  });
+
+  test("a container doesn't start where Podman can't list the others or look at them, and does once it can, with another's that mounts nothing", async () => {
+    const cli = new FakePodmanCli();
+    const workspace = repository();
+    const sandboxes = new Sandboxes(new Podman(cli, PLAIN), hostFor(workspace).host, IDLE_STOP_MS);
+    cli.failing = ([command]) => (command === "ps" ? "Error: database is locked" : null);
+    await expect(sandboxes.launch(agentIn(workspace))).rejects.toMatchObject(notReady({ kind: "could-not-start" }));
+    expect(cli.callsOf("run")).toEqual([]);
+
+    cli.failing = () => null;
+    cli.containers.set("mirador-of-another-host", { "mirador.host": "another-host" });
+    cli.failing = ([command]) => (command === "inspect" ? "Error: database is locked" : null);
+    await expect(sandboxes.launch(agentIn(workspace))).rejects.toMatchObject(notReady({ kind: "could-not-start" }));
+    expect(cli.callsOf("run")).toEqual([]);
+
+    cli.failing = () => null;
+    await sandboxes.launch(agentIn(workspace));
+    expect(cli.callsOf("run")).toHaveLength(1);
+    await sandboxes.stopAll();
+  });
 });

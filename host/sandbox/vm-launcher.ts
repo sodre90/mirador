@@ -21,6 +21,12 @@ export class SandboxNotReady extends HostProblemError {
 export const HOST_LABEL = "mirador.host";
 export const OWNER_LABEL = "mirador.owner";
 
+/** Whether a VM whose host label is this was started by another Mirador on this computer, not by this one. */
+export const isAnotherMiradors = (label: unknown, hostLabel: string) => typeof label === "string" && label !== hostLabel;
+
+/** A mount's source as the runtime lists it, a folder's with a slash at its end, as a path. */
+export const withoutTrailingSlash = (path: string) => path.replace(/(.)\/+$/, "$1");
+
 /** What a VM's first process prints once its agents can reach Mirador's sockets. */
 export const VM_READY_LINE = "relays ready";
 
@@ -65,6 +71,11 @@ export interface VmLauncher {
   stop(vm: string): Promise<void>;
   /** The VMs, running or not, that the host with this label started. */
   listMiradors(hostLabel: string): Promise<string[]>;
+  /**
+   * What the VMs of every other Mirador on this computer mount read and write, booting, running or just stopped: the
+   * places another host's agents may write now. Throws SandboxNotReady where the runtime can't list them.
+   */
+  writtenByOtherMiradors(hostLabel: string): Promise<string[]>;
   /** Removes the VMs the host with this label left from a crash; starts nothing to look for them. */
   removeLeftovers(hostLabel: string): Promise<void>;
 }

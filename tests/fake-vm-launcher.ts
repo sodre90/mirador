@@ -65,5 +65,13 @@ export class FakeVmLauncher implements VmLauncher {
     return [];
   }
 
+  /** What other Miradors' VMs mount read and write, by how many times the launcher was asked before. */
+  otherMiradorsWrite: (askedBefore: number) => string[] = () => [];
+  private askedForOtherMiradors = 0;
+
+  async writtenByOtherMiradors() {
+    return this.otherMiradorsWrite(this.askedForOtherMiradors++);
+  }
+
   async removeLeftovers() {}
 }

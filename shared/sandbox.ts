@@ -122,7 +122,9 @@ export type SandboxBlocker =
   | { kind: "workspace-overlaps-sandbox-folder"; folder: string }
   | { kind: "workspace-overlaps-sandbox-workspace"; folder: string }
   /** The way to the workspace follows a link inside a folder a sandbox worked in, whose agents could have made it. */
-  | { kind: "way-through-link-sandbox-left"; link: string };
+  | { kind: "way-through-link-sandbox-left"; link: string }
+  /** Another Mirador on this computer has a VM that writes in the folder, on the way to the workspace, in it, or where the VM is to mount. */
+  | { kind: "workspace-overlaps-other-mirador"; folder: string };
 
 /**
  * A folder of this computer the owner added to a room's or workspace's sandbox, which its VM shows at the same path,

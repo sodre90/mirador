@@ -518,6 +518,7 @@ export const problems: Messages["problems"] = {
   sandboxWorkspaceOverlapsSandboxFolder: (folder: string) => `Egy másik, bekapcsolt sandbox olvashatóan és írhatóan kapta meg ezt a mappát, amely a munkaterület, tartalmazza, vagy benne van; csak egy sandbox írhat oda: ${folder}`,
   sandboxWorkspaceOverlapsSandboxWorkspace: (folder: string) => `Egy másik, bekapcsolt sandbox dolgozik egy mappában, amely tartalmazza a munkaterületet, vagy benne van; csak egy sandbox írhat oda: ${folder}`,
   sandboxWayThroughLinkSandboxLeft: (link: string) => `A munkaterülethez vezető út a(z) ${link} linken át halad, egy olyan mappában, amelyben egy sandbox dolgozott, így az ügynökei bárhová irányíthatták: a sandbox használatához nyisd meg a munkaterületet abban a mappában, ahová a link vezet.`,
+  sandboxWorkspaceOverlapsOtherMirador: (folder: string) => `Ezen a gépen egy másik Mirador egyik sandboxa éppen dolgozik, és a(z) ${folder} mappába ír, ahol ez a sandbox dolgozna, vagy az odavezető úton: a sandbox használatához várd meg, amíg az a sandbox leáll, vagy állítsd le abban a Miradorban.`,
   sandboxTooManyHeldChanges: (most: number) => `Az ágensei több mint ${most} visszatartott fájlt módosítottak, amelyek a válaszodra várnak: előbb engedélyezz vagy vess el néhányat.`,
   sandboxSetupFailed: (cause: string) => `A sandboxok beállítása nem sikerült: ${cause}`,
   sandboxCouldNotStart: (cause: string) => `Nem tudott elindulni: ${cause}`,

@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync, readFileSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, realpathSync, renameSync, symlinkSync, writeFileSync } from "node:fs";
 import { createServer, request as httpRequest, type IncomingHttpHeaders } from "node:http";
 import { connect, type AddressInfo, type Socket } from "node:net";
 import { release } from "node:os";
@@ -411,6 +411,61 @@ test("the switch stays off where the way to the workspace follows a link inside 
   await expect(sandboxSwitch(dialog)).toBeDisabled();
   await keepScreenshot(dialog, "way-through-link-sandbox-left");
   await dialog.getByRole("button", { name: "Done" }).click();
+});
+
+/** A VM another Mirador on this computer runs, as the shared `container` lists it, mounting `folder` read and write; it goes again with the call it returns. */
+function anotherMiradorsVmIn(folder: string) {
+  const name = "mirador-of-another-host";
+  const changeState = (changing: (state: { vms: Record<string, Record<string, string>>; mounts?: Record<string, unknown[]> }) => void) => {
+    const statePath = join(containerState(), "state.json");
+    const state = JSON.parse(readFileSync(statePath, "utf8"));
+    changing(state);
+    writeFileSync(`${statePath}.spec`, JSON.stringify(state));
+    renameSync(`${statePath}.spec`, statePath);
+  };
+  changeState((state) => {
+    state.vms[name] = { "mirador.host": "another-mirador", "mirador.owner": "workspace:theirs" };
+    state.mounts = { ...state.mounts, [name]: [{ source: `${folder}/`, options: [] }] };
+  });
+  return () =>
+    changeState((state) => {
+      delete state.vms[name];
+      delete state.mounts?.[name];
+    });
+}
+
+test("a sandboxed conversation doesn't start its VM where another Mirador on this computer has one writing in the workspace, saying so, and does once that one has gone", async ({ page }) => {
+  test.skip(!sandboxesRunHere, "Sandboxes run on macOS 26 on Apple silicon only.");
+  const shared = join(host.root, "shared-with-another");
+  execFileSync("git", ["init", "-q", shared]);
+  await signIn(page, host);
+  await addWorkspaceFromSidebar(page, shared);
+  const card = workspaceCard(page, shared);
+  await card.getByLabel("Agent", { exact: true }).selectOption({ label: "Builder · Claude Code" });
+  const dialog = await openSandboxOf(page, card, "shared-with-another");
+  await sandboxSwitch(dialog).check();
+  await expect(dialog.locator(".room-sandbox-setup")).toHaveText("Set up on this Mac.");
+  await dialog.getByRole("button", { name: "Done" }).click();
+
+  const gone = anotherMiradorsVmIn(realpathSync(shared));
+  try {
+    const previousUrl = page.url();
+    await card.getByRole("button", { name: "+ New conversation" }).click();
+    await expect(page).not.toHaveURL(previousUrl);
+    const runsBefore = containerCalls().filter(([command]) => command === "run").length;
+    await sendMessage(page, "SAY Hello.");
+    await expect(page.locator(".error-line:visible")).toContainText(
+      `Another Mirador on this computer has a sandbox at work that writes in ${realpathSync(shared)}, where this sandbox would work or on the way there: wait until that sandbox stops, or stop it in that Mirador, to use this one.`,
+    );
+    await keepPageScreenshot(page, "other-mirador-writes-there");
+    expect(containerCalls().filter(([command]) => command === "run")).toHaveLength(runsBefore);
+  } finally {
+    gone();
+  }
+
+  await sendMessage(page, "SAY Hello again.");
+  await waitForTurnToEnd(page);
+  await expect(lastAgentMessage(page)).toHaveText("Hello again.");
 });
 
 test("where none of the profiles can run in the sandbox, its settings say so and name the kind that could", async ({ page }) => {

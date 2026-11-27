@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, realpathSync, rmSync, 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { environmentInVm, KEY_PLACEHOLDER } from "../host/sandbox/agent-environment.ts";
-import { CONTAINER_READS, execArguments, vmIdsLabelled } from "../host/sandbox/apple-container.ts";
+import { CONTAINER_READS, execArguments, vmIdsLabelled, writtenByOthersIn } from "../host/sandbox/apple-container.ts";
 import { appleContainerAvailability, appleContainerRuntime, podmanAvailability, podmanStorageIn, selinuxEnforcingAt } from "../host/sandbox/availability.ts";
 import { execProcessEnvironment } from "../host/sandbox/exec-environment.ts";
 import { versionSaidIn } from "../host/sandbox/agent-version.ts";
@@ -146,6 +146,18 @@ test("the VMs left behind are found by this host's label alone", () => {
   ]);
   expect(vmIdsLabelled(listed, "mirador.host", "abc")).toEqual(["ours"]);
   expect(vmIdsLabelled("garbage", "mirador.host", "abc")).toEqual([]);
+});
+
+test("what other Miradors' VMs write is read from container's list: their mounts read and write, not this host's nor others' read-only ones", () => {
+  const mount = (source: string, options: string[]) => ({ destination: "/in-vm", type: { virtiofs: {} }, source, options });
+  const listed = JSON.stringify([
+    { status: "running", configuration: { id: "ours", labels: { "mirador.host": "abc" }, mounts: [mount("/Users/me/ours/", [])] } },
+    { status: "stopped", configuration: { id: "theirs", labels: { "mirador.host": "def", "mirador.owner": "room:x" }, mounts: [mount("/Users/me/project/", []), mount("/Users/me/docs/", ["ro"]), mount("/private/tmp/of-1/network.sock", [])] } },
+    { status: "running", configuration: { id: "not-a-miradors", labels: {}, mounts: [mount("/Users/me/elsewhere/", [])] } },
+    { configuration: { id: "unlabelled", mounts: "garbage" } },
+  ]);
+  expect(writtenByOthersIn(listed, "abc")).toEqual(["/Users/me/project", "/private/tmp/of-1/network.sock"]);
+  expect(writtenByOthersIn("garbage", "abc")).toEqual([]);
 });
 
 test("the agent's environment in the VM keeps the key, this Mac's own places and what has programs load code out, and passes its values by name", () => {
