@@ -47,10 +47,13 @@ export class FakeVmLauncher implements VmLauncher {
   readonly imagesHere = new Map<string, string>();
   /** The owner's base images pulled, by full name, each time one was. */
   readonly pulled: string[] = [];
+  /** A pull of an owner's base image waits for this. */
+  pulling: Promise<void> = Promise.resolve();
 
   async ownBase(name: string) {
     const pull = async () => {
       this.pulled.push(name);
+      await this.pulling;
       const content = this.registry.get(name);
       if (content) this.imagesHere.set(name, content);
       return content ? { exitCode: 0, output: "" } : { exitCode: 1, output: `Error: ${name} is not in the registry` };

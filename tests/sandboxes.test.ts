@@ -182,6 +182,21 @@ describe("a room's sandbox", () => {
     await sandboxes.stopAll();
   });
 
+  test("removes after its build only the image it builds on, which it pulled, and keeps one pulled meanwhile, as an owner's base image may be", async () => {
+    const workspace = repository();
+    const cli = new FakeContainerCli();
+    const pulledMeanwhile = "docker.io/team/dev:latest";
+    cli.failing = ([command]) => {
+      if (command === "build") cli.images.add(pulledMeanwhile);
+      return null;
+    };
+    const sandboxes = new Sandboxes(new AppleContainer(cli, AVAILABLE), hostFor(workspace).host, IDLE_STOP_MS);
+    (await sandboxes.launch(agentIn(workspace))).gone!();
+    expect(cli.callsOf("image").filter(([, sub]) => sub === "delete")).toEqual([["image", "delete", "docker.io/library/debian:bookworm-slim"]]);
+    expect(cli.images.has(pulledMeanwhile)).toBe(true);
+    await sandboxes.stopAll();
+  });
+
   test("removes at start only the VMs this host left behind", async () => {
     const workspace = repository();
     const { host } = hostFor(workspace);
@@ -606,6 +621,63 @@ describe("a sandbox on its owner's own base image", () => {
     expect(checksOf(cli)).toHaveLength(2);
     expect(pullsOf(cli)).toHaveLength(1);
     await sandboxes.stopAll();
+  });
+
+  test("is pulled once for every sandbox that names it, while the others are set up meanwhile", async () => {
+    const { host, owned } = hostFor(repository(), (owner) => (owner.kind === "room" ? "team/dev" : null));
+    const launcher = new FakeVmLauncher();
+    launcher.registry.set(TEAM_IMAGE, TEAM_DIGEST);
+    const pull = Promise.withResolvers<void>();
+    launcher.pulling = pull.promise;
+    const sandboxes = new Sandboxes(launcher, host, IDLE_STOP_MS);
+    const claude = { harness: "claude", version: "2.1.330" } as const;
+    const OTHER_ROOM = roomSandbox("room-2");
+    const lastStageOf = (owner: SandboxOwner) => stagesOf(owned, owner).at(-1);
+    const until = async (holds: () => boolean) => {
+      for (const started = Date.now(); Date.now() - started < 5_000 && !holds(); ) await Bun.sleep(5);
+      return holds();
+    };
+
+    sandboxes.prepareInBackground(ROOM, claude);
+    sandboxes.prepareInBackground(OTHER_ROOM, claude);
+    expect(await until(() => lastStageOf(ROOM) === "pulling-image" && lastStageOf(OTHER_ROOM) === "pulling-image")).toBe(true);
+    sandboxes.prepareInBackground(WORKSPACE, claude);
+    expect(await until(() => lastStageOf(WORKSPACE) === "ready")).toBe(true);
+    expect(stagesOf(owned, WORKSPACE)).toContain("installing-tool");
+    expect([lastStageOf(ROOM), lastStageOf(OTHER_ROOM)]).toEqual(["pulling-image", "pulling-image"]);
+
+    pull.resolve();
+    expect(await until(() => lastStageOf(ROOM) === "ready" && lastStageOf(OTHER_ROOM) === "ready")).toBe(true);
+    expect(launcher.pulled).toEqual([TEAM_IMAGE]);
+    expect(launcher.checked()).toHaveLength(1);
+  });
+
+  test("once pulled, says what the others' setup under way meanwhile holds it up with", async () => {
+    const { host, owned } = hostFor(repository(), teamImageForTheRoom);
+    const launcher = new FakeVmLauncher();
+    launcher.registry.set(TEAM_IMAGE, TEAM_DIGEST);
+    const pull = Promise.withResolvers<void>();
+    const installs = Promise.withResolvers<void>();
+    launcher.pulling = pull.promise;
+    launcher.runningOnce = installs.promise;
+    const sandboxes = new Sandboxes(launcher, host, IDLE_STOP_MS);
+    const claude = { harness: "claude", version: "2.1.330" } as const;
+    const lastStageOf = (owner: SandboxOwner) => stagesOf(owned, owner).at(-1);
+    const comesTo = async (owner: SandboxOwner, stage: string) => {
+      for (const started = Date.now(); Date.now() - started < 5_000 && lastStageOf(owner) !== stage; ) await Bun.sleep(5);
+      return lastStageOf(owner);
+    };
+
+    sandboxes.prepareInBackground(ROOM, claude);
+    expect(await comesTo(ROOM, "pulling-image")).toBe("pulling-image");
+    sandboxes.prepareInBackground(WORKSPACE, claude);
+    expect(await comesTo(WORKSPACE, "installing-tool")).toBe("installing-tool");
+    expect(lastStageOf(ROOM)).toBe("pulling-image");
+
+    pull.resolve();
+    expect(await comesTo(ROOM, "installing-tool")).toBe("installing-tool");
+    installs.resolve();
+    expect([await comesTo(ROOM, "ready"), await comesTo(WORKSPACE, "ready")]).toEqual(["ready", "ready"]);
   });
 
   test("named by its digest isn't pulled again where it is here", async () => {

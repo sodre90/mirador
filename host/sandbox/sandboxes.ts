@@ -323,8 +323,12 @@ const hostLabelOf = (dataDir: string) => shortHash(dataDir);
 export class Sandboxes {
   /** Where setting up each sandbox stands, of those set up since the host started. */
   private readonly setups = new Map<string, OwnedSetup>();
-  /** The sandboxes being set up now, each with how many of its launches wait for it. */
-  private readonly preparing = new Map<string, { owner: SandboxOwner; launches: number }>();
+  /** The sandboxes being set up now, each with how many of its launches wait for it, and how many of those for its own image's pull. */
+  private readonly preparing = new Map<string, { owner: SandboxOwner; launches: number; pulling: number }>();
+  /** The pulls of owners' base images under way, by piece: each beside the other pieces, as one may take long. */
+  private readonly pulls = new Map<string, Promise<OwnBase>>();
+  /** What the piece of setup under way told every sandbox being set up, which one whose pull ended meanwhile is told too. */
+  private toldEveryOne: SandboxSetup | null = null;
   /** What of the setup is ready on this computer, by piece: the runtime, the base images, each owner's checked, and each tool. */
   private readonly ready = new Map<string, unknown>();
   /** The last piece of setup asked for: each is set up once the one before is over, one at a time. */
@@ -1202,17 +1206,37 @@ export class Sandboxes {
     }
   }
 
-  /** The owner's own base image, pulled once in each run of the host, or the one here. */
+  /**
+   * The owner's own base image, pulled once in each run of the host, or the one here: pulled beside the other pieces of
+   * setup, not after them, so a long pull holds up no other sandbox, and once for every sandbox that names it.
+   */
   private async ownBaseHere(owner: SandboxOwner, name: string): Promise<OwnBase> {
-    const fullName = fullImageName(name);
+    const key = ownBaseKey(name);
+    if (this.ready.has(key)) return this.ready.get(key) as OwnBase;
+    const preparing = this.preparing.get(ownerKey(owner));
+    if (preparing) preparing.pulling += 1;
+    this.tell(owner, { stage: "pulling-image", image: name });
     try {
-      return await this.piece(ownBaseKey(name), () => {
-        this.tell(owner, { stage: "pulling-image", image: name });
-        return this.launcher.ownBase(fullName);
-      });
+      return await this.pulled(key, name);
     } catch (error) {
       throw error instanceof BaseNotPulled ? new BaseUnusable({ image: name, problem: { kind: "pull-failed", cause: error.message } }) : error;
+    } finally {
+      if (preparing && --preparing.pulling === 0 && this.toldEveryOne) this.tell(owner, this.toldEveryOne);
     }
+  }
+
+  private pulled(key: string, name: string): Promise<OwnBase> {
+    const underWay = this.pulls.get(key);
+    if (underWay) return underWay;
+    const pull = this.launcher
+      .ownBase(fullImageName(name))
+      .then((here) => {
+        this.ready.set(key, here);
+        return here;
+      })
+      .finally(() => this.pulls.delete(key));
+    this.pulls.set(key, pull);
+    return pull;
   }
 
   /**
@@ -1232,7 +1256,7 @@ export class Sandboxes {
   }
 
   private startPreparing(owner: SandboxOwner) {
-    const preparing = this.preparing.get(ownerKey(owner)) ?? { owner, launches: 0 };
+    const preparing = this.preparing.get(ownerKey(owner)) ?? { owner, launches: 0, pulling: 0 };
     preparing.launches += 1;
     this.preparing.set(ownerKey(owner), preparing);
     return preparing;
@@ -1248,17 +1272,24 @@ export class Sandboxes {
     this.host.setupChanged(owner, setup);
   }
 
-  /** What every sandbox needs moves on: each of those being set up now waits for it. */
-  private readonly toEveryOnePreparing = (setup: SandboxSetup) => [...this.preparing.values()].forEach(({ owner }) => this.tell(owner, setup));
+  /** What every sandbox needs moves on: each of those being set up now waits for it, but those that wait for their own image's pull. */
+  private readonly toEveryOnePreparing = (setup: SandboxSetup) => {
+    this.toldEveryOne = setup;
+    [...this.preparing.values()].filter(({ pulling }) => pulling === 0).forEach(({ owner }) => this.tell(owner, setup));
+  };
 
   /** A piece of setup, made once: its result where it is ready, else made after the pieces asked for before. */
   private async piece<T>(key: string, make: () => Promise<T>): Promise<T> {
     if (this.ready.has(key)) return this.ready.get(key) as T;
     return this.setupStep(async () => {
       if (this.ready.has(key)) return this.ready.get(key) as T;
-      const made = await make();
-      this.ready.set(key, made);
-      return made;
+      try {
+        const made = await make();
+        this.ready.set(key, made);
+        return made;
+      } finally {
+        this.toldEveryOne = null;
+      }
     });
   }
 

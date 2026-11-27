@@ -102,14 +102,15 @@ export const buildProgress = (progress: (setup: SandboxSetup) => void) => (line:
 
 /**
  * Builds Mirador's base image on this Mac from its recipe, with an empty folder as the build's context, then removes the
- * builder it started, the images the build pulled, and the bases of other recipes built before. A builder that ran
- * before is left as it was, and so is every other image that was there before. The builder's own image stays:
- * `container` keeps it out of its image list, as its own.
+ * builder it started, the image it builds on where the build pulled it, and the bases of other recipes built before. A
+ * builder that ran before is left as it was, and so is every other image, pulled meanwhile too, as an owner's base image
+ * may be. The builder's own image stays: `container` keeps it out of its image list, as its own.
  */
 export async function buildImage(cli: ContainerCli, tag: string, progress: (setup: SandboxSetup) => void) {
   progress({ stage: "building-image" });
   const builderRanBefore = await builderRuns(cli);
-  const imagesBefore = await listImages(cli);
+  const base = baseImageOf(await readFile(BASE_RECIPE, "utf8"));
+  const baseWasThere = base !== null && (await listImages(cli)).has(base);
   const emptyContext = await mkdtemp(join(tmpdir(), "mirador-image-"));
   try {
     if (!builderRanBefore) await mustRun(cli, ["builder", "start"], { timeoutMs: SERVICE_START_TIMEOUT_MS });
@@ -118,15 +119,9 @@ export async function buildImage(cli: ContainerCli, tag: string, progress: (setu
   } finally {
     await rm(emptyContext, { recursive: true, force: true });
     if (!builderRanBefore) await removeBuilder(cli);
-    await removeImagesPulledFor(cli, tag, imagesBefore);
+    if (base !== null && !baseWasThere) await cli.run(["image", "delete", base]);
   }
   await removeOtherBases(cli, tag);
-}
-
-/** Removes the images there now that were not before, but the one kept. */
-export async function removeImagesPulledFor(cli: ContainerCli, kept: string, imagesBefore: Set<string>) {
-  const pulled = [...(await listImages(cli))].filter((name) => !imagesBefore.has(name) && name !== kept);
-  if (pulled.length > 0) await cli.run(["image", "delete", ...pulled]);
 }
 
 async function removeBuilder(cli: ContainerCli) {
