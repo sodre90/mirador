@@ -1,5 +1,6 @@
 import type { ContainerCli, ContainerRun, ContainerRunOptions } from "../host/sandbox/container-cli.ts";
 import { runHere } from "./in-vm-here.ts";
+import { mountsOfRun } from "./guard-told.ts";
 
 const done = (output = ""): ContainerRun => ({ exitCode: 0, output, stdout: output });
 const failed = (output: string): ContainerRun => ({ exitCode: 1, output, stdout: "" });
@@ -24,12 +25,7 @@ export const agentCheckFinding = (failed?: string) => done(`mirador-agent-check\
 export const imageOfRun = (args: string[]) => args[args.indexOf("--entrypoint") + 2]!;
 
 /** Each `-v source:target[:ro]` of a run, as `container list` shows a folder's: its source with a slash at its end. */
-const mountsOf = (args: string[]) =>
-  args.flatMap((arg, index) => {
-    if (args[index - 1] !== "-v") return [];
-    const [source, , access] = arg.split(":");
-    return [{ source: `${source}/`, options: access === "ro" ? ["ro"] : [] }];
-  });
+const mountsOf = (args: string[]) => mountsOfRun(args).map(({ source, readOnly }) => ({ source: `${source}/`, options: readOnly ? ["ro"] : [] }));
 
 /** What a pull says as it goes, as `container image pull --progress plain` does: fetching, then unpacking. */
 export const PULL_PROGRESS = [

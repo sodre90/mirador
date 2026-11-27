@@ -90,7 +90,6 @@ const THIS_COMPUTERS_ADDRESS = Object.values(networkInterfaces())
   .find(({ family, address }) => family === "IPv4" && mayDial("everything", address))?.address;
 
 const notReady = (why: Partial<SandboxNotReadyWhy>) => ({ problem: { code: "sandbox-not-ready", why } });
-const mountsIn = (run: string[]) => run.flatMap((arg, index) => (run[index - 1] === "-v" ? [arg] : []));
 const nameIn = (run: string[]) => run[run.indexOf("--name") + 1]!;
 const settled = async (holds: () => boolean) => {
   for (const started = Date.now(); Date.now() - started < 10_000 && !holds(); ) await Bun.sleep(20);
@@ -165,7 +164,7 @@ describe("the VM of an agent someone brought into a sandboxed room", () => {
   test.skipIf(!RUNS_SANDBOXES)("has the sandbox's way out alone, which reaches what the owner has the sandbox reach, and is gone with it", async () => {
     const { workspace, cli, sandboxes } = sandboxedRoom();
     await sandboxes.launchForBrought(brought(workspace));
-    const socket = mountsIn(cli.callsOf("run")[0]!).at(-1)!.split(":")[0]!;
+    const socket = mountsOfRun(cli.callsOf("run")[0]!).at(-1)!.source;
     const asks = ["GET /mcp/c1 HTTP/1.1", "POST /p/builder/v1/messages HTTP/1.1", "CONNECT 1.1.1.1:443 HTTP/1.1"];
     for (const ask of asks) expect(await saidBy(socket, `${ask}\r\nhost: localhost\r\n\r\n`)).toStartWith("HTTP/1.1 403 Forbidden\r\n");
     await sandboxes.stopAll();
@@ -176,7 +175,7 @@ describe("the VM of an agent someone brought into a sandboxed room", () => {
     const { workspace, cli, reached, sandboxes } = sandboxedRoom();
     await sandboxes.launch(ownAgent(workspace));
     await sandboxes.launchForBrought(brought(workspace));
-    const sockets = cli.callsOf("run").map((run) => mountsIn(run).find((mount) => mount.endsWith(":/run/mirador/network.sock"))!.split(":")[0]!);
+    const sockets = cli.callsOf("run").map((run) => mountsOfRun(run).find(({ target }) => target === "/run/mirador/network.sock")!.source);
     const place = Bun.listen({ hostname: THIS_COMPUTERS_ADDRESS!, port: 0, socket: { data: (connection, data) => void connection.write(data) } });
     const ask = `CONNECT ${THIS_COMPUTERS_ADDRESS}:${place.port} HTTP/1.1\r\n\r\n`;
     const allAnswer = async (status: string) => expect((await Promise.all(sockets.map((socket) => saidBy(socket, ask)))).map((said) => said.split("\r\n")[0])).toEqual([status, status]);
