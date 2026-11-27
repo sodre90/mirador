@@ -9443,18 +9443,6 @@ button.device-revoke:hover:not(:disabled) {
   border-radius: 6px;
 }
 
-.connection-what {
-  flex: 1 1 220px;
-  display: grid;
-  gap: 2px;
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-.connection-what .hint {
-  margin: 0;
-}
-
 .peer-to-peer-problem {
   color: var(--warn-on-soft);
   font-size: calc(12px * var(--font-scale));
@@ -11229,13 +11217,6 @@ button.link.more-rows {
   display: block;
 }
 
-.room-invite-make,
-.room-invite-make label {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
 .room-usage-period {
   display: flex;
   align-items: center;
@@ -12100,13 +12081,14 @@ button.room-meaning:hover {
   display: grid;
   gap: 2px;
   min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .room-row-words .hint {
   margin: 0;
 }
 
-.room-control-row > .room-row-words {
+.settings-rows > li > .room-row-words {
   flex: 1 1 220px;
 }
 
@@ -12131,6 +12113,64 @@ button.room-meaning:hover {
 .room-switch input {
   flex: none;
   margin: 0;
+}
+
+/* Matches .plugin-switch-track so every role="switch" input reads visually as a switch, not a plain checkbox. */
+input[type="checkbox"][role="switch"]:not(:has(+ .plugin-switch-track)) {
+  appearance: none;
+  position: relative;
+  flex: none;
+  width: 36px;
+  height: 20px;
+  margin: 0;
+  border: 0;
+  border-radius: 99px;
+  background: var(--muted);
+  cursor: pointer;
+  transition: background 0.16s;
+}
+
+input[type="checkbox"][role="switch"]:not(:has(+ .plugin-switch-track))::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 99px;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.25);
+  transition: transform 0.16s;
+}
+
+input[type="checkbox"][role="switch"]:not(:has(+ .plugin-switch-track)):checked {
+  background: var(--accent);
+}
+
+input[type="checkbox"][role="switch"]:not(:has(+ .plugin-switch-track)):checked::after {
+  transform: translateX(16px);
+}
+
+input[type="checkbox"][role="switch"]:not(:has(+ .plugin-switch-track)):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+input[type="checkbox"][role="switch"]:not(:has(+ .plugin-switch-track)):disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+@media (forced-colors: active) {
+  input[type="checkbox"][role="switch"]:not(:has(+ .plugin-switch-track)) {
+    appearance: auto;
+    width: auto;
+    height: auto;
+  }
+
+  input[type="checkbox"][role="switch"]:not(:has(+ .plugin-switch-track))::after {
+    content: none;
+  }
 }
 
 .settings-rows > li.room-none {

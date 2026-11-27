@@ -40,17 +40,38 @@ export function RoomSection({ title, meaning, action, children }: { title: strin
   );
 }
 
+/** A row of a settings list: its title and note, and whatever sits at the end of it. */
+export function SettingRow({
+  title,
+  about,
+  labelFor,
+  className,
+  children,
+}: {
+  title: string;
+  about?: ReactNode;
+  labelFor?: string;
+  className?: string;
+  children?: ReactNode;
+}) {
+  return (
+    <li className={className}>
+      <span className="room-row-words">
+        {labelFor ? <label htmlFor={labelFor}>{title}</label> : <strong className="room-row-title">{title}</strong>}
+        {about}
+      </span>
+      {children}
+    </li>
+  );
+}
+
 /** A row of a room's settings: what it sets, with a note under it, and its control at the end. */
 export function ControlRow({ title, note, control }: { title: string; note?: string; control: (id: string) => ReactNode }) {
   const id = useId();
   return (
-    <li className="room-control-row">
-      <span className="room-row-words">
-        <label htmlFor={id}>{title}</label>
-        {note && <span className="hint">{note}</span>}
-      </span>
+    <SettingRow title={title} labelFor={id} className="room-control-row" about={note && <span className="hint">{note}</span>}>
       {control(id)}
-    </li>
+    </SettingRow>
   );
 }
 

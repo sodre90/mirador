@@ -84,7 +84,12 @@ test("an agent's many values open on its own page, held back first, and leave th
   await test.step("its page shows the value held back, and the given ones once their line is opened", async () => {
     await openRoomAgent(settings, "Full of values");
     await expect(agents).toHaveCount(0);
-    await expect(settings.getByRole("list", { name: "Values held back from Full of values" }).getByRole("switch")).toHaveCount(1);
+    const heldSwitch = settings.getByRole("list", { name: "Values held back from Full of values" }).getByRole("switch");
+    await expect(heldSwitch).toHaveCount(1);
+    expect(await heldSwitch.evaluate((element) => {
+      const style = getComputedStyle(element);
+      return { appearance: style.appearance, width: style.width, height: style.height, radius: style.borderRadius };
+    })).toEqual({ appearance: "none", width: "36px", height: "20px", radius: "99px" });
     const given = settings.getByRole("list", { name: "Values Full of values gets from its profile" });
     await expect(given).toBeHidden();
     await settings.getByText("Given (24)").click();

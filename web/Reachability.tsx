@@ -7,6 +7,7 @@ import { connection } from "./connection.ts";
 import { hints } from "./hints.ts";
 import { describedText } from "./host-error.ts";
 import { t } from "./i18n/index.ts";
+import { ControlRow, SettingRow } from "./RoomSection.tsx";
 import { saveSetting } from "./saved-setting.ts";
 import { SettingsSection } from "./SettingsSection.tsx";
 import { useSentChoice } from "./sent-choice.ts";
@@ -49,27 +50,15 @@ export function EnvironmentSetsReach() {
   );
 }
 
-function ConnectionRow({ title, about, className = "", children }: { title: string; about: ReactNode; className?: string; children?: ReactNode }) {
-  return (
-    <li className={className}>
-      <div className="connection-what">
-        <strong>{title}</strong>
-        {about}
-      </div>
-      {children}
-    </li>
-  );
-}
-
 function PeerToPeerRow({ status }: { status: PeerToPeerStatus | null }) {
   const problem = peerToPeerProblem(status);
   const about = status === null ? t.rooms.peerToPeerOff : words.reach.peerToPeerAbout;
   return (
-    <ConnectionRow title={words.reach.peerToPeer} about={<span className={problem ? "peer-to-peer-problem" : "hint"}>{problem ?? about}</span>}>
+    <SettingRow title={words.reach.peerToPeer} about={<span className={problem ? "peer-to-peer-problem" : "hint"}>{problem ?? about}</span>}>
       <span className="peer-to-peer-status" data-status={status ?? "off"}>
         {words.reach.peerToPeerStatus[status ?? "off"]}
       </span>
-    </ConnectionRow>
+    </SettingRow>
   );
 }
 
@@ -92,7 +81,7 @@ function AddressRow({ settings, peerToPeerOn, onChange }: { settings: Reachabili
   const noAddressAbout = peerToPeerOn ? words.reach.noAddressAbout : words.reach.noneReaches;
   const locked = reachSetByEnvironment(settings);
   return (
-    <ConnectionRow
+    <SettingRow
       title={publicAddress ? words.reach.at(hostOf(publicAddress)) : words.reach.routes.none}
       about={
         <>
@@ -107,7 +96,7 @@ function AddressRow({ settings, peerToPeerOn, onChange }: { settings: Reachabili
           {words.reach.change}
         </button>
       )}
-    </ConnectionRow>
+    </SettingRow>
   );
 }
 
@@ -116,7 +105,7 @@ function RestartRow({ settings }: { settings: ReachabilitySettings }) {
   const next = route === "address" && settings.savedPublicAddress ? hostOf(settings.savedPublicAddress) : words.reach.next[route];
   return (
     <li className="restart-needed">
-      <span className="connection-what" role="status">
+      <span className="room-row-words" role="status">
         {words.reach.afterRestart(next)}
       </span>
       <RestartHostButton />
@@ -129,15 +118,19 @@ function RoomInvitesRow({ connect: kept }: { connect: RoomInviteConnect }) {
   const [connect, choose] = useSentChoice(kept, (connect) => connection.send({ type: "settings.set-room-invites-connect", connect }));
   const labels: Record<RoomInviteConnect, string> = { "peer-to-peer": words.roomInvites.peerToPeer, address: words.roomInvites.address };
   return (
-    <ConnectionRow title={words.roomInvites.title} about={<span className="hint">{words.roomInvites.about}</span>}>
-      <select aria-label={words.roomInvites.title} value={connect} onChange={(event) => choose(event.target.value as RoomInviteConnect)}>
-        {ROOM_INVITE_CONNECTS.map((each) => (
-          <option key={each} value={each}>
-            {labels[each]}
-          </option>
-        ))}
-      </select>
-    </ConnectionRow>
+    <ControlRow
+      title={words.roomInvites.title}
+      note={words.roomInvites.about}
+      control={(id) => (
+        <select id={id} value={connect} onChange={(event) => choose(event.target.value as RoomInviteConnect)}>
+          {ROOM_INVITE_CONNECTS.map((each) => (
+            <option key={each} value={each}>
+              {labels[each]}
+            </option>
+          ))}
+        </select>
+      )}
+    />
   );
 }
 
