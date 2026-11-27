@@ -2,7 +2,7 @@ import { GIT_WITHOUT_REPOSITORY_PROGRAMS, gitEnvironmentFor } from "./git-enviro
 import { realpathSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { chosenModel } from "../shared/config-options.ts";
+import { chosenEffort, chosenModel } from "../shared/config-options.ts";
 import { COMPACT_COMMAND } from "../shared/slash-commands.ts";
 import { harnessLabels, type Conversation, type ContextUsage, type PlanQuotas, type PluginContextHint, type PluginStatuslineChips, type QuotaWindow, type StatuslineRender } from "../shared/model.ts";
 import type { CanvasPlugins } from "./canvas/plugins.ts";
@@ -58,6 +58,9 @@ const rateLimits = ({ fiveHour, sevenDay }: PlanQuotas) => ({
 
 type Cost = NonNullable<ContextUsage["cost"]>;
 
+/** claude-agent-acp's picker row for no effort pinned, where Claude Code takes the level from settings.json and sends none. */
+const EFFORT_NOT_PINNED = "default";
+
 /** The cost a plugin's chip shows for the conversation, which takes the place of what the agent reported. */
 export const costOfPluginChips = (pluginChips: PluginStatuslineChips[]): Cost | null => pluginChips.flatMap(({ chips }) => chips).find(({ cost }) => cost)?.cost ?? null;
 
@@ -70,6 +73,7 @@ export function statuslineInput(conversation: Conversation, directory: string, t
   const cost = pluginCost ?? usage?.cost;
   const usedPercentage = usage && usage.size > 0 ? Math.round((usage.used / usage.size) * 100) : null;
   const model = chosenModel(conversation.configOptions);
+  const effort = chosenEffort(conversation.configOptions);
   return {
     hook_event_name: "Status",
     session_id: conversation.acpSessionId,
@@ -93,6 +97,7 @@ export function statuslineInput(conversation: Conversation, directory: string, t
       current_usage: usage ? { input_tokens: usage.used, output_tokens: 0, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 } : null,
     },
     exceeds_200k_tokens: (usage?.used ?? 0) > 200_000,
+    ...(effort !== null && effort !== EFFORT_NOT_PINNED && { effort: { level: effort } }),
     ...(quotas && { rate_limits: rateLimits(quotas) }),
   };
 }

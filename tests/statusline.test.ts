@@ -99,6 +99,21 @@ describe("statusline", () => {
     expect(input).not.toHaveProperty("rate_limits");
   });
 
+  test("the effort chosen reaches the command as Claude Code's effort.level, and is left out when the agent offers none or none is pinned", () => {
+    const effortOption: SessionConfigOption = {
+      id: "effort",
+      name: "Effort",
+      category: "thought_level",
+      type: "select",
+      currentValue: "max",
+      options: [{ value: "default", name: "Default" }, { value: "high", name: "High" }, { value: "max", name: "Max" }],
+    };
+    expect(statuslineInput({ ...conversation, configOptions: [modelOption, effortOption] }, "/work", null, null, 0).effort).toEqual({ level: "max" });
+    expect(statuslineInput(conversation, "/work", null, null, 0)).not.toHaveProperty("effort");
+    const notPinned = { ...effortOption, currentValue: "default" };
+    expect(statuslineInput({ ...conversation, configOptions: [modelOption, notPinned] }, "/work", null, null, 0)).not.toHaveProperty("effort");
+  });
+
   test("the plan's usage limits reach the command as Claude Code's rate_limits, with only the windows known", () => {
     const quotas = { fiveHour: { usedPercent: 37, resetsAt: 1_791_149_400_000 }, sevenDay: null };
     expect(statuslineInput(conversation, "/work", null, quotas, 0).rate_limits).toEqual({ five_hour: { used_percentage: 37, resets_at: 1_791_149_400 } });
