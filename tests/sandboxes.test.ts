@@ -246,6 +246,34 @@ describe("a room's sandbox", () => {
     await sandboxes.stopAll();
   });
 
+  test.skipIf(!RUNS_SANDBOXES)("tells a launch waiting its turn behind another that the VM starts, once what both waited for is set up", async () => {
+    const workspace = repository();
+    const launcher = new FakeVmLauncher();
+    const sandboxes = new Sandboxes(launcher, hostFor(workspace).host, IDLE_STOP_MS);
+    const installs = Promise.withResolvers<void>();
+    const vmStarts = Promise.withResolvers<void>();
+    launcher.runningOnce = installs.promise;
+    launcher.starting = vmStarts.promise;
+    const launchTelling = (agent: AgentInSandbox) => {
+      const told: string[] = [];
+      return { launching: sandboxes.launch(agent, (step) => told.push(step)), told };
+    };
+
+    const first = launchTelling(agentIn(workspace));
+    const beside = launchTelling(agentIn(workspace, { profileId: "reviewer" }));
+    expect([first.told, beside.told]).toEqual([["preparing-sandbox"], ["preparing-sandbox"]]);
+    installs.resolve();
+    for (const started = Date.now(); Date.now() - started < 5_000 && !beside.told.includes("starting-sandbox"); ) await Bun.sleep(5);
+    expect(beside.told).toEqual(["preparing-sandbox", "starting-sandbox"]);
+    expect(first.told).toEqual(["preparing-sandbox", "starting-sandbox"]);
+    expect(launcher.started).toEqual([]);
+
+    vmStarts.resolve();
+    (await Promise.all([first.launching, beside.launching])).forEach(({ gone }) => gone!());
+    expect(launcher.started).toHaveLength(1);
+    await sandboxes.stopAll();
+  });
+
   test("says it is set up only once each agent kind it is set up for is, not as the first of them is", async () => {
     const { host, owned } = hostFor(repository());
     const launcher = new FakeVmLauncher();

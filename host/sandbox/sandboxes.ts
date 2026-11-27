@@ -537,6 +537,7 @@ export class Sandboxes {
     const tell = (step: SandboxStartStep) => step !== toldLast && told((toldLast = step));
     const first = this.firstStepOf(agent.owner, tools);
     if (first) tell(first);
+    if (first === "preparing-sandbox") await this.preparedTellingWhatsNext(agent.owner, tools, tell);
     const vm = await this.oneLaunchAtATime(agent.owner, () => this.startedAgentsVm(agent.owner, tools, tell));
     const places = { configFolder: sandboxConfigFolder(this.host.dataDir, agent.owner, harness, harness === "pi" ? agent.profileId : undefined), modelBaseUrl: modelAddress(agent.profileId) };
     const environment = environmentInVm(agent.given, { kind: agent.kind, version: agent.version, base: vm.base }, places, secretsOf(agent.route));
@@ -863,6 +864,16 @@ export class Sandboxes {
   private firstStepOf(owner: SandboxOwner, agent: AgentTools): SandboxStartStep | null {
     if (!this.readyFor(owner, agent)) return "preparing-sandbox";
     return this.agentsVm(owner)?.running ? null : "starting-sandbox";
+  }
+
+  /**
+   * Sets up what the agent needs, then tells the launch what it waits for next: the VM starting, as another launch of
+   * the owner's may start it while this one waits its turn to.
+   */
+  private async preparedTellingWhatsNext(owner: SandboxOwner, agent: AgentTools, tell: (step: SandboxStartStep) => void) {
+    await this.preparedFor(owner, agent);
+    const next = this.firstStepOf(owner, agent);
+    if (next) tell(next);
   }
 
   /**
