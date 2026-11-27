@@ -263,6 +263,7 @@ export const rooms: Messages["rooms"] = {
     },
     installingTool: (tool: string) => `${tool} telepítése a sandboxhoz…`,
     pullingImage: (image: string) => `${image} letöltése a sandboxhoz…`,
+    unpackingImage: (image: string) => `${image} kicsomagolása a sandboxhoz…`,
     checkingImage: (image: string) => `${image} ellenőrzése: megvan-e benne, ami az ágenseknek kell…`,
     baseImage: {
       label: "Alap-image",

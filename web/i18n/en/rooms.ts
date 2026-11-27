@@ -274,6 +274,7 @@ export const rooms = {
     } satisfies Record<SandboxKind, (at: number, of: number) => string>,
     installingTool: (tool: string) => `Installing ${tool} for the sandbox…`,
     pullingImage: (image: string) => `Pulling ${image} for the sandbox…`,
+    unpackingImage: (image: string) => `Unpacking ${image} for the sandbox…`,
     checkingImage: (image: string) => `Checking ${image} for what the agents need…`,
     baseImage: {
       label: "Base image",

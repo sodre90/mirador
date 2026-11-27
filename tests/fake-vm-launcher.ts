@@ -49,10 +49,13 @@ export class FakeVmLauncher implements VmLauncher {
   readonly pulled: string[] = [];
   /** A pull of an owner's base image waits for this. */
   pulling: Promise<void> = Promise.resolve();
+  /** Tells how far the pull under way got, as a runtime would. */
+  pullMoves: (setup: SandboxSetup) => void = () => {};
 
-  async ownBase(name: string) {
+  async ownBase(name: string, progress: (setup: SandboxSetup) => void) {
     const pull = async () => {
       this.pulled.push(name);
+      this.pullMoves = progress;
       await this.pulling;
       const content = this.registry.get(name);
       if (content) this.imagesHere.set(name, content);

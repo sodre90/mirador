@@ -31,6 +31,14 @@ const mountsOf = (args: string[]) =>
     return [{ source: `${source}/`, options: access === "ro" ? ["ro"] : [] }];
   });
 
+/** What a pull says as it goes, as `container image pull --progress plain` does: fetching, then unpacking. */
+export const PULL_PROGRESS = [
+  "[1/2] Fetching image [0s]",
+  "[1/2] Fetching image 40% (3 of 7 blobs, 16,4 MB/41,3 MB, 8,2 MB/s) [2s]",
+  "[2/2] Unpacking image for platform linux/arm64/v8 [3s]",
+  "[2/2] Unpacking image for platform linux/arm64/v8 100% (5 706 entries, 136,9 MB) [4s]",
+];
+
 /** The images a build of the base recipe pulls. */
 export const BASE_IMAGES = ["docker.io/library/debian:bookworm-slim"];
 
@@ -70,7 +78,7 @@ export class FakeContainerCli implements ContainerCli {
     if (command === "system" && sub === "start") return this.startService();
     if (command === "builder") return this.builder(sub!);
     if (command === "build") return this.build(args, options);
-    if (command === "image") return this.image(sub!, args.slice(2));
+    if (command === "image") return this.image(sub!, args.slice(2), options);
     if (command === "run") return this.start(args);
     if (command === "logs") return this.vms.has(args.at(-1)!) ? done("relays ready\n") : failed("not found");
     if (command === "stop" || command === "delete") {
@@ -112,9 +120,9 @@ export class FakeContainerCli implements ContainerCli {
     return done();
   }
 
-  private image(sub: string, names: string[]) {
+  private image(sub: string, names: string[], { onLine }: ContainerRunOptions) {
     if (sub === "list") return done(JSON.stringify([...this.images].map((reference) => ({ reference }))));
-    if (sub === "pull") return this.pull(names.at(-1)!);
+    if (sub === "pull") return this.pullTelling(names.at(-1)!, onLine);
     if (sub === "inspect") return names.every((name) => this.images.has(name)) ? done(JSON.stringify(names.map((name) => ({ name, index: { digest: this.digests.get(name) ?? `sha256:${"0".repeat(64)}` } })))) : failed("image not found");
     if (sub === "delete") names.forEach((name) => this.images.delete(name));
     return done();
@@ -122,6 +130,13 @@ export class FakeContainerCli implements ContainerCli {
 
   /** The throwaway containers run, installers of tools among them, by their arguments: kept apart from the calls, as VMs' runs are what those tell. */
   readonly ranOnce: string[][] = [];
+
+  /** A pull, which says how far it got as it goes, after it started, as a process does. */
+  private async pullTelling(name: string, onLine?: (line: string) => void) {
+    await Bun.sleep(0);
+    PULL_PROGRESS.forEach((line) => onLine?.(line));
+    return this.pull(name);
+  }
 
   private pull(name: string) {
     const digest = this.registry.get(name);

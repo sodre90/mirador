@@ -541,7 +541,7 @@ describe("a sandbox on its owner's own base image", () => {
 
     const [run] = cli.callsOf("run");
     expect(run![run!.indexOf("--entrypoint") + 2]).toBe(TEAM_IMAGE);
-    expect(pullsOf(cli)).toEqual([["image", "pull", "--progress", "none", "--platform", "linux/arm64", TEAM_IMAGE]]);
+    expect(pullsOf(cli)).toEqual([["image", "pull", "--progress", "plain", "--platform", "linux/arm64", TEAM_IMAGE]]);
     expect(cli.callsOf("build")).toEqual([]);
     const [check] = checksOf(cli);
     expect(imageOfRun(check!)).toBe(TEAM_IMAGE);
@@ -550,8 +550,14 @@ describe("a sandbox on its owner's own base image", () => {
     expect(check![check!.indexOf("--entrypoint") + 1]).toBe("/bin/sh");
     expect(mountsOfRun(check!)).toEqual([{ source: toolsFolderOf(host.dataDir), target: "/opt/mirador", readOnly: true }]);
     expect(launched.command).toContain(`PATH=/opt/mirador/claude-2.1.330/bin:${dirname(BUN_IN_VM)}:${NODE_FOLDER_IN_VM}:/team/bin:/usr/bin:/bin`);
-    expect(setups.map(({ stage }) => stage)).toEqual(["starting-service", "pulling-image", "installing-tool", "installing-tool", "installing-tool", "checking-image", "installing-tool", "checking-image", "ready"]);
-    expect(setups.flatMap(({ image }) => image ?? [])).toEqual(["team/dev", "team/dev", "team/dev"]);
+    expect(setups.map(({ stage }) => stage).filter((stage, at, stages) => stage !== stages[at - 1])).toEqual(["starting-service", "pulling-image", "installing-tool", "checking-image", "installing-tool", "checking-image", "ready"]);
+    expect(setups.filter(({ stage }) => stage === "pulling-image")).toEqual([
+      { stage: "pulling-image", image: "team/dev" },
+      { stage: "pulling-image", image: "team/dev", percent: 40 },
+      { stage: "pulling-image", image: "team/dev", unpacking: true },
+      { stage: "pulling-image", image: "team/dev", percent: 100, unpacking: true },
+    ]);
+    expect(setups.filter(({ stage }) => stage === "checking-image").map(({ image }) => image)).toEqual(["team/dev", "team/dev"]);
     const [agentRan] = cli.ranOnce.filter(isAgentCheck);
     expect([imageOfRun(agentRan!), agentRan![agentRan!.indexOf("--user") + 1], agentRan![agentRan!.indexOf("--network") + 1]]).toEqual([TEAM_IMAGE, "65534:65534", "none"]);
     expect(agentRan!.at(-1)).toContain("'/opt/mirador/claude-2.1.330/bin/claude' --version");
@@ -683,6 +689,43 @@ describe("a sandbox on its owner's own base image", () => {
     expect(await until(() => lastStageOf(ROOM) === "ready" && lastStageOf(OTHER_ROOM) === "ready")).toBe(true);
     expect(launcher.pulled).toEqual([TEAM_IMAGE]);
     expect(launcher.checked()).toHaveLength(1);
+  });
+
+  test("says how far its pull got to every sandbox that waits for it, by the name each gave it, one that joins late at once", async () => {
+    const OTHER_ROOM = roomSandbox("room-2");
+    const { host, owned } = hostFor(repository(), (owner) => (sameOwner(owner, ROOM) ? "team/dev" : sameOwner(owner, OTHER_ROOM) ? "docker.io/team/dev:latest" : null));
+    const launcher = new FakeVmLauncher();
+    launcher.registry.set(TEAM_IMAGE, TEAM_DIGEST);
+    const pull = Promise.withResolvers<void>();
+    launcher.pulling = pull.promise;
+    const sandboxes = new Sandboxes(launcher, host, IDLE_STOP_MS);
+    const claude = { harness: "claude", version: "2.1.330" } as const;
+    const pullingOf = (owner: SandboxOwner) => owned.filter((each) => sameOwner(each.owner, owner) && each.setup.stage === "pulling-image").map(({ setup }) => setup);
+    const until = async (holds: () => boolean) => {
+      for (const started = Date.now(); Date.now() - started < 5_000 && !holds(); ) await Bun.sleep(5);
+      return holds();
+    };
+
+    sandboxes.prepareInBackground(ROOM, claude);
+    expect(await until(() => launcher.pulled.length === 1)).toBe(true);
+    launcher.pullMoves({ stage: "pulling-image", percent: 40 });
+    launcher.pullMoves({ stage: "pulling-image", percent: 40 });
+    sandboxes.prepareInBackground(OTHER_ROOM, claude);
+    expect(await until(() => pullingOf(OTHER_ROOM).length === 1)).toBe(true);
+    launcher.pullMoves({ stage: "pulling-image", percent: 100, unpacking: true });
+
+    expect(pullingOf(ROOM)).toEqual([
+      { stage: "pulling-image", image: "team/dev" },
+      { stage: "pulling-image", image: "team/dev", percent: 40 },
+      { stage: "pulling-image", image: "team/dev", percent: 100, unpacking: true },
+    ]);
+    expect(pullingOf(OTHER_ROOM)).toEqual([
+      { stage: "pulling-image", image: "docker.io/team/dev:latest", percent: 40 },
+      { stage: "pulling-image", image: "docker.io/team/dev:latest", percent: 100, unpacking: true },
+    ]);
+    pull.resolve();
+    expect(await until(() => [ROOM, OTHER_ROOM].every((owner) => stagesOf(owned, owner).at(-1) === "ready"))).toBe(true);
+    expect(launcher.pulled).toEqual([TEAM_IMAGE]);
   });
 
   test("once pulled, says what the others' setup under way meanwhile holds it up with", async () => {

@@ -107,7 +107,7 @@ const outsideSelinux = (check: SandboxCheck | null) =>
   check.availability.selinuxEnforcing;
 
 function setupText(
-  { stage, step, tool, image, problem, unusableBase }: SandboxSetup,
+  { stage, step, tool, image, unpacking, problem, unusableBase }: SandboxSetup,
   kind: SandboxKind,
 ) {
   if (stage === "failed" && unusableBase)
@@ -117,7 +117,7 @@ function setupText(
     return words.buildingStep[kind](step.at, step.of);
   if (stage === "installing-tool" && tool)
     return words.installingTool(toolNameOf(tool));
-  if (stage === "pulling-image" && image) return words.pullingImage(image);
+  if (stage === "pulling-image" && image) return unpacking ? words.unpackingImage(image) : words.pullingImage(image);
   if (stage === "checking-image" && image) return words.checkingImage(image);
   return words.setup[kind][stage];
 }
@@ -129,7 +129,7 @@ function SetupProgress({
   setup: SandboxSetup;
   kind: SandboxKind;
 }) {
-  const { stage, step } = setup;
+  const { stage, step, percent } = setup;
   const stages = words.setup[kind];
   return (
     <div className="room-sandbox-setup" role="status">
@@ -139,6 +139,14 @@ function SetupProgress({
           value={step?.at}
           max={step?.of}
           aria-label={stages["building-image"]}
+        />
+      )}
+      {stage === "pulling-image" && (
+        <progress
+          key={percent === undefined ? "how-far-unknown" : "how-far-known"}
+          value={percent}
+          max={100}
+          aria-label={stages["pulling-image"]}
         />
       )}
     </div>

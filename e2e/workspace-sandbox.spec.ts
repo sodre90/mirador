@@ -17,6 +17,8 @@ const fakeContainer = () => bunProgramPath(join(host.root, "fake-container"), "c
 const containerState = () => join(host.root, "fake-container-state");
 const buildHeldBy = () => join(host.root, "build-may-go-on");
 const installHeldBy = () => join(host.root, "install-may-go-on");
+const pullHeldBy = () => join(host.root, "pull-may-go-on");
+const unpackHeldBy = () => join(host.root, "unpack-may-go-on");
 const worktree = () => join(host.root, "worktree");
 const promptsFile = () => join(host.root, "prompts");
 const promptsSoFar = () => (existsSync(promptsFile()) ? readFileSync(promptsFile(), "utf8") : "");
@@ -31,6 +33,8 @@ function writeFakeContainer() {
     FAKE_CONTAINER_STATE: containerState(),
     FAKE_CONTAINER_BUILD_HELD_BY: buildHeldBy(),
     FAKE_CONTAINER_INSTALL_HELD_BY: installHeldBy(),
+    FAKE_CONTAINER_PULL_HELD_BY: pullHeldBy(),
+    FAKE_CONTAINER_UNPACK_HELD_BY: unpackHeldBy(),
     FAKE_ACP_PROMPTS: promptsFile(),
   });
   const claude = join(host.fakeProgramsDir, "claude");
@@ -394,8 +398,16 @@ test("a base image of the owner's own is pulled and checked for what the agents 
     await dialog.getByRole("button", { name: "Done" }).click();
   });
 
-  await test.step("one with all they need runs the VM, by its name as Docker reads it, checked once", async () => {
+  await test.step("one with all they need is pulled with a bar of how far its fetching and then its unpacking got, then runs the VM, by its name as Docker reads it, checked once", async () => {
     const dialog = await useBaseImage("team/dev:1");
+    await expect(dialog.locator(".room-sandbox-setup")).toHaveText("Pulling team/dev:1 for the sandbox…");
+    const howFar = dialog.getByRole("progressbar", { name: "Pulling the sandbox's base image onto this Mac…" });
+    await expect(howFar).toHaveJSProperty("value", 40);
+    await keepScreenshot(dialog, "base-image-pulling");
+    writeFileSync(pullHeldBy(), "");
+    await expect(dialog.locator(".room-sandbox-setup")).toHaveText("Unpacking team/dev:1 for the sandbox…");
+    await expect(howFar).toHaveJSProperty("value", 60);
+    writeFileSync(unpackHeldBy(), "");
     await expect(dialog.locator(".room-sandbox-setup")).toHaveText("Set up on this Mac.");
     await dialog.getByRole("button", { name: "Done" }).click();
     await sendMessage(page, "SAY On the team's base.");

@@ -87,6 +87,7 @@ These terms stay the same everywhere:
 | Podman container (the sandbox on Linux, which shares this computer's kernel, weaker than a VM) | Podman-konténer | contenedor de Podman | Podman 容器 | Podman-Container (der) |
 | base image (the system a sandbox runs on, the agents' programs installed beside it) | alap-image | imagen base | 基础镜像 | Basis-Image (das) |
 | pull (an image, from its registry onto this computer) | letölt | descargar | 拉取 | laden |
+| unpack (a pulled image's layers, before it can run) | kicsomagol | desempaquetar | 解包 | entpacken |
 | digest (the hash naming one image's content, sha256:…) | digest | digest | digest | Digest (der) |
 | kernel (the Linux kernel a Podman container shares) | kernel | kernel | 内核 | Kernel (der) |
 | SELinux confinement (what SELinux keeps a container to, which the sandbox runs without) | SELinux korlátai | confinamiento de SELinux | SELinux 的约束 | Einschränkungen von SELinux (die) |

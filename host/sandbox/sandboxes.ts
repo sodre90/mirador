@@ -326,7 +326,7 @@ export class Sandboxes {
   /** The sandboxes being set up now, each with how many of its launches wait for it, and how many of those for its own image's pull. */
   private readonly preparing = new Map<string, { owner: SandboxOwner; launches: number; pulling: number }>();
   /** The pulls of owners' base images under way, by piece: each beside the other pieces, as one may take long. */
-  private readonly pulls = new Map<string, Promise<OwnBase>>();
+  private readonly pulls = new Map<string, BasePull>();
   /** What the piece of setup under way told every sandbox being set up, which one whose pull ended meanwhile is told too. */
   private toldEveryOne: SandboxSetup | null = null;
   /** What of the setup is ready on this computer, by piece: the runtime, the base images, each owner's checked, and each tool. */
@@ -1216,26 +1216,30 @@ export class Sandboxes {
     if (this.ready.has(key)) return this.ready.get(key) as OwnBase;
     const preparing = this.preparing.get(ownerKey(owner));
     if (preparing) preparing.pulling += 1;
-    this.tell(owner, { stage: "pulling-image", image: name });
+    const pull = this.pullOf(key, name);
+    pull.join(owner, name);
     try {
-      return await this.pulled(key, name);
+      return await pull.done;
     } catch (error) {
       throw error instanceof BaseNotPulled ? new BaseUnusable({ image: name, problem: { kind: "pull-failed", cause: error.message } }) : error;
     } finally {
+      pull.leave(owner);
       if (preparing && --preparing.pulling === 0 && this.toldEveryOne) this.tell(owner, this.toldEveryOne);
     }
   }
 
-  private pulled(key: string, name: string): Promise<OwnBase> {
+  private pullOf(key: string, name: string): BasePull {
     const underWay = this.pulls.get(key);
     if (underWay) return underWay;
-    const pull = this.launcher
-      .ownBase(fullImageName(name))
-      .then((here) => {
-        this.ready.set(key, here);
-        return here;
-      })
-      .finally(() => this.pulls.delete(key));
+    const pulled = (progress: (setup: SandboxSetup) => void) =>
+      this.launcher
+        .ownBase(fullImageName(name), progress)
+        .then((here) => {
+          this.ready.set(key, here);
+          return here;
+        })
+        .finally(() => this.pulls.delete(key));
+    const pull = new BasePull(pulled, (owner, setup) => this.tell(owner, setup));
     this.pulls.set(key, pull);
     return pull;
   }
@@ -1321,6 +1325,35 @@ export class Sandboxes {
     } catch (error) {
       throw error instanceof ToolInstallFailed ? new SetupFailed(`installing ${toolNameOf(tool)}: ${error.message}`) : error;
     }
+  }
+}
+
+/** A pull of an owner's base image under way, how far it got told to each sandbox that waits for it, by the name it gave the image. */
+class BasePull {
+  private readonly waiting = new Map<string, { owner: SandboxOwner; name: string }>();
+  private got: SandboxSetup = { stage: "pulling-image" };
+  readonly done: Promise<OwnBase>;
+
+  constructor(
+    pulled: (progress: (setup: SandboxSetup) => void) => Promise<OwnBase>,
+    private readonly tell: (owner: SandboxOwner, setup: SandboxSetup) => void,
+  ) {
+    this.done = pulled((got) => this.moved(got));
+  }
+
+  join(owner: SandboxOwner, name: string) {
+    this.waiting.set(ownerKey(owner), { owner, name });
+    this.tell(owner, { ...this.got, image: name });
+  }
+
+  leave(owner: SandboxOwner) {
+    this.waiting.delete(ownerKey(owner));
+  }
+
+  private moved(got: SandboxSetup) {
+    if (got.percent === this.got.percent && got.unpacking === this.got.unpacking) return;
+    this.got = got;
+    this.waiting.forEach(({ owner, name }) => this.tell(owner, { ...got, image: name }));
   }
 }
 

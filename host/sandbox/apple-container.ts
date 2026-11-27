@@ -42,7 +42,19 @@ export const runArguments = ({ name, labels, image, memory, mounts, entrypoint, 
 ];
 
 /** `container image pull` of the owner's base image, for this Mac's processor. */
-export const pullArguments = (name: string) => ["image", "pull", "--progress", "none", "--platform", "linux/arm64", name];
+export const pullArguments = (name: string) => ["image", "pull", "--progress", "plain", "--platform", "linux/arm64", name];
+
+/**
+ * How far a pull got, as `container image pull --progress plain` says it about once a second: `[1/2] Fetching image 45%
+ * (3 of 7 blobs, …) [12s]`, then, its last part, `[2/2] Unpacking image for platform linux/arm64/v8 80% (…) [14s]`.
+ */
+export function pullProgressIn(line: string): SandboxSetup | null {
+  const part = /^\[(\d+)\/(\d+)\] /.exec(line);
+  if (!part) return null;
+  const percent = /\s(\d{1,3})%/.exec(line)?.[1];
+  const unpacking = Number(part[2]) > 1 && part[1] === part[2];
+  return { stage: "pulling-image", ...(percent === undefined ? {} : { percent: Math.min(Number(percent), 100) }), ...(unpacking ? { unpacking } : {}) };
+}
 
 /**
  * The owner's base image as `container image inspect` gives it, `[{ name, index: { digest } }]`: run by its name, as
@@ -149,13 +161,17 @@ export class AppleContainer implements VmLauncher {
     return { image: tag, path: DEFAULT_BASE_PATH };
   }
 
-  async ownBase(name: string) {
+  async ownBase(name: string, progress: (setup: SandboxSetup) => void) {
     const cli = this.usable();
     const here = async () => {
       const inspected = await cli.run(["image", "inspect", name]);
       return inspected.exitCode === 0 ? ownBaseIn(inspected.stdout, name) : null;
     };
-    return pulledOrHere(name, () => cli.run(pullArguments(name), { timeoutMs: PULL_TIMEOUT_MS }), here);
+    const told = (line: string) => {
+      const pulled = pullProgressIn(line);
+      if (pulled) progress(pulled);
+    };
+    return pulledOrHere(name, () => cli.run(pullArguments(name), { timeoutMs: PULL_TIMEOUT_MS, onLine: told }), here);
   }
 
   async runOnce(run: ThrowawayRun, timeoutMs: number) {

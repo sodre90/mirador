@@ -87,6 +87,7 @@ export const chat: Messages["chat"] = {
   sandboxImageStep: (at: number, of: number) => `A sandbox előkészítése: az alap-image építése, ${of} lépésből a(z) ${at}.…`,
   sandboxInstalling: (tool: string) => `A sandbox előkészítése: ${tool} telepítése…`,
   sandboxPulling: (image: string) => `A sandbox előkészítése: ${image} letöltése…`,
+  sandboxUnpacking: (image: string) => `A sandbox előkészítése: ${image} kicsomagolása…`,
   sandboxChecking: (image: string) => `A sandbox előkészítése: ${image} ellenőrzése…`,
   notice: {
     lines: (count) => `${count} sor`,

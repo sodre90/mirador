@@ -256,6 +256,7 @@ export const rooms: Messages["rooms"] = {
     },
     installingTool: (tool: string) => `正在为沙箱安装 ${tool}…`,
     pullingImage: (image: string) => `正在为沙箱拉取 ${image}…`,
+    unpackingImage: (image: string) => `正在为沙箱解包 ${image}…`,
     checkingImage: (image: string) => `正在检查 ${image} 是否具备 Agent 所需的一切…`,
     baseImage: {
       label: "基础镜像",

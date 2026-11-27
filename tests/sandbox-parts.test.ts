@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, realpathSync, rmSync, 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { environmentInVm, KEY_PLACEHOLDER } from "../host/sandbox/agent-environment.ts";
-import { CONTAINER_READS, execArguments, ownBaseIn, pullArguments, vmIdsLabelled, writtenByOthersIn } from "../host/sandbox/apple-container.ts";
+import { CONTAINER_READS, execArguments, ownBaseIn, pullArguments, pullProgressIn, vmIdsLabelled, writtenByOthersIn } from "../host/sandbox/apple-container.ts";
 import { agentCheck, agentVerdictIn, baseCheck, verdictIn } from "../host/sandbox/base-check.ts";
 import { appleContainerAvailability, appleContainerRuntime, podmanAvailability, podmanStorageIn, selinuxEnforcingAt } from "../host/sandbox/availability.ts";
 import { execProcessEnvironment } from "../host/sandbox/exec-environment.ts";
@@ -163,8 +163,17 @@ test.skipIf(process.platform === "win32")("a check of an agent kind's own progra
   expect(agentVerdictIn("Error: failed to find target executable /bin/sh")).toBeNull();
 });
 
+test("a pull in Apple's container says how far its fetching got, then its unpacking, as it says it", () => {
+  expect(pullProgressIn("[1/2] Fetching image [0s]")).toEqual({ stage: "pulling-image" });
+  expect(pullProgressIn("[1/2] Fetching image 45% (3 of 7 blobs, 18,4 MB/41,3 MB, 9,1 MB/s) [12s]")).toEqual({ stage: "pulling-image", percent: 45 });
+  expect(pullProgressIn("[2/2] Unpacking image for platform linux/arm64/v8 [13s]")).toEqual({ stage: "pulling-image", unpacking: true });
+  expect(pullProgressIn("[2/2] Unpacking image for platform linux/arm64/v8 100% (5 706 entries, 136,9 MB) [14s]")).toEqual({ stage: "pulling-image", percent: 100, unpacking: true });
+  expect(pullProgressIn("Error: HTTP request to https://registry-1.docker.io/v2/team/dev/manifests/1 failed with response: 401 Unauthorized")).toBeNull();
+  expect(pullArguments("docker.io/team/dev:1")).toEqual(["image", "pull", "--progress", "plain", "--platform", "linux/arm64", "docker.io/team/dev:1"]);
+});
+
 test("the owner's base image runs by its name in Apple's container, as pulled for this Mac, and by its ID in Podman", () => {
-  expect(pullArguments("docker.io/team/dev:latest")).toEqual(["image", "pull", "--progress", "none", "--platform", "linux/arm64", "docker.io/team/dev:latest"]);
+  expect(pullArguments("docker.io/team/dev:latest")).toEqual(["image", "pull", "--progress", "plain", "--platform", "linux/arm64", "docker.io/team/dev:latest"]);
   const digest = `sha256:${"a".repeat(64)}`;
   expect(ownBaseIn(JSON.stringify([{ name: "docker.io/team/dev:latest", index: { digest } }]), "docker.io/team/dev:latest")).toEqual({ image: "docker.io/team/dev:latest", content: digest });
   expect(ownBaseIn("[]", "docker.io/team/dev:latest")).toBeNull();

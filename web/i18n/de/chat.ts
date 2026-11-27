@@ -89,6 +89,7 @@ export const chat: Messages["chat"] = {
   sandboxImageStep: (at: number, of: number) => `Die Sandbox wird eingerichtet: Ihr Basis-Image wird gebaut, Schritt ${at} von ${of}…`,
   sandboxInstalling: (tool: string) => `Die Sandbox wird eingerichtet: ${tool} wird installiert…`,
   sandboxPulling: (image: string) => `Die Sandbox wird eingerichtet: ${image} wird geladen…`,
+  sandboxUnpacking: (image: string) => `Die Sandbox wird eingerichtet: ${image} wird entpackt…`,
   sandboxChecking: (image: string) => `Die Sandbox wird eingerichtet: ${image} wird geprüft…`,
   notice: {
     lines: (count) => plural(count, "1 Zeile", `${count} Zeilen`),

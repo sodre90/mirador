@@ -91,9 +91,10 @@ export interface VmLauncher {
   defaultBase(progress: (setup: SandboxSetup) => void): Promise<BaseImage>;
   /**
    * The owner's own base image, by its full name: pulled afresh, unless it names its digest and is here already, else the
-   * one here where the pull fails. Throws BaseNotPulled where there is none here.
+   * one here where the pull fails, how far the pull got told where the runtime says. Throws BaseNotPulled where there is
+   * none here.
    */
-  ownBase(name: string): Promise<OwnBase>;
+  ownBase(name: string, progress: (setup: SandboxSetup) => void): Promise<OwnBase>;
   /** Runs a throwaway container to its end: its exit code and what it said. */
   runOnce(run: ThrowawayRun, timeoutMs: number): Promise<{ exitCode: number; output: string }>;
   /** Starts the VM, once its first process says it is ready; throws SandboxNotReady where it does not get there. */

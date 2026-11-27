@@ -6,8 +6,10 @@
  * script that puts held files back in a VM here, from host/sandbox/in-vm; what it runs ends with the VM. A throwaway
  * `run`, which installs a tool, installs nothing and succeeds. With FAKE_CONTAINER_BUILD_HELD_BY, the base image's build
  * stops after its second step until that file exists; with FAKE_CONTAINER_INSTALL_HELD_BY, so does Claude Code's install.
- * A pull gets any image but one whose name has /missing in it; the check of an owner's base image, noted in checks.log,
- * finds all the agents need but in one whose name has lacks-git in it.
+ * A pull gets any image but one whose name has /missing in it, saying how far it got as `--progress plain` does; with
+ * FAKE_CONTAINER_PULL_HELD_BY, one whose name has /dev: in it stops at 40% until that file exists, and with
+ * FAKE_CONTAINER_UNPACK_HELD_BY, at 60% of its unpacking. The check of an owner's base image, noted in checks.log, finds
+ * all the agents need but in one whose name has lacks-git in it.
  */
 import { appendFileSync, existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -65,11 +67,20 @@ async function build() {
   change((state) => state.images.push(tag));
 }
 
-function pull(name: string) {
+/** A line as `--progress plain` says it: uncoloured, which console.error isn't where the run forces colour. */
+const sayPlainly = (line: string) => process.stderr.write(`${line}\n`);
+
+async function pull(name: string) {
+  sayPlainly("[1/2] Fetching image [0s]");
   if (name.includes("/missing")) {
     console.error(`Error: HTTP request to ${name} failed with response: 404 Not Found`);
     process.exit(1);
   }
+  sayPlainly("[1/2] Fetching image 40% (3 of 7 blobs, 16,4 MB/41,3 MB, 8,2 MB/s) [2s]");
+  if (name.includes("/dev:")) await waitForFile(process.env.FAKE_CONTAINER_PULL_HELD_BY);
+  sayPlainly("[2/2] Unpacking image for platform linux/arm64/v8 60% (3 424 entries, 82,1 MB) [3s]");
+  if (name.includes("/dev:")) await waitForFile(process.env.FAKE_CONTAINER_UNPACK_HELD_BY);
+  sayPlainly("[2/2] Unpacking image for platform linux/arm64/v8 100% (5 706 entries, 136,9 MB) [4s]");
   change((state) => void (state.images.includes(name) || state.images.push(name)));
 }
 
@@ -142,7 +153,7 @@ switch (command) {
     break;
   case "image":
     if (sub === "list") console.log(JSON.stringify(read().images.map((reference) => ({ reference }))));
-    if (sub === "pull") pull(args.at(-1)!);
+    if (sub === "pull") await pull(args.at(-1)!);
     if (sub === "inspect") inspect(args[2]!);
     if (sub === "delete") change((state) => (state.images = state.images.filter((name) => !args.slice(2).includes(name))));
     break;

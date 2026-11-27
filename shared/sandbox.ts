@@ -322,6 +322,10 @@ export interface SandboxSetup {
   tool?: SandboxTool;
   /** While the owner's base image is pulled or checked: which, as they named it. */
   image?: string;
+  /** While the owner's base image is pulled: how much of it is fetched, or unpacked once fetched, out of 100, where the runtime says. */
+  percent?: number;
+  /** While the owner's base image is pulled: that it is fetched, and now unpacked. */
+  unpacking?: boolean;
   /** Only when it failed for another reason than the owner's base image: what went wrong, in a line. */
   problem?: string;
   /** Only when it failed as the owner's base image is no use. */

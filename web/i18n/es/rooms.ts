@@ -264,6 +264,7 @@ export const rooms: Messages["rooms"] = {
     },
     installingTool: (tool: string) => `Instalando ${tool} para el sandbox…`,
     pullingImage: (image: string) => `Descargando ${image} para el sandbox…`,
+    unpackingImage: (image: string) => `Desempaquetando ${image} para el sandbox…`,
     checkingImage: (image: string) => `Comprobando si ${image} tiene lo que necesitan los agentes…`,
     baseImage: {
       label: "Imagen base",
