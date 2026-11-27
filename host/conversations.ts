@@ -539,6 +539,8 @@ export class ConversationService {
   private readonly replaysBeingRead = new Map<string, acp.SessionNotification[]>();
   private readonly contextUsage: Map<string, ContextUsage>;
   private readonly creditReads = new Map<string, ReturnType<typeof setTimeout>>();
+  /** Each workspace's last save of where its new conversations work, which checks the repository first; settled, failed or not. */
+  private readonly worktreeSettingsSaved = new Map<string, Promise<unknown>>();
   private readonly planQuotas = new PlanQuotasByProfile();
   private readonly antigravityQuotas = new AntigravityQuotaReader((profileId, groups, conversationIds) => {
     if (this.planQuotas.recordGroups(profileId, groups, Date.now())) {
@@ -714,13 +716,29 @@ export class ConversationService {
 
   /** Like `create`, where the workspace starts its conversations unless `startsIn` names the other place. */
   async start(workspaceId: string, launch?: Launch, prompt?: string, startsIn?: ConversationPlace, authorId?: string): Promise<Conversation> {
-    const workspace = this.existingWorkspace(workspaceId);
-    const worktree = placeOfNewConversation(workspace, startsIn) === "worktree" ? await this.worktrees.plan(workspace) : undefined;
+    const worktree = await this.worktreeOfNewConversation(workspaceId, startsIn);
     return this.create(workspaceId, launch, prompt, undefined, {}, worktree, { authorId });
   }
 
-  /** Where the workspace's new conversations work, and the command that sets each new worktree up. */
-  async setWorktreeSettings(workspaceId: string, newConversationsIn: ConversationPlace, worktreeSetup: string) {
+  /** A new conversation's own worktree, where the workspace, its settings saved, starts it in one, or `startsIn` says so. */
+  private async worktreeOfNewConversation(workspaceId: string, startsIn?: ConversationPlace) {
+    await this.worktreeSettingsSaved.get(workspaceId);
+    const workspace = this.existingWorkspace(workspaceId);
+    return placeOfNewConversation(workspace, startsIn) === "worktree" ? await this.worktrees.plan(workspace) : undefined;
+  }
+
+  /**
+   * Where the workspace's new conversations work, and the command that sets each new worktree up. Saves go one after
+   * another, so the last one asked for stays, and a conversation started meanwhile starts where it says.
+   */
+  setWorktreeSettings(workspaceId: string, newConversationsIn: ConversationPlace, worktreeSetup: string) {
+    const previous = this.worktreeSettingsSaved.get(workspaceId) ?? Promise.resolve();
+    const saved = previous.then(() => this.saveWorktreeSettings(workspaceId, newConversationsIn, worktreeSetup));
+    this.worktreeSettingsSaved.set(workspaceId, saved.catch(() => {}));
+    return saved;
+  }
+
+  private async saveWorktreeSettings(workspaceId: string, newConversationsIn: ConversationPlace, worktreeSetup: string) {
     const workspace = this.existingWorkspace(workspaceId);
     if (!isConversationPlace(newConversationsIn)) return;
     if (newConversationsIn === "worktree") await this.worktrees.mustHold(workspace);
@@ -796,9 +814,8 @@ export class ConversationService {
    * It works for nobody, so it stands in the sidebar as any other and tells the user when its turns end.
    */
   async startForPlugin(workspaceId: string, pluginTitle: string, { profileId, prompt, title, model, effort }: WorkspaceConversationStart): Promise<StartedConversation> {
-    const workspace = this.existingWorkspace(workspaceId);
     const profile = this.profileWithId(profileId);
-    const worktree = placeOfNewConversation(workspace) === "worktree" ? await this.worktrees.plan(workspace) : undefined;
+    const worktree = await this.worktreeOfNewConversation(workspaceId);
     return this.startedOf(this.create(workspaceId, { harness: profile.harness, profileId: profile.id }, prompt, title, { model, effort }, worktree, { fromPlugin: pluginTitle }));
   }
 

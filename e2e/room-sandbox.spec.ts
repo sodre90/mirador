@@ -366,7 +366,7 @@ test("in a sandboxed room's workspace a commit or merge runs none of the reposit
     await sendMessage(page, "FOLDER");
     await waitForTurnToEnd(page);
     const folder = (await lastAgentMessage(page).innerText()).trim().replace(/^Working in /, "");
-    expect(folder).not.toBe(host.projectDir);
+    expect(realpathSync(folder)).not.toBe(realpathSync(host.projectDir));
     writeFileSync(join(folder, "merged.txt"), "from the worktree\n");
     execFileSync("git", ["-C", folder, "add", "merged.txt"]);
     execFileSync("git", ["-C", folder, "commit", "--no-verify", "-qm", "Add merged.txt"]);

@@ -125,6 +125,34 @@ test("a plugin's tool starts conversations in worktrees of their own, each on a 
   expect(replies.every(({ reply }) => reply.ended === "finished")).toBe(true);
 });
 
+test("a conversation started while the workspace's switch to worktrees is still being saved starts in a worktree of its own", async () => {
+  const { conversations } = await callerInWorkspace({ inRepository: true });
+
+  const saved = conversations.setWorktreeSettings("w1", "worktree", "");
+  const started = await conversations.start("w1");
+  await saved;
+
+  expect(started.worktree?.branch).toMatch(/^mirador\//);
+});
+
+test("of two quick saves of where a workspace's conversations work, the later one stays", async () => {
+  const { conversations, store } = await callerInWorkspace({ inRepository: true });
+
+  await Promise.all([conversations.setWorktreeSettings("w1", "worktree", ""), conversations.setWorktreeSettings("w1", "folder", "")]);
+
+  expect(store.findWorkspace("w1")?.newConversationsIn).toBe("folder");
+});
+
+test("a refused switch to worktrees leaves a conversation started meanwhile in the workspace's folder", async () => {
+  const { conversations } = await callerInWorkspace({ inRepository: false });
+
+  const refused = conversations.setWorktreeSettings("w1", "worktree", "");
+  const started = await conversations.start("w1");
+
+  await expect(refused).rejects.toThrow("is not in one");
+  expect(started.worktree).toBeUndefined();
+});
+
 test("a conversation started in a worktree from a given commit works on a new branch at that commit", async () => {
   const { conversations, project, callerId, replied } = await callerInWorkspace({ inRepository: true });
   const firstCommit = (await git(project, ["rev-parse", "HEAD"])).stdout;
