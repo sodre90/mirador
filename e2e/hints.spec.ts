@@ -70,3 +70,33 @@ test("help text in the app stays where it is written, unlike the hint bubble", a
   await expect(help).toHaveCSS("position", "static");
   await expect(page.getByRole("tooltip")).toHaveCount(0);
 });
+
+test("a short hint opens on a touch tap without blocking clicks beneath it, and links via aria-describedby for screen readers", async ({ page }) => {
+  await signIn(page, host);
+  const addWorkspaceButton = page.getByRole("button", { name: "Add workspace" });
+  const hint = page.getByRole("tooltip");
+
+  // Touch tap opens a short hint and lets taps pass through it; tapping again or elsewhere dismisses it.
+  await addWorkspaceButton.dispatchEvent("pointerover", { pointerType: "touch", bubbles: true });
+  await addWorkspaceButton.dispatchEvent("pointerdown", { pointerType: "touch", bubbles: true });
+  await expect(hint).toBeVisible();
+  await expect(hint).toContainText("Add a project directory.");
+  await expect(hint).toHaveCSS("pointer-events", "none");
+  const tooltipId = await hint.getAttribute("id");
+  expect(tooltipId).toBeTruthy();
+  await expect(addWorkspaceButton).toHaveAttribute("aria-describedby", tooltipId!);
+
+  await addWorkspaceButton.dispatchEvent("pointerdown", { pointerType: "touch", bubbles: true });
+  await expect(hint).toHaveCount(0);
+  await expect(addWorkspaceButton).not.toHaveAttribute("aria-describedby");
+
+  // Keyboard focus links the focused control to the tooltip so screen readers hear its description.
+  while (!(await addWorkspaceButton.evaluate((node) => node === document.activeElement))) {
+    await page.keyboard.press("Tab");
+  }
+  await expect(hint).toBeVisible();
+  await expect(addWorkspaceButton).toHaveAccessibleDescription(/Add a project directory\./);
+  await page.keyboard.press("Escape");
+  await expect(hint).toHaveCount(0);
+  await expect(addWorkspaceButton).not.toHaveAttribute("aria-describedby");
+});

@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 
 const SHOW_DELAY_MS = 700;
 const GAP = 6;
@@ -11,6 +11,7 @@ interface Hint {
   shortcut: string | null;
   long: boolean;
   anchor: DOMRect;
+  described: HTMLElement | null;
 }
 
 /** A hint inside a canvas frame, which the page's own listeners can't see into; its anchor is where it shows on the page. */
@@ -22,16 +23,29 @@ export const showFramedHint = (hint: FramedHint) => framedHintListeners.forEach(
 
 const hintedElementAt = (target: EventTarget | null) => (target instanceof Element ? target.closest<HTMLElement>("[data-hint], [data-shortcut]") : null);
 
+function attachDescribedBy(target: HTMLElement, tooltipId: string) {
+  const ids = (target.getAttribute("aria-describedby") ?? "").split(/\s+/).filter(Boolean);
+  if (!ids.includes(tooltipId)) target.setAttribute("aria-describedby", [...ids, tooltipId].join(" "));
+}
+
+function detachDescribedBy(target: HTMLElement, tooltipId: string) {
+  const rest = (target.getAttribute("aria-describedby") ?? "").split(/\s+/).filter((id) => id && id !== tooltipId);
+  if (rest.length > 0) target.setAttribute("aria-describedby", rest.join(" "));
+  else target.removeAttribute("aria-describedby");
+}
+
 /**
- * Shows the `data-hint` text of whatever is pointed at or focused with the keyboard, one hint at a time, with the
- * key that does the same (`data-shortcut`) when there is one.
- * A long one (`data-hint-long`) shows every paragraph alike, shows on a press too, and stays while the pointer is in it,
- * so it can be read and scrolled.
- * Pressing an element puts its hint away until the pointer moves to something else or the element loses focus.
+ * Shows the `data-hint` text of whatever is pointed at, focused with the keyboard, or tapped on a touch screen, one
+ * hint at a time, with the key that does the same (`data-shortcut`) when there is one, and links it by
+ * `aria-describedby` so screen readers read it.
+ * A long one (`data-hint-long`) shows every paragraph alike, shows on a mouse press too, and stays while the pointer is
+ * in it, so it can be read and scrolled.
+ * Clicking an element with a mouse puts its short hint away until the pointer moves to something else or focus leaves.
  */
 export function HintLayer() {
   const [hint, setHint] = useState<Hint | null>(null);
   const bubble = useRef<HTMLDivElement>(null);
+  const tooltipId = useId();
 
   useEffect(() => {
     let current: HTMLElement | null = null;
@@ -58,22 +72,28 @@ export function HintLayer() {
       keepShown();
       hideTimer = setTimeout(hide, LONG_HINT_GRACE_MS);
     };
-    const showFor = (element: HTMLElement, delay: number) => {
+    const reveal = (element: HTMLElement, described: HTMLElement) => {
+      const text = element.dataset.hint ?? "";
+      const shortcut = element.dataset.shortcut ?? null;
+      if ((!text && !shortcut) || !element.isConnected) return;
+      visible = true;
+      shownLong = isLong(element);
+      setHint({ text, shortcut, long: shownLong, anchor: element.getBoundingClientRect(), described });
+    };
+    const showFor = (element: HTMLElement, delay: number, described: HTMLElement = element) => {
       clearTimeout(timer);
       keepShown();
       current = element;
-      timer = setTimeout(() => {
-        const text = element.dataset.hint ?? "";
-        const shortcut = element.dataset.shortcut ?? null;
-        if ((!text && !shortcut) || !element.isConnected) return;
-        visible = true;
-        shownLong = isLong(element);
-        setHint({ text, shortcut, long: shownLong, anchor: element.getBoundingClientRect() });
-      }, delay);
+      if (delay === 0) reveal(element, described);
+      else timer = setTimeout(() => reveal(element, described), delay);
     };
     const onPointerDown = (event: PointerEvent) => {
       if (isInBubble(event.target)) return;
       const element = hintedElementAt(event.target);
+      if (event.pointerType === "touch") {
+        if (!element || (element === current && visible)) return hide();
+        return showFor(element, 0);
+      }
       if (isLong(element)) {
         if (element !== current || !visible) showFor(element, 0);
         return;
@@ -82,6 +102,7 @@ export function HintLayer() {
       hide();
     };
     const onPointerOver = (event: PointerEvent) => {
+      if (event.pointerType === "touch") return;
       pointerInBubble = isInBubble(event.target);
       if (pointerInBubble) return keepShown();
       const element = hintedElementAt(event.target);
@@ -92,7 +113,7 @@ export function HintLayer() {
     };
     const onFocusIn = (event: FocusEvent) => {
       const element = hintedElementAt(event.target);
-      if (element && element !== dismissed && event.target instanceof Element && event.target.matches(":focus-visible")) showFor(element, 0);
+      if (element && element !== dismissed && event.target instanceof HTMLElement && event.target.matches(":focus-visible")) showFor(element, 0, event.target);
     };
     const onFocusOut = (event: FocusEvent) => {
       if (event.target instanceof Node && dismissed?.contains(event.target)) dismissed = null;
@@ -107,7 +128,7 @@ export function HintLayer() {
       timer = setTimeout(
         () => {
           visible = true;
-          setHint({ text: framed.text, shortcut: null, long: false, anchor: framed.anchor });
+          setHint({ text: framed.text, shortcut: null, long: false, anchor: framed.anchor, described: null });
         },
         visible ? 0 : SHOW_DELAY_MS,
       );
@@ -135,6 +156,13 @@ export function HintLayer() {
   }, []);
 
   useLayoutEffect(() => {
+    const described = hint?.described;
+    if (!described) return;
+    attachDescribedBy(described, tooltipId);
+    return () => detachDescribedBy(described, tooltipId);
+  }, [hint?.described, tooltipId]);
+
+  useLayoutEffect(() => {
     const element = bubble.current;
     if (!hint || !element) return;
     element.style.left = "0px";
@@ -154,7 +182,7 @@ export function HintLayer() {
   if (!hint) return null;
   if (hint.long)
     return (
-      <div ref={bubble} className="hint-bubble long" role="tooltip" style={{ visibility: "hidden" }}>
+      <div ref={bubble} id={tooltipId} className="hint-bubble long" role="tooltip" style={{ visibility: "hidden" }}>
         {hint.text.split("\n\n").map((paragraph) => (
           <p key={paragraph}>{paragraph}</p>
         ))}
@@ -162,7 +190,7 @@ export function HintLayer() {
     );
   const [summary, ...details] = hint.text.split("\n\n");
   return (
-    <div ref={bubble} className="hint-bubble" role="tooltip" style={{ visibility: "hidden" }}>
+    <div ref={bubble} id={tooltipId} className="hint-bubble" role="tooltip" style={{ visibility: "hidden" }}>
       <div className="hint-summary">
         {summary && (details.length > 0 ? <strong>{summary}</strong> : <span>{summary}</span>)}
         {hint.shortcut && <kbd>{hint.shortcut}</kbd>}
