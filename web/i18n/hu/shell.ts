@@ -184,6 +184,7 @@ export const shell: Messages["shell"] = {
     noneSayThat: "Itt egyik munkamenetben sem szerepel ez.",
     loading: "Munkamenetek betöltése…",
     noneYet: (agent) => `Ebben a könyvtárban még nincs munkamenet ezzel: ${agent}.`,
+    inWorktree: "worktree",
   },
   search: {
     label: "Keresés minden munkaterületen",

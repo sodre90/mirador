@@ -181,6 +181,7 @@ export const shell: Messages["shell"] = {
     noneSayThat: "这里没有会话提到这个。",
     loading: "正在加载会话…",
     noneYet: (agent) => `这个目录里还没有 ${agent} 会话。`,
+    inWorktree: "工作树",
   },
   search: {
     label: "搜索所有工作区",

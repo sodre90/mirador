@@ -199,6 +199,7 @@ export const hints: Messages["hints"] = {
     "Jede Unterhaltung läuft mit einem Profil. Richte dein erstes im Hauptbereich ein; ohne weitere Einstellungen startet es den Agenten so, wie er auf diesem Rechner eingerichtet ist.",
   sessionSearch:
     "Finde Sitzungen in diesem Verzeichnis nach dem, was darin gesagt wurde, egal wie alt. Die Suche liest die eigenen Aufzeichnungen des Agenten zu jeder Sitzung hier und findet so auch Sitzungen, die die Liste nicht zeigt.",
+  sessionInWorktree: "Wurde in einem Worktree dieses Arbeitsbereichs gestartet. Beim Fortsetzen oder Forken öffnet sie sich in einem eigenen neuen Worktree.",
   profiles:
     "Benannte Einstellungen für einen Agenten: Umgebungsvariablen und ein Befehl vor dem Start, angewendet auf den Agent-Prozess, den das Profil startet. Jede Unterhaltung läuft mit einem davon.",
   shellOutputStyle:

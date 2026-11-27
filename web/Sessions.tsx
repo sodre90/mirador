@@ -8,6 +8,7 @@ import { locale, t } from "./i18n/index.ts";
 import { launchLabel } from "./launch-label.ts";
 import type { AppAction } from "./state.ts";
 import { hostErrorText } from "./host-error.ts";
+import { WorktreeIcon } from "./Worktrees.tsx";
 
 const words = t.shell.sessions;
 
@@ -72,6 +73,14 @@ function SessionRow({
         {session.match && <div className="session-match">{session.match}</div>}
         <div className="session-meta">
           {ago(session.updatedAt)} · <code>{session.sessionId.slice(0, 8)}</code>
+          {session.inWorktree && (
+            <>
+              {" · "}
+              <span className="session-worktree" data-hint={hints.sessionInWorktree}>
+                <WorktreeIcon /> {words.inWorktree}
+              </span>
+            </>
+          )}
         </div>
       </div>
       {session.conversationId ? (
@@ -120,7 +129,7 @@ export function SessionsDialog({
       type: "conversation.adopt",
       workspaceId: workspace.id,
       launch: workspace.defaultLaunch,
-      session: { sessionId: session.sessionId, title: session.title },
+      session: { sessionId: session.sessionId, title: session.title, ...(session.inWorktree && { inWorktree: true }) },
       mode,
     });
     onClose();

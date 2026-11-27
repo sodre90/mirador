@@ -210,6 +210,7 @@ export const shell: Messages["shell"] = {
     noneSayThat: "Ninguna sesión de aquí dice eso.",
     loading: "Cargando sesiones…",
     noneYet: (agent) => `Todavía no hay sesiones de ${agent} en este directorio.`,
+    inWorktree: "worktree",
   },
   search: {
     label: "Buscar en todos los espacios de trabajo",

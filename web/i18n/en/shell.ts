@@ -210,6 +210,7 @@ export const shell = {
     noneSayThat: "No sessions here say that.",
     loading: "Loading sessions…",
     noneYet: (agent: string) => `No ${agent} sessions in this directory yet.`,
+    inWorktree: "worktree",
   },
   search: {
     label: "Search all workspaces",

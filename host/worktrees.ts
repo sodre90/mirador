@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { mkdir, realpath, rm } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { HostProblemError } from "../shared/host-problems.ts";
 import type { Landable, Landed } from "../shared/changes.ts";
 import type { Conversation, ConversationWorktree, Workspace } from "../shared/model.ts";
@@ -9,10 +9,23 @@ import { landableOnto, landOnto } from "./landing.ts";
 
 const SHORT_ID_LENGTH = 8;
 
-const folderNameOf = ({ name, id }: Workspace) => `${name.replace(/[^\p{L}\p{N}._-]+/gu, "-")}-${id.slice(0, SHORT_ID_LENGTH)}`;
+const folderNameOf = ({ name, id }: Pick<Workspace, "id" | "name">) => `${name.replace(/[^\p{L}\p{N}._-]+/gu, "-")}-${id.slice(0, SHORT_ID_LENGTH)}`;
 
 /** macOS temp folders reach their real place through a symlink, and git answers with the real one. */
-const realPathOf = (path: string) => realpath(path).catch(() => resolve(path));
+const realPathOf = async (path: string): Promise<string> => {
+  try {
+    return await realpath(path);
+  } catch {
+    const parent = dirname(path);
+    return parent === path ? resolve(path) : join(await realPathOf(parent), basename(path));
+  }
+};
+
+/** Whether `cwd` is inside `worktreesDirectory`, i.e. one of the workspace's own worktrees, even one already deleted. */
+export function isInWorktreesDirectory(cwd: string, worktreesDirectory: string): boolean {
+  const rel = relative(worktreesDirectory, cwd);
+  return rel !== "" && rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel);
+}
 
 /**
  * Where the conversation works, as a workspace: its worktree, under the worktree's own id, so what Mirador keeps per
@@ -26,6 +39,11 @@ export class Worktrees {
   private readonly queues = new Map<string, Promise<unknown>>();
 
   constructor(private readonly dataDir: string) {}
+
+  /** The folder holding this workspace's worktrees, with symlinks resolved as session `cwd`s record them. */
+  async directoryOf(workspace: Pick<Workspace, "id" | "name">): Promise<string> {
+    return join(await realPathOf(this.dataDir), "worktrees", folderNameOf(workspace));
+  }
 
   private queue<T>(workspacePath: string, task: () => Promise<T>): Promise<T> {
     const previous = this.queues.get(workspacePath) ?? Promise.resolve();

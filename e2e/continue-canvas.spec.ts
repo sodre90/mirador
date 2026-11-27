@@ -21,11 +21,13 @@ test.beforeAll(async () => {
     FAKE_ACP_PROMPTS: join(host.root, "prompts"),
     FAKE_ACP_HISTORY: historyFile,
   });
+  await host.start();
   writeFileSync(
     historyFile,
     JSON.stringify({
       sessionId: "recorded-session",
       title: "Earlier canvas work",
+      cwd: host.projectDirInTerminal,
       updates: [
         { sessionUpdate: "user_message_chunk", content: { type: "text", text: "Show me the plan" } },
         ...replayedCall("t1", "canvas_show", { title: "The plan", html: "<h1 id='plan'>Step one</h1>" }, "Shown to the user."),
@@ -34,7 +36,6 @@ test.beforeAll(async () => {
       ],
     }),
   );
-  await host.start();
 });
 test.afterAll(async () => {
   await host.stop();

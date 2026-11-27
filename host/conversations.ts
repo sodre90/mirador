@@ -147,7 +147,7 @@ import { claudeTranscriptPaths, messageSnippetOf, openOpencodeDatabase, opencode
 import { UserCommandRunner } from "./user-commands.ts";
 import { newerPiThan } from "./pi-updates.ts";
 import { commandShell, shellInvocation } from "./command-shell.ts";
-import { Worktrees, workingCopyOf } from "./worktrees.ts";
+import { isInWorktreesDirectory, Worktrees, workingCopyOf } from "./worktrees.ts";
 import { ConversationSessions } from "./conversation-sessions.ts";
 import { SubagentSessions } from "./subagent-sessions.ts";
 import { SubagentUsageReader } from "./subagent-usage.ts";
@@ -1062,17 +1062,17 @@ export class ConversationService {
     return harness === "claude" && acpSessionId ? claudeTranscript(this.claudeConfigDirOf(conversation), acpSessionId) : "";
   }
 
-  /** The newest sessions the harness knows for the workspace directory, including ones started outside the app. */
+  /** The newest sessions the harness knows for the workspace or its worktrees, including ones started outside the app. */
   async listSessionsInWorkspace(workspaceId: string, launch: Launch): Promise<ExternalSession[]> {
-    const { sessions, conversationIdBySession } = await this.harnessSessions(workspaceId, launch);
-    return sessions.slice(0, LISTED_SESSIONS).map((session) => externalSession(session, conversationIdBySession));
+    const { sessions } = await this.harnessSessions(workspaceId, launch, { limit: LISTED_SESSIONS });
+    return sessions;
   }
 
-  /** Sessions in the workspace whose title or messages hold what the user is looking for, newest first; a search the user has moved on from stops. */
+  /** Sessions in the workspace or its worktrees whose title or messages hold what the user is looking for, newest first; a search the user has moved on from stops. */
   async searchSessionsInWorkspace(workspaceId: string, launch: Launch, query: string, outdated?: AbortSignal): Promise<SessionSearchHit[]> {
     const lowerQuery = query.trim().toLowerCase();
     if (lowerQuery.length < MIN_SEARCH_LENGTH) return [];
-    const { profile, sessions, conversationIdBySession } = await this.harnessSessions(workspaceId, launch);
+    const { profile, sessions } = await this.harnessSessions(workspaceId, launch, { outdated });
     const harness = this.harnessFor(launch);
     if (harness.spec.id !== "claude" && harness.spec.id !== "opencode") throw new HostProblemError({ code: "agent-cannot-search-sessions", agent: harness.spec.label });
     const environment = profileEnvironment(profile);
@@ -1087,7 +1087,7 @@ export class ConversationService {
         outdated?.throwIfAborted();
         const titleMatch = (session.title ?? "").toLowerCase().includes(lowerQuery);
         const match = titleMatch ? null : await messageSnippetOf(session.sessionId, lowerQuery, transcriptPaths, database);
-        if (titleMatch || match !== null) hits.push({ ...externalSession(session, conversationIdBySession), match });
+        if (titleMatch || match !== null) hits.push({ ...session, match });
         if (hits.length >= SEARCHED_SESSIONS) break;
       }
       return hits;
@@ -1097,31 +1097,56 @@ export class ConversationService {
   }
 
   /**
-   * The harness's sessions for the workspace directory, newest first, with the app's conversation on each. A session a
-   * conversation of another workspace holds is that workspace's, though both may name one folder under two spellings,
-   * and one an agent works on a room's tasks in is the room's.
+   * The harness's sessions for the workspace directory and its worktrees (including ones already removed), newest first,
+   * with the app's conversation on each. A session a conversation of another workspace holds is that workspace's, though
+   * both may name one folder under two spellings, and one an agent works on a room's tasks in is the room's.
    */
-  private async harnessSessions(workspaceId: string, launch: Launch) {
+  private async harnessSessions(workspaceId: string, launch: Launch, { limit, outdated }: { limit?: number; outdated?: AbortSignal } = {}) {
     this.refuseSessionsFromThisComputerIn(workspaceId);
-    const directory = await recordedDirectory(this.existingWorkspace(workspaceId));
+    const workspace = this.existingWorkspace(workspaceId);
+    const [directory, worktreesDir] = await Promise.all([recordedDirectory(workspace), this.worktrees.directoryOf(workspace)]);
     const profile = profileToLaunch(this.store, launch);
     const harness = this.harnessFor(launch);
     const capabilities = await harness.start();
     if (!capabilities.agentCapabilities?.sessionCapabilities?.list) throw new HostProblemError({ code: "agent-cannot-list-sessions", agent: harness.spec.label });
-    const { sessions } = await harness.listSessions(directory);
     const conversations = this.store.listConversations();
     const conversationIdBySession = new Map(conversations.map(({ acpSessionId, id }) => [acpSessionId, id]));
     const heldElsewhere = new Set(conversations.filter((conversation) => conversation.workspaceId !== workspaceId || conversation.roomId).map(({ acpSessionId }) => acpSessionId));
-    return { profile, sessions: sessions.filter(({ cwd, sessionId }) => cwd === directory && !heldElsewhere.has(sessionId)), conversationIdBySession };
+    const sessions: ExternalSession[] = [];
+    const seenSessions = new Set<string>();
+    const seenCursors = new Set<string>();
+    let cursor: string | undefined;
+    while (true) {
+      outdated?.throwIfAborted();
+      const page = await harness.listSessions(undefined, cursor);
+      for (const session of page.sessions) {
+        if (seenSessions.has(session.sessionId) || heldElsewhere.has(session.sessionId)) continue;
+        const inWorktree = isInWorktreesDirectory(session.cwd, worktreesDir);
+        if (session.cwd !== directory && !inWorktree) continue;
+        seenSessions.add(session.sessionId);
+        sessions.push(externalSession(session, conversationIdBySession, inWorktree));
+        if (limit !== undefined && sessions.length >= limit) return { profile, sessions };
+      }
+      if (!page.nextCursor || seenCursors.has(page.nextCursor)) break;
+      seenCursors.add(page.nextCursor);
+      cursor = page.nextCursor;
+    }
+    return { profile, sessions };
   }
 
   /**
-   * Continues (or forks) a session started elsewhere, e.g. in a terminal, replaying its history into the conversation.
-   * A sandboxed workspace's agents keep their sessions in its sandbox, which holds none from this computer.
+   * Continues (or forks) a session started elsewhere, e.g. in a terminal or a deleted worktree, replaying its history
+   * into the conversation. A session that ran in a worktree gets a fresh worktree of its own; one from the project
+   * folder stays there. A sandboxed workspace's agents keep their sessions in its sandbox, which holds none from this
+   * computer.
    */
-  adopt(workspaceId: string, launch: Launch, session: Pick<ExternalSession, "sessionId" | "title">, mode: AdoptMode): Conversation {
+  async adopt(workspaceId: string, launch: Launch, session: Pick<ExternalSession, "sessionId" | "title" | "inWorktree">, mode: AdoptMode): Promise<Conversation> {
     this.refuseSessionsFromThisComputerIn(workspaceId);
-    return this.adoptSession(workspaceId, launch, session, mode);
+    if (mode === "continue" && this.store.listConversations().some(({ acpSessionId }) => acpSessionId === session.sessionId)) {
+      throw new HostProblemError({ code: "session-already-open" });
+    }
+    const worktree = session.inWorktree ? await this.worktrees.plan(this.existingWorkspace(workspaceId)) : undefined;
+    return this.adoptSession(workspaceId, launch, session, mode, null, worktree);
   }
 
   private refuseSessionsFromThisComputerIn(workspaceId: string) {
@@ -5011,11 +5036,13 @@ const recordedDirectory = (workspace: Workspace) => realpath(workspace.path).cat
 const externalSession = (
   { sessionId, title, updatedAt }: { sessionId: string; title?: string | null; updatedAt?: string | null },
   conversationIdBySession: Map<string | null, string>,
+  inWorktree = false,
 ): ExternalSession => ({
   sessionId,
   title: title ?? null,
   updatedAt: updatedAt ?? null,
   conversationId: conversationIdBySession.get(sessionId) ?? null,
+  ...(inWorktree && { inWorktree: true }),
 });
 
 /** An error event the host writes itself: in English, and as the problem for the page to translate. */

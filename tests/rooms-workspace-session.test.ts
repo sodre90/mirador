@@ -211,7 +211,10 @@ describe("the session of an agent that works in a room's workspace", () => {
   test("is as bare in whatever else is started in its folder: a conversation of your own there, or one that goes on from a session of the agent's", async () => {
     const { conversations, withItsAgent, sessionsAsked, store } = heldToTheRoomsWorkspace();
     const own = withItsAgent(() => conversations.create("w1", { harness: "claude", profileId: "p1" }));
-    const goesOn = withItsAgent(() => conversations.adopt("w1", { harness: "claude", profileId: "p1" }, { sessionId: "deleted-conversations-session", title: "Garden" }, "continue"));
+    const { ensureSession } = conversations as unknown as { ensureSession: (id: string) => Promise<string> };
+    (conversations as unknown as { ensureSession: () => Promise<string> }).ensureSession = async () => "not-started";
+    const goesOn = await conversations.adopt("w1", { harness: "claude", profileId: "p1" }, { sessionId: "deleted-conversations-session", title: "Garden" }, "continue");
+    (conversations as unknown as { ensureSession: typeof ensureSession }).ensureSession = ensureSession;
     for (const { id } of [own, goesOn]) expect(store.findConversation(id)).toMatchObject({ broughtIntoRoom: true, worksInRoomsWorkspace: true, bypassPermissions: false });
     const elsewhere = withItsAgent(() => conversations.create("own", { harness: "claude", profileId: "p1" }));
     expect(elsewhere).toMatchObject({ bypassPermissions: true });

@@ -48,7 +48,7 @@ index 0000000000000000000000000000000000000000..a077840b116493e38f412b3a8572502b
 +  return entry.type === "message" && entry.message?.role === role;
 +}
 diff --git a/dist/index.js b/dist/index.js
-index 313203f22025d320f4bcc23803a1bd2302b4aba0..0f504845f08437ae6e28e696ae2801e53b740e1e 100755
+index 313203f22025d320f4bcc23803a1bd2302b4aba0..3650d9c7f549837302c510ce38fb03770ebf8532 100755
 --- a/dist/index.js
 +++ b/dist/index.js
 @@ -71,6 +71,12 @@ function shouldUseShellForPiCommand(cmd) {
@@ -772,6 +772,15 @@ index 313203f22025d320f4bcc23803a1bd2302b4aba0..0f504845f08437ae6e28e696ae2801e5
    }
    async cancel(params) {
      const session = this.sessions.maybeGet(params.sessionId);
+@@ -2566,7 +2845,7 @@ ${JSON.stringify(stats, null, 2)}`;
+   }
+   async listSessions(params) {
+     const all = listPiSessions();
+-    const effectiveCwd = params.cwd ?? this.lastSessionCwd;
++    const effectiveCwd = params.cwd;
+     const filtered = effectiveCwd ? all.filter((s) => s.cwd === effectiveCwd) : all;
+     const offset = params.cursor ? Number.parseInt(params.cursor, 10) : 0;
+     const start = Number.isFinite(offset) && offset > 0 ? offset : 0;
 @@ -2582,6 +2861,12 @@ ${JSON.stringify(stats, null, 2)}`;
      return { sessions, nextCursor, _meta: {} };
    }

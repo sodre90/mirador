@@ -190,6 +190,7 @@ export const hints: Messages["hints"] = {
     "Minden beszélgetés egy profilon fut. Az elsőt a fő panelen állíthatod be; ha semmi mást nem adsz meg, az ágenst úgy futtatja, ahogy ezen a gépen be van állítva.",
   sessionSearch:
     "Munkamenetek keresése ebben a könyvtárban aszerint, mi hangzott el bennük, bármilyen régiek. A keresés az ágens saját feljegyzéseit olvassa minden itteni munkamenetről, így olyanokat is megtalál, amelyeket a lista nem mutat.",
+  sessionInWorktree: "Ennek a munkaterületnek egy worktree-jében indult. Folytatáskor vagy elágaztatáskor saját új worktree-ben nyílik meg.",
   profiles:
     "Elnevezett beállítások egy ágenshez: környezeti változók és indítás előtti parancs, amelyeket a profil által indított ágensfolyamatra alkalmaz. Minden beszélgetés valamelyiken fut.",
   shellOutputStyle:

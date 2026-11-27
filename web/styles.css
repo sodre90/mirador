@@ -2525,6 +2525,12 @@ label.plugin-switch {
   color: var(--muted);
 }
 
+.session-worktree {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
 .session-match {
   font-size: calc(11px * var(--font-scale));
   color: var(--muted);

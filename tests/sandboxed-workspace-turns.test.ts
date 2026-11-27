@@ -432,7 +432,7 @@ test("a sandboxed workspace takes in no session from this computer, runs no ! co
   const outside = { code: "sandboxed-workspace-outside-session" };
   await expect(conversations.listSessionsInWorkspace("w1", BUILDER)).rejects.toMatchObject({ problem: outside });
   await expect(conversations.searchSessionsInWorkspace("w1", BUILDER, "deploy")).rejects.toMatchObject({ problem: outside });
-  expect(() => conversations.adopt("w1", BUILDER, { sessionId: "from-a-terminal", title: "Terminal" }, "continue")).toThrow(expect.objectContaining({ problem: outside }));
+  await expect(conversations.adopt("w1", BUILDER, { sessionId: "from-a-terminal", title: "Terminal" }, "continue")).rejects.toMatchObject({ problem: outside });
   const conversation = conversations.create("w1", BUILDER);
   await expect(conversations.runCommand(conversation.id, "touch ran")).rejects.toMatchObject({ problem: { code: "sandboxed-workspace-command" } });
 

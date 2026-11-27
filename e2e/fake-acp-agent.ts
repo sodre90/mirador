@@ -106,8 +106,8 @@ const resumeFails = process.env.FAKE_ACP_RESUME_FAILS === "1";
 /** Forks sessions, and loads a fork as a session of its own with no history to replay. */
 const forks = process.env.FAKE_ACP_FORKS === "1";
 const forkedSessions = new Set<string>();
-/** A session of its own past, to list and load: `{ sessionId, title, updates }`, its updates replayed on load. */
-const history: { sessionId: string; title: string; updates: acp.SessionUpdate[] } | null = process.env.FAKE_ACP_HISTORY
+/** A session of its own past, to list and load: `{ sessionId, title, cwd?, updates }`, its updates replayed on load. */
+const history: { sessionId: string; title: string; cwd?: string; updates: acp.SessionUpdate[] } | null = process.env.FAKE_ACP_HISTORY
   ? JSON.parse(readFileSync(process.env.FAKE_ACP_HISTORY, "utf8"))
   : null;
 const startsWith = (prompt: acp.ContentBlock[], word: string) => prompt.every((block) => block.type === "text" && block.text.startsWith(word));
@@ -653,7 +653,7 @@ acp
     return offersModes ? { sessionId, configOptions: offeredOptions(sessionId) } : { sessionId };
   })
   .onRequest(acp.methods.agent.session.list, (ctx) => ({
-    sessions: history ? [{ sessionId: history.sessionId, cwd: ctx.params.cwd ?? process.cwd(), title: history.title, updatedAt: new Date().toISOString() }] : [],
+    sessions: history ? [{ sessionId: history.sessionId, cwd: history.cwd ?? ctx.params.cwd ?? process.cwd(), title: history.title, updatedAt: new Date().toISOString() }] : [],
   }))
   .onRequest(acp.methods.agent.session.fork, () => {
     const sessionId = `fake-fork-${process.pid}-${++nextSession}`;

@@ -254,7 +254,7 @@ export type ClientMessage =
       type: "conversation.adopt";
       workspaceId: string;
       launch: Launch;
-      session: Pick<ExternalSession, "sessionId" | "title">;
+      session: Pick<ExternalSession, "sessionId" | "title" | "inWorktree">;
       mode: AdoptMode;
     }
   /** A new conversation with a copy of this one's agent session, which goes on as it was: whole, or through the turn begun with the message at `throughTurnSeq`. */

@@ -215,6 +215,7 @@ export const shell: Messages["shell"] = {
     noneSayThat: "Keine Sitzung hier enthält das.",
     loading: "Sitzungen werden geladen…",
     noneYet: (agent) => `Noch keine Sitzungen von ${agent} in diesem Verzeichnis.`,
+    inWorktree: "Worktree",
   },
   search: {
     label: "Alle Arbeitsbereiche durchsuchen",

@@ -199,6 +199,7 @@ export const hints: Messages["hints"] = {
     "Toda conversación se ejecuta con un perfil. Configura el primero en el panel principal; sin nada más definido, ejecuta el agente tal como está configurado en esta máquina.",
   sessionSearch:
     "Busca sesiones de este directorio por lo que se dijo en ellas, por antiguas que sean. La búsqueda lee los registros propios del agente de cada sesión de aquí, así que encuentra sesiones que la lista no muestra.",
+  sessionInWorktree: "Se inició en un worktree de este espacio de trabajo. Al continuarla o hacer un fork, se abre en un nuevo worktree propio.",
   profiles:
     "Configuraciones con nombre para un agente: variables de entorno y un comando previo al inicio, aplicados al proceso del agente que inicia el perfil. Toda conversación se ejecuta con uno.",
   shellOutputStyle:

@@ -1740,7 +1740,7 @@ export function startServer(services: HostServices) {
       case "conversation.set-profile":
         return conversations.setProfile(message.conversationId, message.profileId);
       case "conversation.adopt":
-        conversations.adopt(message.workspaceId, message.launch, message.session, message.mode);
+        await conversations.adopt(message.workspaceId, message.launch, message.session, message.mode);
         return;
       case "conversation.fork":
         conversations.fork(message.conversationId, message.throughTurnSeq);

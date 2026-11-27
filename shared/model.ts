@@ -873,13 +873,15 @@ export type ConversationEvent =
 export const endsTurnWithSpend = (event: ConversationEvent): event is Extract<ConversationEvent, { type: "turn-end" }> | (Extract<ConversationEvent, { type: "error" }> & { endsTurn: true }) =>
   event.type === "turn-end" || (event.type === "error" && event.endsTurn === true);
 
-/** A harness session in a workspace directory, possibly started outside the app. */
+/** A harness session in a workspace directory or one of its worktrees, possibly started outside the app. */
 export interface ExternalSession {
   sessionId: string;
   title: string | null;
   updatedAt: string | null;
   /** The conversation already driving this session in the app, if any. */
   conversationId: string | null;
+  /** The session ran in a git worktree of the workspace, rather than its project folder. */
+  inWorktree?: boolean;
 }
 
 export type AdoptMode = "continue" | "fork";

@@ -201,8 +201,11 @@ export class HarnessProcess {
     return Boolean((await this.initialized)?.agentCapabilities?.sessionCapabilities?.additionalDirectories);
   }
 
-  async listSessions(cwd: string) {
-    return this.agent().request(acp.methods.agent.session.list, { cwd });
+  async listSessions(cwd?: string, cursor?: string) {
+    return this.agent().request(acp.methods.agent.session.list, {
+      ...(cwd !== undefined && { cwd }),
+      ...(cursor !== undefined && { cursor }),
+    });
   }
 
   async prompt(sessionId: string, prompt: acp.ContentBlock[]) {

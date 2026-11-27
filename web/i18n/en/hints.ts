@@ -180,6 +180,7 @@ export const hints = {
   setUpProfile: "Every conversation runs on a profile. Set up your first one in the main pane; with nothing more set, it runs the agent as it is set up on this machine.",
   sessionSearch:
     "Find sessions in this directory by what was said in them, however old. The search reads the agent's own records of every session here, so it finds sessions the list does not show.",
+  sessionInWorktree: "Started in a worktree of this workspace. Continuing or forking it opens a new worktree of its own.",
   profiles: "Named setups for an agent: environment variables and a pre-launch command, applied to the agent process the profile starts. Every conversation runs on one.",
   shellOutputStyle:
     "How each shell command the agent runs shows in a conversation until you open or close it: its command with the output a click away, the output open only when the command failed, one line with the command too a click away, or everything open. Commands you run with ! always show their output.",
