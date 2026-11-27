@@ -9,6 +9,7 @@ import { connection } from "./connection.ts";
 import { BroughtAgentName, HintedWhenCutShort } from "./cut-short.tsx";
 import { textCutShort, useCutShort } from "./cut-short.tsx";
 import { t } from "./i18n/index.ts";
+import { LineIcon } from "./LineIcon.tsx";
 import { AgentSearch, ModelChoice } from "./RoomAgents.tsx";
 import { AgentValues, ClaudeSetupSection, environmentInWords, nameOf, UnconfinedLine } from "./RoomAgentSetup.tsx";
 import { MeaningMark, RoomSection, SwitchRow } from "./RoomSection.tsx";
@@ -224,7 +225,10 @@ function BroughtAgents({ room, people }: { room: Room; people: Person[] }) {
                 {workspace ? (
                   <WorkspaceAccessLine roomId={room.id} agentId={agentId} agentName={shownName} access={workspace} answers />
                 ) : (
-                  <div className="workspace-access">{words.worksInOwnWorkspaceOf(bringer)}</div>
+                  <div className="workspace-access" data-workspace-scope="own">
+                    <LineIcon shape="laptop" />
+                    <span>{words.worksInOwnWorkspaceOf(bringer)}</span>
+                  </div>
                 )}
               </li>
             );

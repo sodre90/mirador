@@ -86,7 +86,8 @@ async function openRoomWithBuilder(page: Page, builder: Builder) {
 async function firstAnswer(page: Page, builder: Builder) {
   await write(page, "Morning all");
   await tagBuilder(page, "SAY First answer");
-  await expect(answerSaying(page, "First answer").locator(".room-quote")).toContainText("@Builder SAY First answer");
+  await expect(answerSaying(page, "First answer")).toHaveCount(1);
+  await expect(answerSaying(page, "First answer").locator(".room-quote")).toHaveCount(0);
   const prompt = builder.prompts();
   expect(prompt).toContain('You are an attendee of the room "Launch"');
   expect(prompt).toMatch(new RegExp(`${framed("Morning all")}${framed("@Builder SAY First answer")}$`));
@@ -99,7 +100,8 @@ async function secondAnswerResumes(page: Page, builder: Builder, first: Awaited<
   await write(page, "The build went green meanwhile");
   await tagBuilder(page, "SAY Second answer");
   const answer = answerSaying(page, "Second answer");
-  await expect(answer.locator(".room-quote")).toContainText("@Builder SAY Second answer");
+  await expect(answer).toHaveCount(1);
+  await expect(answer.locator(".room-quote")).toHaveCount(0);
 
   await expect.poll(() => builder.promptsTaken()).toHaveLength(2);
   const [, second] = builder.promptsTaken();
@@ -150,7 +152,8 @@ test.describe("a room's agent that can't resume its session", () => {
     await expect.poll(() => isRunning(first.pid), { message: "the agent's process stops once it sat idle", timeout: 20_000 }).toBe(false);
     await write(page, "The build went green meanwhile");
     await tagBuilder(page, "SAY Second answer");
-    await expect(answerSaying(page, "Second answer").locator(".room-quote")).toContainText("@Builder SAY Second answer");
+    await expect(answerSaying(page, "Second answer")).toHaveCount(1);
+    await expect(answerSaying(page, "Second answer").locator(".room-quote")).toHaveCount(0);
 
     const sentAgain = builder.prompts().slice(first.promptsSoFar);
     expect(sentAgain).toContain('You are an attendee of the room "Launch"');

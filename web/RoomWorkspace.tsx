@@ -9,10 +9,12 @@ import {
   type RoomWorkspaceCall,
   type ThreadActivityItem,
 } from "../shared/room-workspace.ts";
+import type { BroughtAgent, BroughtWorkspaceScope } from "../shared/rooms.ts";
 import { Timestamp, usePersonName } from "./Chat.tsx";
 import { ConfirmButton } from "./ConfirmButton.tsx";
 import { connection } from "./connection.ts";
 import { t } from "./i18n/index.ts";
+import { LineIcon } from "./LineIcon.tsx";
 import { HighlightedText, MarkdownText } from "./Markdown.tsx";
 import { MeaningMark } from "./RoomSection.tsx";
 
@@ -107,10 +109,30 @@ export function WorkspaceCallApproval({ asked, agentName, count, task }: { asked
   );
 }
 
+/** Short label for a brought agent's workspace pill: this room's workspace, waiting for it, or its bringer's own. */
+export function broughtScopeLabel({ workspace, bringer }: Pick<BroughtAgent, "workspace"> & { bringer: string }) {
+  if (workspace === "allowed") return words.workspaceScope.room;
+  if (workspace === "asked") return words.workspaceScope.asked;
+  if (workspace === "declined") return words.workspaceScope.declined;
+  return words.workspaceScope.ownOf(bringer);
+}
+
+/** Colour-coded pill marking whether a brought agent works in this room's workspace, waits for it, or works in a user's own workspace. */
+export function WorkspaceScopePill({ scope, label }: { scope: BroughtWorkspaceScope; label: string }) {
+  return (
+    <span className="workspace-scope-pill" data-workspace-scope={scope}>
+      <LineIcon shape={scope === "own" ? "laptop" : "home"} />
+      <span>{label}</span>
+    </span>
+  );
+}
+
 /** Whether an agent someone brought works in the room's workspace; who approves there lets it in, or takes that away. */
 export function WorkspaceAccessLine({ roomId, agentId, agentName, access, answers }: { roomId: string; agentId: string; agentName: string; access: RoomWorkspaceAccess; answers: boolean }) {
+  const scope: BroughtWorkspaceScope = access === "allowed" ? "room" : "pending";
   return (
-    <div className="workspace-access" data-workspace-access={access}>
+    <div className="workspace-access" data-workspace-access={access} data-workspace-scope={scope}>
+      <LineIcon shape="home" />
       <span>{words.workspaceAccess[access]}</span>
       {answers && access === "allowed" && (
         <ConfirmButton

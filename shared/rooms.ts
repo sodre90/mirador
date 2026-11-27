@@ -357,6 +357,21 @@ export const agentStandIn = (roomId: string, profileId: string) => `${roomId}/${
 /** The messages the room shows itself: those written in it and the agents' answers; follow-ups show in their threads. */
 export const shownInRoom = (message: RoomMessage) => message.threadId === null || message.answers !== undefined;
 
+/** The message an answer quotes in the room timeline, omitted when that message already sits directly above it. */
+export function quotedInRoom(message: RoomMessage, previous: RoomMessage | undefined, messagesById: ReadonlyMap<string, RoomMessage>): RoomMessage | undefined {
+  if (message.answers === undefined || previous?.id === message.answers) return undefined;
+  return messagesById.get(message.answers);
+}
+
+/** Where a brought agent works, for colour-coded pills across the room: in this room's workspace, waiting for it, or in its bringer's own. */
+export type BroughtWorkspaceScope = "room" | "pending" | "own";
+
+export function broughtWorkspaceScope(brought: Pick<BroughtAgent, "workspace">): BroughtWorkspaceScope {
+  if (brought.workspace === "allowed") return "room";
+  if (brought.workspace === undefined) return "own";
+  return "pending";
+}
+
 /** A room's canvas holds its agents' pages, questions, and plugin items. */
 export const shownOnRoomCanvas = (_item: CanvasItem) => true;
 

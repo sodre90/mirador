@@ -110,7 +110,8 @@ test("an agent's page shows on the room's canvas, its answer opens it there, the
 test("a question asked in a room is voted on and confirmed there, its canvas only shows it, and the agent's reply lands in the thread that asked it", async ({ page }) => {
   await openNewRoom(page, "Colours");
   await tag(page, "Colours", "Builder", canvasCall("ask", { question: "Which colour?", options: [{ label: "Blue" }, { label: "Green" }] }));
-  const asking = answersOf(page, "Builder").filter({ has: page.locator(".room-quote", { hasText: "Which colour?" }) });
+  const asking = answersOf(page, "Builder").filter({ has: page.locator(".room-canvas-line") });
+  await expect(asking.locator(".room-quote")).toHaveCount(0);
   await expect(asking.locator(".room-canvas-line")).toContainText("On the canvas: 1 question");
   await tag(page, "Colours", "Builder", "SAY Unrelated done");
   await expect(answerSaying(page, "Unrelated done")).toHaveCount(1);
@@ -168,7 +169,7 @@ test("an agent tags another with room_tag, which answers in a thread of its own 
   await expect(handedOver.locator(".room-tags-line")).toHaveText("Tagged Reviewer");
   const reviewerAnswer = answersOf(page, "Reviewer");
   await expect(reviewerAnswer.locator(".message.agent")).toHaveText("Noted.");
-  await expect(reviewerAnswer.locator(".room-quote")).toContainText("Your final answer of this turn will tag Reviewer.");
+  await expect(reviewerAnswer.locator(".room-quote")).toHaveCount(0);
   await reviewerAnswer.getByRole("button", { name: "Open thread" }).click();
   await expect(thread(page, "Reviewer").locator(".message.agent")).toHaveText(["Your final answer of this turn will tag Reviewer.", "Noted."]);
   const prompt = recordedPrompts("Reviewer");

@@ -118,7 +118,9 @@ test("Mia brings an agent of hers into Ann's room: Ann's tasks for it wait for M
     await roomCard(ann, "Garden").click();
     await expect(agentChip(ann)).toBeVisible();
     await expect(agentChip(ann)).not.toHaveClass(/\baway\b/);
+    await expect(agentChip(ann)).toHaveAttribute("data-workspace-scope", "own");
     await expect(agentChip(ann)).toHaveAttribute("data-hint", "On Mia's computer · Works in Mia's workspace");
+    await expect(invitedBar(mia).locator('.workspace-scope-pill[data-workspace-scope="own"]')).toHaveText(basename(mias.projectDir));
   });
 
   await test.step("Ann's list of who is here shows it as Mia's, and fits it without scrolling sideways", async () => {
@@ -148,6 +150,7 @@ test("Mia brings an agent of hers into Ann's room: Ann's tasks for it wait for M
     await okCard(mia).getByRole("button", { name: "Allow" }).click();
     await expect(okCard(mia)).toHaveCount(0);
     await expect(answersOfCoder(ann).locator(".message.agent")).toHaveText("Weeded the beds");
+    await expect(answersOfCoder(ann).locator('.author .workspace-scope-pill[data-workspace-scope="own"]')).toHaveText("Mia's workspace");
     expect(readFileSync(coderPrompts(), "utf8")).toContain('A task from the room "Garden" on Ann\'s machine');
     await screenshot(ann, "room-with-brought-agent");
     await expect(joinedCard(mia)).not.toHaveClass(/\bwaiting\b/);
@@ -202,6 +205,7 @@ test("Mia brings an agent of hers into Ann's room: Ann's tasks for it wait for M
 
     await miasAnswer.getByRole("button", { name: "Open thread" }).click();
     const miasThread = miasRoom.locator(".room-thread");
+    await expect(miasThread.locator(".workspace-access")).toHaveAttribute("data-workspace-scope", "own");
     await expect(miasThread).toContainText("Its steps stay on your computer.");
     await miasThread.getByRole("button", { name: "Show in Its work" }).click();
     await expect(workPanel(mia)).toBeVisible();
@@ -384,12 +388,13 @@ test("Mia's Builder beside Ann's: the name the @ menu put in tags the one it nam
   };
 
   await test.step("a message whose tag of Ann's Builder gave way to one of Mia's reaches Mia's alone", async () => {
-    const pick = async (name: string) => {
-      await composer(ann).fill("@Bu");
-      await ann.getByRole("listbox", { name: "Agents and people of the room" }).getByRole("option", { name, exact: true }).click();
-    };
-    await pick("@Builder");
-    await pick("@Builder (Mia)");
+    await composer(ann).fill("@Bu");
+    const menu = ann.getByRole("listbox", { name: "Agents and people of the room" });
+    await menu.getByRole("option", { name: "@Builder", exact: true }).click();
+    await composer(ann).fill("@Bu");
+    const miasOption = menu.getByRole("option", { name: "@Builder (Mia)" });
+    await expect(miasOption.locator('.workspace-scope-pill[data-workspace-scope="own"]')).toHaveText("Mia's workspace");
+    await miasOption.click();
     await composer(ann).fill("@Builder (Mia) SAY Pruned the roses");
     await composer(ann).press("Enter");
     await allowsHerBuilder("Ann (Owner) gives this agent a task in Garden on Ann's machine");

@@ -26,12 +26,14 @@ import {
   AGENT_TAGGED_TURNS_AFTER_A_PERSON,
   askedInBroughtTask,
   broughtTaskPrompt,
+  broughtWorkspaceScope,
   roomMessageSeqInBroughtTask,
   canvasItemsOfAnswers,
   catchUpPrompt,
   eventsAnswering,
   firstReachingTheAgent,
   framedMessage,
+  quotedInRoom,
   ROOM_CATCH_UP_LIMIT,
   ROOM_HISTORY_CHARACTERS,
   ROOM_HISTORY_TOOL,
@@ -2189,5 +2191,40 @@ describe("a room's sandbox leaving its workspace", () => {
     expect(left).toHaveLength(2);
     rooms.setWorkspace(room.id, "w1");
     expect(left).toHaveLength(2);
+  });
+});
+
+describe("room timeline quotes and brought workspace scopes", () => {
+  const msg = (id: string, seq: number, extra: Partial<RoomMessage> = {}): RoomMessage => ({
+    id,
+    roomId: "r1",
+    seq,
+    threadId: null,
+    author: { personId: OWNER },
+    text: id,
+    tags: [],
+    at: seq,
+    ...extra,
+  });
+
+  test("quotedInRoom skips the quote when the answered message sits directly above, and keeps it otherwise", () => {
+    const asked = msg("m1", 1);
+    const other = msg("m2", 2);
+    const followUp = msg("m3", 3, { threadId: "t1" });
+    const immediateAnswer = msg("a1", 4, { threadId: "t1", author: { profileId: "p1" }, answers: asked.id });
+    const followUpAnswer = msg("a2", 5, { threadId: "t1", author: { profileId: "p1" }, answers: followUp.id });
+    const byId = new Map([asked, other, followUp, immediateAnswer, followUpAnswer].map((m) => [m.id, m]));
+
+    expect(quotedInRoom(asked, undefined, byId)).toBeUndefined();
+    expect(quotedInRoom(immediateAnswer, asked, byId)).toBeUndefined();
+    expect(quotedInRoom(immediateAnswer, other, byId)).toBe(asked);
+    expect(quotedInRoom(followUpAnswer, immediateAnswer, byId)).toBe(followUp);
+  });
+
+  test("broughtWorkspaceScope classifies room, pending, and own workspace agents", () => {
+    expect(broughtWorkspaceScope({ workspace: "allowed" })).toBe("room");
+    expect(broughtWorkspaceScope({ workspace: "asked" })).toBe("pending");
+    expect(broughtWorkspaceScope({ workspace: "declined" })).toBe("pending");
+    expect(broughtWorkspaceScope({})).toBe("own");
   });
 });

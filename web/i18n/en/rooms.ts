@@ -523,6 +523,13 @@ export const rooms = {
     declined: "Not let into this room's workspace",
   } satisfies Record<RoomWorkspaceAccess, string>,
   worksInOwnWorkspaceOf: (person: string) => `Works in ${person}'s workspace`,
+  workspaceScope: {
+    room: "Room workspace",
+    asked: "Waiting for room workspace",
+    declined: "No room workspace",
+    ownOf: (person: string) => `${person}'s workspace`,
+    yourOwn: "Your workspace",
+  },
   takeWorkspaceAway: "Take away",
   takeWorkspaceAwayOf: (agent: string) => `Take this room's workspace away from ${agent}`,
   takeWorkspaceAwayArmed: "Take it away?",

@@ -499,6 +499,13 @@ export const rooms: Messages["rooms"] = {
     declined: "未获准进入这个房间的工作区",
   },
   worksInOwnWorkspaceOf: (person) => `在 ${person} 的工作区里工作`,
+  workspaceScope: {
+    room: "房间工作区",
+    asked: "等待房间工作区",
+    declined: "无房间工作区",
+    ownOf: (person) => `${person} 的工作区`,
+    yourOwn: "你的工作区",
+  },
   takeWorkspaceAway: "收回",
   takeWorkspaceAwayOf: (agent) => `收回 ${agent} 对这个房间工作区的使用`,
   takeWorkspaceAwayArmed: "确定收回？",

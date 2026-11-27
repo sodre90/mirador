@@ -1,6 +1,6 @@
 import { useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type Dispatch, type ReactNode, type RefObject } from "react";
 import type { BroughtAgentHere, BroughtTaskWaiting } from "../shared/brought-agents.ts";
-import type { Conversation, Machine, MachineStatus, Profile } from "../shared/model.ts";
+import type { Conversation, Machine, MachineStatus, Profile, Workspace } from "../shared/model.ts";
 import { BroughtAgentsBar, BroughtAgentsWaiting, broughtInto, BroughtWorkPanel, useBroughtWorkKept, type BroughtHere, type BroughtWorkJump } from "./BroughtWork.tsx";
 import { t } from "./i18n/index.ts";
 import { broughtWorkWidthIn, MIN_BROUGHT_WORK_MARGIN, MIN_BROUGHT_WORK_WIDTH } from "./layout.ts";
@@ -79,6 +79,7 @@ export function InvitedRoomPane({
   broughtWorkShown,
   broughtTasks,
   profiles,
+  workspaces = [],
   banner,
   onJoinedRoom,
   dispatch,
@@ -96,6 +97,7 @@ export function InvitedRoomPane({
   broughtWorkShown: string | null;
   broughtTasks: BroughtTaskWaiting[];
   profiles: Profile[];
+  workspaces?: Workspace[];
   banner: ReactNode;
   onJoinedRoom: (machineId: string, roomId: string, waiting: boolean) => void;
   dispatch: Dispatch<AppAction>;
@@ -105,7 +107,7 @@ export function InvitedRoomPane({
   const roomId = selected?.roomId ?? joined?.room.id;
   const opening = useMemo((): PlaceToOpen | null => (selected && roomId ? { machineId: selected.machineId, place: `#/r/${roomId}` } : null), [selected, roomId]);
   const { visited } = useKeptLoaded(machine?.id ?? null);
-  const here = machine ? broughtInto(machine.id, roomId ?? null, { broughtAgents, broughtConversations, broughtWork, broughtTasks, profiles }) : [];
+  const here = machine ? broughtInto(machine.id, roomId ?? null, { broughtAgents, broughtConversations, broughtWork, broughtTasks, profiles, workspaces }) : [];
   useBroughtWorkKept(here, dispatch);
   const workBeside = here.find(({ conversation }) => conversation.id === broughtWorkShown);
   const bodyRef = useRef<HTMLDivElement>(null);

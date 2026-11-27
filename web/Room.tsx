@@ -15,11 +15,13 @@ import {
   approvesIn,
   askedInThread,
   broughtAgentName,
+  broughtWorkspaceScope,
   canvasItemsOfAnswers,
   eventsAnswering,
   firstReachingTheAgent,
   isRoomRole,
   messagesOfThread,
+  quotedInRoom,
   reachedAmong,
   ROOM_MESSAGE_MOST_CHARACTERS,
   roomMessageLength,
@@ -76,7 +78,7 @@ import { nameOf } from "./RoomAgentSetup.tsx";
 import { HeldChangeCard } from "./Sandbox.tsx";
 import { JoinerAtTheDoor, RemovePerson, WaitingToJoin } from "./RoomSettings.tsx";
 import { RoomVote } from "./RoomVote.tsx";
-import { BroughtThreadActivity, WorkspaceAccessApproval, WorkspaceAccessLine, WorkspaceActivityLine, WorkspaceActivityPanel, WorkspaceCallApproval } from "./RoomWorkspace.tsx";
+import { broughtScopeLabel, BroughtThreadActivity, WorkspaceAccessApproval, WorkspaceAccessLine, WorkspaceActivityLine, WorkspaceActivityPanel, WorkspaceCallApproval, WorkspaceScopePill } from "./RoomWorkspace.tsx";
 import { useSpellCheck } from "./spell-check.ts";
 import { useTypingAidAttributes } from "./typing-aids.ts";
 import type { WorkspacePluginTab } from "./WorkspaceTabView.tsx";
@@ -165,6 +167,7 @@ function RoomEntry({
 }) {
   const ending = answerEnding(message);
   const byAgent = writtenByAgent(message.author);
+  const broughtAuthor = writtenByAgent(message.author) ? agentsById.get(message.author.profileId)?.brought : undefined;
   const { you } = useContext(MessageWriters);
   const mentionsRead = useMemo(() => (message.mentions ? { mentions: message.mentions, you } : null), [message.mentions, you]);
   return (
@@ -175,6 +178,7 @@ function RoomEntry({
       <div className="entry-body">
         <div className="author">
           <AuthorName author={message.author} agentsById={agentsById} />
+          {broughtAuthor && <WorkspaceScopePill scope={broughtWorkspaceScope(broughtAuthor)} label={broughtScopeLabel(broughtAuthor)} />}
           {message.authorRole && <span className="room-role-label">{words.roles[message.authorRole]}</span>}
           <Timestamp at={message.at} />
         </div>
@@ -268,7 +272,14 @@ function useTagMenu({ taggable, text, caret, take }: { taggable: Taggable[]; tex
   };
   const menu = open ? (
     <SuggestionList id={TAG_MENU_ID} label={words.tagMenu} className="mention-paths room-tags" items={offered} keyOf={keyOfTaggable} pickedIndex={pickedIndex} onPick={take}>
-      {(each) => <span className={`room-tag-option${"person" in each ? " person" : ""}`}>@{nameToTag(each)}</span>}
+      {(each) => (
+        <span className={`room-tag-option${"person" in each ? " person" : ""}`}>
+          <span>@{nameToTag(each)}</span>
+          {"agent" in each && each.agent.brought && (
+            <WorkspaceScopePill scope={broughtWorkspaceScope(each.agent.brought)} label={broughtScopeLabel(each.agent.brought)} />
+          )}
+        </span>
+      )}
     </SuggestionList>
   ) : null;
   return { onKeyDown, textareaAttributes: suggestionAttributes(TAG_MENU_ID, open, pickedIndex), menu };
@@ -646,7 +657,12 @@ function ThreadColumn({
       {access ? (
         <WorkspaceAccessLine roomId={thread.roomId} agentId={agent.profileId} agentName={agent.name} access={access} answers={answersWorkspace} />
       ) : (
-        agent.brought && <div className="workspace-access">{words.worksInOwnWorkspaceOf(agent.brought.bringer)}</div>
+        agent.brought && (
+          <div className="workspace-access" data-workspace-scope="own">
+            <LineIcon shape="laptop" />
+            <span>{words.worksInOwnWorkspaceOf(agent.brought.bringer)}</span>
+          </div>
+        )
       )}
       <div className="timeline" ref={threadTimeline} onScroll={onScroll}>
         {agent.conversation && opened?.loaded && firstReached && <HistoryReachingBack opened={opened} messageId={firstReached.id} />}
@@ -818,8 +834,9 @@ function AgentChip({
       ]
     : [words.agentCard.repliesInRoom, words.agentCard.usesRoomCanvas, words.agentCard.stepsInThread];
 
+  const scope = agent.brought ? broughtWorkspaceScope(agent.brought) : undefined;
   return (
-    <li className={`agent-chip${agent.brought && !agent.brought.here ? " away" : ""}`} data-hint={whereItRuns || undefined}>
+    <li className={`agent-chip${agent.brought && !agent.brought.here ? " away" : ""}`} data-workspace-scope={scope} data-hint={whereItRuns || undefined}>
       <button
         ref={opener}
         type="button"
@@ -828,6 +845,7 @@ function AgentChip({
         aria-expanded={placement !== null}
         onClick={() => setOpen((wasOpen) => !wasOpen)}
       >
+        {scope && <LineIcon shape={scope === "own" ? "laptop" : "home"} />}
         <HintedWhenCutShort className="room-agent-label" whole={[agent.name, model, whereItRuns].filter(Boolean).join(" · ")}>
           {agent.brought ? <BroughtAgentName prefix={markPrefix} name={agent.brought.name} bringer={agent.brought.bringer} /> : `${markPrefix}${agent.name}`}
           {model && <span className="room-agent-model">{model}</span>}
@@ -1096,7 +1114,12 @@ function RoomPeople({
                       {brought && <BroughtMark brought={brought} />}
                       {answering !== null && <span className="room-agent-working">{words.agentWorking}</span>}
                     </div>
-                    {brought && <div className="room-people-agent-workspace">{broughtWorkspaceOf(brought)}</div>}
+                    {brought && (
+                      <div className="room-people-agent-workspace" data-workspace-scope={broughtWorkspaceScope(brought)}>
+                        <LineIcon shape={broughtWorkspaceScope(brought) === "own" ? "laptop" : "home"} />
+                        <span>{broughtWorkspaceOf(brought)}</span>
+                      </div>
+                    )}
                     {owns && !brought && (
                       <div className="room-people-agent-choices">
                         <ModelChoice
@@ -1296,9 +1319,10 @@ export function RoomView({
       <div className="timeline room-timeline" ref={roomTimeline} onScroll={onScroll}>
         {!timeline && <div className="notice-line">{words.loading}</div>}
         {timeline && shown.length === 0 && <EmptyRoom tagsAgents={tagsAgents} agentsToTag={agentsToTag} onTag={(agent) => composer.current?.tag(agent)} onInvite={owns ? invite : null} />}
-        {shown.map((message) => {
+        {shown.map((message, index) => {
           const madeOnCanvas = canvasOfAnswers.get(message.id) ?? [];
           const answered = message.answers === undefined ? undefined : messagesById.get(message.answers);
+          const quoted = quotedInRoom(message, shown[index - 1], messagesById);
           const answeringAgentId = writtenByAgent(message.author) ? message.author.profileId : null;
           const callsForAnswer = timeline ? workspaceCallsOfAnswer(timeline, message) : [];
           const openWork =
@@ -1306,7 +1330,7 @@ export function RoomView({
               ? () => askParentToOpenBroughtWork({ roomId: room.id, agentId: answeringAgentId, ...(answered && { messageSeq: answered.seq }) })
               : undefined;
           return (
-            <RoomEntry key={message.id} message={message} answered={answered} quoted={answered} agentsById={agentsById}>
+            <RoomEntry key={message.id} message={message} answered={answered} quoted={quoted} agentsById={agentsById}>
               {callsForAnswer.length > 0 && message.threadId && <WorkspaceActivityLine calls={callsForAnswer} onOpenThread={() => openThread(message.threadId!)} />}
               {madeOnCanvas.length > 0 && <CanvasLine items={madeOnCanvas} onOpen={onOpenOnCanvas} />}
               {madeOnCanvas.filter(isAsk).map(voteOn)}

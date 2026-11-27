@@ -91,7 +91,8 @@ async function giveTask(words: string, calls: string) {
   await composer(ann).press("Enter");
 }
 
-const openThreadOf = (page: Page, task: string) => answersOfCoder(page).filter({ hasText: task }).last().getByRole("button", { name: "Open thread" }).click();
+const openThreadOf = (page: Page, task: string) =>
+  page.locator(".room-timeline .room-entry", { hasText: task }).last().locator("+ .room-entry").getByRole("button", { name: "Open thread" }).click();
 
 const lastAnswer = (page: Page) => answersOfCoder(page).last().locator(".message.agent");
 
@@ -164,6 +165,9 @@ test("Ann lets it in, and it reads the room's workspace, changes a file and runs
     await screenshot(ann, "workspace-access-card");
     await giveTask("COUNT THE BEDS", 'CALL mcp__canvas__room_read {"path":"notes.txt"}');
     await expect(lastAnswer(ann)).toContainText("has not let you work in its workspace", { timeout: 60_000 });
+    await expect(agentChip(ann)).toHaveAttribute("data-workspace-scope", "pending");
+    await expect(answersOfCoder(ann).last().locator('.author .workspace-scope-pill[data-workspace-scope="pending"]')).toHaveText("Waiting for room workspace");
+    await expect(mia.locator('.invited-room-bar .workspace-scope-pill[data-workspace-scope="room"]')).toHaveText("Room workspace");
   });
 
   await test.step("the model is offered the canvas and the room's workspace, and nothing else", async () => {
@@ -174,12 +178,15 @@ test("Ann lets it in, and it reads the room's workspace, changes a file and runs
   await test.step("let in, it reads a file", async () => {
     await accessCard(ann).getByRole("button", { name: "Let it work here" }).click();
     await expect(accessCard(ann)).toHaveCount(0);
+    await expect(agentChip(ann)).toHaveAttribute("data-workspace-scope", "room");
     await expect(agentChip(ann)).toHaveAttribute("data-hint", "On Mia's computer · Works in this room's workspace");
     await ann.locator(".room-here-count").click();
     await expect(ann.locator(".room-people .room-people-agent-workspace")).toHaveText("Works in this room's workspace");
+    await expect(ann.locator(".room-people .room-people-agent-workspace")).toHaveAttribute("data-workspace-scope", "room");
     await ann.keyboard.press("Escape");
     await giveTask("READ THE NOTES", 'CALL mcp__canvas__room_read {"path":"notes.txt"}');
     await expect(lastAnswer(ann)).toContainText("Sow the beets", { timeout: 60_000 });
+    await expect(answersOfCoder(ann).last().locator('.author .workspace-scope-pill[data-workspace-scope="room"]')).toHaveText("Room workspace");
     await expect(callCard(ann)).toHaveCount(0);
   });
 

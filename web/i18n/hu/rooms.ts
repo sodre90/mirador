@@ -509,6 +509,13 @@ export const rooms: Messages["rooms"] = {
     declined: "Nincs beengedve a szoba munkaterületére",
   },
   worksInOwnWorkspaceOf: (person) => `${person} munkaterületén dolgozik`,
+  workspaceScope: {
+    room: "Szoba munkaterülete",
+    asked: "Munkaterületre vár",
+    declined: "Nincs szobai munkaterület",
+    ownOf: (person) => `${person} munkaterülete`,
+    yourOwn: "Saját munkaterület",
+  },
   takeWorkspaceAway: "Visszavonás",
   takeWorkspaceAwayOf: (agent) => `A szoba munkaterületének elvétele tőle: ${agent}`,
   takeWorkspaceAwayArmed: "Visszavonod?",

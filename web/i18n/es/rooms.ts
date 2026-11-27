@@ -510,6 +510,13 @@ export const rooms: Messages["rooms"] = {
     declined: "Sin acceso al espacio de trabajo de esta sala",
   },
   worksInOwnWorkspaceOf: (person) => `Trabaja en el espacio de trabajo de ${person}`,
+  workspaceScope: {
+    room: "Espacio de la sala",
+    asked: "Espera espacio de la sala",
+    declined: "Sin espacio de la sala",
+    ownOf: (person) => `Espacio de ${person}`,
+    yourOwn: "Tu espacio de trabajo",
+  },
   takeWorkspaceAway: "Retirar",
   takeWorkspaceAwayOf: (agent) => `Retirar a ${agent} el espacio de trabajo de esta sala`,
   takeWorkspaceAwayArmed: "¿Retirárselo?",

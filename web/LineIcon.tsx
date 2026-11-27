@@ -102,6 +102,18 @@ const lineIconShapes = {
       <path d="M2.5 2.5l11 11" />
     </>
   ),
+  laptop: (
+    <>
+      <rect x="2.5" y="3" width="11" height="8" rx="1.25" />
+      <path d="M1.25 13h13.5" />
+    </>
+  ),
+  home: (
+    <>
+      <path d="M2.5 7.5 8 2.75l5.5 4.75" />
+      <path d="M4 6.5v6.25a.75.75 0 0 0 .75.75h6.5a.75.75 0 0 0 .75-.75V6.5" />
+    </>
+  ),
 };
 
 export type LineIconShape = keyof typeof lineIconShapes;

@@ -1,12 +1,13 @@
 import { useEffect, useRef, type Dispatch, type ReactNode, type RefObject } from "react";
 import type { BroughtAgentHere, BroughtTaskWaiting } from "../shared/brought-agents.ts";
-import type { Conversation, Profile } from "../shared/model.ts";
+import type { Conversation, Profile, Workspace } from "../shared/model.ts";
 import { BroughtTaskCard, isBusy, JumpToLatest, PendingApprovals, QueuedMessages, TimelineOfEvents, useScrollAnchor } from "./Chat.tsx";
 import { connection } from "./connection.ts";
 import { ConversationSettingsPopover, ConversationSettingsToggle, useConversationSettings } from "./ConversationSettings.tsx";
 import { useEarlierHistory } from "./earlier-history.ts";
 import { t } from "./i18n/index.ts";
 import { asksYou } from "./brought-waiting.ts";
+import { WorkspaceScopePill } from "./RoomWorkspace.tsx";
 import type { AppAction, OpenConversation } from "./state.ts";
 
 const words = t.rooms;
@@ -15,6 +16,8 @@ const words = t.rooms;
 export interface BroughtHere {
   conversation: Conversation;
   name: string;
+  /** The local workspace name when it works in one of yours; null when it works in the room's workspace. */
+  workspaceLabel: string | null;
   opened: OpenConversation | undefined;
   tasks: BroughtTaskWaiting[];
 }
@@ -23,17 +26,33 @@ export interface BroughtHere {
 export function broughtInto(
   machineId: string,
   roomId: string | null,
-  { broughtAgents, broughtConversations, broughtWork, broughtTasks, profiles }: { broughtAgents: BroughtAgentHere[]; broughtConversations: Conversation[]; broughtWork: OpenConversation[]; broughtTasks: BroughtTaskWaiting[]; profiles: Profile[] },
+  {
+    broughtAgents,
+    broughtConversations,
+    broughtWork,
+    broughtTasks,
+    profiles,
+    workspaces = [],
+  }: {
+    broughtAgents: BroughtAgentHere[];
+    broughtConversations: Conversation[];
+    broughtWork: OpenConversation[];
+    broughtTasks: BroughtTaskWaiting[];
+    profiles: Profile[];
+    workspaces?: Workspace[];
+  },
 ): BroughtHere[] {
   return broughtAgents
     .filter((brought) => brought.machineId === machineId && brought.roomId === roomId)
-    .flatMap(({ profileId, conversationId }) => {
+    .flatMap(({ profileId, conversationId, workspaceId }) => {
       const conversation = broughtConversations.find(({ id }) => id === conversationId);
       if (!conversation) return [];
+      const workspaceLabel = conversation.worksInRoomsWorkspace ? null : (workspaces.find(({ id }) => id === (workspaceId ?? conversation.workspaceId))?.name ?? null);
       return [
         {
           conversation,
           name: profiles.find(({ id }) => id === profileId)?.name ?? words.agentGone,
+          workspaceLabel,
           opened: broughtWork.find((open) => open.conversationId === conversation.id),
           tasks: broughtTasks.filter((task) => task.conversationId === conversation.id),
         },
@@ -62,6 +81,10 @@ export function BroughtAgentsBar({ here, workShown, profiles, dispatch }: { here
   );
 }
 
+const broughtHerePill = ({ conversation, workspaceLabel }: Pick<BroughtHere, "conversation" | "workspaceLabel">) => (
+  <WorkspaceScopePill scope={conversation.worksInRoomsWorkspace ? "room" : "own"} label={conversation.worksInRoomsWorkspace ? words.workspaceScope.room : (workspaceLabel ?? words.workspaceScope.yourOwn)} />
+);
+
 function BroughtAgentControls({ agent, shown, profiles, dispatch }: { agent: BroughtHere; shown: boolean; profiles: Profile[]; dispatch: Dispatch<AppAction> }) {
   const settings = useConversationSettings();
   const { conversation, name } = agent;
@@ -70,6 +93,7 @@ function BroughtAgentControls({ agent, shown, profiles, dispatch }: { agent: Bro
     <span className="brought-agent-controls">
       <ConversationSettingsToggle conversation={conversation} profiles={profiles} settings={settings} />
       <ConversationSettingsPopover conversation={conversation} profiles={profiles} begun={true} settings={settings} title={words.settingsOf(name)} note={words.broughtSettingsNote} />
+      {broughtHerePill(agent)}
       <button
         type="button"
         className={`link brought-work-toggle${waits ? " waits" : ""}`}
@@ -152,6 +176,7 @@ export function BroughtWorkPanel({
       <header className="side-chat-header">
         <div className="side-chat-heading">
           <h2>{words.workOf(name)}</h2>
+          {broughtHerePill(agent)}
         </div>
         {isBusy(conversation) && (
           <button type="button" className="danger brought-work-stop" onClick={() => connection.send({ type: "conversation.cancel", conversationId: conversation.id })}>

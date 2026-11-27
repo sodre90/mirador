@@ -1021,6 +1021,7 @@ export function App() {
             broughtWorkShown={state.broughtWorkShown}
             broughtTasks={state.broughtTasks}
             profiles={state.profiles}
+            workspaces={state.workspaces}
             banner={<HostBanner status={status} state={state} />}
             onJoinedRoom={joinedRoom}
             dispatch={dispatch}

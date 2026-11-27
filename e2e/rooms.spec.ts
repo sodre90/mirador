@@ -58,11 +58,11 @@ test("people write in a room, a tagged agent answers in its thread, and another 
     expect(recordedPrompts("Reviewer")).toBe("");
   });
 
-  await test.step("a tagged agent is sent what was written before, and its answer quotes the message", async () => {
+  await test.step("a tagged agent is sent what was written before, and its answer omits a duplicate quote right below the message", async () => {
     await tag(page, "Builder", "@Bu", "SAY Shipped it");
-    const answer = roomEntries(page).filter({ hasText: "Shipped it" }).filter({ has: page.locator(".room-quote") });
+    const answer = roomEntries(page).filter({ has: page.locator(".message.agent", { hasText: "Shipped it" }) });
     await expect(answer.locator(".message.agent")).toHaveText("Shipped it");
-    await expect(answer.locator(".room-quote")).toContainText("@Builder SAY Shipped it");
+    await expect(answer.locator(".room-quote")).toHaveCount(0);
     await expect(answer.locator(".author")).toContainText("Builder");
     const prompt = recordedPrompts("Builder");
     expect(prompt).toContain('You are an attendee of the room "Launch"');
