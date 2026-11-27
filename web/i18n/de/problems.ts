@@ -522,6 +522,7 @@ export const problems: Messages["problems"] = {
     `Der Arbeitsbereich ist oder enthält ${folder}, aus dem dieser Rechner von selbst Programme startet: Eine Sandbox könnte sie ändern.`,
   sandboxWorkspaceOverlapsSandboxFolder: (folder: string) => `Eine andere eingeschaltete Sandbox hat ${folder} les- und schreibbar, also den Arbeitsbereich, einen Ordner darüber oder darin: Nur eine Sandbox darf dort schreiben.`,
   sandboxWorkspaceOverlapsSandboxWorkspace: (folder: string) => `Eine andere eingeschaltete Sandbox arbeitet in ${folder}, also in einem Ordner über dem Arbeitsbereich oder darin: Nur eine Sandbox darf dort schreiben.`,
+  sandboxWayThroughLinkSandboxLeft: (link: string) => `Der Weg zum Arbeitsbereich führt über den Link ${link} in einem Ordner, in dem eine Sandbox gearbeitet hat, deren Agenten ihn überallhin zeigen lassen konnten: Öffne den Arbeitsbereich im Ordner, auf den der Link zeigt, um eine Sandbox zu verwenden.`,
   sandboxTooManyHeldChanges: (most: number) => `Seine Agenten haben mehr als ${most} zurückgehaltene Dateien geändert, die auf deine Antwort warten: Erlaube oder verwirf zuerst einige.`,
   sandboxSetupFailed: (cause: string) => `Das Einrichten der Sandboxes ist fehlgeschlagen: ${cause}`,
   sandboxCouldNotStart: (cause: string) => `Sie konnte nicht starten: ${cause}`,

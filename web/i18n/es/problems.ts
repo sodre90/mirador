@@ -517,6 +517,7 @@ export const problems: Messages["problems"] = {
     `El espacio de trabajo es o contiene ${folder}, desde donde este equipo ejecuta programas por sí solo: un sandbox podría cambiarlos.`,
   sandboxWorkspaceOverlapsSandboxFolder: (folder: string) => `Otro sandbox encendido tiene ${folder} en lectura y escritura, que es el espacio de trabajo, lo contiene o está dentro de él: solo un sandbox puede escribir ahí.`,
   sandboxWorkspaceOverlapsSandboxWorkspace: (folder: string) => `Otro sandbox encendido trabaja en ${folder}, que contiene el espacio de trabajo o está dentro de él: solo un sandbox puede escribir ahí.`,
+  sandboxWayThroughLinkSandboxLeft: (link: string) => `El camino al espacio de trabajo pasa por el enlace ${link}, dentro de una carpeta en la que trabajó un sandbox, cuyos agentes podrían haberlo hecho apuntar a cualquier sitio: abre el espacio de trabajo en la carpeta a la que lleva el enlace para usar un sandbox.`,
   sandboxTooManyHeldChanges: (most: number) => `Sus agentes cambiaron más de ${most} archivos retenidos, que esperan tu respuesta: permite o descarta algunos primero.`,
   sandboxSetupFailed: (cause: string) => `No se pudieron preparar los sandboxes: ${cause}`,
   sandboxCouldNotStart: (cause: string) => `No pudo iniciarse: ${cause}`,

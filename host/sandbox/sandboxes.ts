@@ -391,7 +391,8 @@ export class Sandboxes {
   /**
    * Another sandbox's agents could have put a link on the way to the workspace, or could yet: those of one that is on and
    * works inside it or around it, in the very same workspace aside, where they can't move it; or of one with a folder
-   * read and write, where the way follows a link in that folder. Null where none could.
+   * read and write, where the way follows a link in that folder; or of any that worked in a folder once, this one too,
+   * where the way follows a link inside it. Null where none could.
    */
   private async besideOthersRefusal(workspace: string, owner: SandboxOwner): Promise<SandboxBlocker | null> {
     const others = this.host.otherSandboxes(owner);
@@ -400,7 +401,10 @@ export class Sandboxes {
     if (nested) return { kind: "workspace-overlaps-sandbox-workspace", folder: endOf(nested) };
     const writable = await Promise.all(others.writableFolders.map(realOrAsIs));
     const linking = writable.find((folder) => way.links.some((link) => isInside(link, folder)));
-    return linking ? { kind: "workspace-overlaps-sandbox-folder", folder: linking } : null;
+    if (linking) return { kind: "workspace-overlaps-sandbox-folder", folder: linking };
+    const left = await Promise.all(others.foldersLeft.map(realOrAsIs));
+    const leftBehind = way.links.find((link) => left.some((folder) => link !== folder && isInside(link, folder)));
+    return leftBehind ? { kind: "way-through-link-sandbox-left", link: leftBehind } : null;
   }
 
   private async besideWritableFoldersRefusal(workspace: string, owner: SandboxOwner): Promise<SandboxBlocker | null> {
@@ -417,14 +421,14 @@ export class Sandboxes {
 
   private async folderSurroundings(owner: SandboxOwner): Promise<FolderSurroundings> {
     const workspace = this.host.workspaceOf(owner);
-    const { workspaces, writableFolders, writableFoldersOn } = this.host.otherSandboxes(owner);
+    const { workspaces, writableFolders, writableFoldersOn, foldersLeft } = this.host.otherSandboxes(owner);
     const real = (paths: string[]) => Promise.all(paths.map(realOrAsIs));
     return {
       places: this.host.places,
       workspace: workspace && (await realpath(workspace).catch(() => null)),
       sandboxOwn: [...sandboxConfigFolders(this.host.dataDir, owner), agentPackages(), IN_VM_SCRIPTS, SCRIPTS_IN_VM, SOCKETS_IN_VM, RAW_FOLDERS_IN_VM, MANIFEST_FOLDER_IN_VM],
       socketsParent: this.socketsParent,
-      otherSandboxes: { workspaces: await real(workspaces), writableFolders: await real(writableFolders), writableFoldersOn: await real(writableFoldersOn) },
+      otherSandboxes: { workspaces: await real(workspaces), writableFolders: await real(writableFolders), writableFoldersOn: await real(writableFoldersOn), foldersLeft: await real(foldersLeft) },
     };
   }
 

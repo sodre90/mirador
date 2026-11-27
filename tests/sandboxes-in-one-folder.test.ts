@@ -2,7 +2,8 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { HELD_CHANGES_MOST, ownerKey, roomSandbox, workspaceSandbox, type HeldChange, type SandboxFolder, type SandboxNotReadyWhy, type SandboxOwner } from "../shared/sandbox.ts";
+import { englishProblem } from "../shared/host-problems.ts";
+import { HELD_CHANGES_MOST, ownerKey, roomSandbox, workspaceSandbox, type HeldChange, type SandboxBlocker, type SandboxFolder, type SandboxNotReadyWhy, type SandboxOwner } from "../shared/sandbox.ts";
 import type { OtherSandboxes } from "../host/sandbox/added-folders.ts";
 import { ANTHROPIC_API } from "../host/sandbox/model-proxy.ts";
 import { Sandboxes, type SandboxHost } from "../host/sandbox/sandboxes.ts";
@@ -18,7 +19,7 @@ afterAll(() => [scratch, ...socketFolders].forEach((folder) => rmSync(folder, { 
 const ROOM = roomSandbox("room-1");
 const OTHER_ROOM = roomSandbox("room-2");
 const WORKSPACE = workspaceSandbox("workspace-1");
-const NO_OTHERS: OtherSandboxes = { workspaces: [], writableFolders: [], writableFoldersOn: [] };
+const NO_OTHERS: OtherSandboxes = { workspaces: [], writableFolders: [], writableFoldersOn: [], foldersLeft: [] };
 
 const repositoryAt = (folder: string) => {
   mkdirSync(folder, { recursive: true });
@@ -349,6 +350,25 @@ describe("a sandbox whose workspace lies in or around where another one's agents
     }
     expect(launcher.started).toEqual([]);
     set.others(ROOM, { workspaces: [outer] });
+    await launch(ROOM, elsewhere);
+    await sandboxes.stopAll();
+  });
+
+  test.skipIf(!RUNS_SANDBOXES)("neither turns on nor starts where its way follows a link inside a folder any sandbox worked in and left, whose agents could have made it", async () => {
+    const { launcher, sandboxes, launch, set } = computer();
+    const { outer, inner } = nested();
+    const elsewhere = repository();
+    renameSync(inner, `${inner}-moved`);
+    symlinkSync(elsewhere, inner);
+    set.others(ROOM, { foldersLeft: [outer] });
+    const leftBehind: SandboxBlocker = { kind: "way-through-link-sandbox-left", link: inner };
+    expect(await sandboxes.workspaceRefusal(inner, ROOM)).toEqual(leftBehind);
+    await expect(launch(ROOM, inner)).rejects.toMatchObject(notReady({ kind: "blocked", blocker: leftBehind }));
+    expect(launcher.started).toEqual([]);
+    expect(englishProblem({ code: "sandbox-not-ready", why: { kind: "blocked", blocker: leftBehind } })).toContain(`The way to the workspace follows the link ${inner}, inside a folder a sandbox worked in`);
+
+    set.others(ROOM, { foldersLeft: [inner, elsewhere] });
+    expect(await sandboxes.workspaceRefusal(inner, ROOM)).toBeNull();
     await launch(ROOM, elsewhere);
     await sandboxes.stopAll();
   });

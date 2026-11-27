@@ -72,7 +72,7 @@ function sandboxHere() {
     heldChanged: () => {},
     foldersOf: () => folders,
     networkOf: () => "closed",
-    otherSandboxes: () => ({ workspaces: [], writableFolders: [], writableFoldersOn: [] }),
+    otherSandboxes: () => ({ workspaces: [], writableFolders: [], writableFoldersOn: [], foldersLeft: [] }),
     foldersStarted: () => {},
     places: { home: scratch, dataDir: join(scratch, "mirador-data"), checkout: "/nonexistent-checkout", computersOwn: [] },
   };

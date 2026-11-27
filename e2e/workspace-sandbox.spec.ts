@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
 import { createServer, request as httpRequest, type IncomingHttpHeaders } from "node:http";
 import { connect, type AddressInfo, type Socket } from "node:net";
 import { release } from "node:os";
@@ -394,6 +394,23 @@ test("turned off, the workspace's conversations start afresh on this computer on
   const where = page.getByRole("dialog", { name: "Where conversations work in project" });
   await expect(where.getByRole("radio", { name: /A worktree of their own/ })).toBeChecked();
   await expect(where.getByRole("radio", { name: /A worktree of their own/ })).toBeEnabled();
+});
+
+test("the switch stays off where the way to the workspace follows a link inside a folder a sandbox worked in, saying so", async ({ page }) => {
+  test.skip(!sandboxesRunHere, "Sandboxes run on macOS 26 on Apple silicon only.");
+  const elsewhere = join(host.root, "elsewhere");
+  execFileSync("git", ["init", "-q", elsewhere]);
+  const linked = inProject("linked");
+  symlinkSync(elsewhere, linked);
+  await signIn(page, host);
+  await addWorkspaceFromSidebar(page, linked);
+  const dialog = await openSandboxOf(page, workspaceCard(page, linked), "linked");
+  await expect(reasons(dialog)).toHaveText(
+    `The way to the workspace follows the link ${join(realpathSync(host.projectDir), "linked")}, inside a folder a sandbox worked in, whose agents could have made it lead anywhere: open the workspace at the folder the link leads to, to use a sandbox.`,
+  );
+  await expect(sandboxSwitch(dialog)).toBeDisabled();
+  await keepScreenshot(dialog, "way-through-link-sandbox-left");
+  await dialog.getByRole("button", { name: "Done" }).click();
 });
 
 test("where none of the profiles can run in the sandbox, its settings say so and name the kind that could", async ({ page }) => {

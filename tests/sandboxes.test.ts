@@ -40,7 +40,7 @@ function hostFor(workspace: string) {
     heldChanged: (_, changes) => held.push(changes),
     foldersOf: () => [],
     networkOf: () => network,
-    otherSandboxes: () => ({ workspaces: [], writableFolders: [], writableFoldersOn: [] }),
+    otherSandboxes: () => ({ workspaces: [], writableFolders: [], writableFoldersOn: [], foldersLeft: [] }),
     foldersStarted: () => {},
     places: { home: "/nonexistent-home", dataDir: join(scratch, "mirador-data"), checkout: "/nonexistent-checkout", computersOwn: [] },
   };

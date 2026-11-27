@@ -52,7 +52,7 @@ function sandboxedRoom(sandbox: SandboxSetting) {
   const conversations = new ConversationService(store, new Hub(), config, { mute: () => {} } as never, {} as never, {} as never, new SystemNotifications(store, new Hub()));
   const conversation = conversations.startInRoom("r1", "w1", launch, "Launch: Builder");
   const turnFailure = () => store.listEvents(conversation.id).findLast(({ event }) => event.type === "error" && event.endsTurn)?.event;
-  const sandboxHost = { dataDir: config.dataDir, workspaceOf: () => realpathSync.native(project), canvasOf: () => ({ belongs: () => false, tokenOf: () => "", handle: () => new Response() }), atWork: () => ({ agents: [], conversationIds: [] }), setupChanged: () => {}, heldChanged: () => {}, foldersOf: () => [], networkOf: () => "closed" as const, otherSandboxes: () => ({ workspaces: [], writableFolders: [], writableFoldersOn: [] }), foldersStarted: () => {}, places: { home: "/nonexistent-home", dataDir: config.dataDir, checkout: "/nonexistent-checkout", computersOwn: [] } };
+  const sandboxHost = { dataDir: config.dataDir, workspaceOf: () => realpathSync.native(project), canvasOf: () => ({ belongs: () => false, tokenOf: () => "", handle: () => new Response() }), atWork: () => ({ agents: [], conversationIds: [] }), setupChanged: () => {}, heldChanged: () => {}, foldersOf: () => [], networkOf: () => "closed" as const, otherSandboxes: () => ({ workspaces: [], writableFolders: [], writableFoldersOn: [], foldersLeft: [] }), foldersStarted: () => {}, places: { home: "/nonexistent-home", dataDir: config.dataDir, checkout: "/nonexistent-checkout", computersOwn: [] } };
   return { store, config, conversations, conversation, claude, turnFailure, project, sandboxHost };
 }
 
@@ -62,7 +62,7 @@ test("a sandboxed room's agent whose sandbox can't be set up fails its turn, and
   const { conversations, conversation, claude, turnFailure, project, config } = sandboxedRoom(SANDBOX_ON);
   const cli = new FakeContainerCli();
   cli.failing = ([command, sub]) => (command === "system" && sub === "start" ? "kernel download failed" : null);
-  const host = { dataDir: config.dataDir, workspaceOf: () => project, canvasOf: () => ({ belongs: () => false, tokenOf: () => "", handle: () => new Response() }), atWork: () => ({ agents: [], conversationIds: [] }), setupChanged: () => {}, heldChanged: () => {}, foldersOf: () => [], networkOf: () => "closed" as const, otherSandboxes: () => ({ workspaces: [], writableFolders: [], writableFoldersOn: [] }), foldersStarted: () => {}, places: { home: "/nonexistent-home", dataDir: config.dataDir, checkout: "/nonexistent-checkout", computersOwn: [] } };
+  const host = { dataDir: config.dataDir, workspaceOf: () => project, canvasOf: () => ({ belongs: () => false, tokenOf: () => "", handle: () => new Response() }), atWork: () => ({ agents: [], conversationIds: [] }), setupChanged: () => {}, heldChanged: () => {}, foldersOf: () => [], networkOf: () => "closed" as const, otherSandboxes: () => ({ workspaces: [], writableFolders: [], writableFoldersOn: [], foldersLeft: [] }), foldersStarted: () => {}, places: { home: "/nonexistent-home", dataDir: config.dataDir, checkout: "/nonexistent-checkout", computersOwn: [] } };
   conversations.startsSandboxedAgentsIn(stoppedAfterAll(new Sandboxes(new AppleContainer(cli, { available: true, kind: "apple-container" }), host)));
 
   await conversations.send(conversation.id, "go");

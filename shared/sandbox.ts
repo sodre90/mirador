@@ -120,7 +120,9 @@ export type SandboxBlocker =
   | { kind: "conversation-in-worktree" }
   /** Another sandbox that is on has a folder read and write that is the workspace, holds it or lies inside it. */
   | { kind: "workspace-overlaps-sandbox-folder"; folder: string }
-  | { kind: "workspace-overlaps-sandbox-workspace"; folder: string };
+  | { kind: "workspace-overlaps-sandbox-workspace"; folder: string }
+  /** The way to the workspace follows a link inside a folder a sandbox worked in, whose agents could have made it. */
+  | { kind: "way-through-link-sandbox-left"; link: string };
 
 /**
  * A folder of this computer the owner added to a room's or workspace's sandbox, which its VM shows at the same path,

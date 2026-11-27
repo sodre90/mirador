@@ -15,7 +15,7 @@ export interface FolderConversations {
 }
 
 /** What the rooms' and workspaces' sandboxes other than this one work in, as a folder read and write of this one keeps clear of. */
-export function otherSandboxesOf(store: Pick<Store, "listRooms" | "listWorkspaces" | "writableSandboxFolders">, owner: SandboxOwner): OtherSandboxes {
+export function otherSandboxesOf(store: Pick<Store, "listRooms" | "listWorkspaces" | "writableSandboxFolders" | "foldersSandboxesLeft">, owner: SandboxOwner): OtherSandboxes {
   const isOther = (other: SandboxOwner) => !sameOwner(other, owner);
   const workspaces = store.listWorkspaces();
   const pathOf = new Map(workspaces.map(({ id, path }) => [id, path]));
@@ -28,6 +28,7 @@ export function otherSandboxesOf(store: Pick<Store, "listRooms" | "listWorkspace
     workspaces: [...ofWorkspaces, ...ofRooms],
     writableFolders: othersWritable.map(({ path }) => path),
     writableFoldersOn: othersWritable.filter((folder) => sandboxesOn.some((on) => sameOwner(on, folder.owner))).map(({ path }) => path),
+    foldersLeft: store.foldersSandboxesLeft().map(({ path }) => path),
   };
 }
 

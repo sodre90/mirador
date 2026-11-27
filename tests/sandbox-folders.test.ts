@@ -47,7 +47,7 @@ function homeOfTheOwner() {
     workspace: folderIn(home, "prj", "app"),
     sandboxOwn: [join(home, ".mirador", "sandbox", "room-1"), join(checkout, "node_modules"), join(checkout, "host", "sandbox", "in-vm"), "/mirador/sandbox", "/run/mirador"],
     socketsParent: folderIn(scratch, `sockets-${crypto.randomUUID()}`),
-    otherSandboxes: { workspaces: [], writableFolders: [], writableFoldersOn: [] },
+    otherSandboxes: { workspaces: [], writableFolders: [], writableFoldersOn: [], foldersLeft: [] },
   };
   return { home, checkout, surroundings };
 }
@@ -172,13 +172,13 @@ describe("a folder added read and write", () => {
     const startsPrograms = folderIn(home, "tools");
     const around = (otherSandboxes: FolderSurroundings["otherSandboxes"]): FolderSurroundings => ({ ...surroundings, otherSandboxes });
 
-    expect(await writableRefusalOf(repository, around({ workspaces: [repository], writableFolders: [], writableFoldersOn: [] }))).toEqual({ kind: "overlaps-sandbox-workspace", folder: repository });
-    expect(await writableRefusalOf(repository, around({ workspaces: [join(repository, "packages")], writableFolders: [], writableFoldersOn: [] }))).toEqual({ kind: "overlaps-sandbox-workspace", folder: join(repository, "packages") });
-    expect(await writableRefusalOf(repository, around({ workspaces: [join(home, "work")], writableFolders: [], writableFoldersOn: [] }))).toEqual({ kind: "overlaps-sandbox-workspace", folder: join(home, "work") });
-    expect(await writableRefusalOf(repository, around({ workspaces: [], writableFolders: [repository], writableFoldersOn: [] }))).toEqual({ kind: "overlaps-sandbox-folder", folder: repository });
-    expect(await writableRefusalOf(repository, around({ workspaces: [], writableFolders: [join(repository, "vendor")], writableFoldersOn: [] }))).toEqual({ kind: "overlaps-sandbox-folder", folder: join(repository, "vendor") });
-    expect(await writableRefusalOf(repository, around({ workspaces: [join(home, "work", "library-2")], writableFolders: [join(home, "work", "lib")], writableFoldersOn: [] }))).toBeNull();
-    expect(await refusalOf(repository, around({ workspaces: [repository], writableFolders: [repository], writableFoldersOn: [] }))).toBeNull();
+    expect(await writableRefusalOf(repository, around({ workspaces: [repository], writableFolders: [], writableFoldersOn: [], foldersLeft: [] }))).toEqual({ kind: "overlaps-sandbox-workspace", folder: repository });
+    expect(await writableRefusalOf(repository, around({ workspaces: [join(repository, "packages")], writableFolders: [], writableFoldersOn: [], foldersLeft: [] }))).toEqual({ kind: "overlaps-sandbox-workspace", folder: join(repository, "packages") });
+    expect(await writableRefusalOf(repository, around({ workspaces: [join(home, "work")], writableFolders: [], writableFoldersOn: [], foldersLeft: [] }))).toEqual({ kind: "overlaps-sandbox-workspace", folder: join(home, "work") });
+    expect(await writableRefusalOf(repository, around({ workspaces: [], writableFolders: [repository], writableFoldersOn: [], foldersLeft: [] }))).toEqual({ kind: "overlaps-sandbox-folder", folder: repository });
+    expect(await writableRefusalOf(repository, around({ workspaces: [], writableFolders: [join(repository, "vendor")], writableFoldersOn: [], foldersLeft: [] }))).toEqual({ kind: "overlaps-sandbox-folder", folder: join(repository, "vendor") });
+    expect(await writableRefusalOf(repository, around({ workspaces: [join(home, "work", "library-2")], writableFolders: [join(home, "work", "lib")], writableFoldersOn: [], foldersLeft: [] }))).toBeNull();
+    expect(await refusalOf(repository, around({ workspaces: [repository], writableFolders: [repository], writableFoldersOn: [], foldersLeft: [] }))).toBeNull();
 
     const runningPrograms: FolderSurroundings = { ...surroundings, places: { ...surroundings.places, computersOwn: [startsPrograms] } };
     expect(await writableRefusalOf(ofTools, runningPrograms)).toEqual({ kind: "inside-computers-own", folder: startsPrograms });
@@ -189,7 +189,7 @@ describe("a folder added read and write", () => {
     const { home, surroundings } = homeOfTheOwner();
     const theirWorkspace = folderIn(home, "work", "app");
     const theirFolder = folderIn(home, "work", "lib");
-    const writing = (writableFolders: string[], writableFoldersOn: string[]): FolderSurroundings => ({ ...surroundings, otherSandboxes: { workspaces: [theirWorkspace], writableFolders, writableFoldersOn } });
+    const writing = (writableFolders: string[], writableFoldersOn: string[]): FolderSurroundings => ({ ...surroundings, otherSandboxes: { workspaces: [theirWorkspace], writableFolders, writableFoldersOn, foldersLeft: [] } });
 
     expect(await refusalOf(folderIn(theirWorkspace, "docs"), writing([], []))).toEqual({ kind: "inside-where-a-sandbox-writes", folder: theirWorkspace });
     expect(await refusalOf(folderIn(theirFolder, "src"), writing([theirFolder], [theirFolder]))).toEqual({ kind: "inside-where-a-sandbox-writes", folder: theirFolder });
@@ -212,10 +212,11 @@ describe("a folder added read and write", () => {
     add(roomSandbox("r2"), "/home/me/r2-writes", true);
     add(roomSandbox("r2"), "/home/me/r2-reads", false);
     add(workspaceSandbox("w1"), "/home/me/w1-writes", true);
+    store.setSandboxLeft("/home/me/four", 1);
 
-    expect(otherSandboxesOf(store, roomSandbox("r1"))).toEqual({ workspaces: ["/home/me/one"], writableFolders: ["/home/me/r2-writes", "/home/me/w1-writes"], writableFoldersOn: ["/home/me/w1-writes"] });
-    expect(otherSandboxesOf(store, workspaceSandbox("w1"))).toEqual({ workspaces: ["/home/me/two"], writableFolders: ["/home/me/r1-writes", "/home/me/r2-writes"], writableFoldersOn: ["/home/me/r1-writes"] });
-    expect(otherSandboxesOf(store, roomSandbox("r2"))).toEqual({ workspaces: ["/home/me/one", "/home/me/two"], writableFolders: ["/home/me/r1-writes", "/home/me/w1-writes"], writableFoldersOn: ["/home/me/r1-writes", "/home/me/w1-writes"] });
+    expect(otherSandboxesOf(store, roomSandbox("r1"))).toEqual({ workspaces: ["/home/me/one"], writableFolders: ["/home/me/r2-writes", "/home/me/w1-writes"], writableFoldersOn: ["/home/me/w1-writes"], foldersLeft: ["/home/me/four"] });
+    expect(otherSandboxesOf(store, workspaceSandbox("w1"))).toEqual({ workspaces: ["/home/me/two"], writableFolders: ["/home/me/r1-writes", "/home/me/r2-writes"], writableFoldersOn: ["/home/me/r1-writes"], foldersLeft: ["/home/me/four"] });
+    expect(otherSandboxesOf(store, roomSandbox("r2"))).toEqual({ workspaces: ["/home/me/one", "/home/me/two"], writableFolders: ["/home/me/r1-writes", "/home/me/w1-writes"], writableFoldersOn: ["/home/me/r1-writes", "/home/me/w1-writes"], foldersLeft: ["/home/me/four"] });
   });
 });
 
@@ -229,7 +230,7 @@ describe("the sandbox's VM", () => {
   function sandboxWithFolders() {
     const { home, surroundings } = homeOfTheOwner();
     let folders: SandboxFolder[] = [];
-    let others: OtherSandboxes = { workspaces: [], writableFolders: [], writableFoldersOn: [] };
+    let others: OtherSandboxes = { workspaces: [], writableFolders: [], writableFoldersOn: [], foldersLeft: [] };
     const started: SandboxOwner[] = [];
     const held: HeldChange[][] = [];
     const host: SandboxHost = {
@@ -272,14 +273,14 @@ describe("the sandbox's VM", () => {
     const inside = folderIn(workspace, "packages");
 
     expect(await sandboxes.workspaceRefusal(workspace, ROOM)).toBeNull();
-    setOthers({ workspaces: [], writableFolders: [around], writableFoldersOn: [] });
+    setOthers({ workspaces: [], writableFolders: [around], writableFoldersOn: [], foldersLeft: [] });
     expect(await sandboxes.workspaceRefusal(workspace, ROOM)).toBeNull();
-    setOthers({ workspaces: [], writableFolders: [around], writableFoldersOn: [around] });
+    setOthers({ workspaces: [], writableFolders: [around], writableFoldersOn: [around], foldersLeft: [] });
     expect(await sandboxes.workspaceRefusal(workspace, ROOM)).toEqual({ kind: "workspace-overlaps-sandbox-folder", folder: around });
-    setOthers({ workspaces: [], writableFolders: [inside], writableFoldersOn: [inside] });
+    setOthers({ workspaces: [], writableFolders: [inside], writableFoldersOn: [inside], foldersLeft: [] });
     expect(await sandboxes.workspaceRefusal(workspace, ROOM)).toEqual({ kind: "workspace-overlaps-sandbox-folder", folder: inside });
     expect(await sandboxes.workspaceRefusal(workspace)).toBeNull();
-    setOthers({ workspaces: [], writableFolders: [folderIn(home, "elsewhere")], writableFoldersOn: [folderIn(home, "elsewhere")] });
+    setOthers({ workspaces: [], writableFolders: [folderIn(home, "elsewhere")], writableFoldersOn: [folderIn(home, "elsewhere")], foldersLeft: [] });
     expect(await sandboxes.workspaceRefusal(workspace, ROOM)).toBeNull();
   });
 
@@ -410,7 +411,7 @@ describe("the sandbox's VM", () => {
     Bun.spawnSync(["git", "-C", includingMissing, "config", "include.path", "../.gitconfig"]);
     const library = repositoryIn(home, "library");
     setFolders(readAndWrite(notes), readAndWrite(piped), readAndWrite(shared), readAndWrite(includingMissing), readAndWrite(library));
-    setOthers({ workspaces: [], writableFolders: [shared], writableFoldersOn: [] });
+    setOthers({ workspaces: [], writableFolders: [shared], writableFoldersOn: [], foldersLeft: [] });
 
     await launch();
 

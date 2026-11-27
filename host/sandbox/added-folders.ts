@@ -14,6 +14,8 @@ export interface OtherSandboxes {
   writableFolders: string[];
   /** The folders added read and write to those whose sandbox is on. */
   writableFoldersOn: string[];
+  /** The folders any sandbox worked in and left, this one's too, whose agents could have left links there. */
+  foldersLeft: string[];
 }
 
 /** What a folder added to one sandbox must keep clear of. */
