@@ -489,6 +489,10 @@ export function startServer(services: HostServices) {
     try {
       const joined = roomInvites.redeem(code, deviceName(name), person, reached, p2p);
       const tunnel = tunnelForDevice?.register(joined.device.id, tunnelKey);
+      if (joined.replacedDeviceIds.length > 0) {
+        const replaced = new Set(joined.replacedDeviceIds);
+        hub.disconnectWhere((socket) => socket.data.deviceId !== null && replaced.has(socket.data.deviceId), "replaced by new sign-in");
+      }
       if (joined.waiting) tellOwnerOfKnock(joined.roomId, joined.personId);
       else personCameIn(joined.roomId, joined.personId, joined.previousRole);
       roomJoinersChanged(joined.personId);

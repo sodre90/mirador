@@ -381,10 +381,13 @@ export class PeerToPeer {
     return { ...this.places(), deviceAddress: address };
   }
 
-  /** Lets a device in no more, and closes what it had open; its key is over from now. Call it before the device is deleted. */
-  forget(deviceId: string) {
+  /** Lets a device in no more, and closes what it had open; unless `keyOver` is false, its key is over from now. Call it before the device is deleted. */
+  forget(deviceId: string, { keyOver = true }: { keyOver?: boolean } = {}) {
     const { key, address } = this.store.deviceTunnel(deviceId) ?? {};
-    if (key && address) this.keyOver({ key, address }, "device");
+    if (key && address) {
+      if (keyOver) this.keyOver({ key, address }, "device");
+      else this.sidecar.unpin(key);
+    }
     this.listeners.get(deviceId)?.stop();
     this.listeners.delete(deviceId);
   }

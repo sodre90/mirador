@@ -326,6 +326,24 @@ describe("a room invite for several people", () => {
     expect(profileOf(store, alice.personId)).toMatchObject({ name: "Mallory", color: "rose" });
   });
 
+  test("replaces the person's earlier device when the same key joins a second room, revoking its first sign-in", () => {
+    const { invites, store } = machine();
+    addRoom(store, "r2");
+    const key = keyPair();
+    const first = joining(invites, invites.invite("r1", "member", 1, "at-once", "15-minutes").code, key, "Alice");
+    const forgotten: string[] = [];
+    const second = joining(
+      invites,
+      invites.invite("r2", "member", 1, "at-once", "15-minutes").code,
+      key,
+      "Alice",
+      { inviteUsed: () => {}, forget: (id: string) => void forgotten.push(id) } as unknown as { inviteUsed: (code: string) => void },
+    );
+    expect(second.replacedDeviceIds).toEqual([first.device.id]);
+    expect(forgotten).toEqual([first.device.id]);
+    expect(store.listDevices().filter(({ personId }) => personId === first.personId).map(({ id }) => id)).toEqual([second.device.id]);
+  });
+
   test("marks a name clash on an at-once invite when renaming would collide one of the person's brought agents in another room", () => {
     const { invites, store } = machine();
     addRoom(store, "r2");

@@ -58,6 +58,8 @@ export interface Admitted {
   roomId: string;
   waiting: boolean;
   previousRole: RoomRole | null;
+  /** Earlier devices of the same person replaced by this join, already revoked in the store. */
+  replacedDeviceIds: string[];
 }
 
 /** Of a name a person presented, what the name rules let them go by: cleaned, or none. */
@@ -204,7 +206,7 @@ export class RoomInvites {
    * none again. The challenge is used up whatever comes of it; with the invite's last seat taken, its one-time key in the
    * tunnel is over.
    */
-  redeem(code: string, deviceName: string, presented: unknown, reached: ReachedAt, p2p: Pick<PeerToPeer, "inviteUsed"> | null = null): Admitted {
+  redeem(code: string, deviceName: string, presented: unknown, reached: ReachedAt, p2p: Pick<PeerToPeer, "inviteUsed"> & Partial<Pick<PeerToPeer, "forget">> | null = null): Admitted {
     const { publicKey, name, color, challenge, signature } = (typeof presented === "object" && presented !== null ? presented : {}) as Record<string, unknown>;
     const asked = isChallenge(challenge) ? this.takeChallenge(challenge) : undefined;
     const codeKey = inviteKey(code);
@@ -222,7 +224,13 @@ export class RoomInvites {
       if (this.store.tookRoomInviteSeat(invite.id, personId)) throw new HostProblemError({ code: "room-invite-used-already" });
       const wasLastSeat = this.store.takeRoomInviteSeat(invite.id, personId);
       const { waiting, previousRole } = this.comeIn(invite, personId, { name, color: isPastel(color) ? color : null, deviceName });
-      return { admitted: { ...this.devices.admit(deviceName, personId), personId, roomId: invite.roomId, waiting, previousRole }, wasLastSeat };
+      const replacedDeviceIds = this.store.listDevices().filter((device) => device.personId === personId).map(({ id }) => id);
+      const admittedDevice = this.devices.admit(deviceName, personId);
+      replacedDeviceIds.forEach((id) => {
+        p2p?.forget?.(id, { keyOver: false });
+        this.devices.revoke(id);
+      });
+      return { admitted: { ...admittedDevice, personId, roomId: invite.roomId, waiting, previousRole, replacedDeviceIds }, wasLastSeat };
     });
     if (wasLastSeat) this.lastSeatTaken(invite.id, code, p2p);
     return admitted;
