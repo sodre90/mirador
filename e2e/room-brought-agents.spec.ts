@@ -352,6 +352,39 @@ test("Mia's Builder beside Ann's: the name the @ menu put in tags the one it nam
   await expect(miasBuilderChip).toHaveCount(0);
 });
 
+test("a brought agent with a long name keeps its bringer visible when cut short and shows the full name on hover", async () => {
+  const longName = "VeryLongBroughtAgentNameForNarrowHeaders";
+  const fullName = `${longName} (Mia)`;
+  const profiles = await createProfile(mia, longName, `OPENCODE_FAKE_ACP_PROMPTS=${join(mias.root, "long-prompts")}`, "", "opencode");
+  await profiles.getByRole("button", { name: "Close" }).click();
+  const dialog = await chooseToBring(longName, "Any time");
+  await dialog.getByRole("button", { name: "Bring", exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+
+  const originalSize = ann.viewportSize()!;
+  await ann.setViewportSize({ width: 760, height: 720 });
+  const chip = ann.locator(".room-header .agent-chip", { hasText: fullName });
+  await expect(chip).toBeVisible();
+  const chipLabel = chip.locator(".room-agent-label");
+  await expect(chip.locator(".room-agent-bringer")).toHaveText(" (Mia)");
+  await expect.poll(() => chip.locator(".room-agent-base").evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(true);
+  await expect.poll(() => chip.locator(".room-agent-bringer").evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+  await expect(chipLabel).toHaveAttribute("data-hint", new RegExp(longName));
+  await expect(roomCard(ann, "Garden").locator(".room-card-subline")).toHaveAttribute("data-hint", new RegExp(longName));
+
+  const settings = await openRoomSettings(ann, "Garden", "Agents");
+  const rowName = settings.locator(".room-settings-row-name", { hasText: fullName });
+  await expect(rowName.locator(".room-agent-bringer")).toHaveText(" (Mia)");
+  await settings.getByRole("button", { name: "Close" }).click();
+
+  await ann.setViewportSize(originalSize);
+  await joinedCard(mia).hover();
+  await joinedCard(mia).getByRole("button", { name: "More for Garden" }).click();
+  await mia.getByRole("menuitem", { name: `Take out ${longName}` }).click();
+  await mia.getByRole("menuitem", { name: `Confirm: Take out ${longName}` }).click();
+  await expect(chip).toHaveCount(0);
+});
+
 test("while Mia's Mirador is away, the room says so at once, and Ann takes the agent out", async () => {
   await mias.stop();
   await expect(agentChip(ann)).toHaveClass(/\baway\b/);

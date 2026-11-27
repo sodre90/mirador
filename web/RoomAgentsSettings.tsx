@@ -6,6 +6,7 @@ import { broughtAgentName, type Room, type RoomAgent } from "../shared/rooms.ts"
 import { agentMarks } from "./Chat.tsx";
 import { ConfirmButton } from "./ConfirmButton.tsx";
 import { connection } from "./connection.ts";
+import { BroughtAgentName, HintedWhenCutShort } from "./cut-short.tsx";
 import { textCutShort, useCutShort } from "./cut-short.tsx";
 import { t } from "./i18n/index.ts";
 import { AgentSearch, ModelChoice } from "./RoomAgents.tsx";
@@ -207,7 +208,9 @@ function BroughtAgents({ room, people }: { room: Room; people: Person[] }) {
                 <span className={`avatar agent-${harness}`} aria-hidden="true">
                   {agentMarks[harness]}
                 </span>
-                <span className="room-settings-row-name">{shownName}</span>
+                <HintedWhenCutShort className="room-settings-row-name" whole={shownName}>
+                  <BroughtAgentName name={name} bringer={bringer} />
+                </HintedWhenCutShort>
                 <span className={`room-agent-brought${here ? "" : " away"}`}>{here ? words.onComputerOf(bringer) : words.awayFrom(bringer)}</span>
                 <ConfirmButton
                   className="link danger"

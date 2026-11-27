@@ -47,7 +47,7 @@ import { placedBelowOnItsSide, useClosing, useKeptInWindow } from "./BarMenu.tsx
 import { CanvasPanel, CanvasShown, type WorkspaceApps } from "./Canvas.tsx";
 import { agentMarks, JumpToLatest, MessageWriters, pendingPermissionNeeded, PersonAvatar, PersonName, TimelineOfEvents, Timestamp, usePersonName, usePersonNames, useScrollAnchor } from "./Chat.tsx";
 import { connection } from "./connection.ts";
-import { HintedWhenCutShort } from "./cut-short.tsx";
+import { BroughtAgentName, HintedWhenCutShort } from "./cut-short.tsx";
 import { useEarlierHistory } from "./earlier-history.ts";
 import type { EditRequest } from "./edit-approval.ts";
 import { FormatBarToggle } from "./FormatBar.tsx";
@@ -108,7 +108,16 @@ function AuthorMark({ author, agentsById }: { author: RoomAuthor; agentsById: Ma
 }
 
 function AuthorName({ author, agentsById }: { author: RoomAuthor; agentsById: Map<string, RoomAgentShown> }) {
-  return writtenByAgent(author) ? <span>{agentsById.get(author.profileId)?.name ?? words.agentGone}</span> : <PersonName personId={author.personId} />;
+  if (!writtenByAgent(author)) return <PersonName personId={author.personId} />;
+  const agent = agentsById.get(author.profileId);
+  if (agent?.brought) {
+    return (
+      <HintedWhenCutShort className="room-author-name" whole={agent.name}>
+        <BroughtAgentName name={agent.brought.name} bringer={agent.brought.bringer} />
+      </HintedWhenCutShort>
+    );
+  }
+  return <span>{agent?.name ?? words.agentGone}</span>;
 }
 
 function answerEnding(message: RoomMessage) {
@@ -579,11 +588,16 @@ function ThreadColumn({
     event.preventDefault();
     onClose();
   };
+  const [threadPrefix = "", threadSuffix = ""] = words.thread("\0").split("\0");
   return (
     <aside className="side-chat room-thread" aria-label={words.thread(agent.name)} onKeyDown={closeOnEscape}>
       <header className="side-chat-header">
         <div className="side-chat-heading">
-          <h2>{words.thread(agent.name)}</h2>
+          <h2>
+            <HintedWhenCutShort className="room-thread-title" whole={words.thread(agent.name)}>
+              {agent.brought ? <BroughtAgentName prefix={threadPrefix} name={agent.brought.name} bringer={agent.brought.bringer} suffix={threadSuffix} /> : words.thread(agent.name)}
+            </HintedWhenCutShort>
+          </h2>
         </div>
         <button type="button" className="icon" aria-label={words.closeThread} onClick={onClose}>
           ×
@@ -684,11 +698,11 @@ function AgentChip({ agent, showsModel }: { agent: RoomAgentShown; showsModel: b
   const whereItRuns =
     agent.brought &&
     [agent.brought.here ? words.onComputerOf(agent.brought.bringer) : words.awayFrom(agent.brought.bringer), broughtWorkspaceOf(agent.brought)].join(" · ");
+  const markPrefix = agent.harness ? `${agentMarks[agent.harness]} ` : "";
   return (
     <li className={`agent-chip${agent.brought && !agent.brought.here ? " away" : ""}`} data-hint={whereItRuns || undefined}>
       <HintedWhenCutShort className="room-agent-label" whole={[agent.name, model, whereItRuns].filter(Boolean).join(" · ")}>
-        {agent.harness ? `${agentMarks[agent.harness]} ` : ""}
-        {agent.name}
+        {agent.brought ? <BroughtAgentName prefix={markPrefix} name={agent.brought.name} bringer={agent.brought.bringer} /> : `${markPrefix}${agent.name}`}
         {model && <span className="room-agent-model">{model}</span>}
       </HintedWhenCutShort>
     </li>

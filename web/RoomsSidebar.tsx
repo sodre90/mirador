@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type CSSProperties, type Dispatch, type RefObject } from "react";
+import { useEffect, useId, useRef, useState, type CSSProperties, type Dispatch, type KeyboardEvent, type RefObject } from "react";
 import { workspaceMarkColor } from "../shared/marks.ts";
 import type { BroughtAgentHere } from "../shared/brought-agents.ts";
 import type { JoinedRoom, Machine, MachineStatus, Person, Profile, RoomKnock, Workspace } from "../shared/model.ts";
@@ -10,7 +10,7 @@ import { joinedRoomKey } from "./brought-waiting.ts";
 import { ConfirmButton } from "./ConfirmButton.tsx";
 import { connection } from "./connection.ts";
 import { useClosingWhenFocusLeavesPage } from "./ContextMenu.tsx";
-import { HintedWhenCutShort } from "./cut-short.tsx";
+import { BroughtAgentName, HintedWhenCutShort } from "./cut-short.tsx";
 import { formatNumber, t } from "./i18n/index.ts";
 import { LayoutToggles } from "./LayoutToggles.tsx";
 import { LineIcon } from "./LineIcon.tsx";
@@ -20,6 +20,12 @@ import type { AppAction, AppState } from "./state.ts";
 import { waitingLabels, type RoomWait } from "./waiting.ts";
 
 const words = t.rooms;
+
+const openRowOnKey = (open: () => void) => (event: KeyboardEvent<HTMLLIElement>) => {
+  if (event.target !== event.currentTarget || (event.key !== "Enter" && event.key !== " ")) return;
+  event.preventDefault();
+  open();
+};
 
 /** A room of someone else's machine this computer joined, as that machine lists it: display data, never a room of this one. */
 export interface JoinedRoomShown {
@@ -127,13 +133,21 @@ export function KnockView({ machine, knock }: KnockShown) {
 }
 
 /** Under a room's name: the people in it besides its owner, and its agents, or that it has none yet. */
-function roomSubline(room: Room, profiles: Profile[], people: Person[], manages: boolean) {
+function roomSublineParts(room: Room, profiles: Profile[], people: Person[], manages: boolean) {
+  const peoplePart = manages && room.people.length > 0 ? words.peopleCount(room.people.length) : null;
   const agents = room.agents.map(({ profileId, brought }) =>
     brought
       ? broughtAgentName(personGoesBy(people.find(({ id }) => id === brought.personId), words.nameless), brought.name)
       : (profiles.find(({ id }) => id === profileId)?.name ?? words.agentGone),
   );
-  return [manages && room.people.length > 0 && words.peopleCount(room.people.length), agents.length > 0 ? agents.join(", ") : words.noAgentsYet].filter(Boolean).join(" · ");
+  const whole = [peoplePart, agents.length > 0 ? agents.join(", ") : words.noAgentsYet].filter(Boolean).join(" · ");
+  const soleBrought = room.agents.length === 1 ? room.agents[0]!.brought : undefined;
+  if (!soleBrought) return { whole, content: whole };
+  const bringer = personGoesBy(people.find(({ id }) => id === soleBrought.personId), words.nameless);
+  return {
+    whole,
+    content: <BroughtAgentName prefix={peoplePart ? `${peoplePart} · ` : ""} name={soleBrought.name} bringer={bringer} />,
+  };
 }
 
 function RoomMark({ style, hollow = false }: { style: CSSProperties & { "--room-mark": string }; hollow?: boolean }) {
@@ -369,7 +383,9 @@ function JoinedRoomCard({
       className={["room-card", "joined-room", selected && "selected", away && "away", waiting && "waiting", ...readingClasses({ ...room, muted: room.muted || isMutedHere(joined) })].filter(Boolean).join(" ")}
       data-waiting-tone={waiting ? "decision" : undefined}
       data-machine={machine.id}
+      tabIndex={0}
       onClick={onOpen}
+      onKeyDown={openRowOnKey(onOpen)}
     >
       <JoinedRoomMark machine={machine} />
       <span className="room-card-text">
@@ -386,11 +402,14 @@ function JoinedRoomCard({
 }
 
 function KnockCard({ machine, knock, selected, dispatch }: KnockShown & { selected: boolean; dispatch: Dispatch<AppAction> }) {
+  const open = () => dispatch({ type: "select-knock", machineId: machine.id, roomId: knock.roomId });
   return (
     <li
       className={["room-card", "room-knock", knock.turnedAway && "turned-away", selected && "selected"].filter(Boolean).join(" ")}
       data-machine={machine.id}
-      onClick={() => dispatch({ type: "select-knock", machineId: machine.id, roomId: knock.roomId })}
+      tabIndex={0}
+      onClick={open}
+      onKeyDown={openRowOnKey(open)}
     >
       <JoinedRoomMark machine={machine} />
       <span className="room-card-text">
@@ -416,7 +435,7 @@ function KnockCard({ machine, knock, selected, dispatch }: KnockShown & { select
 /** Opens where a new invite is pasted to come back to its rooms. */
 function MachineToComeBackToCard({ machine, selected, onOpen }: { machine: Machine; selected: boolean; onOpen: () => void }) {
   return (
-    <li className={["room-card", "machine-to-come-back-to", selected && "selected"].filter(Boolean).join(" ")} data-machine={machine.id} onClick={onOpen}>
+    <li className={["room-card", "machine-to-come-back-to", selected && "selected"].filter(Boolean).join(" ")} data-machine={machine.id} tabIndex={0} onClick={onOpen} onKeyDown={openRowOnKey(onOpen)}>
       <JoinedRoomMark machine={machine} />
       <span className="room-card-text">
         <span className="room-card-name">{machine.name}</span>
@@ -542,17 +561,23 @@ export function RoomsSection({
         {rooms.map((room) => {
           const waiting = roomsWaiting.get(room.id);
           const reading = readings.find(({ roomId }) => roomId === room.id) ?? NOTHING_UNREAD;
+          const subline = roomSublineParts(room, profiles, people, manages);
+          const open = () => dispatch({ type: "select-room", roomId: room.id });
           return (
             <li
               key={room.id}
               className={["room-card", room.id === selectedRoomId && "selected", needsYou(waiting, reading) && "waiting", ...readingClasses(reading)].filter(Boolean).join(" ")}
               data-waiting-tone={needsYou(waiting, reading) ? "decision" : undefined}
-              onClick={() => dispatch({ type: "select-room", roomId: room.id })}
+              tabIndex={0}
+              onClick={open}
+              onKeyDown={openRowOnKey(open)}
             >
               <RoomMark style={{ "--room-mark": workspaceMarkColor(room.name) }} />
               <span className="room-card-text">
                 <span className="room-card-name">{room.name}</span>
-                <span className="room-card-subline">{roomSubline(room, profiles, people, manages)}</span>
+                <HintedWhenCutShort className="room-card-subline" whole={subline.whole}>
+                  {subline.content}
+                </HintedWhenCutShort>
               </span>
               {roomsWithPeopleHere.includes(room.id) && <span className="room-people-here" role="img" aria-label={words.someoneHere} data-hint={words.someoneHere} />}
               <ReadingMarks reading={reading} waiting={waiting} />

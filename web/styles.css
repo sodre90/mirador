@@ -1228,12 +1228,13 @@ body.resizing iframe {
 }
 
 :is(.workspace, .rooms) li button.icon {
-  visibility: hidden;
+  opacity: 0;
 }
 
 :is(.workspace, .rooms) li:hover button.icon,
-:is(.workspace, .rooms) li.selected button.icon {
-  visibility: visible;
+:is(.workspace, .rooms) li.selected button.icon,
+:is(.workspace, .rooms) li:focus-within button.icon {
+  opacity: 1;
 }
 
 :is(.workspace, .rooms) > header button.icon {
@@ -1267,17 +1268,32 @@ body.resizing iframe {
 }
 
 /* Takes no room until the pointer is on the heading or the keyboard on one of its buttons, so the name keeps its width
-   while the pointer moves down the conversations. The profile chip's select counts as keyboard focus even when clicked,
-   so only buttons reveal them. */
+   while the pointer moves down the conversations. Stay out of flow instead of display: none so Tab from a neighbour
+   doesn't lose the next button while focus moves between them. The profile chip's select counts as keyboard focus even
+   when clicked, so only buttons reveal them. */
 :is(.workspace, .rooms) > header button.icon.workspace-action {
-  display: none;
-  padding: 0 3px;
+  position: absolute;
+  width: 0;
+  height: 0;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
 }
 
-:is(.workspace, .rooms) > header:is(:hover, :has(> button:focus-visible)) > button.icon.workspace-action,
+:is(.workspace, .rooms) > header:not(:has(> .armed)):is(:hover, :has(> button:focus-visible), :has(> button.workspace-action:focus)) > button.icon.workspace-action,
 :is(.workspace, .rooms) > header > button.icon.workspace-action.armed {
+  position: static;
   display: grid;
   place-items: center;
+  width: auto;
+  height: auto;
+  padding: 0 3px;
+  overflow: visible;
+  opacity: 1;
+  pointer-events: auto;
 }
 
 /* "Remove?" takes the room of the buttons beside it while it asks */
@@ -1287,8 +1303,15 @@ body.resizing iframe {
 
 @media (hover: none) {
   :is(.workspace, .rooms) > header button.icon.workspace-action {
+    position: static;
     display: grid;
     place-items: center;
+    width: auto;
+    height: auto;
+    padding: 0 3px;
+    overflow: visible;
+    opacity: 1;
+    pointer-events: auto;
   }
 }
 
@@ -3069,6 +3092,8 @@ input.picker-search {
 }
 
 .timestamp {
+  flex: none;
+  white-space: nowrap;
   color: var(--faint);
   font-size: calc(11px * var(--font-scale));
   font-weight: 400;
@@ -10608,6 +10633,47 @@ button.link.more-rows {
   white-space: nowrap;
 }
 
+.room-agent-label:has(.brought-agent-name),
+.room-card-subline:has(.brought-agent-name),
+.room-settings-row-name:has(.brought-agent-name) {
+  display: flex;
+  align-items: baseline;
+}
+
+.room-author-name,
+.room-thread-title {
+  display: inline-flex;
+  align-items: baseline;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.brought-agent-name {
+  display: inline-flex;
+  align-items: baseline;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.room-agent-base {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.room-agent-bringer {
+  flex: 0 0 auto;
+  max-width: 60%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: pre;
+}
+
 /* The bar's buttons wrap as one group, to the right, so none is left alone under the room's name. */
 .room-header-actions {
   display: flex;
@@ -11343,6 +11409,10 @@ button.link.more-rows {
 }
 
 .room-agent-model {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   margin-left: 4px;
   color: var(--muted);
 }
@@ -11368,7 +11438,7 @@ button.link.more-rows {
 }
 
 .rooms li button.icon.room-mute.muted {
-  visibility: visible;
+  opacity: 1;
 }
 
 .room-card.unread .room-card-name {

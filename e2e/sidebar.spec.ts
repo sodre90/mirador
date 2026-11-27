@@ -490,3 +490,68 @@ test("a row's control that takes the focus shows under the heading stuck at the 
   const roomsEnd = await page.locator(".sidebar-scroll").evaluate((list) => list.querySelector(".rooms")!.getBoundingClientRect().bottom - list.getBoundingClientRect().top + list.scrollTop);
   for (const beforeEnd of [10, 20, 30, 40]) expect(await controlsOutOfPlace(".rooms", roomsEnd - beforeEnd)).toEqual([]);
 });
+
+test("Tab crosses a workspace heading both ways without dropping to BODY, and keyboard reaches every room and its menu", async ({ page }) => {
+  await page.setViewportSize({ width: 1100, height: 420 });
+  const folder = join(host.root, "tab-walk");
+  mkdirSync(folder, { recursive: true });
+  await signIn(page, host);
+  await addWorkspaceFromSidebar(page, folder);
+  await createRoom(page, "Cloister", []);
+  await createRoom(page, "Dormer", []);
+  await roomCard(page, "Cloister").click();
+  await expect(page.getByRole("heading", { name: "# Cloister" })).toBeVisible();
+
+  const card = workspaceCard(page, folder);
+  const name = basename(folder);
+  const fold = card.getByRole("button", { name: `Fold ${name}` });
+  const agentSelect = card.getByLabel("Agent");
+  const activeTag = () => page.evaluate(() => document.activeElement?.tagName ?? "");
+
+  await test.step("Tab forward and Shift+Tab back through a workspace heading never drop focus to BODY", async () => {
+    await fold.focus();
+    const forwardLabels: string[] = [];
+    for (let step = 0; step < 10; step++) {
+      await page.keyboard.press("Tab");
+      expect(await activeTag()).not.toBe("BODY");
+      const label = await page.evaluate(() => document.activeElement?.getAttribute("aria-label") ?? "");
+      forwardLabels.push(label);
+      if (await agentSelect.evaluate((element) => element === document.activeElement)) break;
+    }
+    expect(forwardLabels).toContain("Workspace colour");
+    expect(forwardLabels).toContain("Continue a session…");
+    expect(forwardLabels).toContain("Remove workspace");
+    expect(forwardLabels).toContain("+ New conversation");
+
+    const backLabels: string[] = [];
+    for (let step = 0; step < 10; step++) {
+      await page.keyboard.press("Shift+Tab");
+      expect(await activeTag()).not.toBe("BODY");
+      const label = await page.evaluate(() => document.activeElement?.getAttribute("aria-label") ?? "");
+      backLabels.push(label);
+      if (await fold.evaluate((element) => element === document.activeElement)) break;
+    }
+    expect(backLabels).toContain("+ New conversation");
+    expect(backLabels).toContain("Remove workspace");
+    expect(backLabels).toContain("Workspace colour");
+  });
+
+  await test.step("unselected room rows and their More menus take keyboard focus and open", async () => {
+    await roomCard(page, "Cloister").focus();
+    await expect(roomCard(page, "Cloister")).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(roomCard(page, "Cloister").getByRole("button", { name: "More for Cloister" })).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(roomCard(page, "Dormer")).toBeFocused();
+    await page.keyboard.press("Tab");
+    const moreDormer = roomCard(page, "Dormer").getByRole("button", { name: "More for Dormer" });
+    await expect(moreDormer).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(page.getByRole("menu", { name: "More for Dormer" })).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("menu", { name: "More for Dormer" })).toHaveCount(0);
+    await roomCard(page, "Dormer").focus();
+    await page.keyboard.press("Enter");
+    await expect(page.getByRole("heading", { name: "# Dormer" })).toBeVisible();
+  });
+});
