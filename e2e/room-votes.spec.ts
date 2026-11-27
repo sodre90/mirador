@@ -329,3 +329,59 @@ test("an agent's answer has a faint colour of its own, and stands out for whom i
     await expect(answerSaying(mia, "the beds are dug")).not.toHaveClass(/\btags-you\b/);
   });
 });
+
+test("two agents asking at the same time stay attributed, never steal canvas focus, and auto-advance on confirm", async ({ page }) => {
+  await signIn(page, host);
+  const profiles = await createProfile(page, "Reviewer", `OPENCODE_FAKE_ACP_PROMPTS=${join(host.root, "reviewer-prompts")}`, "", "opencode");
+  await profiles.getByRole("button", { name: "Close" }).click();
+  await createRoom(page, "Shed", ["Builder", "Reviewer"]);
+
+  await test.step("clicking an agent chip opens its capability card", async () => {
+    const chip = page.locator(".room-header .agent-chip", { hasText: "Builder" });
+    await chip.getByRole("button").click();
+    const card = page.getByRole("dialog", { name: "Builder" });
+    await expect(card).toContainText("This computer");
+    await expect(card).toContainText("Draws on the room's canvas and asks questions");
+    await page.keyboard.press("Escape");
+    await expect(card).toHaveCount(0);
+  });
+
+  const q1 = "Which roof?";
+  const q2 = "Which paint?";
+  await test.step("Builder asks first and takes the canvas; Reviewer asks second without stealing focus", async () => {
+    await writeTagging(memberComposer(page, "Shed"), tagMenu(page), "Bu", "Builder", `CANVAS ask ${JSON.stringify({ question: q1, options: [{ label: "Tin" }, { label: "Tile" }] })}`);
+    await expect(vote(page, q1)).toBeVisible();
+    await expect(vote(page, q1).locator(".room-vote-asker")).toContainText("Builder asks");
+    await expect(page.locator(".canvas-panel:visible .ask h3")).toHaveText(q1);
+    await expect(page.locator(".canvas-panel:visible .canvas-author")).toContainText("Builder");
+
+    await writeTagging(memberComposer(page, "Shed"), tagMenu(page), "Re", "Reviewer", `CANVAS ask ${JSON.stringify({ question: q2, options: [{ label: "Red" }, { label: "Blue" }] })}`);
+    await expect(vote(page, q2)).toBeVisible();
+    await expect(vote(page, q2).locator(".room-vote-asker")).toContainText("Reviewer asks");
+
+    // Canvas stays on Builder's waiting question and shows the 2-question switcher bar
+    await expect(page.locator(".canvas-panel:visible .ask h3")).toHaveText(q1);
+    const switcher = page.locator(".canvas-panel:visible .canvas-waiting-asks");
+    await expect(switcher).toContainText("2 questions waiting");
+    await expect(switcher.getByRole("button", { name: /Builder/ })).toHaveAttribute("aria-pressed", "true");
+    await expect(switcher.getByRole("button", { name: /Reviewer/ })).toHaveAttribute("aria-pressed", "false");
+  });
+
+  await test.step("clicking the switcher or Show on canvas switches questions; confirming auto-advances to the remaining waiting question", async () => {
+    await page.locator(".canvas-panel:visible .canvas-waiting-asks").getByRole("button", { name: /Reviewer/ }).click();
+    await expect(page.locator(".canvas-panel:visible .ask h3")).toHaveText(q2);
+    await expect(page.locator(".canvas-panel:visible .canvas-author")).toContainText("Reviewer");
+
+    await vote(page, q1).getByRole("button", { name: "Show on canvas" }).click();
+    await expect(page.locator(".canvas-panel:visible .ask h3")).toHaveText(q1);
+
+    await option(page, q1, "Tin").getByRole("button").click();
+    await vote(page, q1).getByRole("button", { name: "Confirm: Tin" }).click();
+    await expect(page.locator(".canvas-panel:visible .ask h3")).toHaveText(q2);
+    await expect(page.locator(".canvas-panel:visible .canvas-waiting-asks")).toHaveCount(0);
+
+    await option(page, q2, "Red").getByRole("button").click();
+    await vote(page, q2).getByRole("button", { name: "Confirm: Red" }).click();
+    await expect(vote(page, q2).locator(".room-vote-status")).toHaveText("Olivia confirmed: Red");
+  });
+});

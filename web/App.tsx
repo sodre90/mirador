@@ -789,6 +789,8 @@ export function App() {
           <RoomCanvas
             key={shownRoom.id}
             room={shownRoom}
+            profiles={state.profiles}
+            people={state.people}
             items={state.roomTimeline?.canvas ?? []}
             shown={showRoomCanvas}
             assetsOrigin={state.canvasAssetsOrigin}

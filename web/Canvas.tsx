@@ -4,8 +4,10 @@ import { buildCanvasDocument, canvasHiddenMessage, canvasPageMessage, canvasRoom
 import { appKey, type AppDocumentState, type InstalledApp, type OpenApp } from "../shared/apps.ts";
 import { answerPicking, answersSummary, answerTo, isNoneOfTheOptions, pickedIn, questionsOf, type AskPage } from "../shared/ask.ts";
 import type { AskAnswerEntry, AskItem, AskQuestion, CanvasItem, ShowItem } from "../shared/model.ts";
+import { nextSelectionAfterSettle, nextSelectionOnArrival, waitingRoomAsks, type CanvasItemAuthor } from "../shared/room-canvas.ts";
 import { AppView } from "./AppView.tsx";
 import { BarMenu, type BarMenuEntry } from "./BarMenu.tsx";
+import { agentMarks } from "./Chat.tsx";
 import { connection } from "./connection.ts";
 import { settledEditNote, type EditRequest } from "./edit-approval.ts";
 import { ChangesView } from "./Changes.tsx";
@@ -719,21 +721,35 @@ function useEditsOnCanvas(edits: EditRequest[], clear: () => void) {
   return { shown, waiting: waiting.length, note, setAside: () => setSetAside(true), bringBack: () => setSetAside(false) };
 }
 
-function CanvasHistory({ items, selectedId, onPick }: { items: CanvasItem[]; selectedId: string | null; onPick: (id: string) => void }) {
+function CanvasHistory({
+  items,
+  selectedId,
+  authorOf,
+  onPick,
+}: {
+  items: CanvasItem[];
+  selectedId: string | null;
+  authorOf?: (item: CanvasItem) => CanvasItemAuthor | null;
+  onPick: (id: string) => void;
+}) {
   return (
     <ul className="canvas-history" aria-label={words.bar.history}>
-      {items.map((item) => (
-        <li key={item.id}>
-          <button type="button" className={`history-entry ${item.id === selectedId ? "selected" : ""} status-${item.status}`} onClick={() => onPick(item.id)}>
-            <time className="timestamp" title={formatFullTime(item.createdAt)}>
-              {formatClockTime(item.createdAt)}
-            </time>
-            <span className="entry-kind">{iconOf(item)}</span>
-            <span className="entry-title">{item.title}</span>
-            <span className="entry-outcome">{outcomeOf(item)}</span>
-          </button>
-        </li>
-      ))}
+      {items.map((item) => {
+        const author = authorOf?.(item) ?? null;
+        return (
+          <li key={item.id}>
+            <button type="button" className={`history-entry ${item.id === selectedId ? "selected" : ""} status-${item.status}`} onClick={() => onPick(item.id)}>
+              <time className="timestamp" title={formatFullTime(item.createdAt)}>
+                {formatClockTime(item.createdAt)}
+              </time>
+              <span className="entry-kind">{iconOf(item)}</span>
+              {author && <span className="entry-author">{author.name}</span>}
+              <span className="entry-title">{item.title}</span>
+              <span className="entry-outcome">{outcomeOf(item)}</span>
+            </button>
+          </li>
+        );
+      })}
     </ul>
   );
 }
@@ -878,6 +894,7 @@ export function CanvasPanel({
   inRoom = false,
   readOnly = false,
   itemToShow = null,
+  authorOf,
 }: {
   conversationId: string;
   items: CanvasItem[];
@@ -901,10 +918,13 @@ export function CanvasPanel({
   readOnly?: boolean;
   /** The item the user asked to see, brought in front once for each time they ask. */
   itemToShow?: { itemId: string } | null;
+  /** Who made each item on a room's canvas, for attribution in the bar, history and waiting-question switcher. */
+  authorOf?: (item: CanvasItem) => CanvasItemAuthor | null;
 }) {
   const pages = useMemo<CanvasItem[]>(() => items.filter((item) => !isTabItem(item)), [items]);
   const tabItem = currentTabItem(items);
   const newestFirst = useMemo(() => [...pages].sort((a, b) => b.createdAt - a.createdAt), [pages]);
+  const waitingAsks = useMemo(() => (inRoom ? waitingRoomAsks(pages) : []), [inRoom, pages]);
   const newest = newestFirst[0];
   const onCanvasByDefault = newest && !isSettledQuestion(newest) ? newest.id : null;
   const checklistIsLatest = tabItem !== undefined && tabItem.createdAt > (newest?.createdAt ?? 0);
@@ -929,8 +949,8 @@ export function CanvasPanel({
   const shown = useContext(CanvasShown);
   useEffect(() => {
     if (!keptSinceLeft.current) {
-      setSelectedId(onCanvasByDefault);
-      setTab(tabByDefault);
+      setSelectedId((current) => nextSelectionOnArrival(current, pages, onCanvasByDefault, inRoom));
+      setTab((currentTab) => (inRoom && waitingAsks.some(({ id }) => id === selectedId) ? currentTab : tabByDefault));
     }
     keptSinceLeft.current = false;
   }, [latestId]);
@@ -957,7 +977,9 @@ export function CanvasPanel({
   const nothingCovers = changesOpen || (!tab && !somethingElseShown);
   const changesShown = !inRoom && nothingCovers;
   const outcome = selected && outcomeOf(selected);
-  const questionNote = useClearWhenSettled(selected, (settledId) => setSelectedId((current) => (current === settledId ? null : current)));
+  const questionNote = useClearWhenSettled(selected, (settledId) =>
+    setSelectedId((current) => (current === settledId ? nextSelectionAfterSettle(settledId, pages, inRoom) : current)),
+  );
   const settledNote = edit.note ?? questionNote;
   const older = selected ? newestFirst[selectedIndex + 1] : newest;
   const newer = selected ? newestFirst[selectedIndex - 1] : undefined;
@@ -1096,6 +1118,15 @@ export function CanvasPanel({
           )}
         </button>
         {!tab && edit.shown && <span className="canvas-outcome status-waiting">{words.outcome.needsYourAnswer}</span>}
+        {!tab && !edit.shown && selected && (() => {
+          const author = authorOf?.(selected) ?? null;
+          return author ? (
+            <span className="canvas-author" title={author.name}>
+              {author.harness ? `${agentMarks[author.harness]} ` : ""}
+              {author.name}
+            </span>
+          ) : null;
+        })()}
         {!tab && !edit.shown && selected && outcome && (
           <span className={`canvas-outcome status-${selected.status}${outcomeIsFreeText(selected) ? " free-text" : ""}`} title={outcome}>
             {outcome}
@@ -1213,9 +1244,35 @@ export function CanvasPanel({
           {words.bar.hide}
         </button>
       </div>
+      {inRoom && waitingAsks.length > 0 && (waitingAsks.length > 1 || selected?.id !== waitingAsks[0]!.id) && (
+        <div className="canvas-waiting-asks" role="region" aria-label={words.bar.questionsWaiting(waitingAsks.length)}>
+          <span className="canvas-waiting-asks-label">{words.bar.questionsWaiting(waitingAsks.length)}</span>
+          <div className="canvas-waiting-asks-tabs">
+            {waitingAsks.map((ask) => {
+              const author = authorOf?.(ask) ?? null;
+              const sameAuthorCount = author ? waitingAsks.filter((other) => authorOf?.(other)?.name === author.name).length : 0;
+              const label = author ? (sameAuthorCount > 1 ? `${author.name}: ${ask.title}` : author.name) : ask.title;
+              const active = !tab && selected?.id === ask.id;
+              return (
+                <button
+                  key={ask.id}
+                  type="button"
+                  className={`canvas-waiting-ask-tab${active ? " on" : ""}`}
+                  aria-pressed={active}
+                  data-hint={ask.title}
+                  onClick={() => pick(ask.id)}
+                >
+                  {author?.harness && <span aria-hidden="true">{agentMarks[author.harness]} </span>}
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
       {pageExport.opened}
       {pageFind.opened}
-      {historyOpen && <CanvasHistory items={newestFirst} selectedId={selected?.id ?? null} onPick={pick} />}
+      {historyOpen && <CanvasHistory items={newestFirst} selectedId={selected?.id ?? null} authorOf={authorOf} onPick={pick} />}
       <div className="canvas-body">
         {nothingCovers && !somethingElseShown && (
           <div className="empty-state">

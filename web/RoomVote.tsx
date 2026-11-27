@@ -1,8 +1,9 @@
 import { useState, type KeyboardEvent } from "react";
 import { answerTo, questionsOf } from "../shared/ask.ts";
 import type { AskItem, AskQuestion } from "../shared/model.ts";
+import type { CanvasItemAuthor } from "../shared/room-canvas.ts";
 import { MOST_OWN_ANSWER_CHARACTERS, pickOf, picksOf, type RoomConfirmedAnswer, type RoomQuestionVotes } from "../shared/room-votes.ts";
-import { PersonAvatar, usePersonName, usePersonNames } from "./Chat.tsx";
+import { agentMarks, PersonAvatar, usePersonName, usePersonNames } from "./Chat.tsx";
 import { connection } from "./connection.ts";
 import { formatNumber, t } from "./i18n/index.ts";
 import { answerShown } from "./shown-answer.ts";
@@ -141,7 +142,25 @@ function WaitingLine({ confirmers }: { confirmers: string[] }) {
  * pick, or, where the question takes an answer of another kind, words of their own, or, for whom may not write them,
  * none of its options; never what others picked for them.
  */
-export function RoomVote({ roomId, item, votes, you, takesOwnWords }: { roomId: string; item: AskItem; votes: RoomQuestionVotes | undefined; you: string | null; takesOwnWords: boolean }) {
+export function RoomVote({
+  roomId,
+  item,
+  votes,
+  you,
+  takesOwnWords,
+  asker,
+  onShowOnCanvas,
+}: {
+  roomId: string;
+  item: AskItem;
+  votes: RoomQuestionVotes | undefined;
+  you: string | null;
+  takesOwnWords: boolean;
+  /** The agent that asked this question, shown so concurrent questions from different agents stay distinct. */
+  asker?: CanvasItemAuthor;
+  /** Brings this question onto the room's canvas, shown on standalone waiting cards. */
+  onShowOnCanvas?: () => void;
+}) {
   const questions = questionsOf(item);
   const { ballots, confirmers } = votes ?? NOBODY_VOTED;
   const open = item.status === "waiting";
@@ -164,6 +183,25 @@ export function RoomVote({ roomId, item, votes, you, takesOwnWords }: { roomId: 
   };
   return (
     <section className={`room-vote${open ? " open" : ""}`} aria-label={item.title} data-item-id={item.id}>
+      {(asker || onShowOnCanvas) && (
+        <div className="room-vote-head">
+          {asker && (
+            <span className="room-vote-asker">
+              {asker.harness && (
+                <span className={`avatar agent-${asker.harness}`} aria-hidden="true">
+                  {agentMarks[asker.harness]}
+                </span>
+              )}
+              <span>{t.rooms.asks(asker.name)}</span>
+            </span>
+          )}
+          {onShowOnCanvas && (
+            <button type="button" className="link room-vote-canvas" onClick={onShowOnCanvas}>
+              {words.showOnCanvas}
+            </button>
+          )}
+        </div>
+      )}
       {questions.map((question, index) => (
         <VoteQuestion
           key={index}

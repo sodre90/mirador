@@ -134,24 +134,29 @@ export function InvitedRoomPane({
           <BroughtAgentsWaiting here={here} />
         </div>
       )}
-      {workBeside && (
-        <BroughtWorkPanel
-          agent={workBeside}
-          jumpTo={jumpTo?.conversationId === workBeside.conversation.id ? jumpTo : null}
-          onClose={() => dispatch({ type: "show-brought-work", conversationId: null })}
+      <div className="invited-room-body">
+        <MachineFrames
+          machines={machines.filter(({ asPerson }) => asPerson)}
+          person={person}
+          shownId={covered ? null : (machine?.id ?? null)}
+          visited={visited}
+          opening={opening}
+          placeOf={NO_PLACE}
+          onPlace={KEEPS_NO_PLACE}
+          onJoinedRoom={onJoinedRoom}
+          onOpenBroughtWork={openBroughtWork}
         />
-      )}
-      <MachineFrames
-        machines={machines.filter(({ asPerson }) => asPerson)}
-        person={person}
-        shownId={covered ? null : (machine?.id ?? null)}
-        visited={visited}
-        opening={opening}
-        placeOf={NO_PLACE}
-        onPlace={KEEPS_NO_PLACE}
-        onJoinedRoom={onJoinedRoom}
-        onOpenBroughtWork={openBroughtWork}
-      />
+        {workBeside && (
+          <>
+            <div className="brought-work-backdrop" aria-hidden="true" onClick={() => dispatch({ type: "show-brought-work", conversationId: null })} />
+            <BroughtWorkPanel
+              agent={workBeside}
+              jumpTo={jumpTo?.conversationId === workBeside.conversation.id ? jumpTo : null}
+              onClose={() => dispatch({ type: "show-brought-work", conversationId: null })}
+            />
+          </>
+        )}
+      </div>
     </section>
   );
 }

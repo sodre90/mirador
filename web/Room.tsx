@@ -7,6 +7,7 @@ import { mentionAt, withMention } from "../shared/mentions.ts";
 import type { RoomApprovalAnswer } from "../shared/room-permissions.ts";
 import { stillTagged, withTagAtCaret, type TaggablePerson } from "../shared/room-mentions.ts";
 import type { RoomQuestionVotes } from "../shared/room-votes.ts";
+import { roomCanvasAuthorOf } from "../shared/room-canvas.ts";
 import {
   AGENT_TAGGED_TURNS_AFTER_A_PERSON,
   approvesIn,
@@ -195,25 +196,40 @@ function RoomEntry({
   );
 }
 
-function ThreadLink({ text, onOpen }: { text?: string; onOpen: () => void }) {
+function ThreadLink({ text, onOpen, onOpenWork }: { text?: string; onOpen: () => void; onOpenWork?: () => void }) {
   return (
     <div className="room-thread-line">
       {text && <span>{text}</span>}
       <button type="button" className="link" onClick={onOpen}>
         {words.openThread}
       </button>
+      {onOpenWork && (
+        <button type="button" className="link" onClick={onOpenWork}>
+          {words.showInItsWork}
+        </button>
+      )}
     </div>
   );
 }
 
 /** A line under an answer whose turn put pages or questions on the room's canvas, which opens the latest of them there. */
 function CanvasLine({ items, onOpen }: { items: CanvasItem[]; onOpen: (itemId: string) => void }) {
-  const pages = items.filter(({ kind }) => kind === "show").length;
+  const shownPages = items.filter(({ kind }) => kind === "show");
+  const pages = shownPages.length;
   const questions = items.filter(({ kind }) => kind === "ask").length;
   const latest = items.toSorted((a, b) => b.createdAt - a.createdAt)[0]!;
   return (
     <div className="room-thread-line room-canvas-line">
       <span>{words.madeOnCanvas(pages, questions)}</span>
+      {shownPages.length > 0 && (
+        <span className="room-canvas-titles">
+          {shownPages.map((page) => (
+            <button key={page.id} type="button" className="room-canvas-title-chip" onClick={() => onOpen(page.id)}>
+              {page.title}
+            </button>
+          ))}
+        </span>
+      )}
       <button type="button" className="link" onClick={() => onOpen(latest.id)}>
         {words.openOnCanvas}
       </button>
@@ -712,19 +728,131 @@ function modelNameOf(agent: RoomAgentShown) {
 const broughtWorkspaceOf = (brought: BroughtAgent & { bringer: string }) =>
   brought.workspace ? words.workspaceAccess[brought.workspace] : words.worksInOwnWorkspaceOf(brought.bringer);
 
-/** An agent in the room's bar: its mark and name, and for the owner its model quietly beside them; cut short where the bar is narrow, whole in a hint then. */
-function AgentChip({ agent, showsModel }: { agent: RoomAgentShown; showsModel: boolean }) {
+/**
+ * An agent in the room's bar: its mark and name, and for the owner its model quietly beside them; cut short where the
+ * bar is narrow, whole in a hint then. Clicking opens a card showing where it runs, which workspace it sees, and what
+ * it can do in the room.
+ */
+function AgentChip({
+  room,
+  agent,
+  showsModel,
+  owns,
+  answersWorkspace,
+  onOpenWork,
+}: {
+  room: Room;
+  agent: RoomAgentShown;
+  showsModel: boolean;
+  owns: boolean;
+  answersWorkspace: boolean;
+  onOpenWork?: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const opener = useRef<HTMLButtonElement>(null);
+  const popover = useRef<HTMLDivElement>(null);
+  const [placement, setPlacement] = useState<CSSProperties | null>(null);
+  useLayoutEffect(() => setPlacement(open && opener.current ? placedBelowOnItsSide(opener.current) : null), [open]);
+  useClosing(placement !== null, [opener, popover], () => setOpen(false));
+  useKeptInWindow(popover, placement);
+
   const model = showsModel ? modelNameOf(agent) : null;
   const whereItRuns =
     agent.brought &&
     [agent.brought.here ? words.onComputerOf(agent.brought.bringer) : words.awayFrom(agent.brought.bringer), broughtWorkspaceOf(agent.brought)].join(" · ");
   const markPrefix = agent.harness ? `${agentMarks[agent.harness]} ` : "";
+  const runsOnText = agent.brought
+    ? agent.brought.here
+      ? words.onComputerOf(agent.brought.bringer)
+      : words.awayFrom(agent.brought.bringer)
+    : owns
+      ? words.agentCard.thisComputer
+      : words.agentCard.roomsMachine;
+  const workspaceText = agent.brought
+    ? broughtWorkspaceOf(agent.brought)
+    : owns && room.sandbox.on
+      ? words.agentCard.roomsWorkspaceSandboxed
+      : `${words.agentCard.roomsWorkspace} · ${words.presets[room.permissions]}`;
+  const capabilities = agent.brought
+    ? [
+        words.agentCard.repliesInRoom,
+        words.agentCard.canvasStaysLocal(agent.brought.bringer),
+        agent.brought.workspace ? words.agentCard.workspaceCallsInThread(agent.brought.bringer) : words.agentCard.stepsStayOnComputer(agent.brought.bringer),
+      ]
+    : [words.agentCard.repliesInRoom, words.agentCard.usesRoomCanvas, words.agentCard.stepsInThread];
+
   return (
     <li className={`agent-chip${agent.brought && !agent.brought.here ? " away" : ""}`} data-hint={whereItRuns || undefined}>
-      <HintedWhenCutShort className="room-agent-label" whole={[agent.name, model, whereItRuns].filter(Boolean).join(" · ")}>
-        {agent.brought ? <BroughtAgentName prefix={markPrefix} name={agent.brought.name} bringer={agent.brought.bringer} /> : `${markPrefix}${agent.name}`}
-        {model && <span className="room-agent-model">{model}</span>}
-      </HintedWhenCutShort>
+      <button
+        ref={opener}
+        type="button"
+        className="room-agent-chip-trigger"
+        aria-haspopup="dialog"
+        aria-expanded={placement !== null}
+        onClick={() => setOpen((wasOpen) => !wasOpen)}
+      >
+        <HintedWhenCutShort className="room-agent-label" whole={[agent.name, model, whereItRuns].filter(Boolean).join(" · ")}>
+          {agent.brought ? <BroughtAgentName prefix={markPrefix} name={agent.brought.name} bringer={agent.brought.bringer} /> : `${markPrefix}${agent.name}`}
+          {model && <span className="room-agent-model">{model}</span>}
+        </HintedWhenCutShort>
+      </button>
+      {placement && (
+        <div ref={popover} className="room-agent-card" role="dialog" aria-label={agent.name} style={placement}>
+          <div className="room-agent-card-head">
+            <span className={`avatar agent-${agent.harness ?? "gone"}`} aria-hidden="true">
+              {agent.harness ? agentMarks[agent.harness] : "?"}
+            </span>
+            <span className="room-agent-card-name">{agent.name}</span>
+            {agent.answering !== null && <span className="room-agent-working">{words.agentWorking}</span>}
+          </div>
+          <dl className="room-agent-card-facts">
+            <div>
+              <dt>{words.agentCard.runsOn}</dt>
+              <dd>{runsOnText}</dd>
+            </div>
+            <div>
+              <dt>{words.agentCard.workspace}</dt>
+              <dd>{workspaceText}</dd>
+            </div>
+          </dl>
+          <div className="room-agent-card-section">
+            <h3>{words.agentCard.capabilities}</h3>
+            <ul>
+              {capabilities.map((capability) => (
+                <li key={capability}>{capability}</li>
+              ))}
+            </ul>
+          </div>
+          {owns && !agent.brought && (
+            <div className="room-agent-card-actions">
+              <ModelChoice
+                agentName={agent.name}
+                profile={agent.profile}
+                conversation={agent.conversation}
+                chosen={agent.model}
+                onChange={(chosen) => connection.send({ type: "room.set-agent-model", roomId: room.id, profileId: agent.profileId, ...chosen })}
+              />
+            </div>
+          )}
+          {agent.brought?.workspace && answersWorkspace && (
+            <WorkspaceAccessLine roomId={room.id} agentId={agent.profileId} agentName={agent.name} access={agent.brought.workspace} answers={answersWorkspace} />
+          )}
+          {onOpenWork && (
+            <div className="room-agent-card-actions">
+              <button
+                type="button"
+                className="link"
+                onClick={() => {
+                  setOpen(false);
+                  onOpenWork();
+                }}
+              >
+                {words.showInItsWork}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
     </li>
   );
 }
@@ -1044,8 +1172,24 @@ export function RoomView({
     () => (timeline ? canvasItemsOfAnswers(timeline.messages, timeline.canvas, (profileId) => room.agents.find((agent) => agent.profileId === profileId)?.conversationId) : new Map<string, CanvasItem[]>()),
     [timeline, room.agents],
   );
+  const authorOf = useMemo(() => roomCanvasAuthorOf(room, profiles, people, words.nameless), [room, profiles, people]);
   const votesOf = new Map(timeline?.votes.map((votes): [string, RoomQuestionVotes] => [votes.itemId, votes]));
-  const voteOn = (item: AskItem) => <RoomVote key={item.id} roomId={room.id} item={item} votes={votesOf.get(item.id)} you={you} takesOwnWords={owns || approvesIn(room, you) || !room.peoplesTasksWait} />;
+  const voteOn = (item: AskItem) => (
+    <RoomVote
+      key={item.id}
+      roomId={room.id}
+      item={item}
+      votes={votesOf.get(item.id)}
+      you={you}
+      takesOwnWords={owns || approvesIn(room, you) || !room.peoplesTasksWait}
+      asker={authorOf(item) ?? undefined}
+      onShowOnCanvas={item.status === "waiting" ? () => onOpenOnCanvas(item.id) : undefined}
+    />
+  );
+  const canOpenBroughtWork = (profileId: string) => {
+    const agent = agentsById.get(profileId);
+    return shownInAnotherMirador() && agent?.brought !== undefined && you !== null && agent.brought.personId === you;
+  };
   const pending = timeline ? workPending(timeline, room.agents) : [];
   const writing = presence?.writing ?? [];
   const { ref: roomTimeline, onScroll, awayFromLatest, jumpToLatest } = useScrollAnchor();
@@ -1057,7 +1201,15 @@ export function RoomView({
         {agents.length > 0 && (
           <ul className="room-agents" aria-label={words.agents}>
             {agents.map((agent) => (
-              <AgentChip key={agent.profileId} agent={agent} showsModel={owns && !agent.brought} />
+              <AgentChip
+                key={agent.profileId}
+                room={room}
+                agent={agent}
+                showsModel={owns && !agent.brought}
+                owns={owns}
+                answersWorkspace={owns || approvesIn(room, you)}
+                onOpenWork={canOpenBroughtWork(agent.profileId) ? () => askParentToOpenBroughtWork({ roomId: room.id, agentId: agent.profileId }) : undefined}
+              />
             ))}
           </ul>
         )}
@@ -1091,16 +1243,27 @@ export function RoomView({
         {shown.map((message) => {
           const madeOnCanvas = canvasOfAnswers.get(message.id) ?? [];
           const answered = message.answers === undefined ? undefined : messagesById.get(message.answers);
+          const answeringAgentId = writtenByAgent(message.author) ? message.author.profileId : null;
+          const openWork =
+            answeringAgentId !== null && canOpenBroughtWork(answeringAgentId)
+              ? () => askParentToOpenBroughtWork({ roomId: room.id, agentId: answeringAgentId, ...(answered && { messageSeq: answered.seq }) })
+              : undefined;
           return (
             <RoomEntry key={message.id} message={message} answered={answered} quoted={answered} agentsById={agentsById}>
               {madeOnCanvas.length > 0 && <CanvasLine items={madeOnCanvas} onOpen={onOpenOnCanvas} />}
               {madeOnCanvas.filter(isAsk).map(voteOn)}
-              {message.answers !== undefined && message.threadId && <ThreadLink onOpen={() => setThreadId(message.threadId)} />}
+              {message.answers !== undefined && message.threadId && <ThreadLink onOpen={() => setThreadId(message.threadId)} onOpenWork={openWork} />}
             </RoomEntry>
           );
         })}
         {timeline && questionsOfNoAnswer(timeline.canvas, canvasOfAnswers).map(voteOn)}
-        {workUnderWay(pending, agentsById, waitedIn).map(({ key, thread: working, text }) => <ThreadLink key={key} text={text} onOpen={() => setThreadId(working.id)} />)}
+        {workUnderWay(pending, agentsById, waitedIn).map(({ key, thread: working, text }) => {
+          const pendingItem = pending.find(({ thread: each }) => each.id === working.id);
+          const openWork = canOpenBroughtWork(working.profileId)
+            ? () => askParentToOpenBroughtWork({ roomId: room.id, agentId: working.profileId, ...(pendingItem && { messageSeq: pendingItem.message.seq }) })
+            : undefined;
+          return <ThreadLink key={key} text={text} onOpen={() => setThreadId(working.id)} onOpenWork={openWork} />;
+        })}
         <WritingLine writing={writing} threadId={null} you={you} />
       </div>
       {awayFromLatest && <JumpToLatest onJump={jumpToLatest} />}
@@ -1152,6 +1315,8 @@ export function RoomView({
 /** The room's canvas: its agents' pages and questions, newest in front, which everyone in the room reads there and votes on in the room. */
 export function RoomCanvas({
   room,
+  profiles,
+  people,
   items,
   shown,
   assetsOrigin,
@@ -1162,6 +1327,8 @@ export function RoomCanvas({
   onHide,
 }: {
   room: Room;
+  profiles: Profile[];
+  people: Person[];
   items: CanvasItem[];
   shown: boolean;
   assetsOrigin: string;
@@ -1171,6 +1338,7 @@ export function RoomCanvas({
   readOnly: boolean;
   onHide: () => void;
 }) {
+  const authorOf = useMemo(() => roomCanvasAuthorOf(room, profiles, people, words.nameless), [room, profiles, people]);
   return (
     <div className="kept-canvas" style={{ display: shown ? "contents" : "none" }}>
       <CanvasShown.Provider value={shown}>
@@ -1190,6 +1358,7 @@ export function RoomCanvas({
           inRoom
           readOnly={readOnly}
           itemToShow={itemToShow}
+          authorOf={authorOf}
         />
       </CanvasShown.Provider>
     </div>

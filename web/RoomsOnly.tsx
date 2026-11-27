@@ -79,6 +79,8 @@ export function RoomsOnlyApp({
     <RoomCanvas
       key={room.id}
       room={room}
+      profiles={state.profiles}
+      people={state.people}
       items={state.roomTimeline?.canvas ?? []}
       shown={canvasShown}
       assetsOrigin={state.canvasAssetsOrigin}

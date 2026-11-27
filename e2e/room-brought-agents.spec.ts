@@ -169,6 +169,15 @@ test("Mia brings an agent of hers into Ann's room: Ann's tasks for it wait for M
   await test.step("opening her brought agent's thread inside the room offers a one-click jump to that task in Its work, and Ann does not see it", async () => {
     const miasRoom = mia.frameLocator(".invited-room .machine-frame.shown");
     const miasAnswer = miasRoom.locator(".room-timeline .room-entry").filter({ hasText: "Weeded the beds" }).last();
+    const frameWidthBefore = await mia.locator(".invited-room .machine-frame.shown").evaluate((element) => element.getBoundingClientRect().width);
+    await miasAnswer.getByRole("button", { name: "Show in Its work" }).click();
+    await expect(workPanel(mia)).toBeVisible();
+    await expect(workPanel(mia).locator(".brought-task-sent.jumped")).toContainText("Weeded the beds");
+    const frameWidthWithDrawer = await mia.locator(".invited-room .machine-frame.shown").evaluate((element) => element.getBoundingClientRect().width);
+    expect(Math.abs(frameWidthWithDrawer - frameWidthBefore)).toBeLessThan(2);
+    await mia.keyboard.press("Escape");
+    await expect(workPanel(mia)).toHaveCount(0);
+
     await miasAnswer.getByRole("button", { name: "Open thread" }).click();
     const miasThread = miasRoom.locator(".room-thread");
     await expect(miasThread).toContainText("Its steps stay on your computer.");
@@ -179,6 +188,16 @@ test("Mia brings an agent of hers into Ann's room: Ann's tasks for it wait for M
     await expect(workPanel(mia)).toHaveCount(0);
     await miasThread.getByRole("button", { name: "Close thread" }).click();
 
+    await miasRoom.locator(".room-header .agent-chip", { hasText: "Coder (Mia)" }).getByRole("button").click();
+    const card = miasRoom.getByRole("dialog", { name: "Coder (Mia)" });
+    await expect(card).toContainText("On Mia's computer");
+    await expect(card).toContainText("Works in Mia's workspace");
+    await card.getByRole("button", { name: "Show in Its work" }).click();
+    await expect(workPanel(mia)).toBeVisible();
+    await workPanel(mia).getByRole("button", { name: "Close its work" }).click();
+    await expect(workPanel(mia)).toHaveCount(0);
+
+    await expect(answersOfCoder(ann).last().getByRole("button", { name: "Show in Its work" })).toHaveCount(0);
     await answersOfCoder(ann).last().getByRole("button", { name: "Open thread" }).click();
     await expect(ann.locator(".room-thread").getByRole("button", { name: "Show in Its work" })).toHaveCount(0);
     await ann.locator(".room-thread").getByRole("button", { name: "Close thread" }).click();

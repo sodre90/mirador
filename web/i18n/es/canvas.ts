@@ -53,6 +53,7 @@ export const canvas: Messages["canvas"] = {
     dismissChecklist: "Descartar la checklist",
     canvas: "Lienzo",
     editsWaiting: (count) => `${count} ${plural(count, "edición", "ediciones")} en espera`,
+    questionsWaiting: (count) => `${count} ${plural(count, "pregunta", "preguntas")} en espera`,
     more: "Más",
     moreMenu: "Más opciones de la barra del lienzo",
     hide: "Ocultar",

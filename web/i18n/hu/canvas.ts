@@ -51,6 +51,7 @@ export const canvas: Messages["canvas"] = {
     dismissChecklist: "Az ellenőrzőlista elvetése",
     canvas: "Vászon",
     editsWaiting: (count) => `${count} szerkesztés vár`,
+    questionsWaiting: (count) => `${count} kérdés vár`,
     more: "Továbbiak",
     moreMenu: "A vászonsáv további gombjai",
     hide: "Elrejtés",

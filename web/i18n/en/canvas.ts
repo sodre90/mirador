@@ -54,6 +54,7 @@ export const canvas = {
     dismissChecklist: "Dismiss the checklist",
     canvas: "Canvas",
     editsWaiting: (count: number) => plural(count, "1 edit waiting", `${count} edits waiting`),
+    questionsWaiting: (count: number) => plural(count, "1 question waiting", `${count} questions waiting`),
     more: "More",
     moreMenu: "More of the canvas bar",
     hide: "Hide",

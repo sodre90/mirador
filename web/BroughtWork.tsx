@@ -119,12 +119,25 @@ export interface BroughtWorkJump {
 /** Beside the room, what an agent you brought did on its tasks there, read as its conversation shows it, and nothing to write to it with. */
 export function BroughtWorkPanel({ agent, jumpTo = null, onClose }: { agent: BroughtHere; jumpTo?: BroughtWorkJump | null; onClose: () => void }) {
   const { conversation, name, opened } = agent;
+  const panelRef = useRef<HTMLElement>(null);
   const { ref, onScroll, awayFromLatest, jumpToLatest } = useScrollAnchor();
   useEffect(() => {
     connection.send({ type: "conversation.set-unread", conversationId: conversation.id, unread: false });
   }, [conversation.id]);
+  useEffect(() => {
+    panelRef.current?.focus({ preventScroll: true });
+  }, [conversation.id]);
+  useEffect(() => {
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      event.preventDefault();
+      onClose();
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [onClose]);
   return (
-    <aside className="side-chat brought-work" aria-label={words.workOf(name)} data-brought-work={conversation.id}>
+    <aside ref={panelRef} tabIndex={-1} className="side-chat brought-work" aria-label={words.workOf(name)} data-brought-work={conversation.id}>
       <header className="side-chat-header">
         <div className="side-chat-heading">
           <h2>{words.workOf(name)}</h2>

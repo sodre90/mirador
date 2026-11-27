@@ -51,6 +51,7 @@ export const canvas: Messages["canvas"] = {
     dismissChecklist: "忽略清单",
     canvas: "画布",
     editsWaiting: (count) => `${count} 处编辑待处理`,
+    questionsWaiting: (count) => `${count} 个问题待回答`,
     more: "更多",
     moreMenu: "画布栏的更多选项",
     hide: "隐藏",

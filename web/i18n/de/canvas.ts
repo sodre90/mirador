@@ -53,6 +53,7 @@ export const canvas: Messages["canvas"] = {
     dismissChecklist: "Checkliste verwerfen",
     canvas: "Canvas",
     editsWaiting: (count) => plural(count, "1 Bearbeitung wartet", `${count} Bearbeitungen warten`),
+    questionsWaiting: (count) => plural(count, "1 Frage wartet", `${count} Fragen warten`),
     more: "Mehr",
     moreMenu: "Mehr aus der Canvas-Leiste",
     hide: "Ausblenden",
