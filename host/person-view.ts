@@ -68,7 +68,12 @@ const roomSeenBy = ({ id, name, agents, permissions, people, peoplesTasksWait, m
 const canvasItemSeen = (item: CanvasItem, roomId: string, profileId: string): CanvasItem => ({ ...item, conversationId: conversationStandIn(roomId, profileId, item.conversationId) });
 
 /** A request a room's agent waits on, as an approver of the room sees it: its conversation's stand-in in place of its conversation. */
-const approvalSeen = (approval: RoomApproval): RoomApproval => ({ ...approval, conversationId: conversationStandIn(approval.roomId, approval.profileId, approval.conversationId) });
+const approvalSeen = (approval: RoomApproval): RoomApproval => ({
+  ...approval,
+  conversationId: approval.conversationId.startsWith(`${approval.roomId}/`)
+    ? approval.conversationId
+    : conversationStandIn(approval.roomId, approval.profileId, approval.conversationId),
+});
 
 /**
  * A room agent's conversation as a person who reads its work sees it: under its stand-in, whether it is at work, and
@@ -233,16 +238,23 @@ export function personView(
     return Object.fromEntries(Object.entries(all).filter(([plugin]) => allowed.has(plugin)));
   };
   const openAppsFor = (rooms: Room[], all: OpenApp[]): OpenApp[] => {
-    const byConversation = new Map<string, { room: Room; profileId: string }>();
+    const byConversation = new Map<string, { room: Room; profileId: string; brought: boolean }>();
     for (const room of rooms) {
-      for (const { conversationId, profileId } of room.agents) {
-        if (conversationId !== null) byConversation.set(conversationId, { room, profileId });
+      for (const { profileId, conversationId, brought } of room.agents) {
+        if (brought) byConversation.set(agentStandIn(room.id, profileId), { room, profileId, brought: true });
+        else if (conversationId !== null) byConversation.set(conversationId, { room, profileId, brought: false });
       }
     }
     return all.flatMap((openApp) => {
       const match = byConversation.get(openApp.conversationId);
       if (!match || !match.room.plugins.includes(openApp.app)) return [];
-      return [{ ...openApp, workspaceId: match.room.id, conversationId: conversationStandIn(match.room.id, match.profileId, openApp.conversationId) }];
+      return [
+        {
+          ...openApp,
+          workspaceId: match.room.id,
+          conversationId: match.brought ? openApp.conversationId : conversationStandIn(match.room.id, match.profileId, openApp.conversationId),
+        },
+      ];
     });
   };
   const installedAppsFor = (rooms: Room[], all: InstalledApp[], open: OpenApp[] = []): InstalledApp[] => {
@@ -498,6 +510,8 @@ export function personView(
     "room.workspace-call-shown": (message, socket) => shownIf(readsAgentsWorkIn(socket, message.call.roomId), message),
     "room.brought-step-shown": (message, socket) => shownIf(readsAgentsWorkIn(socket, message.step.roomId), message),
     "room.workspace-answered": (message, socket) => shownIf(message.personId === socket.personId && socket.carriesAgents, message),
+    "room.plugin-tools": (message, socket) => shownIf(message.personId === socket.personId && socket.carriesAgents, message),
+    "room.plugin-answered": (message, socket) => shownIf(message.personId === socket.personId && socket.carriesAgents, message),
     "room.sandbox-checked": HIDDEN,
     "workspace.sandbox-checked": HIDDEN,
     "sandbox.setup": HIDDEN,

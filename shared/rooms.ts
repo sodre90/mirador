@@ -718,9 +718,11 @@ export function roomTimeOf(written: string): number | null {
   return Number.isNaN(at) ? null : at;
 }
 
-/** The open app tabs belonging to a room's agents, deduplicated per app by keeping the most recently shown document. */
-export function roomOpenApps(room: Pick<Room, "agents">, openApps: OpenApp[]): OpenApp[] {
-  const conversationIds = new Set(room.agents.flatMap(({ conversationId }) => (conversationId === null ? [] : [conversationId])));
+/** The open app tabs belonging to a room's agents (host or brought), deduplicated per app by keeping the most recently shown document. */
+export function roomOpenApps(room: Pick<Room, "id" | "agents">, openApps: OpenApp[]): OpenApp[] {
+  const conversationIds = new Set(
+    room.agents.flatMap(({ profileId, conversationId, brought }) => (brought ? [agentStandIn(room.id, profileId)] : conversationId === null ? [] : [conversationId])),
+  );
   const byApp = new Map<string, OpenApp>();
   for (const open of openApps) {
     if (!conversationIds.has(open.conversationId)) continue;

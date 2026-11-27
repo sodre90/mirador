@@ -388,9 +388,13 @@ export function startServer(services: HostServices) {
     conversationBehind: (standIn) => conversationBehindStandIn(store, personId, standIn),
     roomOfCanvasItem: (itemId) => {
       const item = store.findCanvasItem(itemId);
-      if (!item || item.kind !== "plugin") return null;
-      const roomId = store.findConversation(item.conversationId)?.roomId;
-      return typeof roomId === "string" ? roomId : null;
+      if (item) {
+        if (item.kind !== "plugin") return null;
+        const roomId = store.findConversation(item.conversationId)?.roomId;
+        return typeof roomId === "string" ? roomId : null;
+      }
+      const brought = store.findRoomBroughtCanvasItem(itemId);
+      return brought?.item.kind === "plugin" ? brought.roomId : null;
     },
     isAppDocumentInRoom: (documentId, roomId, app) => apps.isOpenInRoom(documentId, roomId, app),
   });
@@ -2433,6 +2437,13 @@ export function startServer(services: HostServices) {
       }
       case "room.workspace-call-stopped":
         return rooms.workspaceCallStopped({ personId: socket.data.personId, roomId: message.roomId, agentId: message.agentId, callId: message.callId });
+      case "room.plugin-call": {
+        const { roomId, agentId, taskId, callId, tool, args } = message;
+        if (socket.data.carriesAgents) return void rooms.pluginCalled({ personId: socket.data.personId, roomId, agentId, taskId, callId, tool, args });
+        throw new HostProblemError({ code: "room-agent-not-yours" });
+      }
+      case "room.plugin-call-stopped":
+        return rooms.pluginCallStopped({ personId: socket.data.personId, roomId: message.roomId, agentId: message.agentId, callId: message.callId });
       case "room.answer-workspace":
         rooms.answerWorkspace(message.roomId, message.agentId, message.answer, socket.data.personId);
         return notifications.roomRead(message.roomId);

@@ -25,6 +25,7 @@ import type {
 import type { BroughtStepKind, RoomBroughtStep, RoomWorkspaceAnswer, RoomWorkspaceApproval, RoomWorkspaceCall, WorkspaceCall, WorkspaceCallResult } from "./room-workspace.ts";
 import type { BroughtAgentHere, BroughtTaskWaiting, OthersTasks } from "./brought-agents.ts";
 import type { BroughtAskAnswer, BroughtCanvasAskPayload } from "./brought-canvas.ts";
+import type { BroughtPluginCallResult, BroughtRoomPluginCatalog } from "./brought-plugins.ts";
 import type { RoomAlert, RoomReading } from "./room-reading.ts";
 import type { RoomConfirmedAnswer, RoomQuestionVotes } from "./room-votes.ts";
 import type { RoomInviteConnect } from "./machines.ts";
@@ -577,6 +578,10 @@ export type ClientMessage =
   | { type: "room.workspace-call"; roomId: string; agentId: string; taskId: string; callId: string; call: WorkspaceCall }
   /** From a person's own Mirador: a call is no longer wanted, as the agent's turn ended or was stopped. */
   | { type: "room.workspace-call-stopped"; roomId: string; agentId: string; callId: string }
+  /** From a person's own Mirador: the agent they brought invokes a room-enabled plugin or app tool on the room host; the host answers `room.plugin-answered`. */
+  | { type: "room.plugin-call"; roomId: string; agentId: string; taskId: string; callId: string; tool: string; args: Record<string, unknown> }
+  /** From a person's own Mirador: a proxied room plugin call is no longer wanted, as the agent's turn ended or was stopped. */
+  | { type: "room.plugin-call-stopped"; roomId: string; agentId: string; callId: string }
   /** The owner or an approver lets an agent someone brought work in the room's workspace, or no longer. */
   | { type: "room.answer-workspace"; roomId: string; agentId: string; answer: RoomWorkspaceAnswer }
   | { type: "room.answer-workspace-call"; roomId: string; callId: string; answer: "allow" | "deny" };
@@ -767,6 +772,10 @@ export type ServerMessage =
   | { type: "room.brought-step-shown"; step: RoomBroughtStep }
   /** To the person's own Mirador alone: what came of a call of the agent they brought. */
   | { type: "room.workspace-answered"; personId: string; roomId: string; agentId: string; callId: string; result: WorkspaceCallResult }
+  /** To the person's own Mirador alone: the proxied canvas & app plugin tools enabled in a room where they have agents. */
+  | { type: "room.plugin-tools"; personId: string; roomId: string; catalog: BroughtRoomPluginCatalog }
+  /** To the person's own Mirador alone: what came of a proxied room plugin tool call of an agent they brought. */
+  | { type: "room.plugin-answered"; personId: string; roomId: string; agentId: string; callId: string; result: BroughtPluginCallResult }
   /** The picks on a question of a subscribed room's agent, and who may confirm its answer, each time either changes. */
   | { type: "room.votes"; roomId: string; votes: RoomQuestionVotes }
   /** To the person alone: how far they have read each of their rooms and what waits for them there, each time it changes. */

@@ -1,6 +1,8 @@
 import { isAbsolute } from "node:path";
 import { launchEditor } from "../editor.ts";
 import { fromJsonSchema, type McpServer, type ServerContext, type ToolAnnotations } from "@modelcontextprotocol/server";
+import type { BroughtPluginCallResult, BroughtPluginTool, BroughtRoomPluginCatalog } from "../../shared/brought-plugins.ts";
+import { agentStandIn } from "../../shared/rooms.ts";
 import type { ApproveHostAction } from "../rooms.ts";
 import { withProgressHeartbeat } from "./progress-heartbeat.ts";
 import {
@@ -914,8 +916,144 @@ export class CanvasPlugins {
     return [...this.settingNotesFor(conversationId), ...fromPlugins];
   }
 
-  private toolContext(plugin: CanvasPlugin, conversationId: string, caller: ToolCaller, signal?: AbortSignal): CanvasToolContext {
-    const inRoomAsAgent = caller === "agent" && this.store.findConversation(conversationId)?.roomId !== undefined;
+  /** Tool descriptors and instructions for room-enabled canvas plugins, to proxy to brought agents. */
+  broughtCatalogFor(roomPlugins: readonly string[]): BroughtRoomPluginCatalog {
+    const allowed = new Set(roomPlugins);
+    const enabled = this.plugins.filter(({ manifest }) => allowed.has(manifest.name));
+    if (enabled.length === 0) return { tools: [], instructions: [] };
+    const tools: BroughtPluginTool[] = [];
+    for (const plugin of enabled) {
+      for (const [name, tool] of Object.entries(plugin.host.tools)) {
+        if (!runsNatively(plugin, tool)) continue;
+        tools.push({ name, description: tool.description, inputSchema: tool.input });
+      }
+    }
+    const useTools = this.useToolToolsOf(enabled);
+    if (useTools.length > 0) {
+      tools.push({
+        name: USE_TOOL_TOOL,
+        description:
+          "Run a canvas tool that is not in your tool list; the canvas instructions name them. Call it with just `tool` to read that tool's description and input schema, then again with `tool` and `input` to run it.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            tool: { type: "string", description: "The tool's name, as the canvas instructions list it." },
+            input: { type: "object", description: "The tool's arguments, as its input schema says; leave it out to read that schema first." },
+          },
+          required: ["tool"],
+        },
+      });
+    }
+    const waiting = enabled.filter(loadsOnRequest);
+    if (waiting.length > 0) {
+      tools.push({
+        name: PLUGIN_LOAD_TOOL,
+        description:
+          "Load a plugin that loads on request, before you first use it: answers with the plugin's instructions and the names of its tools, which run through use_tool. The canvas instructions list those plugins, with what each is for.",
+        inputSchema: {
+          type: "object",
+          properties: { plugin: { type: "string", enum: waiting.map(({ manifest }) => manifest.name), description: "The plugin's name, as the canvas instructions list it." } },
+          required: ["plugin"],
+        },
+      });
+    }
+    const guidance = this.guidanceOf(enabled, loadsOnRequest, { offerInstall: false });
+    const onRequest = guidance.onRequest ?? [];
+    const instructions = [
+      ...guidance.instructions,
+      ...(onRequest.length > 0 ? [`Plugins that load on request (call ${PLUGIN_LOAD_TOOL} with the plugin's name first):\n${onRequest.join("\n")}`] : []),
+    ];
+    return { tools, instructions };
+  }
+
+  /** Whether `toolName` is a canvas plugin tool enabled in `roomPlugins`. */
+  hasBroughtTool(roomPlugins: readonly string[], toolName: string): boolean {
+    const allowed = new Set(roomPlugins);
+    const enabled = this.plugins.filter(({ manifest }) => allowed.has(manifest.name));
+    if (toolName === PLUGIN_LOAD_TOOL) return enabled.some(loadsOnRequest);
+    if (toolName === USE_TOOL_TOOL) return this.useToolToolsOf(enabled).length > 0;
+    return enabled.some((plugin) => Object.entries(plugin.host.tools).some(([name, tool]) => name === toolName && runsNatively(plugin, tool)));
+  }
+
+  /** Executes a room-enabled canvas plugin tool on behalf of a brought agent, attributing items to `agentStandIn(roomId, agentId)`. */
+  async runBroughtTool(
+    roomId: string,
+    agentId: string,
+    answeringMessageId: string,
+    toolName: string,
+    args: Record<string, unknown>,
+    signal?: AbortSignal,
+  ): Promise<BroughtPluginCallResult> {
+    const room = this.store.findRoom(roomId);
+    if (!room) return { done: false, text: "That room no longer exists." };
+    const allowed = new Set(room.plugins);
+    const enabled = this.plugins.filter(({ manifest }) => allowed.has(manifest.name));
+    const standIn = agentStandIn(roomId, agentId);
+    if (toolName === PLUGIN_LOAD_TOOL) {
+      const name = typeof args.plugin === "string" ? args.plugin : "";
+      const waiting = enabled.filter(loadsOnRequest);
+      const plugin = waiting.find(({ manifest }) => manifest.name === name);
+      if (!plugin) return { done: false, text: `No plugin named ${name} loads on request here; the ones that do are ${waiting.map(({ manifest }) => manifest.name).join(", ") || "none"}.` };
+      const tools = Object.keys(plugin.host.tools);
+      const text = [
+        `${plugin.manifest.title} is loaded.`,
+        ...[plugin.host.guidance?.instructions ?? []].flat(),
+        tools.length > 0 ? `Its tools run through ${USE_TOOL_TOOL}: ${tools.join(", ")}.` : "It brings no tools.",
+      ].join("\n\n");
+      return { done: true, text };
+    }
+    if (toolName === USE_TOOL_TOOL) {
+      const targetName = typeof args.tool === "string" ? args.tool : "";
+      const available = this.useToolToolsOf(enabled);
+      const found = available.find((each) => each.name === targetName);
+      if (!found) {
+        return { done: false, text: `No canvas tool named ${targetName} runs through ${USE_TOOL_TOOL} here; the ones that do are ${available.map(({ name }) => name).join(", ") || "none"}.` };
+      }
+      const { plugin, tool } = found;
+      const schema = `Input schema:\n${JSON.stringify(tool.input, null, 2)}`;
+      if (args.input === undefined) {
+        return { done: true, text: [`${plugin.manifest.title} · ${targetName}`, tool.description, schema, `Call ${USE_TOOL_TOOL} again with tool: "${targetName}" and input to run it.`].join("\n\n") };
+      }
+      const parsed = await fromJsonSchema(tool.input)["~standard"].validate(args.input);
+      if (parsed.issues) {
+        return { done: false, text: [`The input doesn't fit ${targetName}'s schema:`, ...parsed.issues.map(({ message }) => `- ${message}`), schema].join("\n") };
+      }
+      try {
+        const text = await tool.run(parsed.value, this.toolContext(plugin, standIn, "agent", signal, answeringMessageId));
+        return { done: true, text: String(text) };
+      } catch (error) {
+        return { done: false, text: messageOf(error) };
+      }
+    }
+    for (const plugin of enabled) {
+      const tool = plugin.host.tools[toolName];
+      if (!tool || !runsNatively(plugin, tool)) continue;
+      const parsed = await fromJsonSchema(tool.input)["~standard"].validate(args);
+      if (parsed.issues) {
+        return { done: false, text: `The input doesn't fit ${toolName}'s schema: ${parsed.issues.map(({ message }) => message).join("; ")}` };
+      }
+      try {
+        const text = await tool.run(parsed.value, this.toolContext(plugin, standIn, "agent", signal, answeringMessageId));
+        return { done: true, text: String(text) };
+      } catch (error) {
+        return { done: false, text: messageOf(error) };
+      }
+    }
+    return { done: false, text: `No canvas plugin tool named ${toolName} is enabled in this room.` };
+  }
+
+  private broughtTarget(conversationId: string): { roomId: string; agentId: string } | null {
+    const slash = conversationId.indexOf("/");
+    if (slash <= 0 || slash !== conversationId.lastIndexOf("/")) return null;
+    const roomId = conversationId.slice(0, slash);
+    const agentId = conversationId.slice(slash + 1);
+    const hasAgent = this.store.findRoom(roomId)?.agents.some((agent) => agent.profileId === agentId && agent.brought !== undefined) === true;
+    return hasAgent ? { roomId, agentId } : null;
+  }
+
+  private toolContext(plugin: CanvasPlugin, conversationId: string, caller: ToolCaller, signal?: AbortSignal, answeringMessageId?: string): CanvasToolContext {
+    const brought = this.broughtTarget(conversationId);
+    const inRoomAsAgent = caller === "agent" && (brought !== null || this.store.findConversation(conversationId)?.roomId !== undefined);
     const requireRoomApproval = async (title: string, detail: string | null, allowanceKey: string) => {
       if (!inRoomAsAgent) return;
       const allowed = await this.approveHostAction(conversationId, { title, detail, allowanceKey, signal });
@@ -924,9 +1062,14 @@ export class CanvasPlugins {
     return {
       ...this.context(plugin, conversationId, { byAgent: caller === "agent" }),
       caller,
-      publish: ({ type, title, data }) => pluginItemOf(this.publish(plugin, conversationId, type, title, data)),
-      prompt: this.promptOfItsOwn(plugin, conversationId),
+      publish: ({ type, title, data }) => pluginItemOf(this.publish(plugin, conversationId, type, title, data, answeringMessageId)),
+      prompt: brought
+        ? async () => {
+            throw new Error("Brought agents cannot send direct prompts from plugin tools.");
+          }
+        : this.promptOfItsOwn(plugin, conversationId),
       startConversation: async (start) => {
+        if (brought) throw new Error("Brought agents cannot start conversations on the room's machine.");
         await requireRoomApproval(
           `${plugin.manifest.title}: start a conversation on ${start.profile}`,
           start.title ? `${start.title} — ${start.prompt.slice(0, 120)}` : start.prompt.slice(0, 120),
@@ -935,10 +1078,12 @@ export class CanvasPlugins {
         return this.startsConversationsFrom(plugin, conversationId)(start);
       },
       stopConversation: async (startedConversationId) => {
+        if (brought) throw new Error("Brought agents cannot manage conversations on the room's machine.");
         await requireRoomApproval(`${plugin.manifest.title}: stop a conversation`, startedConversationId, `plugin:stop:${plugin.manifest.name}`);
         return this.stopStarted(conversationId, plugin.manifest.name, startedConversationId);
       },
       deleteStarted: async (startedConversationId) => {
+        if (brought) throw new Error("Brought agents cannot manage conversations on the room's machine.");
         await requireRoomApproval(`${plugin.manifest.title}: delete a conversation`, startedConversationId, `plugin:delete:${plugin.manifest.name}`);
         return this.deleteStarted(conversationId, plugin.manifest.name, startedConversationId);
       },
@@ -1005,8 +1150,9 @@ export class CanvasPlugins {
     actor: PluginActionActor = { personId: this.store.ownerId(), isOwner: true, mayApprove: true },
     item?: PluginCanvasItem,
   ): CanvasActionContext {
-    const conversation = this.store.findConversation(conversationId);
-    const inRoom = conversation?.roomId !== undefined;
+    const brought = this.broughtTarget(conversationId);
+    const conversation = brought ? undefined : this.store.findConversation(conversationId);
+    const inRoom = brought !== null || conversation?.roomId !== undefined;
     const assertApproverInRoom = () => {
       if (inRoom && !actor.isOwner && !actor.mayApprove) {
         throw new Error("Only the room's owner or an approver can manage conversations started by a plugin.");
@@ -1016,6 +1162,10 @@ export class CanvasPlugins {
       ...this.context(plugin, conversationId, { byAgent: false }),
       prompt: async (text, { afterTurn = false } = {}) => {
         this.recordLoaded(plugin, conversationId);
+        if (brought) {
+          await this.sendRoomPrompt(brought.roomId, actor.personId, brought.agentId, item?.madeInRoom?.answering, text);
+          return;
+        }
         if (conversation?.roomId && conversation.profileId) {
           await this.sendRoomPrompt(conversation.roomId, actor.personId, conversation.profileId, item?.madeInRoom?.answering, text);
           return;
@@ -1048,8 +1198,9 @@ export class CanvasPlugins {
 
   private context(plugin: CanvasPlugin, conversationId: string, { byAgent }: { byAgent: boolean }): CanvasPluginContext {
     const workspaceOf = () => {
-      const conversation = this.store.findConversation(conversationId);
-      const workspace = conversation ? this.store.findWorkspace(conversation.workspaceId) : undefined;
+      const brought = this.broughtTarget(conversationId);
+      const workspaceId = brought ? this.store.findRoom(brought.roomId)?.workspaceId : this.store.findConversation(conversationId)?.workspaceId;
+      const workspace = workspaceId ? this.store.findWorkspace(workspaceId) : undefined;
       if (!workspace) throw new Error(`Conversation ${conversationId} has no workspace any more.`);
       return { id: workspace.id, name: workspace.name, folder: workspace.path };
     };
@@ -1112,14 +1263,18 @@ export class CanvasPlugins {
     }
   }
 
-  private madeInRoom(conversationId: string): { madeInRoom?: MadeInRoom } {
+  private madeInRoom(conversationId: string, answeringMessageId?: string): { madeInRoom?: MadeInRoom } {
+    const brought = this.broughtTarget(conversationId);
+    if (brought) {
+      return answeringMessageId ? { madeInRoom: { answering: answeringMessageId, afterSeq: this.store.lastRoomSeq(brought.roomId) } } : {};
+    }
     const roomId = this.store.findConversation(conversationId)?.roomId;
     const turn = roomId ? roomMessageAnswered(this.store.listEventsOfTypes(conversationId, ["user-message"])) : undefined;
     if (!roomId || !turn) return {};
     return { madeInRoom: { answering: turn.answering, afterSeq: this.store.lastRoomSeq(roomId) } };
   }
 
-  private publish(plugin: CanvasPlugin, conversationId: string, type: string, title: string, data: unknown) {
+  private publish(plugin: CanvasPlugin, conversationId: string, type: string, title: string, data: unknown, answeringMessageId?: string) {
     const itemType = plugin.host.items[type];
     if (!itemType) throw new Error(`${plugin.manifest.name} has no kind of item named ${type}; it has ${Object.keys(plugin.host.items).join(", ")}.`);
     if (typeof title !== "string" || !title.trim()) throw new Error("An item needs a title.");
@@ -1136,7 +1291,7 @@ export class CanvasPlugins {
       ...shownOf(itemType, data),
       status: "shown",
       createdAt: Date.now(),
-      ...this.madeInRoom(conversationId),
+      ...this.madeInRoom(conversationId, answeringMessageId),
     });
   }
 
@@ -1155,17 +1310,25 @@ export class CanvasPlugins {
   }
 
   private itemsOf(plugin: CanvasPlugin, conversationId: string) {
-    return this.store.listCanvasItems(conversationId).filter((item): item is PluginCanvasItem => item.kind === "plugin" && item.plugin === plugin.manifest.name);
+    const brought = this.broughtTarget(conversationId);
+    const items = brought ? this.store.listRoomBroughtCanvasItemsOfAgent(brought.roomId, brought.agentId) : this.store.listCanvasItems(conversationId);
+    return items.filter((item): item is PluginCanvasItem => item.kind === "plugin" && item.plugin === plugin.manifest.name);
   }
 
   private pluginItem(itemId: string) {
-    const item = this.store.findCanvasItem(itemId);
+    const item = this.store.findCanvasItem(itemId) ?? this.store.findRoomBroughtCanvasItem(itemId)?.item;
     if (item?.kind !== "plugin") throw new HostProblemError({ code: "unknown-item" });
     return item;
   }
 
   private save(change: PluginCanvasItem) {
     const item = { ...change, updatedAt: Date.now() };
+    const brought = this.broughtTarget(item.conversationId);
+    if (brought) {
+      this.store.saveRoomBroughtCanvasItem(brought.roomId, brought.agentId, item);
+      this.hub.publishToRoom(brought.roomId, { type: "canvas.upserted", item });
+      return item;
+    }
     this.store.saveCanvasItem(item);
     this.hub.publishToConversation(item.conversationId, { type: "canvas.upserted", item });
     const roomId = this.store.findConversation(item.conversationId)?.roomId;

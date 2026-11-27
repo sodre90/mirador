@@ -3630,7 +3630,7 @@ export class ConversationService {
   /** The canvas tools that only show things in Mirador run without asking; for a room, the room's own tools and its enabled plugins' tools. */
   private preAllowsCanvasTool(conversationId: string, tool: string | null) {
     const conversation = this.get(conversationId);
-    if (conversation.worksInRoomsWorkspace) return tool !== null && ROOMS_WORKSPACE_CANVAS_TOOLS.includes(tool);
+    if (conversation.worksInRoomsWorkspace) return tool !== null && (ROOMS_WORKSPACE_CANVAS_TOOLS.includes(tool) || this.canvasPlugins(conversationId).toolNames.includes(tool));
     if (worksForARoom(conversation)) return tool !== null && (ROOM_CANVAS_TOOLS.includes(tool) || this.canvasPlugins(conversationId).toolNames.includes(tool));
     return isPreAllowedCanvasTool(tool, this.canvasPlugins(conversationId).toolNames);
   }

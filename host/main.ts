@@ -6,11 +6,14 @@ import { serveCanvasAssets } from "./canvas/assets.ts";
 import { authorityFingerprint, namesToCover, servingCertificate } from "./certificates.ts";
 import { CanvasMcpEndpoints } from "./canvas/mcp.ts";
 import { AppDocuments } from "./apps/documents.ts";
+import { broughtAppCatalogFor, runBroughtAppTool } from "./apps/tools.ts";
 import { defaultPluginsIn, installDefaultPlugins } from "./apps/default-plugins.ts";
 import { commitsOf, InstalledPlugins, pluginLooksOf } from "./apps/installed-plugins.ts";
 import { applyReadyUpdatesAtStart, ReadyPluginUpdates } from "./apps/ready-plugin-updates.ts";
 import { loadPlugins, pluginFolders, watchViews } from "./apps/plugins.ts";
+import { NO_CANVAS_PLUGINS } from "./canvas/guidance.ts";
 import { CanvasPlugins } from "./canvas/plugins.ts";
+import { APP_TOOLS, PLUGIN_LOAD_TOOL, USE_TOOL_TOOL } from "./canvas/tool-names.ts";
 import { PluginSettingsStore } from "./plugin-settings.ts";
 import { officialPluginInstaller, PluginCatalog, revokedWhileRunning } from "./plugin-catalog.ts";
 import { CanvasService } from "./canvas/service.ts";
@@ -130,7 +133,12 @@ const pluginSettings = new PluginSettingsStore(
   [...loadedPlugins.canvases, ...loadedPlugins.apps].map(({ manifest }) => manifest),
   canvasPlugins.checkingProfiles(),
 );
-const conversations = new ConversationService(store, hub, config, notifierMute, images, droppedFiles, notifications, (conversationId) => canvasPlugins.guidanceFor(conversationId));
+let broughtAgentsRef: BroughtAgents | null = null;
+const conversations = new ConversationService(store, hub, config, notifierMute, images, droppedFiles, notifications, (conversationId) => {
+  const brought = broughtAgentsRef?.pluginCatalogFor(conversationId);
+  if (brought) return { ...NO_CANVAS_PLUGINS, instructions: brought.instructions, toolNames: brought.tools.map(({ name }) => name) };
+  return canvasPlugins.guidanceFor(conversationId);
+});
 canvasPlugins.notifiesWith((workspace, said) => notifications.fromPlugin(workspace, said));
 canvasPlugins.sendsPromptsWith((conversationId, text, { afterTurn, fromPlugin }) => conversations.send(conversationId, text, [], { afterTurn, fromPlugin }));
 canvasPlugins.startsConversationsWith((callerId, plugin, profileName, prompt, title, choices, worktree) =>
@@ -235,8 +243,49 @@ const mcp = new CanvasMcpEndpoints({
     forwardShow: (conversationId, item) => broughtAgents.forwardShow(conversationId, item),
     forwardAsk: (conversationId, item) => broughtAgents.forwardAsk(conversationId, item),
   },
+  broughtPlugins: {
+    pluginCatalogFor: (conversationId) => broughtAgents.pluginCatalogFor(conversationId),
+    callRoomPlugin: (conversationId, tool, args, signal) => broughtAgents.callRoomPlugin(conversationId, tool, args, signal),
+  },
   approveHostAction: (conversationId, request) => rooms.approveHostAction(conversationId, request),
   antigravityAskWaitMs: config.antigravityAskWaitMs,
+});
+rooms.proxiesPluginsWith({
+  catalogFor: (roomPlugins) => {
+    const canvasCatalog = canvasPlugins.broughtCatalogFor(roomPlugins);
+    const appCatalog = broughtAppCatalogFor(apps, roomPlugins, (app) => catalog.all.find(({ name }) => name === app)?.tagline ?? null);
+    return { tools: [...canvasCatalog.tools, ...appCatalog.tools], instructions: [...canvasCatalog.instructions, ...appCatalog.instructions] };
+  },
+  isReadOnlyTool: (tool, args) => tool === "app_state" || tool === PLUGIN_LOAD_TOOL || (tool === USE_TOOL_TOOL && args.input === undefined),
+  describeCall: (roomId, agentId, tool, args) => {
+    if (tool === "app_open") {
+      const app = typeof args.app === "string" ? args.app : "app";
+      const file = typeof args.file === "string" ? args.file : "";
+      return { title: `Open ${app} on ${file || "a file"}`, detail: file || null, allowanceKey: `brought:app_open:${app}` };
+    }
+    if (tool === "apply") {
+      const app = typeof args.app === "string" ? args.app : "app";
+      return { title: `Apply change to ${app}`, detail: JSON.stringify(args.op ?? {}).slice(0, 140), allowanceKey: `brought:apply:${app}` };
+    }
+    if (tool === "app_run") {
+      const task = typeof args.task === "string" ? args.task : "";
+      const app = typeof args.app === "string" ? args.app : undefined;
+      try {
+        const target = apps.describeTaskForApproval(`${roomId}/${agentId}`, app, task);
+        return { title: `Run ${target.appTitle} task “${target.taskTitle}”`, detail: `${target.app}:${task} on ${target.file}`, allowanceKey: `brought:app_run:${target.app}:${task}` };
+      } catch {
+        return { title: `Run app task “${task}”`, detail: app ? `${app}:${task}` : task, allowanceKey: `brought:app_run:${app ?? ""}:${task}` };
+      }
+    }
+    const targetTool = tool === USE_TOOL_TOOL && typeof args.tool === "string" ? args.tool : tool;
+    const preview = JSON.stringify(tool === USE_TOOL_TOOL ? (args.input ?? {}) : args).slice(0, 140);
+    return { title: `Run plugin tool “${targetTool}”`, detail: preview === "{}" ? null : preview, allowanceKey: `brought:plugin:${targetTool}` };
+  },
+  run: (roomId, agentId, answeringMessageId, tool, args, signal) =>
+    APP_TOOLS.includes(tool)
+      ? runBroughtAppTool(apps, roomId, agentId, tool, args)
+      : canvasPlugins.runBroughtTool(roomId, agentId, answeringMessageId, tool, args, signal),
+  forgetAgent: (roomId, agentId) => apps.forgetBroughtAgent(roomId, agentId),
 });
 rooms.hearPluginsChangedWith((roomId, removed) => {
   if (removed.length > 0) apps.forgetRoomApps(roomId, removed);
@@ -351,6 +400,8 @@ const watch = new MachineWatch(
   tunnels,
 );
 const broughtAgents = new BroughtAgents(store, hub, watch, conversations, notifications, broughtAgentsFolder(config.dataDir), undefined, undefined, canvasAssetsOrigins);
+broughtAgentsRef = broughtAgents;
+broughtAgents.hearPluginToolsChangedWith((conversationId) => mcp.toolsChangedForConversation(conversationId));
 broughtAgents.answersCanvasWith(canvas);
 canvas.hearAskCancelledWith((conversationId, itemId) => broughtAgents.cancelAsk(conversationId, itemId));
 watch.hearRoomMachinesWith({

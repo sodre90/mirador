@@ -1,6 +1,8 @@
 import type { McpServer, ServerContext } from "@modelcontextprotocol/server";
 import { normalize } from "node:path";
 import * as z from "zod/v4";
+import type { BroughtPluginCallResult, BroughtRoomPluginCatalog } from "../../shared/brought-plugins.ts";
+import { agentStandIn } from "../../shared/rooms.ts";
 import { withProgressHeartbeat } from "../canvas/progress-heartbeat.ts";
 import type { ConversationService } from "../conversations.ts";
 import { toPosix } from "../paths.ts";
@@ -131,6 +133,103 @@ export function registerAppTools(
     },
     ({ app }, ctx) => answered(ctx, (conversationId) => apps.describe(conversationId, app)),
   );
+}
+
+export function broughtAppCatalogFor(apps: AppDocuments, roomPlugins: readonly string[], taglineOf: AppTagline = () => null): BroughtRoomPluginCatalog {
+  const enabled = apps.installedFor(roomPlugins);
+  if (enabled.length === 0) return { tools: [], instructions: [] };
+  const names = installedNames(apps, roomPlugins);
+  return {
+    tools: [
+      {
+        name: "app_open",
+        description: `Open an app enabled in this room on a file of the room's workspace; everyone in the room sees it live on the canvas. Installed apps: ${names}.`,
+        inputSchema: {
+          type: "object",
+          properties: {
+            app: { type: "string", description: "The app's name, e.g. one of those enabled in this room." },
+            file: { type: "string", minLength: 1, description: "The document's path, or the path of a file the app edits, relative to the workspace." },
+          },
+          required: ["app", "file"],
+        },
+      },
+      {
+        name: "apply",
+        description: "Change the document of the app open in this room with one operation. app_state says which operations the app takes.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            op: { type: "object", description: 'The operation, as the app defines it, e.g. { "op": "add", "by": 2 }.' },
+            app: { type: "string", description: "The app, when more than one is open in this room." },
+          },
+          required: ["op"],
+        },
+      },
+      {
+        name: "app_run",
+        description: "Run one of the tasks of the app open in this room, such as a render, and wait until it ends. app_state lists the app's tasks.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            task: { type: "string", description: "The task's name, as app_state lists it." },
+            app: { type: "string", description: "The app, when more than one is open in this room." },
+          },
+          required: ["task"],
+        },
+      },
+      {
+        name: "app_state",
+        description: "The document of the app open in this room, in words, with its latest changes.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            app: { type: "string", description: "The app, when more than one is open in this room." },
+          },
+        },
+      },
+    ],
+    instructions: [appToolsGuidance(apps, taglineOf, roomPlugins)],
+  };
+}
+
+/** Runs one of the four app tools on behalf of a brought agent in a room (after any approver gate). */
+export async function runBroughtAppTool(
+  apps: AppDocuments,
+  roomId: string,
+  agentId: string,
+  toolName: string,
+  args: Record<string, unknown>,
+): Promise<BroughtPluginCallResult> {
+  const standIn = agentStandIn(roomId, agentId);
+  try {
+    if (toolName === "app_open") {
+      if (typeof args.app !== "string" || typeof args.file !== "string" || !args.file) throw new AppProblem("Give app and file.");
+      const opened = await apps.open(standIn, args.app, args.file);
+      const asked = toPosix(normalize(args.file));
+      const forFile = opened.file === asked ? "" : `, the document for ${asked}`;
+      return { done: true, text: `${opened.title} is open on ${opened.file}${forFile}; everyone in the room sees it on the canvas.\n\n${apps.describe(standIn, opened.app)}` };
+    }
+    if (toolName === "apply") {
+      if (typeof args.op !== "object" || args.op === null || Array.isArray(args.op)) throw new AppProblem("Give an operation object in op.");
+      const app = typeof args.app === "string" ? args.app : undefined;
+      const change = await apps.apply(standIn, app, args.op, { kind: "agent", conversationId: standIn, turnSeq: 0 });
+      return { done: true, text: `${takenUpWords(change.takenUp)}${change.file}: ${change.summary}` };
+    }
+    if (toolName === "app_run") {
+      if (typeof args.task !== "string" || !args.task) throw new AppProblem("Give the task name.");
+      const app = typeof args.app === "string" ? args.app : undefined;
+      const { ended, takenUp } = apps.startTask(standIn, app, args.task, { kind: "agent", conversationId: standIn, turnSeq: 0 });
+      return { done: true, text: `${takenUpWords(takenUp)}${await ended}` };
+    }
+    if (toolName === "app_state") {
+      const app = typeof args.app === "string" ? args.app : undefined;
+      return { done: true, text: apps.describe(standIn, app) };
+    }
+    return { done: false, text: `Unknown app tool: ${toolName}.` };
+  } catch (error) {
+    if (error instanceof AppProblem) return { done: false, text: error.message };
+    throw error;
+  }
 }
 
 export type { TakenUp };

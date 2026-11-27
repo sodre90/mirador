@@ -303,7 +303,7 @@ export function sessionMeta(
     sandbox?: SessionInSandbox | null;
   },
 ) {
-  if (harness === "claude" && inRoomsWorkspace) return claudeRoomsWorkspaceSessionMeta(canvasUse, idleCompaction);
+  if (harness === "claude" && inRoomsWorkspace) return claudeRoomsWorkspaceSessionMeta(canvasUse, idleCompaction, canvasPlugins);
   if (harness === "claude")
     return inRoom
       ? claudeRoomSessionMeta(canvasUse, { withoutUserSettings, canvasPlugins, idleCompaction, claudeSetup, keptProtections, sandbox })
@@ -434,10 +434,10 @@ const NO_CLAUDE_IN_CHROME = { CLAUDE_CODE_ENABLE_CFC: "0" };
  * so that nothing the room says has it read, change or run anything of this computer, nor hears of a repository its empty
  * folder may be inside.
  */
-export function claudeRoomsWorkspaceSessionMeta(canvasUse: CanvasUse, idleCompaction = true) {
-  const meta = claudeRoomSessionMeta(canvasUse, { idleCompaction, claudeSetup: NONE_OF_CLAUDE_SETUP });
+export function claudeRoomsWorkspaceSessionMeta(canvasUse: CanvasUse, idleCompaction = true, canvasPlugins = NO_CANVAS_PLUGINS) {
+  const meta = claudeRoomSessionMeta(canvasUse, { idleCompaction, canvasPlugins, claudeSetup: NONE_OF_CLAUDE_SETUP });
   const { options } = meta.claudeCode;
-  const allowedTools = ROOMS_WORKSPACE_CANVAS_TOOLS.map((tool) => `mcp__${CANVAS_SERVER_NAME}__${tool}`);
+  const allowedTools = [...ROOMS_WORKSPACE_CANVAS_TOOLS, ...canvasPlugins.toolNames].map((tool) => `mcp__${CANVAS_SERVER_NAME}__${tool}`);
   return {
     ...meta,
     claudeCode: { options: { ...options, tools: [] as string[], allowedTools, env: { ...options.env, ...NO_CLAUDE_IN_CHROME }, settings: { ...options.settings, includeGitInstructions: false } } },

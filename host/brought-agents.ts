@@ -19,6 +19,14 @@ import {
   rewriteAskAssets,
   type BroughtCanvasAskPayload,
 } from "../shared/brought-canvas.ts";
+import {
+  broughtPluginCatalogIn,
+  broughtPluginResultIn,
+  MOST_BROUGHT_PLUGIN_CALLS_A_MINUTE,
+  MOST_BROUGHT_PLUGIN_CALLS_AT_ONCE,
+  type BroughtPluginCallResult,
+  type BroughtRoomPluginCatalog,
+} from "../shared/brought-plugins.ts";
 import { HostProblemError, type HostProblem } from "../shared/host-problems.ts";
 import { replyOf } from "../shared/last-words.ts";
 import { isRoomId, MOST_ROOMS_READ } from "../shared/machines.ts";
@@ -101,6 +109,16 @@ interface OpenBroughtStep {
   timer: ReturnType<typeof setTimeout> | null;
 }
 
+/** A proxied room plugin tool call of a brought agent on its way to the room's host, until it answers. */
+interface PluginCallUnderWay {
+  broughtId: string;
+  conversationId: string;
+  machineId: string;
+  roomId: string;
+  agentId: string;
+  settle(result: BroughtPluginCallResult): void;
+}
+
 /** What a room's machine may say kept an agent out, which your Mirador passes on; anything else it says counts as not letting it in. */
 const REFUSALS_PASSED_ON = ["room-gone", "room-bringing-not-yours", "room-agents-brought-too-many", "room-agent-name-taken", "room-bringing-too-fast"] as const;
 
@@ -164,12 +182,17 @@ export class BroughtAgents {
   private readonly lettingIn = new Map<string, { settle: (problem: HostProblem | null) => void; timer: ReturnType<typeof setTimeout> }>();
   private readonly tasksArriving: SenderLimit;
   private readonly workspaceCallsMade: SenderLimit;
+  private readonly pluginCallsMade: SenderLimit;
   /** Who this computer's owner is on each machine, as the machine last said. */
   private readonly you = new Map<string, string>();
   /** The task each conversation's turn under way works on, and since when. */
   private readonly turnsOnTasks = new Map<string, { taskId: string; since: number }>();
   private readonly workspaceCalls = new Map<string, WorkspaceCallUnderWay>();
   private readonly openSteps = new Map<string, OpenBroughtStep>();
+  private readonly pluginCalls = new Map<string, PluginCallUnderWay>();
+  /** Room-enabled plugin tool catalogs sent by remote room hosts, keyed by `${machineId}\n${roomId}`. */
+  private readonly roomPluginCatalogs = new Map<string, BroughtRoomPluginCatalog>();
+  private pluginToolsChangedListener: (conversationId: string) => void = () => {};
   private readonly forwardedAsks = new Map<string, { broughtId: string; machineId: string; roomId: string; agentId: string }>();
   private canvas: Pick<CanvasService, "answer" | "hasWaiter"> | null = null;
   private holding: ReadonlySet<string>;
@@ -188,6 +211,7 @@ export class BroughtAgents {
   ) {
     this.tasksArriving = new SenderLimit(now, MOST_BROUGHT_TASKS_A_MINUTE);
     this.workspaceCallsMade = new SenderLimit(now, MOST_WORKSPACE_CALLS_A_MINUTE);
+    this.pluginCallsMade = new SenderLimit(now, MOST_BROUGHT_PLUGIN_CALLS_A_MINUTE);
     store.forgetBroughtTasksAnsweredBefore(now() - ANSWERS_KEPT_MS);
     store.forgetBroughtAgentsNotLetIn();
     this.holding = this.conversationsHolding();
@@ -287,16 +311,63 @@ export class BroughtAgents {
   disconnected(machineId: string) {
     this.dropOpenSteps((step) => step.machineId === machineId);
     this.endWorkspaceCalls((call) => call.machineId === machineId, CONNECTION_LOST);
+    this.endPluginCalls((call) => call.machineId === machineId, CONNECTION_LOST);
   }
 
   /** The machine is gone or signed this computer out: forget every agent brought there and drop their queued tasks. */
   forgotMachine(machineId: string) {
     this.you.delete(machineId);
     this.dropOpenSteps((step) => step.machineId === machineId);
+    for (const key of [...this.roomPluginCatalogs.keys()]) {
+      if (key.startsWith(`${machineId}\n`)) this.roomPluginCatalogs.delete(key);
+    }
     this.endWorkspaceCalls((call) => call.machineId === machineId, OUT_OF_THE_ROOM);
+    this.endPluginCalls((call) => call.machineId === machineId, OUT_OF_THE_ROOM);
     const here = this.store.listBroughtAgents().filter((brought) => brought.machineId === machineId);
     here.forEach((brought) => this.forget(brought));
     if (here.length === 0) this.changed();
+  }
+
+  /** Fires when a room host updates its enabled plugin tools, so MCP endpoints notify running brought-agent conversations. */
+  hearPluginToolsChangedWith(listener: (conversationId: string) => void) {
+    this.pluginToolsChangedListener = listener;
+  }
+
+  /** The room host's proxied plugin tools and instructions for a brought agent's conversation, or null when none are enabled. */
+  pluginCatalogFor(conversationId: string): BroughtRoomPluginCatalog | null {
+    const brought = this.store.listBroughtAgents().find((each) => each.conversationId === conversationId && each.agentId !== null);
+    if (!brought) return null;
+    return this.roomPluginCatalogs.get(`${brought.machineId}\n${brought.roomId}`) ?? null;
+  }
+
+  /** Invokes a room-enabled canvas or app plugin tool on the room's host during an active brought task. */
+  async callRoomPlugin(conversationId: string, tool: string, args: Record<string, unknown>, signal: AbortSignal): Promise<BroughtPluginCallResult> {
+    const turn = this.turnsOnTasks.get(conversationId);
+    const task = turn && this.store.findBroughtTaskById(turn.taskId);
+    const brought = task?.state === "sent" ? this.store.findBroughtAgentHere(task.broughtId) : undefined;
+    if (!turn || !task || !brought?.agentId || signal.aborted) return callRefused(NOT_ON_A_TASK);
+    const { id: broughtId, machineId, roomId, agentId } = brought;
+    if (this.now() - turn.since > WORKSPACE_TASK_MS) return callRefused(TIME_IS_OVER);
+    if (this.pluginCallsUnderWay(conversationId) >= MOST_BROUGHT_PLUGIN_CALLS_AT_ONCE) return callRefused(TOO_MANY_AT_ONCE);
+    if (!this.pluginCallsMade.allows(machineId)) return callRefused(TOO_MANY_A_MINUTE);
+    const callId = crypto.randomUUID();
+    if (!this.machines.send(machineId, { type: "room.plugin-call", roomId, agentId, taskId: task.taskId, callId, tool, args })) return callRefused(NOT_ANSWERING);
+    return new Promise((resolve) => {
+      const giveUp = (why: string) => {
+        this.machines.send(machineId, { type: "room.plugin-call-stopped", roomId, agentId, callId });
+        this.pluginCalls.get(callId)?.settle(callRefused(why));
+      };
+      const turnStopped = () => giveUp(TURN_OVER);
+      const timer = setTimeout(() => giveUp(NO_ANSWER_IN_TIME), WORKSPACE_TASK_MS + ANSWER_LATE_MS);
+      signal.addEventListener("abort", turnStopped, { once: true });
+      const settle = (result: BroughtPluginCallResult) => {
+        if (!this.pluginCalls.delete(callId)) return;
+        clearTimeout(timer);
+        signal.removeEventListener("abort", turnStopped);
+        resolve(result);
+      };
+      this.pluginCalls.set(callId, { broughtId, conversationId, machineId, roomId, agentId, settle });
+    });
   }
 
   /**
@@ -433,6 +504,10 @@ export class BroughtAgents {
         return this.askAnswered(machineId, said);
       case "room.workspace-answered":
         return this.workspaceAnswered(machineId, said);
+      case "room.plugin-tools":
+        return this.pluginToolsReceived(machineId, said);
+      case "room.plugin-answered":
+        return this.pluginAnswered(machineId, said);
     }
   }
 
@@ -466,6 +541,7 @@ export class BroughtAgents {
     this.closeOpenStep(conversationId);
     this.turnsOnTasks.delete(conversationId);
     this.stopWorkspaceCalls((call) => call.conversationId === conversationId);
+    this.stopPluginCalls((call) => call.conversationId === conversationId);
     const task = this.taskStarting(conversationId, turnSeq);
     if (!task) return;
     const { text, ended } = answerOf(this.store.listEventsFrom(conversationId, turnSeq));
@@ -637,6 +713,39 @@ export class BroughtAgents {
     call.settle(workspaceCallResultIn(result) ?? callRefused(ANSWER_UNREADABLE));
   }
 
+  private pluginToolsReceived(machineId: string, { roomId, catalog }: Said) {
+    if (!isRoomId(roomId)) return;
+    const cleaned = broughtPluginCatalogIn(catalog);
+    if (!cleaned) return;
+    const key = `${machineId}\n${roomId}`;
+    if (cleaned.tools.length === 0 && cleaned.instructions.length === 0) this.roomPluginCatalogs.delete(key);
+    else this.roomPluginCatalogs.set(key, cleaned);
+    for (const brought of this.broughtInto(machineId, roomId)) {
+      if (brought.conversationId) this.pluginToolsChangedListener(brought.conversationId);
+    }
+  }
+
+  private pluginAnswered(machineId: string, { roomId, agentId, callId, result }: Said) {
+    const call = typeof callId === "string" ? this.pluginCalls.get(callId) : undefined;
+    if (call?.machineId !== machineId || call.roomId !== roomId || call.agentId !== agentId) return;
+    call.settle(broughtPluginResultIn(result) ?? callRefused(ANSWER_UNREADABLE));
+  }
+
+  private pluginCallsUnderWay(conversationId: string) {
+    return [...this.pluginCalls.values()].filter((call) => call.conversationId === conversationId).length;
+  }
+
+  private endPluginCalls(which: (call: PluginCallUnderWay) => boolean, why: string) {
+    [...this.pluginCalls.values()].filter(which).forEach(({ settle }) => settle(callRefused(why)));
+  }
+
+  private stopPluginCalls(which: (call: PluginCallUnderWay) => boolean) {
+    [...this.pluginCalls]
+      .filter(([, call]) => which(call))
+      .forEach(([callId, { machineId, roomId, agentId }]) => this.machines.send(machineId, { type: "room.plugin-call-stopped", roomId, agentId, callId }));
+    this.endPluginCalls(which, TURN_OVER);
+  }
+
   private askAnswered(machineId: string, { roomId, agentId, itemId, answer }: Said) {
     if (!this.canvas || !isRoomId(roomId) || !isRoomId(agentId) || !isRoomId(itemId)) return;
     const brought = this.broughtInto(machineId, roomId).find((each) => each.agentId === agentId);
@@ -778,6 +887,7 @@ export class BroughtAgents {
     this.store.deleteBroughtAgentHere(brought.id);
     this.dropOpenSteps((step) => step.broughtId === brought.id);
     this.endWorkspaceCalls((call) => call.broughtId === brought.id, OUT_OF_THE_ROOM);
+    this.endPluginCalls((call) => call.broughtId === brought.id, OUT_OF_THE_ROOM);
     for (const [itemId, forwarded] of this.forwardedAsks) {
       if (forwarded.broughtId === brought.id) this.forwardedAsks.delete(itemId);
     }

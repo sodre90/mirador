@@ -5,11 +5,13 @@ import { join } from "node:path";
 import { claudeRoomSessionMeta, sessionMeta } from "../host/acp/harnesses.ts";
 import { AppDocuments } from "../host/apps/documents.ts";
 import { loadPlugins } from "../host/apps/plugins.ts";
+import { broughtAppCatalogFor, runBroughtAppTool } from "../host/apps/tools.ts";
+import { BroughtAgents, type BroughtSessions } from "../host/brought-agents.ts";
 import { CanvasMcpEndpoints, type CanvasRequestFrom } from "../host/canvas/mcp.ts";
 import { CanvasPlugins } from "../host/canvas/plugins.ts";
 import type { RoomTools } from "../host/canvas/room-tools.ts";
 import type { CanvasService } from "../host/canvas/service.ts";
-import { APP_TOOLS, ROOM_CANVAS_TOOLS } from "../host/canvas/tool-names.ts";
+import { APP_TOOLS, PLUGIN_LOAD_TOOL, ROOM_CANVAS_TOOLS, USE_TOOL_TOOL } from "../host/canvas/tool-names.ts";
 import type { ConversationService } from "../host/conversations.ts";
 import type { Hub, SocketData } from "../host/hub.ts";
 import { admittedFromPerson, type PersonInRooms } from "../host/person-admission.ts";
@@ -22,7 +24,8 @@ import { ALL_OF_CLAUDE_SETUP, roomSetupFingerprint } from "../shared/room-agent-
 import { DEFAULT_PERMISSION_PRESET } from "../shared/room-permissions.ts";
 import { NO_SANDBOX, type SandboxSetting } from "../shared/sandbox.ts";
 import type { PluginCanvasItem, Profile } from "../shared/model.ts";
-import type { ServerMessage } from "../shared/protocol.ts";
+import type { ClientMessage, ServerMessage } from "../shared/protocol.ts";
+import { agentStandIn } from "../shared/rooms.ts";
 import { storeWithConversation } from "./canvas-plugin-host.ts";
 
 const BOARD_FIXTURES = join(import.meta.dir, "fixtures", "canvas-plugins");
@@ -567,6 +570,223 @@ describe("room plugin approver gates (slice 3)", () => {
       apps.stop();
     } finally {
       rmSync(workspaceDir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("brought agent plugin proxying (slice 4)", () => {
+  test("room host proxies enabled canvas & app plugins to brought agents, gates mutating calls behind approvers, runs read-only app_state directly, and attributes items to the brought agent", async () => {
+    const workspaceDir = mkdtempSync(join(tmpdir(), "mirador-brought-plugins-"));
+    const emptyFolders = mkdtempSync(join(tmpdir(), "mirador-brought-empty-"));
+    try {
+      // Room host setup
+      const hostStore = storeWithConversation();
+      hostStore.saveProfile(profile);
+      hostStore.insertWorkspace({ id: "w-real", name: "Proj", path: workspaceDir, defaultLaunch: { harness: "claude", profileId: null }, createdAt: 1 });
+      hostStore.insertPerson({ id: "mia", name: "Mia", color: null });
+      hostStore.insertPerson({ id: "ava", name: "Ava", color: null });
+
+      const loadedCanvas = await loadPlugins(BOARD_FIXTURES);
+      const loadedApps = await loadPlugins(APP_FIXTURES);
+      const toBringer: ServerMessage[] = [];
+      let bringerOnline = false;
+      const hostHub = {
+        broadcast: () => {},
+        publishToRoom: () => {},
+        publishToConversation: () => {},
+        publishToPluginWindows: () => {},
+        publishToPluginTabs: () => {},
+        carriesAgentsOf: (personId: string) => personId === "mia" && bringerOnline,
+        sendToAgentsOf: (personId: string, message: ServerMessage) => {
+          if (personId !== "mia" || !bringerOnline) return false;
+          toBringer.push(message);
+          broughtAgents.heard("m-host", message);
+          return true;
+        },
+      } as unknown as Hub;
+      const hostPlugins = new CanvasPlugins(hostStore, hostHub, loadedCanvas.canvases);
+      const hostApps = new AppDocuments(hostStore, loadedApps.apps, { openAppsChanged: () => {}, stateChanged: () => {} });
+      const hostSessions = {
+        startInRoom: () => {
+          throw new Error("unused");
+        },
+        send: async () => {},
+        deleteWithAllItHolds: () => {},
+        waitingPermissions: () => [],
+        answerPermission: () => {},
+        followRoomPreset: async () => {},
+        followRoomAgentModel: async () => {},
+        takeQueuedRoomPrompts: () => [],
+        startAfreshInRoom: () => {},
+      } satisfies RoomSessions;
+      const notifications = { notify: () => {}, roomTaskHeld: () => {} } as unknown as SystemNotifications;
+      const rooms = new RoomService(hostStore, hostHub, hostSessions, notifications, "/tmp/data");
+      rooms.proxiesPluginsWith({
+        catalogFor: (roomPlugins) => {
+          const c = hostPlugins.broughtCatalogFor(roomPlugins);
+          const a = broughtAppCatalogFor(hostApps, roomPlugins);
+          return { tools: [...c.tools, ...a.tools], instructions: [...c.instructions, ...a.instructions] };
+        },
+        isReadOnlyTool: (tool, args) => tool === "app_state" || tool === PLUGIN_LOAD_TOOL || (tool === USE_TOOL_TOOL && args.input === undefined),
+        describeCall: (roomId, agentId, tool, args) => ({
+          title: `Run ${tool}`,
+          detail: JSON.stringify(args).slice(0, 80),
+          allowanceKey: `brought:${roomId}:${agentId}:${tool}`,
+        }),
+        run: (roomId, agentId, answeringMessageId, tool, args, signal) =>
+          APP_TOOLS.includes(tool)
+            ? runBroughtAppTool(hostApps, roomId, agentId, tool, args)
+            : hostPlugins.runBroughtTool(roomId, agentId, answeringMessageId, tool, args, signal),
+        forgetAgent: (roomId, agentId) => hostApps.forgetBroughtAgent(roomId, agentId),
+      });
+
+      const room = rooms.create("Studio", "w-real", ["p1"], "read-freely");
+      rooms.setPersonRole(room.id, "mia", "member");
+      rooms.setPersonRole(room.id, "ava", "approver");
+      rooms.setPeoplesTasksWait(room.id, false);
+      rooms.setPlugins(room.id, ["board", "counter"]);
+
+      // Bringer Mirador setup (no local plugins installed!)
+      const bringerStore = storeWithConversation();
+      bringerStore.saveProfile({ ...profile, id: "p-coder", name: "Coder" });
+      bringerStore.insertMachine({ id: "m-host", name: "Host", origin: "http://127.0.0.1:4600", createdAt: 1 });
+      bringerStore.setMachineDeviceToken("m-host", "t");
+      bringerStore.setMachineJoinedAs("m-host", { asPerson: true, relayKey: null });
+      bringerStore.setMachineRooms("m-host", [{ id: room.id, name: room.name, unread: 0, mentions: 0, toConfirm: 0, toApprove: 0, muted: false }]);
+
+      const toHost: ClientMessage[] = [];
+      let localConvId = "";
+      let activeBroughtTaskLocalId = "";
+      const bringerSessions: BroughtSessions = {
+        createBroughtIntoRoom: (workspaceId, launch, title, inRoomsWorkspace) => {
+          localConvId = "c-brought";
+          const conv = { ...bringerStore.findConversation("c1")!, id: localConvId, workspaceId, profileId: launch.profileId, title, broughtIntoRoom: true as const, ...(inRoomsWorkspace && { worksInRoomsWorkspace: true as const }) };
+          bringerStore.insertConversation(conv);
+          return conv;
+        },
+        send: async (convId, text, _imgs, opts) => {
+          activeBroughtTaskLocalId = opts.broughtTaskId;
+          const seq = bringerStore.appendEvent(convId, { type: "user-message", text, broughtTaskId: opts.broughtTaskId }).seq;
+          broughtAgents.turnStarted(convId, seq);
+        },
+        heldTasksChanged: () => {},
+        dropQueuedBroughtTasks: () => {},
+        broughtTasksInHand: () => (activeBroughtTaskLocalId ? [activeBroughtTaskLocalId] : []),
+      };
+      const broughtAgents = new BroughtAgents(
+        bringerStore,
+        { broadcast: () => {} },
+        {
+          send: (_machineId, message) => {
+            toHost.push(message);
+            if (message.type === "room.bring-agent") {
+              const agentId = rooms.bringAgent(message.roomId, "mia", message.name, message.harness, message.worksInRoom);
+              queueMicrotask(() => broughtAgents.heard("m-host", { type: "room.agent-brought", personId: "mia", requestId: message.requestId, roomId: message.roomId, agentId, problem: null }));
+            } else if (message.type === "room.plugin-call") {
+              void rooms.pluginCalled({ personId: "mia", roomId: message.roomId, agentId: message.agentId, taskId: message.taskId, callId: message.callId, tool: message.tool, args: message.args });
+            } else if (message.type === "room.plugin-call-stopped") {
+              rooms.pluginCallStopped({ personId: "mia", roomId: message.roomId, agentId: message.agentId, callId: message.callId });
+            } else if (message.type === "room.take-agent-out") {
+              rooms.takeAgentOut(message.roomId, message.agentId, "mia");
+            }
+            return true;
+          },
+        },
+        bringerSessions,
+        notifications,
+        emptyFolders,
+      );
+
+      bringerOnline = true;
+      rooms.broughtAgentsHere({ personId: "mia", isOwner: false, carriesAgents: false });
+      await broughtAgents.bring("m-host", room.id, "p-coder", "w1", "any-time");
+      const broughtAgentId = hostStore.findRoom(room.id)!.agents.find(({ brought }) => brought !== undefined)!.profileId;
+
+      const bringerMcp = new CanvasMcpEndpoints({
+        canvas: {} as CanvasService,
+        conversations: { conversationOfSession: async () => localConvId } as unknown as ConversationService,
+        assetsOrigin: "http://127.0.0.1:4601",
+        store: bringerStore,
+        broughtPlugins: broughtAgents,
+      });
+
+      const mcp = async (method: string, params: Record<string, unknown> = {}) => {
+        const request = new Request(`http://127.0.0.1/mcp/${localConvId}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Accept: "application/json, text/event-stream", "MCP-Protocol-Version": "2025-11-25" },
+          body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
+        });
+        const response = await bringerMcp.handle(localConvId, request);
+        const body = await response.text();
+        const payload = body.split("\n").find((line) => line.startsWith("data: "))?.slice("data: ".length) ?? body;
+        return JSON.parse(payload);
+      };
+      const callTool = async (name: string, args: object) => {
+        const { result } = await mcp("tools/call", { name, arguments: args });
+        return { text: result.content[0].text as string, isError: result.isError === true };
+      };
+
+      // 1. Proxied room plugin & app tools appear on the brought agent's MCP server.
+      const listed = ((await mcp("tools/list")).result.tools as { name: string }[]).map(({ name }) => name);
+      expect(listed).toContain("show_card");
+      expect(listed).toContain("app_open");
+      expect(listed).toContain("app_state");
+      expect(listed).not.toContain("plugin_install");
+
+      // 2. Outside an active task, proxied calls are refused.
+      expect(await callTool("show_card", { title: "Early", text: "Nope" })).toEqual({
+        isError: true,
+        text: "You work in the room's workspace only during a turn on a task the room gave you.",
+      });
+
+      // 3. Tag the brought agent to start an active task.
+      rooms.write(room.id, hostStore.ownerId(), "Check status", [broughtAgentId], null);
+      await new Promise((r) => setTimeout(r, 20));
+
+      // 4. Mutating canvas plugin call waits for approver; once approved, publishes under agentStandIn and supports member interaction.
+      const cardCall = callTool("show_card", { title: "Brought Card", text: "From Mia's Coder" });
+      await new Promise((r) => setTimeout(r, 20));
+      const waitingCard = rooms.approvals(room.id);
+      expect(waitingCard).toHaveLength(1);
+      expect(waitingCard[0]!.profileId).toBe(broughtAgentId);
+      rooms.approve(room.id, broughtAgentId, waitingCard[0]!.request.permissionId, "allow", "ava");
+      expect((await cardCall).isError).toBe(false);
+
+      const roomCanvas = rooms.canvas(room.id);
+      const card = roomCanvas.find((item): item is PluginCanvasItem => item.kind === "plugin" && item.title === "Brought Card")!;
+      expect(card).toBeDefined();
+      expect(card.conversationId).toBe(agentStandIn(room.id, broughtAgentId));
+      expect(await hostPlugins.act(card.id, { kind: "press" }, { personId: "mia", isOwner: false, mayApprove: false })).toEqual({ presses: 1 });
+
+      // 5. Brought agent cannot start conversations on the room host via plugin tools.
+      const handOver = callTool("hand_over", { profile: "Builder", task: "Do stuff" });
+      await new Promise((r) => setTimeout(r, 20));
+      rooms.approve(room.id, broughtAgentId, rooms.approvals(room.id)[0]!.request.permissionId, "allow", "ava");
+      expect(await handOver).toEqual({ isError: true, text: "Brought agents cannot start conversations on the room's machine." });
+
+      // 6. Brought agent opens Counter app (gated), reads app_state directly (no approval!), and applies a change (gated).
+      const openCall = callTool("app_open", { app: "counter", file: "brought.counter.json" });
+      await new Promise((r) => setTimeout(r, 20));
+      rooms.approve(room.id, broughtAgentId, rooms.approvals(room.id)[0]!.request.permissionId, "allow", "ava");
+      expect((await openCall).text).toContain("Counter is open on brought.counter.json");
+      const openDoc = hostApps.openApps().find(({ file }) => file === "brought.counter.json")!;
+      expect(openDoc.conversationId).toBe(agentStandIn(room.id, broughtAgentId));
+      expect(hostApps.isOpenInRoom(openDoc.documentId, room.id, "counter")).toBe(true);
+
+      // Read-only app_state runs immediately without any approval card!
+      const stateCall = await callTool("app_state", { app: "counter" });
+      expect(stateCall.isError).toBe(false);
+      expect(stateCall.text).toContain("Counter on brought.counter.json");
+      expect(rooms.approvals(room.id)).toHaveLength(0);
+
+      // Taking out the brought agent forgets its open app pointer.
+      rooms.takeAgentOut(room.id, broughtAgentId, hostStore.ownerId());
+      expect(hostApps.isOpenInRoom(openDoc.documentId, room.id, "counter")).toBe(false);
+
+      hostApps.stop();
+    } finally {
+      rmSync(workspaceDir, { recursive: true, force: true });
+      rmSync(emptyFolders, { recursive: true, force: true });
     }
   });
 });

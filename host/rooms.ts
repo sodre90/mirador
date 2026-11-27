@@ -11,6 +11,13 @@ import {
   type BroughtAskAnswer,
   type BroughtCanvasAskPayload,
 } from "../shared/brought-canvas.ts";
+import {
+  MOST_BROUGHT_PLUGIN_CALLS_A_MINUTE,
+  MOST_BROUGHT_PLUGIN_CALLS_AT_ONCE,
+  type BroughtPluginCallResult,
+  type BroughtRoomPluginCatalog,
+} from "../shared/brought-plugins.ts";
+import { WORKSPACE_TASK_MS } from "../shared/room-workspace.ts";
 import { HostProblemError } from "../shared/host-problems.ts";
 import { replyOf } from "../shared/last-words.ts";
 import { harnessIds, type AskAnswerEntry, type AskItem, type CanvasItem, type Conversation, type HarnessId, type Launch, type Profile, type ShowItem } from "../shared/model.ts";
@@ -179,6 +186,31 @@ export interface HostApprovalRequest {
 
 export type ApproveHostAction = (conversationId: string, request: HostApprovalRequest) => Promise<boolean>;
 
+/** Bridge supplied by the host so RoomService can proxy room-enabled canvas & app plugins to brought agents. */
+export interface BroughtPluginBridge {
+  catalogFor(roomPlugins: readonly string[]): BroughtRoomPluginCatalog;
+  isReadOnlyTool(tool: string, args: Record<string, unknown>): boolean;
+  describeCall(roomId: string, agentId: string, tool: string, args: Record<string, unknown>): { title: string; detail: string | null; allowanceKey: string };
+  run(roomId: string, agentId: string, answeringMessageId: string, tool: string, args: Record<string, unknown>, signal: AbortSignal): Promise<BroughtPluginCallResult>;
+  forgetAgent?(roomId: string, agentId: string): void;
+}
+
+const NO_PLUGIN_BRIDGE: BroughtPluginBridge = {
+  catalogFor: () => ({ tools: [], instructions: [] }),
+  isReadOnlyTool: () => false,
+  describeCall: (_roomId, _agentId, tool) => ({ title: `Run plugin tool “${tool}”`, detail: null, allowanceKey: `brought:plugin:${tool}` }),
+  run: async () => ({ done: false, text: "No plugins are available in this room." }),
+};
+
+interface BroughtPluginCallUnderWay {
+  personId: string;
+  roomId: string;
+  agentId: string;
+  taskId: string;
+  callId: string;
+  stopping: AbortController;
+}
+
 interface PendingHostApproval {
   roomId: string;
   conversationId: string;
@@ -282,6 +314,9 @@ export class RoomService implements RoomRules, TurnListener {
   private readonly pendingHostApprovals = new Map<string, PendingHostApproval>();
   /** Host-side plugin allowance keys approved for the rest of each conversation's turn. */
   private readonly allowedHostForTurn = new Map<string, Set<string>>();
+  private readonly broughtPluginLimiter = new SenderLimit(Date.now, MOST_BROUGHT_PLUGIN_CALLS_A_MINUTE);
+  private readonly broughtPluginCalls = new Map<string, BroughtPluginCallUnderWay>();
+  private pluginBridge: BroughtPluginBridge = NO_PLUGIN_BRIDGE;
   /** Own-agent conversations that were still answering when the previous host stopped or died. */
   private readonly orphanedAnswering: Set<string>;
   private outOfEveryRoom: (personIds: string[]) => void = () => {};
@@ -357,6 +392,11 @@ export class RoomService implements RoomRules, TurnListener {
   /** Told each time a room's enabled Mirador plugins change. */
   hearPluginsChangedWith(listener: (roomId: string, removedPlugins: string[]) => void) {
     this.pluginsChangedListener = listener;
+  }
+
+  /** Connects the room service to the host's canvas & app plugins for proxying to brought agents. */
+  proxiesPluginsWith(bridge: BroughtPluginBridge) {
+    this.pluginBridge = bridge;
   }
 
   /** A person an invite just let into the room: pages hear of them as of one the owner let in, cleaning up if an existing member's role was lowered. */
@@ -482,9 +522,13 @@ export class RoomService implements RoomRules, TurnListener {
     const removed = room.plugins.filter((name) => !chosen.includes(name));
     const stopsTurn = removed.length > 0;
     this.store.setRoomPlugins(roomId, chosen);
-    if (stopsTurn) this.denyPendingHostApprovals((pending) => pending.roomId === roomId);
+    if (stopsTurn) {
+      this.denyPendingHostApprovals((pending) => pending.roomId === roomId);
+      this.stopBroughtPluginCalls((call) => call.roomId === roomId);
+    }
     this.publish(roomId);
     this.pluginsChangedListener(roomId, removed);
+    this.broadcastPluginTools(this.existingRoom(roomId));
     room.agents.filter(({ brought }) => !brought).forEach((agent) => this.startAfresh(agent, stopsTurn));
   }
 
@@ -648,6 +692,7 @@ export class RoomService implements RoomRules, TurnListener {
   delete(roomId: string) {
     const room = this.existingRoom(roomId);
     this.denyPendingHostApprovals((pending) => pending.roomId === roomId);
+    this.stopBroughtPluginCalls((call) => call.roomId === roomId);
     room.agents.forEach(({ conversationId }) => conversationId && this.sessions.deleteWithAllItHolds(conversationId));
     this.workspaceCalls.endAll((sent) => sent.roomId === roomId);
     void this.sandboxes.ownerGone(roomSandbox(roomId));
@@ -684,6 +729,7 @@ export class RoomService implements RoomRules, TurnListener {
     const agentId = crypto.randomUUID();
     this.store.addBroughtAgent(roomId, agentId, { personId, name: this.freeAgentName(room, personId, name), harness, ...(worksInRoom && { workspace: "asked" as const }) }, this.hub.carriesAgentsOf(personId));
     this.publish(roomId);
+    this.sendPluginToolsTo(personId, this.existingRoom(roomId));
     if (worksInRoom) {
       this.waitingChanged(roomId);
       this.workspaceWaits(this.existingRoom(roomId), agentId);
@@ -832,6 +878,9 @@ export class RoomService implements RoomRules, TurnListener {
         this.pendingBroughtAskAnswers.delete(itemId);
       }
     }
+    for (const room of this.store.roomsOf(socket.personId)) {
+      if (room.plugins.length > 0 || room.agents.some(broughtBy(socket.personId))) this.sendPluginToolsTo(socket.personId, room);
+    }
   }
 
   /** The person's own Mirador went: their agents show as away, working on nothing the room sees, until it is back. */
@@ -866,6 +915,10 @@ export class RoomService implements RoomRules, TurnListener {
     const task = this.store.takeRoomBroughtTask(taskId, roomId, agentId);
     if (!task) throw new HostProblemError({ code: "room-brought-task-unknown" });
     this.workspaceCalls.endAll((sent) => sent.roomId === roomId && sent.taskId === taskId);
+    this.stopBroughtPluginCalls((call) => call.roomId === roomId && call.taskId === taskId);
+    const standIn = agentStandIn(roomId, agentId);
+    this.allowedHostForTurn.delete(standIn);
+    this.denyPendingHostApprovals((pending) => pending.conversationId === standIn);
     if (agent.brought?.workspace !== undefined) void this.sandboxes.turnEnded(roomSandbox(roomId)).catch((error: unknown) => console.error(`looking at the held files of the room ${roomId} failed:`, error));
     this.store.setRoomAgentAnsweringIn(roomId, agentId, null);
     this.publish(roomId);
@@ -1247,6 +1300,113 @@ export class RoomService implements RoomRules, TurnListener {
     return roomUsage(roomId, since, agents, this.store.listRoomMessages(roomId));
   }
 
+  /** An agent someone brought invokes a room-enabled canvas or app plugin tool on this machine; mutating calls wait for an approver. */
+  async pluginCalled(sent: { personId: string; roomId: string; agentId: string; taskId: string; callId: string; tool: string; args: Record<string, unknown> }) {
+    const { personId, roomId, agentId, taskId, callId, tool, args } = sent;
+    const reply = (result: BroughtPluginCallResult) => {
+      this.hub.sendToAgentsOf(personId, { type: "room.plugin-answered", personId, roomId, agentId, callId, result });
+    };
+    const room = this.store.findRoom(roomId);
+    const agent = room?.agents.find((each) => each.profileId === agentId && each.brought?.personId === personId);
+    if (!room || !agent) return reply({ done: false, text: "You are no longer in the room." });
+    if (room.plugins.length === 0) return reply({ done: false, text: "No plugins are enabled in this room." });
+    const task = this.store.findRoomBroughtTask(taskId);
+    if (!task || task.roomId !== roomId || task.agentId !== agentId) return reply({ done: false, text: "The room knows no such task of yours, or you have answered it." });
+    if (Date.now() - task.sentAt >= WORKSPACE_TASK_MS) return reply({ done: false, text: "The time for this task in the room is over." });
+    if (this.broughtPluginCalls.has(callId)) return;
+    if (!this.broughtPluginLimiter.allows(personId)) return reply({ done: false, text: "Your agents make too many plugin calls; wait a minute." });
+    const activeForAgent = [...this.broughtPluginCalls.values()].filter((call) => call.roomId === roomId && call.agentId === agentId).length;
+    if (activeForAgent >= MOST_BROUGHT_PLUGIN_CALLS_AT_ONCE) {
+      return reply({ done: false, text: `Only ${MOST_BROUGHT_PLUGIN_CALLS_AT_ONCE} plugin calls of yours wait or run at a time; let one of them end first.` });
+    }
+    const stopping = new AbortController();
+    this.broughtPluginCalls.set(callId, { personId, roomId, agentId, taskId, callId, stopping });
+    try {
+      if (!this.pluginBridge.isReadOnlyTool(tool, args)) {
+        const described = this.pluginBridge.describeCall(roomId, agentId, tool, args);
+        const allowed = await this.approveBroughtHostAction(room, agentId, task.messageId, { ...described, signal: stopping.signal });
+        if (!allowed) return reply({ done: false, text: stopping.signal.aborted ? "It was stopped." : "Whoever approves in the room said no." });
+      }
+      if (stopping.signal.aborted) return reply({ done: false, text: "It was stopped." });
+      const result = await this.pluginBridge.run(roomId, agentId, task.messageId, tool, args, stopping.signal);
+      reply(result);
+    } catch (error) {
+      reply({ done: false, text: error instanceof Error ? error.message : String(error) });
+    } finally {
+      this.broughtPluginCalls.delete(callId);
+    }
+  }
+
+  /** Its bringer's Mirador no longer wants an in-flight proxied plugin call. */
+  pluginCallStopped({ personId, roomId, agentId, callId }: { personId: string; roomId: string; agentId: string; callId: string }) {
+    const call = this.broughtPluginCalls.get(callId);
+    if (call && call.personId === personId && call.roomId === roomId && call.agentId === agentId) call.stopping.abort();
+  }
+
+  private stopBroughtPluginCalls(matches: (call: BroughtPluginCallUnderWay) => boolean) {
+    for (const call of [...this.broughtPluginCalls.values()]) {
+      if (matches(call)) call.stopping.abort();
+    }
+  }
+
+  private sendPluginToolsTo(personId: string, room: Room) {
+    const catalog = this.pluginBridge.catalogFor(room.plugins);
+    this.hub.sendToAgentsOf(personId, { type: "room.plugin-tools", personId, roomId: room.id, catalog });
+  }
+
+  private broadcastPluginTools(room: Room) {
+    const bringers = new Set(room.agents.flatMap(({ brought }) => (brought ? [brought.personId] : [])));
+    bringers.forEach((personId) => this.sendPluginToolsTo(personId, room));
+  }
+
+  private approveBroughtHostAction(room: Room, agentId: string, answeringMessageId: string, request: HostApprovalRequest): Promise<boolean> {
+    const standIn = agentStandIn(room.id, agentId);
+    if (!room.sandbox.on && asksForNothing(room.permissions)) return Promise.resolve(true);
+    if (this.allowedHostForTurn.get(standIn)?.has(request.allowanceKey)) return Promise.resolve(true);
+    if (request.signal?.aborted) return Promise.resolve(false);
+    const permissionId = `host-${crypto.randomUUID()}`;
+    const messagesById = new Map(this.store.listRoomMessages(room.id).map((message) => [message.id, message]));
+    const asked = messagesById.get(answeringMessageId);
+    const approval: RoomApproval = {
+      roomId: room.id,
+      conversationId: standIn,
+      profileId: agentId,
+      request: {
+        kind: "permission",
+        permissionId,
+        title: request.title,
+        toolKind: "other",
+        command: request.detail,
+        description: null,
+        options: [],
+      },
+      file: null,
+      outsideWorkspace: false,
+      at: Date.now(),
+      threadId: (asked && this.threadOf(asked, agentId)?.id) ?? null,
+      task: asked ? taskOf(asked, messagesById, this.store.ownerId()) : null,
+      approvers: this.approversOf(room),
+    };
+    return new Promise<boolean>((resolve) => {
+      let settled = false;
+      const finish = (allowed: boolean) => {
+        if (settled) return;
+        settled = true;
+        this.pendingHostApprovals.delete(permissionId);
+        request.signal?.removeEventListener("abort", onAbort);
+        resolve(allowed);
+      };
+      const onAbort = () => {
+        finish(false);
+        this.waitingChanged(room.id);
+      };
+      this.pendingHostApprovals.set(permissionId, { roomId: room.id, conversationId: standIn, profileId: agentId, allowanceKey: request.allowanceKey, approval, settle: finish });
+      request.signal?.addEventListener("abort", onAbort, { once: true });
+      this.notifications.roomTaskHeld(room, { kind: "permission", tool: request.title });
+      this.waitingChanged(room.id);
+    });
+  }
+
   /** The pages and questions the room's agents (own and brought) made there, oldest first. */
   canvas(roomId: string): CanvasItem[] {
     return [
@@ -1618,6 +1778,11 @@ export class RoomService implements RoomRules, TurnListener {
   }
 
   private takeOut(room: Room, agent: RoomAgent) {
+    this.stopBroughtPluginCalls((call) => call.roomId === room.id && call.agentId === agent.profileId);
+    const standIn = agentStandIn(room.id, agent.profileId);
+    this.allowedHostForTurn.delete(standIn);
+    this.denyPendingHostApprovals((pending) => pending.conversationId === standIn);
+    this.pluginBridge.forgetAgent?.(room.id, agent.profileId);
     const heldForOrBy = this.store
       .listRoomTasksWaiting(room.id)
       .filter(

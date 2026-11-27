@@ -277,6 +277,8 @@ const EVERY_CLIENT_MESSAGE: Record<ClientMessage["type"], true> = {
   "room.brought-canvas-cancel": true,
   "room.workspace-call": true,
   "room.workspace-call-stopped": true,
+  "room.plugin-call": true,
+  "room.plugin-call-stopped": true,
   "room.answer-workspace": true,
   "room.answer-workspace-call": true,
   "machine.bring-agent": true,

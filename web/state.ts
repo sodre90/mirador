@@ -930,6 +930,8 @@ function applyServerMessage(state: AppState, message: ServerMessage): AppState {
     case "room.brought-step-shown":
       return withRoomTimeline(state, message.step.roomId, (timeline) => ({ ...timeline, broughtSteps: upsert(timeline.broughtSteps, message.step) }));
     case "room.workspace-answered":
+    case "room.plugin-tools":
+    case "room.plugin-answered":
       return state;
     case "sandbox.setup":
       // A host that hasn't restarted since the page was rebuilt says no owner.

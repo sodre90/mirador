@@ -13,6 +13,7 @@ import {
   type OpenApp,
 } from "../../shared/apps.ts";
 import { type Conversation, type Workspace, workingCopyIdOf } from "../../shared/model.ts";
+import { agentStandIn, type Room } from "../../shared/rooms.ts";
 import { toPosix } from "../paths.ts";
 import { renameWhenFree } from "../rename-when-free.ts";
 import type { Store } from "../store.ts";
@@ -286,6 +287,23 @@ export class AppDocuments {
     return this.plugins.filter(({ manifest }) => allowed.has(manifest.name)).map(installedApp);
   }
 
+  /** The room a pointer's conversation belongs to (either a host agent's conversation or a brought agent's stand-in). */
+  private roomIdOfPointer(conversationId: string): string | null {
+    const convRoom = this.store.findConversation(conversationId)?.roomId;
+    if (typeof convRoom === "string") return convRoom;
+    return this.broughtAgentRoom(conversationId)?.room.id ?? null;
+  }
+
+  private broughtAgentRoom(conversationId: string): { room: Room; agentId: string } | null {
+    const slash = conversationId.indexOf("/");
+    if (slash <= 0 || slash !== conversationId.lastIndexOf("/")) return null;
+    const roomId = conversationId.slice(0, slash);
+    const agentId = conversationId.slice(slash + 1);
+    const room = this.store.findRoom(roomId);
+    if (!room?.agents.some((agent) => agent.profileId === agentId && agent.brought !== undefined)) return null;
+    return { room, agentId };
+  }
+
   /** The rooms whose agents currently hold `documentId` open (and still have that app enabled). */
   roomsHoldingDocument(documentId: string): string[] {
     const opened = this.documents.get(documentId);
@@ -293,8 +311,8 @@ export class AppDocuments {
     const rooms = new Set<string>();
     for (const pointer of this.openedIn.values()) {
       if (pointer.documentId !== documentId) continue;
-      const roomId = this.store.findConversation(pointer.conversationId)?.roomId;
-      if (typeof roomId === "string" && this.store.findRoom(roomId)?.plugins.includes(pointer.app)) rooms.add(roomId);
+      const roomId = this.roomIdOfPointer(pointer.conversationId);
+      if (roomId && this.store.findRoom(roomId)?.plugins.includes(pointer.app)) rooms.add(roomId);
     }
     return [...rooms];
   }
@@ -306,7 +324,7 @@ export class AppDocuments {
     const room = this.store.findRoom(roomId);
     if (!room || !room.plugins.includes(appName)) return false;
     return [...this.openedIn.values()].some(
-      (pointer) => pointer.documentId === documentId && pointer.app === appName && this.store.findConversation(pointer.conversationId)?.roomId === roomId,
+      (pointer) => pointer.documentId === documentId && pointer.app === appName && this.roomIdOfPointer(pointer.conversationId) === roomId,
     );
   }
 
@@ -317,9 +335,22 @@ export class AppDocuments {
     let changed = false;
     for (const [key, pointer] of [...this.openedIn]) {
       if (!removed.has(pointer.app)) continue;
-      if (this.store.findConversation(pointer.conversationId)?.roomId !== roomId) continue;
+      if (this.roomIdOfPointer(pointer.conversationId) !== roomId) continue;
       this.openedIn.delete(key);
-      this.store.forgetOpenApp(pointer.conversationId, pointer.app);
+      if (!this.broughtAgentRoom(pointer.conversationId)) this.store.forgetOpenApp(pointer.conversationId, pointer.app);
+      changed = true;
+    }
+    if (!changed) return;
+    for (const opened of [...this.documents.values()]) if (!this.isHeld(opened)) this.close(opened.id);
+    this.publishOpenApps();
+  }
+
+  /** Drops open app pointers held by a brought agent that left a room. */
+  forgetBroughtAgent(roomId: string, agentId: string) {
+    const standIn = agentStandIn(roomId, agentId);
+    let changed = false;
+    for (const pointer of this.pointersOf(standIn)) {
+      this.openedIn.delete(pointerKeyOf(standIn, pointer.app));
       changed = true;
     }
     if (!changed) return;
@@ -618,9 +649,10 @@ export class AppDocuments {
    * which this conversation takes up quietly and is told it did. Where the workspace holds several, they are named.
    */
   private openFor(conversationId: string, appName: string | undefined): { opened: AppDocument; takenUp: TakenUp } {
-    const conversation = this.conversationOf(conversationId);
-    const roomId = typeof conversation.roomId === "string" ? conversation.roomId : null;
-    const room = roomId ? this.store.findRoom(roomId) : undefined;
+    const brought = this.broughtAgentRoom(conversationId);
+    const conversation = brought ? null : this.conversationOf(conversationId);
+    const roomId = brought ? brought.room.id : typeof conversation?.roomId === "string" ? conversation.roomId : null;
+    const room = brought ? brought.room : roomId ? this.store.findRoom(roomId) : undefined;
     if (roomId && appName !== undefined && !room?.plugins.includes(appName)) {
       throw new AppProblem(`${appName} isn't enabled in this room.`);
     }
@@ -630,7 +662,7 @@ export class AppDocuments {
     if (here.length === 1) return { opened: this.documentOf(here[0]!.documentId), takenUp: null };
     const elsewhere = roomId
       ? this.documentsOpenInRoom(roomId, appName, allowedInRoom)
-      : this.documentsOpenIn(workingCopyIdOf(conversation), appName);
+      : this.documentsOpenIn(workingCopyIdOf(conversation!), appName);
     if (elsewhere.length === 1) {
       const opened = elsewhere[0]!;
       this.noteOpenedIn(conversationId, opened, { kind: "quiet" });
@@ -658,11 +690,13 @@ export class AppDocuments {
     refuseLeaving?: (leaving: AppDocument) => AppProblem | null,
   ): Promise<OpenApp> {
     const plugin = this.plugin(appName);
-    const conversation = this.conversationOf(conversationId);
-    if (typeof conversation.roomId === "string" && !this.store.findRoom(conversation.roomId)?.plugins.includes(appName)) {
+    const brought = this.broughtAgentRoom(conversationId);
+    const conversation = brought ? null : this.conversationOf(conversationId);
+    const room = brought ? brought.room : typeof conversation?.roomId === "string" ? this.store.findRoom(conversation.roomId) : undefined;
+    if ((brought || typeof conversation?.roomId === "string") && !room?.plugins.includes(appName)) {
       throw new AppProblem(`${plugin.manifest.title} isn't enabled in this room.`);
     }
-    const { workspace, ownerId } = this.folderOf(conversation);
+    const { workspace, ownerId } = brought ? this.folderOfRoom(brought.room) : this.folderOf(conversation!);
     const documentFile = this.guarded(() => plugin.host.documentFor?.(file)) ?? file;
     const target = fileInWorkspace(workspace.path, documentFile);
     const openedFile = documentFile === file ? undefined : toPosix(relative(dirname(target.path), fileInWorkspace(workspace.path, file).path));
@@ -674,7 +708,8 @@ export class AppDocuments {
     } finally {
       this.oneOpenLessOf(filed.key);
     }
-    if (!this.store.findConversation(conversationId)) throw this.goneBeforeItWasHeld(opened, new AppProblem(`No conversation ${conversationId} holds an app open.`));
+    const stillHere = brought ? this.broughtAgentRoom(conversationId) !== null : Boolean(this.store.findConversation(conversationId));
+    if (!stillHere) throw this.goneBeforeItWasHeld(opened, new AppProblem(`No conversation ${conversationId} holds an app open.`));
     if (!this.isStillOpen(opened)) throw this.goneBeforeItWasHeld(opened, new AppProblem(`${documentWords(opened)} closed while it was being opened; open it again with app_open.`));
     const refusal = refuseLeaving === undefined ? null : this.refusalToLeave(conversationId, appName, opened, refuseLeaving);
     if (refusal !== null) throw this.goneBeforeItWasHeld(opened, refusal);
@@ -834,7 +869,7 @@ export class AppDocuments {
       shownAt: opening.kind === "opened" ? Date.now() : null,
       openedInView: opening.kind === "in-view",
     };
-    this.store.saveOpenApp(conversationId, opened.ownerId, opened.workspaceId, pointer.app, opened.file);
+    if (!this.broughtAgentRoom(conversationId)) this.store.saveOpenApp(conversationId, opened.ownerId, opened.workspaceId, pointer.app, opened.file);
     this.openedIn.set(key, pointer);
     if (before && before.documentId !== opened.id) this.closeUnlessHeld(before.documentId);
     this.publishOpenApps();
@@ -862,7 +897,7 @@ export class AppDocuments {
   private documentsOpenInRoom(roomId: string, appName: string | undefined, allowedInRoom: ReadonlySet<string> | null): AppDocument[] {
     const held = [...this.openedIn.values()].filter(
       (pointer) =>
-        this.store.findConversation(pointer.conversationId)?.roomId === roomId &&
+        this.roomIdOfPointer(pointer.conversationId) === roomId &&
         (appName === undefined || pointer.app === appName) &&
         (allowedInRoom === null || allowedInRoom.has(pointer.app)),
     );
@@ -1066,6 +1101,12 @@ export class AppDocuments {
     const owner = this.store.findWorkspace(conversation.workspaceId);
     if (!owner) throw new AppProblem("That workspace no longer exists.");
     return { workspace: workingCopyOf(owner, conversation), ownerId: owner.id };
+  }
+
+  private folderOfRoom(room: Room): { workspace: Workspace; ownerId: string } {
+    const owner = this.store.findWorkspace(room.workspaceId);
+    if (!owner) throw new AppProblem("That workspace no longer exists.");
+    return { workspace: owner, ownerId: owner.id };
   }
 
   private plugin(name: string) {

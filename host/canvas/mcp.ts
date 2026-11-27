@@ -31,6 +31,7 @@ import { registerPlanUsageTool } from "./plan-usage-tool.ts";
 import { registerLandTool } from "./land-tool.ts";
 import { registerRoomTools, type RoomTools } from "./room-tools.ts";
 import { registerRoomWorkspaceTools, type RoomsWorkspaces } from "./room-workspace-tools.ts";
+import { registerBroughtPluginTools, type BroughtRoomPlugins } from "./brought-plugin-tools.ts";
 import { withProgressHeartbeat } from "./progress-heartbeat.ts";
 import { sandboxOfConversation } from "../sandbox/sandboxes.ts";
 import type { ApproveHostAction } from "../rooms.ts";
@@ -196,6 +197,7 @@ export interface CanvasServerParts {
   rooms?: RoomTools | null;
   roomsWorkspaces?: RoomsWorkspaces | null;
   broughtCanvas?: BroughtCanvasForwarder | null;
+  broughtPlugins?: BroughtRoomPlugins | null;
   approveHostAction?: ApproveHostAction | null;
   antigravityAskWaitMs?: number;
 }
@@ -219,22 +221,29 @@ const runsInASandboxHere = (store: Store | null, conversationId: string) => {
 export type CanvasRequestFrom = "this-computer" | "sandbox";
 
 function buildCanvasServer(conversationId: string, parts: CanvasServerParts, cutInstructionsWarning: CutInstructionsWarning, from: CanvasRequestFrom) {
-  const { canvas, conversations, assetsOrigin, apps = null, canvasPlugins = null, catalog = null, store = null, rooms = null, roomsWorkspaces = null, broughtCanvas = null, approveHostAction = null, antigravityAskWaitMs = ANTIGRAVITY_ASK_WAIT_MS } = parts;
-  const harness = store?.findConversation(conversationId)?.harness;
+  const { canvas, conversations, assetsOrigin, apps = null, canvasPlugins = null, catalog = null, store = null, rooms = null, roomsWorkspaces = null, broughtCanvas = null, broughtPlugins = null, approveHostAction = null, antigravityAskWaitMs = ANTIGRAVITY_ASK_WAIT_MS } = parts;
+  const conversation = store?.findConversation(conversationId);
+  const harness = conversation?.harness;
   const askWaitLimitMs = harness === "antigravity" ? antigravityAskWaitMs : null;
   const reviewFree = reviewFreeFor(harness);
-  const { roomId, worksInRoomsWorkspace } = store?.findConversation(conversationId) ?? {};
+  const { roomId, worksInRoomsWorkspace, broughtIntoRoom } = conversation ?? {};
   const inHostRoom = typeof roomId === "string";
   const roomPlugins = inHostRoom ? (store?.findRoom(roomId)?.plugins ?? []) : [];
   const roomHasApps = inHostRoom && hasApps(apps) && apps.installedFor(roomPlugins).length > 0;
+  const broughtCatalog = broughtIntoRoom === true && from === "this-computer" ? (broughtPlugins?.pluginCatalogFor(conversationId) ?? null) : null;
   const showAndAskAlone = worksForARoomHere(store, conversationId) || from === "sandbox" || runsInASandboxHere(store, conversationId);
   const plugins = canvasPlugins?.guidanceFor(conversationId) ?? NO_CANVAS_PLUGINS;
   const pluginsHere = getsPluginLinesInSystemPrompt(harness) ? withoutPluginLines(plugins) : plugins;
+  const broughtGuidance: CanvasPluginGuidance = broughtCatalog
+    ? { ...NO_CANVAS_PLUGINS, instructions: broughtCatalog.instructions, toolNames: broughtCatalog.tools.map(({ name }) => name) }
+    : NO_CANVAS_PLUGINS;
   const instructions = inHostRoom
     ? canvasInstructions(assetsOrigin, roomHasApps ? withAppTools(pluginsHere, apps, catalog, roomPlugins) : pluginsHere)
-    : showAndAskAlone
-      ? canvasInstructions(assetsOrigin)
-      : canvasServerInstructions(harness, store?.canvasUse() ?? "often", assetsOrigin, withAppTools(pluginsHere, apps, catalog));
+    : broughtCatalog
+      ? canvasInstructions(assetsOrigin, broughtGuidance)
+      : showAndAskAlone
+        ? canvasInstructions(assetsOrigin)
+        : canvasServerInstructions(harness, store?.canvasUse() ?? "often", assetsOrigin, withAppTools(pluginsHere, apps, catalog));
   cutInstructionsWarning.check(harness, instructions);
   const server = new McpServer({ name: CANVAS_SERVER_NAME, version: MIRADOR_VERSION }, { instructions });
 
@@ -317,6 +326,7 @@ function buildCanvasServer(conversationId: string, parts: CanvasServerParts, cut
     if (inHostRoom && roomHasApps && apps) registerAppTools(server, apps, conversations, callingConversation, roomPlugins, approveHostAction ?? undefined);
     if (inHostRoom) canvasPlugins?.registerTools(server, conversationId, callingConversation, reviewFree);
     if (worksInRoomsWorkspace && roomsWorkspaces && from === "this-computer") registerRoomWorkspaceTools(server, roomsWorkspaces, callingConversation, { _meta: loadedUpFront });
+    if (broughtIntoRoom === true && broughtPlugins && from === "this-computer") registerBroughtPluginTools(server, broughtPlugins, conversationId, callingConversation, { _meta: loadedUpFront });
     return server;
   }
 
@@ -416,6 +426,11 @@ export class CanvasMcpEndpoints {
         if (this.parts.store?.findConversation(conversationId)?.roomId === roomId) handler.notify.toolsChanged();
       }
     }
+  }
+
+  /** One conversation (e.g. a brought agent whose remote room's plugins changed) lists its tools again. */
+  toolsChangedForConversation(conversationId: string) {
+    this.handlers["this-computer"].get(conversationId)?.notify.toolsChanged();
   }
 
   private handlerFor(conversationId: string, from: CanvasRequestFrom) {

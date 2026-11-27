@@ -1,4 +1,5 @@
 import { broughtCanvasAskIn, broughtCanvasShowIn } from "../shared/brought-canvas.ts";
+import { broughtPluginCallIn } from "../shared/brought-plugins.ts";
 import { HostProblemError } from "../shared/host-problems.ts";
 import { isPastel } from "../shared/model.ts";
 import type { PersonMessageType } from "../shared/person-messages.ts";
@@ -446,6 +447,16 @@ const admissions: { [K in ClientMessage["type"]]: K extends PersonMessageType ? 
     return { type, roomId, agentId, taskId, callId, call: known };
   },
   "room.workspace-call-stopped": ({ roomId, agentId, callId }, person) => {
+    if (!isRoomId(agentId) || !isRoomId(callId)) throw unreadable();
+    void roleOf(person, roomId);
+  },
+  "room.plugin-call": ({ type, roomId, agentId, taskId, callId, tool, args }, person) => {
+    assertTaskNamed({ agentId, taskId });
+    const known = broughtPluginCallIn(tool, args);
+    if (!isRoomId(callId) || !known || !asksAgentsAs(roleOf(person, roomId))) throw unreadable();
+    return { type, roomId, agentId, taskId, callId, ...known };
+  },
+  "room.plugin-call-stopped": ({ roomId, agentId, callId }, person) => {
     if (!isRoomId(agentId) || !isRoomId(callId)) throw unreadable();
     void roleOf(person, roomId);
   },
