@@ -1,4 +1,4 @@
-import { useEffect, useRef, type Dispatch, type RefObject } from "react";
+import { useEffect, useRef, type Dispatch, type ReactNode, type RefObject } from "react";
 import type { BroughtAgentHere, BroughtTaskWaiting } from "../shared/brought-agents.ts";
 import type { Conversation, Profile } from "../shared/model.ts";
 import { BroughtTaskCard, isBusy, JumpToLatest, PendingApprovals, QueuedMessages, TimelineOfEvents, useScrollAnchor } from "./Chat.tsx";
@@ -117,7 +117,17 @@ export interface BroughtWorkJump {
 }
 
 /** Beside the room, what an agent you brought did on its tasks there, read as its conversation shows it, and nothing to write to it with. */
-export function BroughtWorkPanel({ agent, jumpTo = null, onClose }: { agent: BroughtHere; jumpTo?: BroughtWorkJump | null; onClose: () => void }) {
+export function BroughtWorkPanel({
+  agent,
+  jumpTo = null,
+  resizer,
+  onClose,
+}: {
+  agent: BroughtHere;
+  jumpTo?: BroughtWorkJump | null;
+  resizer?: ReactNode;
+  onClose: () => void;
+}) {
   const { conversation, name, opened } = agent;
   const panelRef = useRef<HTMLElement>(null);
   const { ref, onScroll, awayFromLatest, jumpToLatest } = useScrollAnchor();
@@ -138,6 +148,7 @@ export function BroughtWorkPanel({ agent, jumpTo = null, onClose }: { agent: Bro
   }, [onClose]);
   return (
     <aside ref={panelRef} tabIndex={-1} className="side-chat brought-work" aria-label={words.workOf(name)} data-brought-work={conversation.id}>
+      {resizer}
       <header className="side-chat-header">
         <div className="side-chat-heading">
           <h2>{words.workOf(name)}</h2>

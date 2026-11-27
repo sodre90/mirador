@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import {
   FACTORY_DEFAULT,
   arrangements,
+  broughtWorkWidthIn,
   inView,
   isPaneLayout,
   layoutFrom,
@@ -123,4 +124,13 @@ test("under the conversation, a side chat starts at half the height and leaves e
   expect(sideChatHeightIn(800, 700)).toBe(640);
   expect(sideChatHeightIn(800, 40)).toBe(160);
   expect(sideChatHeightIn(240, 200)).toBe(120);
+});
+
+test("a brought agent's work drawer starts at 440 pixels, keeps a dragged width within 300 pixels and an 80-pixel margin, and recovers when the room grows", () => {
+  expect(broughtWorkWidthIn(1200, null)).toBe(440);
+  expect(broughtWorkWidthIn(1200, 720.4)).toBe(720);
+  expect(broughtWorkWidthIn(760, 720)).toBe(680);
+  expect(broughtWorkWidthIn(1200, 120)).toBe(300);
+  expect(broughtWorkWidthIn(1200, 1180)).toBe(1120);
+  expect(broughtWorkWidthIn(400, null)).toBe(320);
 });

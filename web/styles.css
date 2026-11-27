@@ -361,12 +361,28 @@ button.icon.layout-toggle svg {
   right: 0;
   bottom: 0;
   z-index: 20;
-  width: min(440px, 85%);
+  width: var(--brought-work-width, min(440px, 85%));
   max-width: 100%;
   background: var(--bg);
   border-left: 1px solid var(--border);
   box-shadow: -8px 0 24px rgb(0 0 0 / 0.18);
   outline: none;
+}
+
+.invited-room-body > .brought-work > .splitter {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(var(--splitter-width) / -2);
+  width: var(--splitter-width);
+  z-index: 2;
+  background: none;
+}
+
+.invited-room-body > .brought-work > .splitter:hover,
+.invited-room-body > .brought-work > .splitter:focus-visible,
+.invited-room-body > .brought-work > .splitter.dragging {
+  background: linear-gradient(var(--accent), var(--accent)) center / 3px 100% no-repeat;
 }
 
 .brought-agents-bar {

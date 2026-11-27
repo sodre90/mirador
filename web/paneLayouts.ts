@@ -18,6 +18,7 @@ const SIDEBAR_WIDTH_KEY = "mirador-sidebar-width";
 const SETTINGS_SIZE_KEY = "mirador-settings-size";
 const SIDEBAR_HIDDEN_KEY = "mirador-sidebar-hidden";
 const SIDE_CHAT_SIZE_KEY = "mirador-side-chat-size";
+const BROUGHT_WORK_WIDTH_KEY = "mirador-brought-work-width";
 
 function readJson(key: string): unknown {
   try {
@@ -128,6 +129,24 @@ export function setSideChatSize(dragged: Partial<SideChatSize>) {
 
 /** The same beside every conversation and room, kept per browser, so a kept conversation shows the size dragged in another. */
 export const useSideChatSize = () => useSyncExternalStore(subscribeToSideChatSize, () => sideChatSize);
+
+let broughtWorkWidth = draggedSize(readJson(BROUGHT_WORK_WIDTH_KEY));
+const broughtWorkWidthListeners = new Set<() => void>();
+
+const subscribeToBroughtWorkWidth = (listener: () => void) => {
+  broughtWorkWidthListeners.add(listener);
+  return () => void broughtWorkWidthListeners.delete(listener);
+};
+
+export function setBroughtWorkWidth(width: number | null) {
+  broughtWorkWidth = draggedSize(width);
+  if (broughtWorkWidth === null) forget(BROUGHT_WORK_WIDTH_KEY);
+  else writeJson(BROUGHT_WORK_WIDTH_KEY, broughtWorkWidth);
+  broughtWorkWidthListeners.forEach((listener) => listener());
+}
+
+/** The brought agent's work drawer width in pixels, as last dragged; null uses the default width. */
+export const useBroughtWorkWidth = () => useSyncExternalStore(subscribeToBroughtWorkWidth, () => broughtWorkWidth);
 
 interface DialogSize {
   width: number;

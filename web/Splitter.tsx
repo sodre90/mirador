@@ -50,8 +50,10 @@ export function Splitter({
   const draggedShare = useRef<number | null>(null);
 
   useEffect(() => {
-    document.body.classList.toggle("resizing", dragging);
-    document.body.classList.toggle("resizing-rows", dragging && axis === "rows");
+    if (!dragging) return;
+    document.body.classList.add("resizing");
+    if (axis === "rows") document.body.classList.add("resizing-rows");
+    return () => document.body.classList.remove("resizing", "resizing-rows");
   }, [dragging, axis]);
 
   const siblingArea = (): SplitArea => {

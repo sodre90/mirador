@@ -175,6 +175,28 @@ test("Mia brings an agent of hers into Ann's room: Ann's tasks for it wait for M
     await expect(workPanel(mia).locator(".brought-task-sent.jumped")).toContainText("Weeded the beds");
     const frameWidthWithDrawer = await mia.locator(".invited-room .machine-frame.shown").evaluate((element) => element.getBoundingClientRect().width);
     expect(Math.abs(frameWidthWithDrawer - frameWidthBefore)).toBeLessThan(2);
+
+    const splitter = workPanel(mia).getByRole("separator", { name: "Resize the side panel" });
+    const widthBeforeDrag = (await workPanel(mia).boundingBox())!.width;
+    const handle = (await splitter.boundingBox())!;
+    await mia.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2);
+    await mia.mouse.down();
+    await mia.mouse.move(handle.x + handle.width / 2 - 180, handle.y + handle.height / 2, { steps: 6 });
+    await mia.mouse.up();
+    const widthAfterDrag = (await workPanel(mia).boundingBox())!.width;
+    expect(widthAfterDrag).toBeGreaterThan(widthBeforeDrag + 150);
+    const frameWidthAfterDrag = await mia.locator(".invited-room .machine-frame.shown").evaluate((element) => element.getBoundingClientRect().width);
+    expect(Math.abs(frameWidthAfterDrag - frameWidthBefore)).toBeLessThan(2);
+
+    await mia.keyboard.press("Escape");
+    await expect(workPanel(mia)).toHaveCount(0);
+    await workToggle(mia).click();
+    await expect(workPanel(mia)).toBeVisible();
+    expect(Math.abs((await workPanel(mia).boundingBox())!.width - widthAfterDrag)).toBeLessThan(2);
+
+    await splitter.dblclick();
+    expect(Math.abs((await workPanel(mia).boundingBox())!.width - widthBeforeDrag)).toBeLessThan(2);
+
     await mia.keyboard.press("Escape");
     await expect(workPanel(mia)).toHaveCount(0);
 

@@ -152,3 +152,11 @@ export const sideChatWidthIn = (boxWidth: number, dragged: number | null) =>
 /** The side chat's height under the conversation, in a box this high: as last dragged, else half of it. */
 export const sideChatHeightIn = (boxHeight: number, dragged: number | null) =>
   sharedAlong(boxHeight, dragged ?? boxHeight / 2, MIN_STACKED_CHAT_HEIGHT, MIN_STACKED_CHAT_HEIGHT);
+
+export const DEFAULT_BROUGHT_WORK_WIDTH = 440;
+export const MIN_BROUGHT_WORK_WIDTH = 300;
+export const MIN_BROUGHT_WORK_MARGIN = 80;
+
+/** The brought agent's work drawer over an invited room: as last dragged, else 440 px while leaving room on the left. */
+export const broughtWorkWidthIn = (boxWidth: number, dragged: number | null) =>
+  sharedAlong(boxWidth, dragged ?? DEFAULT_BROUGHT_WORK_WIDTH, MIN_BROUGHT_WORK_WIDTH, MIN_BROUGHT_WORK_MARGIN);
