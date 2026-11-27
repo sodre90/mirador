@@ -177,6 +177,16 @@ test.describe("a room's agent across a host restart", () => {
     expect(isRunning(first.pid), "the host's stop ended the agent's process").toBe(false);
     await secondAnswerResumes(page, builder, first);
     await showsAPageAfterResuming(page);
+
+    await test.step("when the host dies in the middle of a turn, the room shows an unfinished answer", async () => {
+      const held = join(builder.host.root, "held-until-crash");
+      await tagBuilder(page, `WAIT ${held} SAY Never reached`);
+      await expect(page.locator(".room-timeline > .room-thread-line", { hasText: "Builder is working…" })).toBeVisible();
+      await builder.host.restart();
+      await reloadFromRestartedHost(page);
+      await expect(page.getByRole("heading", { name: "# Launch" })).toBeVisible();
+      await expect(page.locator(".room-timeline")).toContainText("Stopped before it finished.");
+    });
   });
 });
 

@@ -246,6 +246,8 @@ function realPlaceOf(path: string): string | null {
 export class RoomService implements RoomRules, TurnListener {
   /** What an approver let through for the rest of each conversation's turn, by `taskAllowanceOf`. */
   private readonly allowedForTurn = new Map<string, Set<string>>();
+  /** Own-agent conversations that were still answering when the previous host stopped or died. */
+  private readonly orphanedAnswering: Set<string>;
   private outOfEveryRoom: (personIds: string[]) => void = () => {};
   private postListener: PostListener = () => {};
   private waitingListener: WaitingListener = () => {};
@@ -266,6 +268,9 @@ export class RoomService implements RoomRules, TurnListener {
     private readonly bringing = new SenderLimit(Date.now, MOST_AGENTS_BROUGHT_A_MINUTE),
     private readonly broughtTaskStarts = new SenderLimit(Date.now, MOST_BROUGHT_TASK_STARTS_A_MINUTE),
   ) {
+    this.orphanedAnswering = new Set(
+      store.listRooms().flatMap(({ agents }) => agents.flatMap(({ conversationId, answering, brought }) => (!brought && conversationId && answering ? [conversationId] : []))),
+    );
     store.forgetRoomAgentsAnswering();
     this.workspaceCalls = new RoomWorkspaceCalls(store, hub, {
       threadOf: (asked, agentId) => this.threadOf(asked, agentId),
@@ -958,12 +963,32 @@ export class RoomService implements RoomRules, TurnListener {
   }
 
   /**
+   * An own agent whose turn was running when the previous host stopped or died, and was not resumed, posts an
+   * unfinished answer in the room so it does not stay silent (or appear stuck working) forever.
+   */
+  settleLost(conversationId: string, cutShortByCrash: boolean) {
+    const wasAnswering = this.orphanedAnswering.delete(conversationId);
+    if (!wasAnswering && !cutShortByCrash) return;
+    const conversation = this.store.findConversation(conversationId);
+    if (!conversation?.roomId || conversation.profileId === null) return;
+    const lastTurnSeq = this.store.listEventsOfTypes(conversationId, ["user-message"]).at(-1)?.seq;
+    if (lastTurnSeq === undefined) return;
+    const asked = this.askedIn(conversationId, lastTurnSeq);
+    if (!asked) return;
+    const alreadyFinished = this.store
+      .listRoomMessages(conversation.roomId)
+      .some(({ answers, author, ended }) => answers === asked.id && "profileId" in author && author.profileId === conversation.profileId && ended === undefined);
+    if (alreadyFinished) return;
+    this.turnEnded(conversationId, lastTurnSeq, { cutShortByRestart: true });
+  }
+
+  /**
    * Posts the final answer of the agent's turn to the room, in the thread of the message the turn answers. It takes the
    * place of an answer of the same agent to that message whose turn did not finish, as a turn that went on from there
    * finished it. A finished answer tags the agents the turn named, unless agents already took too many turns on each
    * other's tags since a person wrote: then it names them as dropped.
    */
-  turnEnded(conversationId: string, turnSeq: number) {
+  turnEnded(conversationId: string, turnSeq: number, { cutShortByRestart = false }: { cutShortByRestart?: boolean } = {}) {
     this.allowedForTurn.delete(conversationId);
     const conversation = this.store.findConversation(conversationId);
     if (!conversation?.roomId || conversation.profileId === null) return;
@@ -974,7 +999,8 @@ export class RoomService implements RoomRules, TurnListener {
     const thread = asked && this.threadOf(asked, conversation.profileId);
     if (!room || !asked || !thread) return;
     const reply = replyOf(this.store.listEventsFrom(conversationId, turnSeq));
-    const finished = reply.ended === "finished";
+    const ended = cutShortByRestart && reply.ended !== "finished" ? "stopped" : reply.ended;
+    const finished = ended === "finished";
     const named = finished ? this.tagsFor(namedInTurn, room, asked).filter((profileId) => this.answers(room, profileId)) : [];
     const passedOn = this.agentsMayGoOn(room.id, asked, named.length) ? named : [];
     const answer = {
@@ -986,7 +1012,7 @@ export class RoomService implements RoomRules, TurnListener {
       ...this.mentionsOf(room, reply.text ?? "", { profileId: conversation.profileId }),
       threadId: thread.id,
       answers: asked.id,
-      ...(reply.ended !== "finished" && { ended: reply.ended }),
+      ...(ended !== "finished" && { ended }),
       ...(passedOn.length < named.length && { tagsDropped: named }),
     };
     const unfinished = this.unfinishedAnswer(asked, conversation.profileId);

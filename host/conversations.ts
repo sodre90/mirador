@@ -260,6 +260,8 @@ export type WaitingPermission = Pick<PendingPermission, "request" | "asked" | "a
 export interface TurnListener {
   turnStarted(conversationId: string, turnSeq: number): void;
   turnEnded(conversationId: string, turnSeq: number): void;
+  /** Called on startup for conversations whose turn was not resumed after a stop or crash. */
+  turnLost?(conversationId: string, cutShortByCrash: boolean): void;
 }
 
 /** What the rooms decide for their agents' conversations: which permission requests go through, and what an agent that lost its session hears. */
@@ -3100,7 +3102,9 @@ export class ConversationService {
     this.store.listConversations().forEach(({ id, acpSessionId }) => {
       if (stoppedTurns.includes(id)) return void this.resumeStoppedTurn(id, acpSessionId).catch(() => {});
       this.broughtTasks.settleLost(id);
-      this.deliverOwedReply(id, this.turnsCutShortByCrash.has(id) ? "failed" : undefined);
+      const cutShort = this.turnsCutShortByCrash.has(id);
+      this.turnsHeard.turnLost?.(id, cutShort);
+      this.deliverOwedReply(id, cutShort ? "failed" : undefined);
       if (!this.resumeUsageLimitWait(id)) this.sendNextQueuedMessage(id);
     });
     this.announceWaiting();

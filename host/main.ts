@@ -330,6 +330,7 @@ conversations.hearTurnsWith({
     rooms.turnEnded(conversationId, turnSeq);
     broughtAgents.turnEnded(conversationId, turnSeq);
   },
+  turnLost: (conversationId, cutShortByCrash) => rooms.settleLost(conversationId, cutShortByCrash),
 });
 const relays = new MachineRelays(
   store,
