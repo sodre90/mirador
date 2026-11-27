@@ -231,8 +231,7 @@ export const hints = {
   deleteConversation: "Delete this conversation, its timeline and its canvas history from the app. The agent's own session files stay on disk. A worktree of its own goes too; one that holds uncommitted files asks first.",
   deleteConversationArmed: "Click again to delete this conversation. The agent's own session files stay on disk.",
   deleteOlder:
-    "Delete every conversation under Older, as × deletes one: their timelines and canvas history go from the app, and the agent's own session files stay on disk. Worktrees of their own go too; if any hold uncommitted files, it asks once first.",
-  deleteOlderArmed: "Click again to delete every conversation under Older, with their side chats and delegated tasks. The agent's own session files stay on disk.",
+    "Delete every conversation under Older, as × deletes one: their timelines and canvas history go from the app, and the agent's own session files stay on disk. It lists them first, for you to confirm. Worktrees of their own go too; if any hold uncommitted files, it asks there.",
   deleteProfileArmed: "Click again to delete this profile. Its conversations can continue with another profile.",
   profileColour: "A dot in this colour goes before the profile's name wherever it shows, and its conversations get an edge of it in the sidebar.",
   profilePrelaunch: "Optional. Runs with your shell and this environment before the agent starts. It must finish within a minute; start long-running proxies in the background.",

@@ -73,9 +73,7 @@ export const shell: Messages["shell"] = {
     removeArmed: "¿Quitar?",
     deleteConversation: "Eliminar conversación",
     deleteArmed: "¿Eliminar?",
-    deleteOlder: "Eliminar conversaciones anteriores",
-    deleteAll: "Eliminar todas",
-    deleteOlderArmed: (count) => `¿Eliminar ${count}?`,
+    deleteOlder: "Eliminar conversaciones anteriores…",
     deleteOthers: "Eliminar las demás conversaciones…",
     deleteBelow: "Eliminar las conversaciones de abajo…",
     newConversationLabel: "+ Nueva conversación",
@@ -185,12 +183,10 @@ export const shell: Messages["shell"] = {
   deleteTogether: {
     titleOthers: (count, workspace) => plural(count, `¿Eliminar la otra conversación de ${workspace}?`, `¿Eliminar las otras ${count} conversaciones de ${workspace}?`),
     titleBelow: (count, above) => plural(count, `¿Eliminar la conversación debajo de «${above}»?`, `¿Eliminar las ${count} conversaciones debajo de «${above}»?`),
+    titleOlder: (count, workspace) => plural(count, `¿Eliminar la conversación anterior de ${workspace}?`, `¿Eliminar las ${count} conversaciones anteriores de ${workspace}?`),
     staying: (count) => plural(count, "1 que sigue trabajando o te espera se queda.", `${count} que siguen trabajando o te esperan se quedan.`),
     goesWithThem: "Sus chats laterales y sus tareas delegadas se eliminan con ellas. Los archivos de sesión de los propios agentes se quedan en el disco.",
     confirm: (count) => plural(count, "Eliminar 1 conversación", `Eliminar ${count} conversaciones`),
-  },
-  olderDelete: {
-    title: "¿Eliminar las conversaciones anteriores y sus worktrees?",
     loses: (count) =>
       plural(count, "Sus worktrees tienen 1 archivo sin commit, que se elimina con ellos.", `Sus worktrees tienen ${count} archivos sin commit, que se eliminan con ellos.`),
     deleteAnyway: "Eliminar de todos modos",

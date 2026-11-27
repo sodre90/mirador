@@ -30,7 +30,7 @@ import { hints, statusHints, waitingHints } from "./hints.ts";
 import { t } from "./i18n/index.ts";
 import { waitingOnJobsHint } from "./job-waits.ts";
 import { launchLabel } from "./launch-label.ts";
-import { callerIdOf, conversationsIn, deletableAround, type Deletable, isUnderCaller, putAwayIn, rowsTopToBottom, showsInSidebar, sidebarParts } from "./navigation.ts";
+import { callerIdOf, conversationsIn, deletableAround, type Deletable, isUnderCaller, putAwayIn, rowsAmong, rowsTopToBottom, showsInSidebar, sidebarParts } from "./navigation.ts";
 import { isPending } from "../shared/reminders.ts";
 import { openReminderPicker, removeReminder } from "./reminders.ts";
 import { LaterGroup, ReminderChip } from "./ReminderViews.tsx";
@@ -549,16 +549,17 @@ function WorkspaceSection({
   const waitingHere = folded ? waitingInFoldedGroup(conversations) : null;
   const deleteWorkspace = () => connection.send({ type: "workspace.delete", workspaceId: workspace.id });
   const deleteConversation = (conversation: Conversation) => connection.send({ type: "conversation.delete", conversationId: conversation.id });
-  const deleteOlder = (older: Conversation[]) => connection.send({ type: "conversations.delete", conversationIds: older.map(({ id }) => id) });
   const openedDelegations = useOpenedDelegations();
   const listedUnder = (caller: Conversation) => conversations.filter((conversation) => isUnderCaller(conversation, conversations) && callerIdOf(conversation) === caller.id);
   const delegatedTo = (caller: Conversation) => listedUnder(caller).filter(({ startedBy }) => startedBy);
   const { listed, more, older } = sidebarParts(conversations, Date.now(), olderAfter, conversationsShown);
   const listedNow = (some: Conversation[]) => some.filter((conversation) => showsInSidebar(conversation, conversations, openedDelegations));
   const shown = listedNow(listed);
-  const rowsOf = (folded: Conversation[]) => folded.filter((conversation) => !isUnderCaller(conversation, conversations)).length;
-  const moreCount = rowsOf(more);
-  const olderCount = rowsOf(older);
+  const moreCount = rowsAmong(more, conversations).length;
+  const olderRows = rowsAmong(older, conversations);
+  const olderCount = olderRows.length;
+  const deleteOlder = () =>
+    dispatch({ type: "delete-together", deleting: { workspaceId: workspace.id, which: "older", conversationIds: olderRows.map(({ id }) => id), staying: 0 } });
   const [moreOpen, setMoreOpen] = useOpenWhileHolding(more, selectedConversationId);
   const [olderOpen, setOlderOpen] = useOpenWhileHolding(older, selectedConversationId);
   const conversationList = useRef<HTMLUListElement>(null);
@@ -730,16 +731,9 @@ function WorkspaceSection({
               <span className="section-label">{words.older(olderCount)}</span>
               <span className="section-rule" />
             </button>
-            <ConfirmButton
-              className="older-delete"
-              label={words.deleteOlder}
-              hint={hints.deleteOlder}
-              armedText={words.deleteOlderArmed(olderCount)}
-              armedHint={hints.deleteOlderArmed}
-              onConfirm={() => deleteOlder(older)}
-            >
-              {words.deleteAll}
-            </ConfirmButton>
+            <button type="button" className="icon older-delete" aria-label={words.deleteOlder} data-hint={hints.deleteOlder} onClick={deleteOlder}>
+              <LineIcon shape="trashMany" />
+            </button>
           </div>
           {olderOpen && <ul>{listedNow(older).map((conversation) => conversationRow(conversation))}</ul>}
         </div>

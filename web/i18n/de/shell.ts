@@ -73,9 +73,7 @@ export const shell: Messages["shell"] = {
     removeArmed: "Entfernen?",
     deleteConversation: "Unterhaltung löschen",
     deleteArmed: "Löschen?",
-    deleteOlder: "Ältere Unterhaltungen löschen",
-    deleteAll: "Alle löschen",
-    deleteOlderArmed: (count) => `${count} löschen?`,
+    deleteOlder: "Ältere Unterhaltungen löschen…",
     deleteOthers: "Andere Unterhaltungen löschen…",
     deleteBelow: "Unterhaltungen darunter löschen…",
     newConversationLabel: "+ Neue Unterhaltung",
@@ -185,13 +183,11 @@ export const shell: Messages["shell"] = {
   deleteTogether: {
     titleOthers: (count, workspace) => plural(count, `Die andere Unterhaltung in ${workspace} löschen?`, `Die ${count} anderen Unterhaltungen in ${workspace} löschen?`),
     titleBelow: (count, above) => plural(count, `Die Unterhaltung unter „${above}“ löschen?`, `Die ${count} Unterhaltungen unter „${above}“ löschen?`),
+    titleOlder: (count, workspace) => plural(count, `Die ältere Unterhaltung in ${workspace} löschen?`, `Die ${count} älteren Unterhaltungen in ${workspace} löschen?`),
     staying: (count) =>
       plural(count, "1 Unterhaltung, die noch arbeitet oder auf dich wartet, bleibt.", `${count} Unterhaltungen, die noch arbeiten oder auf dich warten, bleiben.`),
     goesWithThem: "Ihre Nebenchats und delegierten Aufgaben werden mit gelöscht. Die eigenen Sitzungsdateien der Agenten bleiben auf der Festplatte.",
     confirm: (count) => plural(count, "1 Unterhaltung löschen", `${count} Unterhaltungen löschen`),
-  },
-  olderDelete: {
-    title: "Die älteren Unterhaltungen und ihre Worktrees löschen?",
     loses: (count) =>
       plural(
         count,

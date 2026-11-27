@@ -292,7 +292,7 @@ test("one conversation starts in the other place, a clean worktree goes without 
   });
 });
 
-test("deleting a workspace's older conversations together asks once before their worktrees' uncommitted files go", async ({ page }) => {
+test("deleting a workspace's older conversations together asks in the same prompt before their worktrees' uncommitted files go", async ({ page }) => {
   await signIn(page, host);
   await startNewConversation(page, host.projectDir);
   const conversationId = page.url().match(/#\/c\/(.+)$/)![1]!;
@@ -301,11 +301,11 @@ test("deleting a workspace's older conversations together asks once before their
   const workspace = workspaceCard(page, host.projectDir);
   const row = workspace.locator(`li[data-reorder-id="${conversationId}"]`);
   const older = workspace.locator(".older-group");
-  const question = page.getByRole("alertdialog", { name: "Delete the older conversations and their worktrees?" });
+  const question = page.getByRole("alertdialog", { name: /^Delete the (?:\d+ )?older conversations? in / });
   const deleteOlder = async () => {
     await older.locator(".older-heading").hover();
-    await older.getByRole("button", { name: "Delete older conversations" }).click();
-    await older.getByRole("button", { name: "Confirm: Delete older conversations" }).click();
+    await older.getByRole("button", { name: "Delete older conversations…" }).click();
+    await question.getByRole("button", { name: /^Delete \d+ conversations?$/ }).click();
   };
   await page.clock.setFixedTime(Date.now() + 8 * 24 * 60 * 60 * 1000);
   await selectedRow(page).click();

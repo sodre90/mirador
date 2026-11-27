@@ -40,7 +40,7 @@ test("a workspace lists its most recently active conversations, folds the rest u
     await expect(moreToggle).toHaveText("More · 1");
     await expect(moreToggle).toHaveAttribute("aria-expanded", "false");
     await expect(moreToggle).toHaveAttribute("data-hint", /holds the 5 most recently active/);
-    await expect(more.getByRole("button", { name: "Delete all" })).toHaveCount(0);
+    await expect(more.locator(":scope > button")).toHaveText(["More · 1"]);
   });
 
   await test.step("More opens to its conversations, and opens by itself when the open conversation is one of them", async () => {

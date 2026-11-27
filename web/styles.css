@@ -10283,25 +10283,19 @@ span.voice-engine-problem {
 
 .older-heading .older-delete {
   flex: none;
-  border: none;
-  margin-right: 4px;
-  padding: 1px 6px;
-  font-size: calc(11px * var(--font-scale));
+  margin-right: 2px;
+  padding: 0 4px;
+  line-height: 0;
+}
+
+.older-heading .older-delete svg {
+  width: calc(14px * var(--font-scale));
+  height: calc(14px * var(--font-scale));
 }
 
 /* Out of the layout until wanted, so the rule runs to the card's edge */
-.older-heading .older-delete:not(.armed) {
+.older-heading:not(:hover, :focus-within) .older-delete {
   display: none;
-  background: none;
-  color: var(--muted);
-}
-
-.older-heading:is(:hover, :focus-within) .older-delete {
-  display: block;
-}
-
-.older-heading .older-delete:not(.armed):hover {
-  color: var(--danger);
 }
 
 .reminder-banner {

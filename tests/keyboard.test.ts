@@ -11,6 +11,7 @@ import {
   deletableAround,
   nextWaitingConversation,
   numberedConversation,
+  rowsAmong,
   rowsTopToBottom,
   stillDeletable,
   type NavigationState,
@@ -399,6 +400,14 @@ describe("navigation", () => {
       const under = (id: string, callerId: string, more: Partial<Conversation> = {}) => madeDaysAgo(id, 30, { startedBy: { conversationId: callerId, plugin: "delegate", reply: null, dismissed: false }, ...more });
       const listed = [madeDaysAgo("resting", 30), under("resting-task", "resting"), madeDaysAgo("delegating", 30), under("busy-task", "delegating", { status: "running" })];
       expect(idsOf(apartFromOlder(listed, now, "1-week"))).toEqual({ current: ["delegating", "busy-task"], older: ["resting", "resting-task"] });
+    });
+
+    test("are deleted by their rows, leaving out a task listed under its caller, which goes or stays with that one", () => {
+      const task = madeDaysAgo("task", 30, { startedBy: { conversationId: "caller", plugin: "delegate", reply: null, dismissed: false } });
+      const listed = [madeDaysAgo("caller", 30), task, madeDaysAgo("alone", 30)];
+      const { older } = apartFromOlder(listed, now, "1-week");
+      expect(older.map(({ id }) => id)).toEqual(["caller", "task", "alone"]);
+      expect(rowsAmong(older, listed).map(({ id }) => id)).toEqual(["caller", "alone"]);
     });
 
     test("are stepped past and not numbered, as the sidebar doesn't list them", () => {

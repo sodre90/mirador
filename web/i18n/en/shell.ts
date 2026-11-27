@@ -76,9 +76,7 @@ export const shell = {
     removeArmed: "Remove?",
     deleteConversation: "Delete conversation",
     deleteArmed: "Delete?",
-    deleteOlder: "Delete older conversations",
-    deleteAll: "Delete all",
-    deleteOlderArmed: (count: number) => `Delete ${count}?`,
+    deleteOlder: "Delete older conversations…",
     deleteOthers: "Delete other conversations…",
     deleteBelow: "Delete conversations below…",
     newConversationLabel: "+ New conversation",
@@ -185,12 +183,11 @@ export const shell = {
     titleOthers: (count: number, workspace: string) =>
       plural(count, `Delete the other conversation in ${workspace}?`, `Delete the ${count} other conversations in ${workspace}?`),
     titleBelow: (count: number, above: string) => plural(count, `Delete the conversation below “${above}”?`, `Delete the ${count} conversations below “${above}”?`),
+    titleOlder: (count: number, workspace: string) =>
+      plural(count, `Delete the older conversation in ${workspace}?`, `Delete the ${count} older conversations in ${workspace}?`),
     staying: (count: number) => plural(count, "1 that is still at work or waiting for you stays.", `${count} that are still at work or waiting for you stay.`),
     goesWithThem: "Their side chats and delegated tasks go with them. The agents' own session files stay on disk.",
     confirm: (count: number) => plural(count, "Delete 1 conversation", `Delete ${count} conversations`),
-  },
-  olderDelete: {
-    title: "Delete the older conversations and their worktrees?",
     loses: (count: number) =>
       plural(count, "Their worktrees hold 1 uncommitted file, which is deleted with them.", `Their worktrees hold ${count} uncommitted files, which are deleted with them.`),
     deleteAnyway: "Delete anyway",

@@ -242,8 +242,7 @@ export const hints: Messages["hints"] = {
   deleteConversation: "A beszélgetés, az idővonala és a vászon-előzményei törlése az alkalmazásból. Az ágens saját munkamenetfájljai a lemezen maradnak. A saját worktree-je is törlődik; ha nem commitolt fájlok vannak benne, előbb rákérdez.",
   deleteConversationArmed: "Kattints újra a beszélgetés törléséhez. Az ágens saját munkamenetfájljai a lemezen maradnak.",
   deleteOlder:
-    "A Régebbi alatti összes beszélgetés törlése, ahogy a × egyet töröl: az idővonaluk és a vászon-előzményeik törlődnek az alkalmazásból, az ágens saját munkamenetfájljai a lemezen maradnak. A saját worktree-jeik is törlődnek; ha bármelyikben nem commitolt fájlok vannak, előbb egyszer rákérdez.",
-  deleteOlderArmed: "Kattints újra a Régebbi alatti összes beszélgetés törléséhez, a mellékszálaikkal és az átadott feladataikkal együtt. Az ágens saját munkamenetfájljai a lemezen maradnak.",
+    "A Régebbi alatti összes beszélgetés törlése, ahogy a × egyet töröl: az idővonaluk és a vászon-előzményeik törlődnek az alkalmazásból, az ágens saját munkamenetfájljai a lemezen maradnak. Előbb felsorolja őket, hogy jóváhagyd. A saját worktree-jeik is törlődnek; ha bármelyikben nem commitolt fájlok vannak, ott rákérdez.",
   deleteProfileArmed: "Kattints újra a profil törléséhez. A beszélgetései egy másik profillal folytatódhatnak.",
   profileColour: "Ilyen színű pötty áll a profil neve előtt mindenhol, ahol megjelenik, és a beszélgetései ilyen színű szegélyt kapnak az oldalsávban.",
   profilePrelaunch: "Nem kötelező. A shelleddel és ezzel a környezettel fut, mielőtt az ágens elindul. Egy percen belül be kell fejeződnie; a hosszan futó proxykat a háttérben indítsd.",

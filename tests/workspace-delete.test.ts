@@ -19,17 +19,7 @@ test("a workspace deleted elsewhere takes its own ask away, and leaves another's
   expect(reducer(asking, deleted("w1")).workspaceToDelete).toBeNull();
 });
 
-test("the host asking before a workspace's older conversations go together shows its count and branches, until the user turns it down", () => {
-  const asking = reducer(initialState, {
-    type: "server",
-    message: { type: "conversations.delete-asks", conversationIds: ["c1", "c2"], uncommittedFiles: 4, branches: ["mirador/c1"] },
-  });
-  expect(asking.conversationsToDelete).toEqual({ conversationIds: ["c1", "c2"], uncommittedFiles: 4, branches: ["mirador/c1"] });
-
-  expect(reducer(asking, { type: "dismiss-conversations-to-delete" }).conversationsToDelete).toBeNull();
-});
-
-describe("deleting several conversations from a row's menu", () => {
+describe("deleting several conversations from a row's menu or the Older line", () => {
   const opened = reducer(initialState, { type: "delete-together", deleting: { fromConversationId: "c0", fromTitle: "Above", workspaceId: "w1", which: "below", conversationIds: ["c1", "c2"], staying: 1 } });
   const sent = reducer(opened, { type: "deleting-together-sent" });
   const hostAsks = (conversationIds: string[]): AppAction => ({ type: "server", message: { type: "conversations.delete-asks", conversationIds, uncommittedFiles: 2, branches: ["mirador/c1"] } });
@@ -50,14 +40,18 @@ describe("deleting several conversations from a row's menu", () => {
   test("asks about uncommitted files in the same prompt when the host asks about those it sent", () => {
     const asking = reducer(sent, hostAsks(["c1"]));
     expect(asking.deletingTogether).toMatchObject({ sent: false, asked: { conversationIds: ["c1"], uncommittedFiles: 2, branches: ["mirador/c1"] } });
-    expect(asking.conversationsToDelete).toBeNull();
     expect(reducer(asking, { type: "dismiss-deleting-together" }).deletingTogether).toBeNull();
   });
 
-  test("leaves the Older fold's ask to its own prompt, before the prompt sends or naming others", () => {
-    for (const asking of [reducer(opened, hostAsks(["c1"])), reducer(sent, hostAsks(["c1", "older"]))]) {
+  test("leaves an ask alone that comes before the prompt sends or names others", () => {
+    expect(reducer(initialState, hostAsks(["c1"]))).toBe(initialState);
+    for (const asking of [reducer(opened, hostAsks(["c1"])), reducer(sent, hostAsks(["c1", "other"]))]) {
       expect(asking.deletingTogether?.asked).toBeNull();
-      expect(asking.conversationsToDelete?.conversationIds.length).toBeGreaterThan(0);
     }
+  });
+
+  test("opens from the Older line with no row to sit beside", () => {
+    const older = reducer(initialState, { type: "delete-together", deleting: { workspaceId: "w1", which: "older", conversationIds: ["c1"], staying: 0 } });
+    expect(older.deletingTogether).toEqual({ workspaceId: "w1", which: "older", conversationIds: ["c1"], staying: 0, sent: false, asked: null });
   });
 });

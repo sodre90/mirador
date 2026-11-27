@@ -117,10 +117,13 @@ export function sidebarParts(listed: Conversation[], now: number, olderAfter: Ol
   return { ...apartFromMore(current, conversationsShown), older };
 }
 
-/** A workspace's rows from top to bottom, those folded under More and Older too. One listed under another is no row of its own: it goes with that one. */
+/** Those of `some` that are rows of their own: one listed under its caller is no row of its own, as it goes with that one, deleted or kept. */
+export const rowsAmong = (some: Conversation[], listed: Conversation[]) => some.filter((conversation) => !isUnderCaller(conversation, listed));
+
+/** A workspace's rows from top to bottom, those folded under More and Older too. */
 export function rowsTopToBottom(conversations: Conversation[], now: number, olderAfter: OlderAfter, conversationsShown: ConversationsShown): Conversation[] {
   const { listed, more, older } = sidebarParts(conversations, now, olderAfter, conversationsShown);
-  return [...listed, ...more, ...older].filter((conversation) => !isUnderCaller(conversation, conversations));
+  return rowsAmong([...listed, ...more, ...older], conversations);
 }
 
 /** Those deleting goes through, and how many it leaves because they or what they hold are at work or wait for the user. */

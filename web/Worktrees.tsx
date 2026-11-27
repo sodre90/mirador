@@ -8,7 +8,7 @@ import { usePlacedBeside } from "./placed-beside.ts";
 import { stillDeletable } from "./navigation.ts";
 import { shownTitle } from "./shown-title.ts";
 import { sideChatAccessLabels } from "./SideChat.tsx";
-import type { AppAction, AppState } from "./state.ts";
+import type { AppAction, AppState, DeletingTogether } from "./state.ts";
 import { useTypingAidAttributes } from "./typing-aids.ts";
 import { openWorkspaceSandbox } from "./WorkspaceSandbox.tsx";
 
@@ -29,9 +29,10 @@ const sideChatChoiceWords = (choice: SideChatAccess | null, setting: SideChatAcc
     ? { label: words.sideChatsAsInSettings, detail: words.sideChatsAsInSettingsDetail(sideChatAccessLabels[setting]) }
     : { label: sideChatAccessLabels[choice], detail: choice === "read-only" ? words.sideChatsReadOnlyDetail : words.sideChatsCanChangeDetail };
 
-const inSidebar = (selector: string) => document.querySelector(`.sidebar ${selector}`);
+const inSidebar = <Found extends Element = Element>(selector: string) => document.querySelector<Found>(`.sidebar ${selector}`);
 const conversationRow = (conversationId: string) => `li[data-reorder-id="${CSS.escape(conversationId)}"]`;
 const workspaceCard = (workspaceId: string) => `section.workspace[data-reorder-id="${CSS.escape(workspaceId)}"]`;
+const olderLine = (workspaceId: string) => `${workspaceCard(workspaceId)} .older-heading`;
 
 /** A branch leaving a trunk, drawn rather than typed: few fonts hold a glyph for it. */
 export function WorktreeIcon() {
@@ -228,50 +229,9 @@ export function WorkspaceDeletePrompt({ workspaceToDelete, dispatch }: { workspa
 }
 
 /**
- * Before a workspace's older conversations are deleted together whose worktrees hold uncommitted files, which go with
- * them. It takes the focus on Cancel, so a stray Enter deletes nothing.
- */
-export function OlderDeletePrompt({
-  conversationsToDelete,
-  workspaceId,
-  dispatch,
-}: {
-  conversationsToDelete: AppState["conversationsToDelete"];
-  workspaceId: string | undefined;
-  dispatch: Dispatch<AppAction>;
-}) {
-  const cancelButton = useRef<HTMLButtonElement>(null);
-  useEffect(() => cancelButton.current?.focus(), [conversationsToDelete]);
-  const prompt = usePlacedBeside<HTMLElement>(conversationsToDelete, () => (workspaceId ? inSidebar(`${workspaceCard(workspaceId)} .older-heading`) : null));
-  if (!conversationsToDelete) return null;
-  const promptWords = t.shell.olderDelete;
-  const cancel = () => dispatch({ type: "dismiss-conversations-to-delete" });
-  const deleteAnyway = () => {
-    connection.send({ type: "conversations.delete", conversationIds: conversationsToDelete.conversationIds, discardsUncommitted: true });
-    cancel();
-  };
-  return (
-    <section ref={prompt} className="file-to-open worktree-to-delete" role="alertdialog" aria-label={promptWords.title} onKeyDown={(event) => event.key === "Escape" && cancel()}>
-      <h2>{promptWords.title}</h2>
-      <p>
-        {promptWords.loses(conversationsToDelete.uncommittedFiles)} {words.deleteKeeps(conversationsToDelete.branches)}
-      </p>
-      <div className="actions">
-        <button type="button" className="danger" onClick={deleteAnyway}>
-          {promptWords.deleteAnyway}
-        </button>
-        <button ref={cancelButton} type="button" onClick={cancel}>
-          {words.cancel}
-        </button>
-      </div>
-    </section>
-  );
-}
-
-/**
- * Before a row's menu deletes the other conversations of its workspace, or those below it: it names each as it is now,
- * says how many stay as they are busy, and asks again here when their worktrees hold uncommitted files. It takes the
- * focus on Cancel, so a stray Enter deletes nothing.
+ * Before a row's menu deletes the other conversations of its workspace or those below it, or the Older fold its
+ * conversations: it names each as it is now, says how many stay as they are busy, and asks again here when their
+ * worktrees hold uncommitted files. It takes the focus on Cancel, so a stray Enter deletes nothing.
  */
 export function DeleteTogetherPrompt({
   deleting,
@@ -285,8 +245,8 @@ export function DeleteTogetherPrompt({
   dispatch: Dispatch<AppAction>;
 }) {
   const cancelButton = useRef<HTMLButtonElement>(null);
-  useEffect(() => cancelButton.current?.focus(), [deleting?.fromConversationId, deleting?.which, deleting?.asked]);
-  const prompt = usePlacedBeside<HTMLElement>(deleting, () => deleting && inSidebar(conversationRow(deleting.fromConversationId)));
+  useEffect(() => cancelButton.current?.focus(), [deleting?.conversationIds, deleting?.asked]);
+  const prompt = usePlacedBeside<HTMLElement>(deleting, () => deleting && inSidebar(deleting.which === "older" ? olderLine(deleting.workspaceId) : conversationRow(deleting.fromConversationId)));
   const { going, staying } = deleting ? stillDeletable(deleting.conversationIds, deleting.staying, conversations) : { going: [], staying: 0 };
   const nothingLeftToDelete = Boolean(deleting) && going.length === 0;
   useEffect(() => {
@@ -294,8 +254,13 @@ export function DeleteTogetherPrompt({
   }, [nothingLeftToDelete]);
   if (!deleting) return null;
   const promptWords = t.shell.deleteTogether;
-  const title = deleting.which === "others" ? promptWords.titleOthers(going.length, workspaceName) : promptWords.titleBelow(going.length, deleting.fromTitle);
-  const cancel = () => dispatch({ type: "dismiss-deleting-together" });
+  const title = deleteTogetherTitle(deleting, going.length, workspaceName);
+  const dismiss = () => dispatch({ type: "dismiss-deleting-together" });
+  /** The Older line's trash shows only while the line has the pointer or the focus, so the focus goes back to that line. */
+  const cancel = () => {
+    dismiss();
+    if (deleting.which === "older") inSidebar<HTMLElement>(`${olderLine(deleting.workspaceId)} .section-toggle`)?.focus();
+  };
   const confirm = () => {
     connection.send({ type: "conversations.delete", conversationIds: going.map(({ id }) => id) });
     dispatch({ type: "deleting-together-sent" });
@@ -303,7 +268,7 @@ export function DeleteTogetherPrompt({
   };
   const deleteAnyway = () => {
     if (deleting.asked) connection.send({ type: "conversations.delete", conversationIds: deleting.asked.conversationIds, discardsUncommitted: true });
-    cancel();
+    dismiss();
   };
   return (
     <section ref={prompt} className="file-to-open delete-together" role="alertdialog" aria-label={title} onKeyDown={(event) => event.key === "Escape" && cancel()}>
@@ -316,7 +281,7 @@ export function DeleteTogetherPrompt({
       {staying > 0 && <p>{promptWords.staying(staying)}</p>}
       {deleting.asked ? (
         <p>
-          {t.shell.olderDelete.loses(deleting.asked.uncommittedFiles)} {words.deleteKeeps(deleting.asked.branches)}
+          {promptWords.loses(deleting.asked.uncommittedFiles)} {words.deleteKeeps(deleting.asked.branches)}
         </p>
       ) : (
         <p>{promptWords.goesWithThem}</p>
@@ -324,7 +289,7 @@ export function DeleteTogetherPrompt({
       <div className="actions">
         {deleting.asked ? (
           <button type="button" className="danger" onClick={deleteAnyway}>
-            {t.shell.olderDelete.deleteAnyway}
+            {promptWords.deleteAnyway}
           </button>
         ) : (
           <button type="button" className="danger" disabled={deleting.sent} onClick={confirm}>
@@ -337,4 +302,16 @@ export function DeleteTogetherPrompt({
       </div>
     </section>
   );
+}
+
+function deleteTogetherTitle(deleting: DeletingTogether, count: number, workspaceName: string) {
+  const promptWords = t.shell.deleteTogether;
+  switch (deleting.which) {
+    case "others":
+      return promptWords.titleOthers(count, workspaceName);
+    case "below":
+      return promptWords.titleBelow(count, deleting.fromTitle);
+    case "older":
+      return promptWords.titleOlder(count, workspaceName);
+  }
 }
