@@ -90,9 +90,12 @@ namespace names {
 
 inline bool startsWith(std::string_view name, std::string_view start) { return name.substr(0, start.size()) == start; }
 
-/** What of a git folder git runs programs from, or is led elsewhere by, with the locks git writes its config through. */
+/**
+ * What of a git folder git runs programs from, or is led elsewhere by, with the locks git writes its config through;
+ * and the remotes a fetch by name may still read from files of their own, as git did before it kept them in its config.
+ */
 inline bool isProtectedInGitFolder(std::string_view folded) {
-  return startsWith(folded, "config") || folded == "hooks" || folded == "worktrees" || folded == "commondir" || folded == "gitdir";
+  return startsWith(folded, "config") || folded == "hooks" || folded == "worktrees" || folded == "commondir" || folded == "gitdir" || folded == "remotes" || folded == "branches";
 }
 
 inline bool isLetter(unsigned char c) { return (c >= 'a' && c <= 'z') || c >= 0x80; }
@@ -118,6 +121,17 @@ inline bool makesRepositoryOfItsFolder(std::string_view folded) { return folded 
 
 }  // namespace names
 
+/** Below the top of every git folder, by name: the files that have git take objects from other folders besides its own. */
+inline const Paths& protectedBelowGitFolders() {
+  static const Paths paths = [] {
+    Paths named;
+    named.add("objects/info/alternates", Paths::Kind::ProtectedFile);
+    named.add("objects/info/http-alternates", Paths::Kind::ProtectedFile);
+    return named;
+  }();
+  return paths;
+}
+
 inline Named protectedName() { return {{Area::Protected, nullptr}, Area::Protected, true, false}; }
 
 inline Named nameIn(const Place& folder, std::string_view name) {
@@ -137,6 +151,7 @@ inline Named nameIn(const Place& folder, std::string_view name) {
       if (folded == ".git" || names::isProtectedInGitFolder(folded)) return protectedName();
       if (folded == "modules") return {{Area::GitModules, below}, Area::Protected, true, false};
       if (below) return {{Area::GitsOwn, below}, Area::Protected, true, true};
+      if (const Paths* gits = protectedBelowGitFolders().named(folded)) return {{Area::GitsOwn, gits}, Area::Protected, true, true};
       return {{Area::GitsOwn, nullptr}, Area::GitsOwn, false, false};
     case Area::GitModules:
       if (folded != ".git" && isGitFolder) return {{Area::GitFolder, below}, Area::Protected, true, false};

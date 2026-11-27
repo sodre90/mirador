@@ -86,13 +86,19 @@ describe.skipIf(CXX === null)("what the guard lets agents do, by the rules it is
     expect(await mayBeDone(folders, others)).toEqual(all(others, DOES_ANYTHING));
   });
 
-  test("git's folders take what git writes, but not what it runs programs from or is led elsewhere by, nor a link", async () => {
+  test("git's folders take what git writes, but not what it runs programs from or is led elsewhere by, objects of other folders and remotes of their own files too, nor a link", async () => {
     const gitWrites = ["index", "index.lock", "HEAD", "HEAD.lock", "refs/heads/main", "logs/HEAD", "objects/ab/cdef", "rebase-merge/done", "COMMIT_EDITMSG", "packed-refs.lock"];
     const kept = ["config", "config.lock", "CONFIG.worktree", "hooks", "hooks/pre-commit", "Hooks", "worktrees", "worktrees/w/gitdir", "commondir", "gitdir"];
+    const ledToOtherObjects = ["objects/info/alternates", "objects/info/alternates.lock", "Objects/Info/Alternates", "objects/info/http-alternates", "remotes", "remotes/origin", "branches", "branches/origin"];
+    const onTheWayToThose = ["objects", "objects/info"];
+    const gitWritesBesideThose = ["objects/info/packs", "objects/info/commit-graph", "objects/pack/pack-1.pack", "objects/incoming-1/ab/cdef"];
     for (const gitFolder of [".git", "vendor/lib/.git", "a/b/c/.GIT"]) {
       const inside = (names: string[]) => names.map((name) => `${gitFolder}/${name}`);
       expect(await mayBeDone([guarded("/w")], inside(gitWrites))).toEqual(all(inside(gitWrites), "change move make-file make-folder"));
       expect(await mayBeDone([guarded("/w")], inside(kept))).toEqual(all(inside(kept), NOTHING));
+      expect(await mayBeDone([guarded("/w")], inside(ledToOtherObjects))).toEqual(all(inside(ledToOtherObjects), NOTHING));
+      expect(await mayBeDone([guarded("/w")], inside(onTheWayToThose))).toEqual(all(inside(onTheWayToThose), "make-folder"));
+      expect(await mayBeDone([guarded("/w")], inside(gitWritesBesideThose))).toEqual(all(inside(gitWritesBesideThose), "change move make-file make-folder"));
     }
   });
 
@@ -113,7 +119,7 @@ describe.skipIf(CXX === null)("what the guard lets agents do, by the rules it is
   test("a bare repository is as any git folder, its HEAD for git to change, and stays where it is", async () => {
     const folders = [guarded("/w", { gitFolders: [".git", "fixtures/remote.git"] })];
     const writable = ["HEAD", "HEAD.lock", "refs/heads/main", "objects/ab/cdef"].map((name) => `fixtures/remote.git/${name}`);
-    const kept = ["config", "hooks/pre-receive", "worktrees/w", "commondir", ".git"].map((name) => `fixtures/remote.git/${name}`);
+    const kept = ["config", "hooks/pre-receive", "worktrees/w", "commondir", ".git", "objects/info/alternates", "remotes/origin"].map((name) => `fixtures/remote.git/${name}`);
     expect(await mayBeDone(folders, writable)).toEqual(all(writable, "change move make-file make-folder"));
     expect(await mayBeDone(folders, kept)).toEqual(all(kept, NOTHING));
     expect(await mayBeDone(folders, ["fixtures/remote.git", "fixtures", "fixtures/HEAD"])).toEqual({ "fixtures/remote.git": NOTHING, fixtures: "make-folder", "fixtures/HEAD": "remove make-folder" });
@@ -123,7 +129,7 @@ describe.skipIf(CXX === null)("what the guard lets agents do, by the rules it is
     const folders = [guarded("/w", { gitFolders: [".git", ".git/modules/lib", ".git/modules/deep/er", ".git/modules/lib/modules/sub"] })];
     const git = (names: string[], modules: string) => names.map((name) => `.git/modules/${modules}/${name}`);
     const writable = [...git(["index", "refs/heads/main"], "lib"), ...git(["HEAD"], "deep/er"), ...git(["index.lock"], "lib/modules/sub")];
-    const kept = [...git(["config", "hooks/pre-commit"], "lib"), ...git(["config"], "deep/er"), ...git(["hooks"], "lib/modules/sub"), ".git/modules", ".git/modules/lib", ".git/modules/deep", ".git/modules/deep/er", ".git/modules/new", ".git/modules/deep/new", ".git/modules/new/config", ".git/modules/lib/modules/new"];
+    const kept = [...git(["config", "hooks/pre-commit", "objects/info/alternates"], "lib"), ...git(["config", "branches"], "deep/er"), ...git(["hooks", "objects/info/http-alternates"], "lib/modules/sub"), ".git/modules", ".git/modules/lib", ".git/modules/deep", ".git/modules/deep/er", ".git/modules/new", ".git/modules/deep/new", ".git/modules/new/config", ".git/modules/lib/modules/new"];
     expect(await mayBeDone(folders, writable)).toEqual(all(writable, "change move make-file make-folder"));
     expect(await mayBeDone(folders, kept)).toEqual(all(kept, NOTHING));
   });
