@@ -459,6 +459,29 @@ test("your own words beside ticked options, unticked again, stay out of the answ
   expect(await toolResult).toBe('The user chose: "Red"');
 });
 
+test("an option picked stays picked as Tab moves past the field for your own answer on to the note", async ({ page }) => {
+  await signIn(page, host);
+  await page.goto(host.origin);
+  const conversationId = await startConversation(page);
+  const ask = page.locator(".ask");
+  const red = ask.getByRole("radio", { name: "Red", exact: true });
+  const toolResult = callCanvasTool(host, conversationId, "ask", { question: "Which colour?", options: [{ label: "Red" }, { label: "Blue" }] });
+
+  await red.check();
+  await red.focus();
+  await page.keyboard.press("Tab");
+  await expect(ask.getByRole("textbox", { name: "Your own answer" })).toBeFocused();
+  await expect(ask.getByRole("radio", { name: "Something else" }), "moving into the field chooses nothing").not.toBeChecked();
+  await page.keyboard.press("Tab");
+  await expect(ask.getByRole("textbox", { name: /note/i })).toBeFocused();
+  await page.keyboard.type("warm");
+  await expect(red).toBeChecked();
+  await expect(ask.locator(".ask-selection")).toHaveText("Your answer: Red");
+  await ask.getByRole("button", { name: "Submit" }).click();
+
+  expect(await toolResult).toBe("The user chose: Red\nTheir note: warm");
+});
+
 test("of several questions one can take several, whose answer the review page and the history show beside the others'", async ({ page }) => {
   await signIn(page, host);
   await page.goto(host.origin);

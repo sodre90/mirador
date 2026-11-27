@@ -368,6 +368,12 @@ function AskQuestionFields({
   const isChosen = (label: string) => chosenLabels.includes(label);
   const otherChosen = multiple ? draft.otherTicked : draft.choice === SOMETHING_ELSE;
   const toggle = (label: string) => onChange({ ticked: draft.ticked.includes(label) ? draft.ticked.filter((each) => each !== label) : [...draft.ticked, label] });
+  /** Typing in the field chooses Something else, not moving into it, so Tab passes it on to the note without dropping a pick. */
+  const typingOwnWords = (other: string): Partial<AskDraft> => {
+    const typed = other.trim() !== "";
+    if (multiple) return { other, otherTicked: typed };
+    return typed ? { other, choice: SOMETHING_ELSE } : { other };
+  };
   const ownAnswerGiven = waiting ? undefined : given?.own;
 
   return (
@@ -431,8 +437,7 @@ function AskQuestionFields({
                 value={draft.other}
                 placeholder={words.ask.somethingElse}
                 aria-label={words.ask.ownAnswer}
-                onFocus={() => !multiple && onChange({ choice: SOMETHING_ELSE })}
-                onChange={(event) => onChange({ other: event.target.value, ...(multiple && { otherTicked: event.target.value.trim() !== "" }) })}
+                onChange={(event) => onChange(typingOwnWords(event.target.value))}
                 onKeyDown={answerOnEnter}
               />
             </label>
