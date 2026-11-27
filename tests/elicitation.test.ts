@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import type * as acp from "@agentclientprotocol/sdk/unstable";
 import { askFormOnCanvas, askOfElicitation, elicitationContent } from "../host/acp/elicitation.ts";
+import type { AskRequest } from "../host/canvas/service.ts";
 import type { AskItem, CanvasAnswer } from "../shared/model.ts";
 
 const codexQuestion = (id: string, question: string, options: string[]) => ({
@@ -59,6 +60,31 @@ test("a field with no choices asks for the user's own words, and an MCP server's
   expect("questions" in asked.ask && asked.ask.questions).toEqual([
     { question: "Your name", options: [], allowOther: true },
     { question: "Tier", options: [{ label: "free" }, { label: "pro" }] },
+  ]);
+});
+
+test("a form's choices offer Something else on the canvas only with a note field, as a form's own rule says: an MCP server's enum has none", async () => {
+  const requests: AskRequest[] = [];
+  const canvas = {
+    openAsk: (_conversationId: string, request: AskRequest) => {
+      requests.push(request);
+      return { id: "ask-1" } as AskItem;
+    },
+    waitForAnswer: async () => ({ label: "free" }),
+    cancelAsk: () => {},
+  };
+  await askFormOnCanvas(canvas, "c1", form({ tier: { type: "string", title: "Tier", enum: ["free", "pro"] } }), new AbortController().signal);
+  await askFormOnCanvas(canvas, "c1", form(codexQuestion("color", "Pick a color", ["Red", "Blue"])), new AbortController().signal);
+  expect(requests).toEqual([
+    { question: "Tier", options: [{ label: "free" }, { label: "pro" }] },
+    {
+      question: "Pick a color",
+      options: [
+        { label: "Red", description: "Red it is" },
+        { label: "Blue", description: "Blue it is" },
+      ],
+      allowOther: true,
+    },
   ]);
 });
 

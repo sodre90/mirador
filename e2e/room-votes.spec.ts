@@ -45,6 +45,9 @@ const answerSaying = (page: Page, text: string) => roomEntries(page).filter({ ha
 const vote = (page: Page, question: string) => page.getByRole("region", { name: question });
 const option = (page: Page, question: string, label: string) => vote(page, question).locator(".room-vote-option").filter({ has: page.getByRole("button", { name: label, exact: true }) });
 const tagMenu = (page: Page) => page.getByRole("listbox", { name: "Agents and people of the room" });
+/** The write-in box under one of several questions: every agent question offers one, so a title alone doesn't pick it. */
+const writeIn = (page: Page, title: string, question: string) =>
+  vote(page, title).locator(".room-vote-question").filter({ hasText: question }).getByRole("textbox", { name: "Or write another answer…" });
 
 /** Lets the person into the room in the role, from the room's settings. */
 async function letIn(page: Page, room: string, person: string, role: "Member" | "Guest") {
@@ -161,8 +164,9 @@ test("an agent's several questions are each voted on and confirmed together, onl
   await expect(confirm).toHaveText("Confirm");
   await expect(confirm).toBeDisabled();
   await expect(vote(page, title).locator(".room-vote-hint")).toHaveText("Pick an answer to confirm it.");
-  await expect(vote(page, title).getByRole("textbox", { name: "Or write another answer…" })).toHaveCount(1);
-  await vote(page, title).getByRole("textbox", { name: "Or write another answer…" }).fill("Carrots");
+  await expect(writeIn(page, title, "Which bed?")).toHaveCount(1);
+  await expect(writeIn(page, title, "Which seeds?")).toHaveCount(1);
+  await writeIn(page, title, "Which seeds?").fill("Carrots");
   await expect(confirm).toBeDisabled();
   await option(page, title, "North").getByRole("button").click();
   await expect(vote(page, title).getByRole("button", { name: "Confirm: North · Carrots" })).toBeEnabled();
@@ -170,7 +174,7 @@ test("an agent's several questions are each voted on and confirmed together, onl
   await option(gus, title, "North").getByRole("button").click();
   await option(page, title, "South").getByRole("button").click();
   await expect(vote(page, title).getByRole("button", { name: "Confirm: South · Carrots" })).toBeVisible();
-  await vote(page, title).getByRole("textbox", { name: "Or write another answer…" }).press("Enter");
+  await writeIn(page, title, "Which seeds?").press("Enter");
 
   for (const each of [page, gus]) await expect(vote(each, title).locator(".room-vote-status")).toHaveText("Olivia confirmed: South · Carrots");
   await expect.poll(() => readFileSync(builderPrompts(), "utf8")).toContain(['My answers to your questions:', '1. "Which bed?": South', '2. "Which seeds?": Carrots'].join("\n"));

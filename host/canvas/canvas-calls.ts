@@ -5,7 +5,7 @@ import { canvasToolName, USE_TOOL_TOOL } from "./tool-names.ts";
 import type { LoadedSession } from "../conversations.ts";
 import type { Store } from "../store.ts";
 import type { CanvasPlugins } from "./plugins.ts";
-import { severalQuestionsRequest, type AskRequest, type CanvasService, type ShowRequest } from "./service.ts";
+import { canvasQuestion, severalQuestionsRequest, type AskRequest, type CanvasService, type ShowRequest } from "./service.ts";
 
 /** A canvas tool call the agent made, as its session's history has it: what it was given, and what it returned. */
 export interface CanvasCall {
@@ -68,17 +68,16 @@ export async function rebuildCanvas(conversationId: string, events: StoredEvent[
 const showRequestOf = ({ title, html }: Record<string, unknown>): ShowRequest | null =>
   typeof title === "string" && typeof html === "string" ? { title, html } : null;
 
-function askRequestOf({ questions, question, options, html, allowOther, multiple, optionWidth }: Record<string, unknown>): AskRequest | null {
+function askRequestOf({ questions, question, options, html, multiple, optionWidth }: Record<string, unknown>): AskRequest | null {
   if (Array.isArray(questions)) return severalQuestionsRequest(questions as AskQuestion[], typeof html === "string" ? html : undefined);
   if (typeof question !== "string" || !Array.isArray(options)) return null;
-  return {
+  return canvasQuestion({
     question,
     options: options as AskOption[],
     ...(typeof html === "string" && { html }),
-    ...(typeof allowOther === "boolean" && { allowOther }),
     ...(multiple === true && { multiple }),
     ...(typeof optionWidth === "number" && { optionWidth }),
-  };
+  });
 }
 
 interface CallInProgress extends CanvasCall {
