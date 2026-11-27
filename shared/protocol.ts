@@ -512,6 +512,7 @@ export type ClientMessage =
   | { type: "room.let-in"; roomId: string; personId: string }
   /** Turns someone who waits to join the room away: in no room then, they lose their devices here too. */
   | { type: "room.turn-away"; roomId: string; personId: string }
+  | { type: "room.turn-away-all"; roomId: string }
   /** Answers a request a room's own agent, by its profile, waits on; allowing it for the task lets the same again through until the turn ends. */
   | { type: "room.approve"; roomId: string; profileId: string; permissionId: string; answer: RoomApprovalAnswer }
   /** Answers a task of a person other than the owner that waits: allowing sends it to its agents, denying tells the room it was declined. */

@@ -1,7 +1,7 @@
 import { HostProblemError } from "../shared/host-problems.ts";
 import { isPastel, type Device, type Pastel } from "../shared/model.ts";
 import { nameRefused, nameTaken, personName, readsAsMiradorsWords } from "../shared/people.ts";
-import { broughtAgentName, isRoomInviteLetsIn, isRoomInviteLifetime, isRoomInviteSeats, isRoomRole, type RoomInvite, type RoomInviteLetsIn, type RoomInviteLifetime, type RoomInviteSeats, type RoomJoiner, type RoomRole } from "../shared/rooms.ts";
+import { broughtAgentName, higherRoomRole, isRoomInviteLetsIn, isRoomInviteLifetime, isRoomInviteSeats, isRoomRole, type RoomInvite, type RoomInviteLetsIn, type RoomInviteLifetime, type RoomInviteSeats, type RoomJoiner, type RoomRole } from "../shared/rooms.ts";
 import { shownAsWritten } from "../shared/written-text.ts";
 import type { InviteTunnel } from "../shared/tunnel.ts";
 import { inviteKey, newRoomInvite, type DeviceService } from "./devices.ts";
@@ -151,6 +151,16 @@ export class RoomInvites {
     if (!this.store.deleteRoomJoiner(roomId, personId)) throw new HostProblemError({ code: "room-joiner-gone" });
   }
 
+  /** Turns away everyone waiting at the room's door and withdraws its after-OK invites so the link can bring no more knocks. */
+  turnAwayAll(roomId: string): { personIds: string[]; withdrawnCodeKeys: string[] } {
+    return this.store.inOneTransaction(() => {
+      const personIds = this.store.deleteRoomJoinersIn(roomId);
+      const withdrawn = this.store.deleteRoomInvitesInto(roomId, "after-ok");
+      withdrawn.forEach(({ id }) => this.forgetChallengesFor(id));
+      return { personIds, withdrawnCodeKeys: withdrawn.map(({ codeKey }) => codeKey) };
+    });
+  }
+
   /** The withdrawn invite's code as `inviteKey` keeps it, for its one-time key in the tunnel to go too; null when it was gone already. */
   withdraw(inviteId: string): string | null {
     const codeKey = this.store.deleteRoomInvite(inviteId);
@@ -244,7 +254,8 @@ export class RoomInvites {
   private comeIn(invite: RoomInvite, personId: string, { name, color, deviceName }: { name: unknown; color: Pastel | null; deviceName: string }) {
     const existing = this.store.findRoom(invite.roomId)?.people.find((person) => person.personId === personId);
     if (invite.letsIn === "at-once") {
-      this.store.setRoomPersonRole(invite.roomId, personId, invite.role);
+      const role = existing ? higherRoomRole(existing.role, invite.role) : invite.role;
+      this.store.setRoomPersonRole(invite.roomId, personId, role);
       this.namePerson(invite.roomId, personId, name, color);
       return { waiting: false, previousRole: existing?.role ?? null };
     }
@@ -255,15 +266,20 @@ export class RoomInvites {
 
   /**
    * Someone at the room's door as its owner sees them: by the name they presented, as the room would let them take it
-   * now, beside its owner, its people, who wrote there and its agents. They learn nothing of it.
+   * now, beside its owner, its people, who wrote there and its agents; and if their key already belongs to someone
+   * named in another room, that name too. They learn nothing of it.
    */
   private atTheDoor({ presentedName: presented, color: _takenOnceLetIn, ...joiner }: StoredRoomJoiner): RoomJoiner {
     const room = this.store.findRoom(joiner.roomId);
-    return { ...joiner, ...checkedName(presented, room ? namesShownIn(this.store, room, joiner.personId) : []) };
+    const checked = checkedName(presented, room ? namesShownIn(this.store, room, joiner.personId) : []);
+    const existing = this.store.listPeople().find(({ id }) => id === joiner.personId);
+    const knownAs = existing?.name && this.store.roomsOf(joiner.personId).length > 0 && !nameTaken(existing.name, [checked.name]) ? existing.name : undefined;
+    return { ...joiner, ...checked, ...(knownAs && { knownAs }) };
   }
 
   private lastSeatTaken(inviteId: string, code: string, p2p: Pick<PeerToPeer, "inviteUsed"> | null) {
     this.forgetChallengesFor(inviteId);
+    this.store.pruneUnusedPeople();
     p2p?.inviteUsed(code);
   }
 

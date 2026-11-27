@@ -243,6 +243,7 @@ const EVERY_CLIENT_MESSAGE: Record<ClientMessage["type"], true> = {
   "room.set-person-role": true,
   "room.let-in": true,
   "room.turn-away": true,
+  "room.turn-away-all": true,
   "room.remove-person": true,
   "room.invite": true,
   "room.withdraw-invite": true,
@@ -1244,40 +1245,41 @@ describe("a person a room invite lets in, from their own Mirador", () => {
     expect(await refusal(await post("/join", { ...proven, code: next }, elsewhere))).toEqual(unproven);
   });
 
-  test("is the same person when the same key joins with another invite: in both rooms, with two devices", async () => {
+  test("is the same person when the same key joins with another invite: in both rooms, replacing their earlier device", async () => {
     const { code } = await ownerInvites(roomD, "guest");
     const mark = owner.mark;
+    const firstDevice = { token: dora.token, deviceId: dora.deviceId, page: dora.page };
     const second = await joined(await joining(code, doraKey));
-    dorasSecondDevice = { token: second.token, deviceId: second.deviceId, page: second.page };
+    dora = { personId: dora.personId, token: second.token, deviceId: second.deviceId, page: second.page };
+    dorasSecondDevice = { token: firstDevice.token, deviceId: firstDevice.deviceId, page: firstDevice.page };
     expect(second.snapshot.you).toBe(dora.personId);
     const roleIn = (roomId: string) => second.snapshot.rooms.find(({ id }) => id === roomId)?.people;
     expect(second.snapshot.rooms).toHaveLength(2);
     expect(roleIn(roomC.id)).toContainEqual({ personId: dora.personId, role: "member" });
     expect(roleIn(roomD.id)).toContainEqual({ personId: dora.personId, role: "guest" });
+    expect(await firstDevice.page.closed).not.toBe(OUT_OF_ROOMS_CLOSE_CODE);
+    expect((await fetch(`http://127.0.0.1:${port}/ws`, { headers: { Cookie: `${TOKEN_COOKIE}=${firstDevice.token}` } })).status).toBe(401);
     const { devices } = await owner.waitFor(isType("devices.listed", ({ devices }) => devices.some(({ id }) => id === second.deviceId)), mark);
-    expect(devices.filter(({ personId }) => personId === dora.personId).map(({ id }) => id).toSorted()).toEqual([dora.deviceId, second.deviceId].toSorted());
+    expect(devices.filter(({ personId }) => personId === dora.personId).map(({ id }) => id)).toEqual([second.deviceId]);
     const { people } = await owner.waitFor(isType("people.listed"), mark);
     expect(people.filter(({ name }) => name === "Dora")).toHaveLength(1);
   });
 
-  test("loses only the device the owner revokes in Settings, and stays in their rooms with the others", async () => {
-    const { code } = await ownerInvites(roomC, "member");
-    const third = await joined(await joining(code, doraKey));
-    expect(third.snapshot.you).toBe(dora.personId);
+  test("loses the device the owner revokes in Settings, and stays in their rooms once they sign in again", async () => {
     const mark = owner.mark;
-    const doraMark = dora.page.mark;
-    owner.send({ type: "device.revoke", deviceId: third.deviceId });
-    expect(await third.page.closed).not.toBe(OUT_OF_ROOMS_CLOSE_CODE);
-    const { devices } = await owner.waitFor(isType("devices.listed", ({ devices }) => !devices.some(({ id }) => id === third.deviceId)), mark);
-    expect(devices.filter(({ personId }) => personId === dora.personId).map(({ id }) => id).toSorted()).toEqual([dora.deviceId, dorasSecondDevice.deviceId].toSorted());
-    expect((await fetch(`http://127.0.0.1:${port}/ws`, { headers: { Cookie: `${TOKEN_COOKIE}=${third.token}` } })).status).toBe(401);
-    dora.page.send({ type: "ping" });
-    await dora.page.waitFor(isType("pong"), doraMark);
-    expect(dora.page.received.slice(doraMark).some(isType("room.deleted"))).toBe(false);
-    const again = await Page.open(port, dorasSecondDevice.token);
-    const { rooms } = await again.waitFor(isType("snapshot"));
-    again.close();
-    expect(rooms.map(({ id }) => id).toSorted()).toEqual([roomC.id, roomD.id].toSorted());
+    const revokedToken = dora.token;
+    const revokedDeviceId = dora.deviceId;
+    owner.send({ type: "device.revoke", deviceId: revokedDeviceId });
+    expect(await dora.page.closed).not.toBe(OUT_OF_ROOMS_CLOSE_CODE);
+    const { devices } = await owner.waitFor(isType("devices.listed", ({ devices }) => !devices.some(({ id }) => id === revokedDeviceId)), mark);
+    expect(devices.filter(({ personId }) => personId === dora.personId)).toEqual([]);
+    expect((await fetch(`http://127.0.0.1:${port}/ws`, { headers: { Cookie: `${TOKEN_COOKIE}=${revokedToken}` } })).status).toBe(401);
+
+    const { code } = await ownerInvites(roomC, "member");
+    const back = await joined(await joining(code, doraKey));
+    dora = { personId: dora.personId, token: back.token, deviceId: back.deviceId, page: back.page };
+    expect(back.snapshot.you).toBe(dora.personId);
+    expect(back.snapshot.rooms.map(({ id }) => id).toSorted()).toEqual([roomC.id, roomD.id].toSorted());
   });
 
   test("never costs the owner a device when the owner is named for removal from a room", async () => {
@@ -1314,7 +1316,7 @@ describe("a person a room invite lets in, from their own Mirador", () => {
     const mark = owner.mark;
     owner.send({ type: "devices.list" });
     const { devices } = await owner.waitFor(isType("devices.listed"), mark);
-    expect(devices.filter(({ personId }) => personId === dora.personId).map(({ id }) => id).toSorted()).toEqual([dora.deviceId, dorasSecondDevice.deviceId].toSorted());
+    expect(devices.filter(({ personId }) => personId === dora.personId).map(({ id }) => id)).toEqual([dora.deviceId]);
     owner.send({ type: "room.withdraw-invite", inviteId: invite.id });
     await owner.waitFor(isType("room-invites.listed", ({ invites }) => !invites.some(({ id }) => id === invite.id)), mark);
   });
@@ -1374,7 +1376,7 @@ describe("a person a room invite lets in, from their own Mirador", () => {
 
     const ownerMark = owner.mark;
     owner.send({ type: "room.remove-person", roomId: roomC.id, personId: dora.personId });
-    expect(await Promise.all([dora.page.closed, dorasSecondDevice.page.closed])).toEqual([OUT_OF_ROOMS_CLOSE_CODE, OUT_OF_ROOMS_CLOSE_CODE]);
+    expect(await dora.page.closed).toBe(OUT_OF_ROOMS_CLOSE_CODE);
     const { devices } = await owner.waitFor(isType("devices.listed"), ownerMark);
     expect(devices.some(({ personId }) => personId === dora.personId)).toBe(false);
     for (const token of [dora.token, dorasSecondDevice.token]) {

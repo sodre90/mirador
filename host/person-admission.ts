@@ -302,6 +302,7 @@ const admissions: { [K in ClientMessage["type"]]: K extends PersonMessageType ? 
   "room.withdraw-invite": OWNER_ONLY,
   "room.let-in": OWNER_ONLY,
   "room.turn-away": OWNER_ONLY,
+  "room.turn-away-all": OWNER_ONLY,
   /** Only an approver of the room answers what its agents ask; the room's host checks the request still waits. */
   "room.approve": ({ roomId, profileId, permissionId, answer }, person) => {
     if (typeof profileId !== "string" || typeof permissionId !== "string" || !isRoomApprovalAnswer(answer)) throw unreadable();

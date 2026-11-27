@@ -510,11 +510,13 @@ export function startServer(services: HostServices) {
     roomPeopleChanged(roomId);
   }
 
-  /** By the name they presented as the room would let them take it, which leaves out one that reads as Mirador's own words or as one already in the room. */
+  /** By the name they presented as the room would let them take it, with who they are already known as in another room when different. */
   function tellOwnerOfKnock(roomId: string, personId: string) {
     const room = store.findRoom(roomId);
     const joiner = roomInvites.joiner(roomId, personId);
-    if (room && joiner) notifications.roomKnock(room, joiner.name);
+    if (!room || !joiner) return;
+    const shown = joiner.knownAs ? (joiner.name ? `${joiner.name} (${joiner.knownAs})` : joiner.knownAs) : joiner.name;
+    notifications.roomKnock(room, shown);
   }
 
   /** In the room only once `room.upserted` went out, so their Mirador never takes a wait that ended for a refusal. */
@@ -529,6 +531,17 @@ export function startServer(services: HostServices) {
     roomInvites.turnAway(roomId, personId);
     roomJoinersChanged(personId);
     signOutPeopleInNoRoom(store.peopleInNoRoom([personId]));
+    store.pruneUnusedPeople();
+  }
+
+  /** Turns away everyone waiting at the room's door and withdraws its after-OK invites. */
+  function turnAwayAllFromRoom(roomId: string) {
+    const { personIds, withdrawnCodeKeys } = roomInvites.turnAwayAll(roomId);
+    withdrawnCodeKeys.forEach((withdrawn) => p2p?.inviteWithdrawn(withdrawn));
+    roomJoinersChanged(...personIds);
+    sendRoomInvitesToEveryPage();
+    signOutPeopleInNoRoom(store.peopleInNoRoom(personIds));
+    store.pruneUnusedPeople();
   }
 
   /** The owner's pages list who waits to join which room, and the person's own pages learn which rooms they still wait at. */
@@ -2272,6 +2285,8 @@ export function startServer(services: HostServices) {
         return letIntoRoom(message.roomId, message.personId);
       case "room.turn-away":
         return turnAwayFromRoom(message.roomId, message.personId);
+      case "room.turn-away-all":
+        return turnAwayAllFromRoom(message.roomId);
       case "room.approve":
         return rooms.approve(message.roomId, message.profileId, message.permissionId, message.answer, socket.data.personId);
       case "room.answer-task":

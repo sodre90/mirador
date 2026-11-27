@@ -11323,6 +11323,18 @@ button.link.more-rows {
   opacity: 0.45;
 }
 
+.room-joiners-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.room-joiners-head .room-joiners-heading {
+  margin: 0;
+}
+
 .room-joiners-heading {
   margin: 8px 0 0;
   color: var(--muted);

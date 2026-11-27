@@ -322,8 +322,36 @@ describe("a room invite for several people", () => {
     const asMallory = { ...presented(key, code, invites.challenge(code, REACHED, REQUESTER)!), name: "Mallory", color: "rose" };
     expect(invites.redeem(code, "Alice's Mirador", asMallory, REACHED)).toMatchObject({ personId: alice.personId, waiting: true });
     expect(profileOf(store, alice.personId)).toMatchObject({ name: "Alice", color: "mint" });
+    expect(invites.joiner("r2", alice.personId)).toMatchObject({ name: "Mallory", knownAs: "Alice" });
     invites.letIn("r2", alice.personId);
     expect(profileOf(store, alice.personId)).toMatchObject({ name: "Mallory", color: "rose" });
+  });
+
+  test("an at-once invite keeps an existing member's higher role instead of downgrading it, while still promoting a lower role", () => {
+    const { invites, store } = machine();
+    const key = keyPair();
+    const joined = joining(invites, invites.invite("r1", "member", 1, "at-once", "15-minutes").code, key, "Alice");
+    joining(invites, invites.invite("r1", "guest", 1, "at-once", "15-minutes").code, key, "Alice");
+    expect(store.findRoom("r1")?.people).toEqual([{ personId: joined.personId, role: "member" }]);
+    joining(invites, invites.invite("r1", "approver", 1, "at-once", "15-minutes").code, key, "Alice");
+    expect(store.findRoom("r1")?.people).toEqual([{ personId: joined.personId, role: "approver" }]);
+  });
+
+  test("turnAwayAll clears every waiting knocker, withdraws after-OK invites, and prunes turned-away orphan people once their invite ends", () => {
+    const { invites, store } = machine();
+    const afterOk = invites.invite("r1", "member", 5, "after-ok", "15-minutes");
+    const atOnce = invites.invite("r1", "guest", 5, "at-once", "15-minutes");
+    const junk1 = joining(invites, afterOk.code, keyPair(), "Junk1");
+    const junk2 = joining(invites, afterOk.code, keyPair(), "Junk2");
+    const result = invites.turnAwayAll("r1");
+    expect(result.personIds.toSorted()).toEqual([junk1.personId, junk2.personId].toSorted());
+    expect(result.withdrawnCodeKeys).toEqual([inviteKey(afterOk.code)]);
+    expect(invites.joiners()).toEqual([]);
+    expect(invites.waiting().map(({ id }) => id)).toEqual([atOnce.invite.id]);
+    // Revoke their devices as server.ts does, then prune: both throwaway people rows are gone.
+    result.personIds.forEach((personId) => store.listDevices().filter((d) => d.personId === personId).forEach((d) => store.deleteDevice(d.id)));
+    store.pruneUnusedPeople();
+    expect(store.listPeople().map(({ id }) => id)).toEqual([store.ownerId()]);
   });
 
   test("replaces the person's earlier device when the same key joins a second room, revoking its first sign-in", () => {

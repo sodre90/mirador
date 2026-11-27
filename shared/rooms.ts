@@ -69,6 +69,9 @@ export const ROOM_ROLES: RoomRole[] = ["approver", "collaborator", "member", "gu
 
 export const isRoomRole = (value: unknown): value is RoomRole => ROOM_ROLES.includes(value as RoomRole);
 
+/** The more capable of two room roles (approver > collaborator > member > guest). */
+export const higherRoomRole = (one: RoomRole, other: RoomRole): RoomRole => (ROOM_ROLES.indexOf(one) <= ROOM_ROLES.indexOf(other) ? one : other);
+
 /** What a room calls an agent a member brought from their own machine, which speaks for them. */
 export const BROUGHT_AGENT_ROLE = "member's agent";
 
@@ -140,6 +143,8 @@ export interface RoomJoiner {
   name: string;
   /** The name they presented when it reads as one already in the room, which the owner sees marked as the room marks it. */
   nameClash?: string;
+  /** The name this key already goes by in another room of this machine, when they knocked under a different one. */
+  knownAs?: string;
   /** The name of the device they knocked from. */
   deviceName: string;
   since: number;

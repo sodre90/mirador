@@ -40,7 +40,7 @@ import { sidebarIds, sidebarItems } from "../shared/sidebar-order.ts";
 import { DEFAULT_PERMISSION_PRESET, type PermissionPreset } from "../shared/room-permissions.ts";
 import { claudeSetupIn, isVariableName, type ClaudeSetup, type VariablesChosen } from "../shared/room-agent-setup.ts";
 import { NO_SANDBOX, roomSandbox, sandboxSettingIn, workspaceSandbox, type SandboxFolder, type SandboxOwner, type SandboxSetting } from "../shared/sandbox.ts";
-import { writtenByAgent, type BroughtAgent, type BroughtAnswerEnd, type Room, type RoomAgent, type RoomAgentModel, type RoomAnswerEnd, type RoomAuthorRole, type RoomInvite, type RoomJoiner, type RoomMessage, type RoomPerson, type RoomRole, type RoomThread, type TaskHeld } from "../shared/rooms.ts";
+import { writtenByAgent, type BroughtAgent, type BroughtAnswerEnd, type Room, type RoomAgent, type RoomAgentModel, type RoomAnswerEnd, type RoomAuthorRole, type RoomInvite, type RoomInviteLetsIn, type RoomJoiner, type RoomMessage, type RoomPerson, type RoomRole, type RoomThread, type TaskHeld } from "../shared/rooms.ts";
 import type { BroughtAgentHere } from "../shared/brought-agents.ts";
 import { MOST_WORKSPACE_CALLS_KEPT, type RoomWorkspaceAccess, type RoomWorkspaceCall } from "../shared/room-workspace.ts";
 import type { RoomMention } from "../shared/room-mentions.ts";
@@ -1474,7 +1474,7 @@ export class Store {
 
   /** Those with seats left, not withdrawn or expired, soonest to expire first; every expired one goes. */
   waitingRoomInvites(now: number): RoomInvite[] {
-    this.db.query("DELETE FROM room_invites WHERE expires_at <= ?").run(now);
+    if (this.db.query("DELETE FROM room_invites WHERE expires_at <= ?").run(now).changes > 0) this.pruneUnusedPeople();
     return this.db.query(`SELECT ${roomInviteColumns} FROM room_invites ORDER BY expires_at, rowid`).all() as RoomInvite[];
   }
 
@@ -1515,6 +1515,11 @@ export class Store {
     return this.db.query("DELETE FROM room_joiners WHERE room_id = ? AND person_id = ?").run(roomId, personId).changes > 0;
   }
 
+  /** Everyone waiting at the room's door, removed from it and returned by id. */
+  deleteRoomJoinersIn(roomId: string): string[] {
+    return (this.db.query("DELETE FROM room_joiners WHERE room_id = ? RETURNING person_id").all(roomId) as { person_id: string }[]).map(({ person_id }) => person_id);
+  }
+
   /** The rooms the person waits to join, by id. */
   roomsWaitedForBy(personId: string): string[] {
     return (this.db.query("SELECT room_id FROM room_joiners WHERE person_id = ? ORDER BY since, rowid").all(personId) as { room_id: string }[]).map(({ room_id }) => room_id);
@@ -1522,11 +1527,35 @@ export class Store {
 
   /** The deleted invite's code hash; null when there was no such invite. */
   deleteRoomInvite(id: string): string | null {
-    return (this.db.query("DELETE FROM room_invites WHERE id = ? RETURNING code_hash AS codeKey").get(id) as { codeKey: string } | null)?.codeKey ?? null;
+    const codeKey = (this.db.query("DELETE FROM room_invites WHERE id = ? RETURNING code_hash AS codeKey").get(id) as { codeKey: string } | null)?.codeKey ?? null;
+    if (codeKey !== null) this.pruneUnusedPeople();
+    return codeKey;
   }
 
-  deleteRoomInvitesInto(roomId: string): { id: string; codeKey: string }[] {
-    return this.db.query("DELETE FROM room_invites WHERE room_id = ? RETURNING id, code_hash AS codeKey").all(roomId) as { id: string; codeKey: string }[];
+  deleteRoomInvitesInto(roomId: string, letsIn?: RoomInviteLetsIn): { id: string; codeKey: string }[] {
+    const deleted = (
+      letsIn
+        ? this.db.query("DELETE FROM room_invites WHERE room_id = ? AND lets_in = ? RETURNING id, code_hash AS codeKey").all(roomId, letsIn)
+        : this.db.query("DELETE FROM room_invites WHERE room_id = ? RETURNING id, code_hash AS codeKey").all(roomId)
+    ) as { id: string; codeKey: string }[];
+    if (deleted.length > 0) this.pruneUnusedPeople();
+    return deleted;
+  }
+
+  /** Removes non-owner people left behind by turned-away knocks once no room, door, active invite seat, device, agent or message refers to them. */
+  pruneUnusedPeople() {
+    this.db
+      .query(
+        `DELETE FROM people
+         WHERE id != ?
+           AND id NOT IN (SELECT person_id FROM room_people)
+           AND id NOT IN (SELECT person_id FROM room_joiners)
+           AND id NOT IN (SELECT person_id FROM room_invite_uses)
+           AND id NOT IN (SELECT person_id FROM devices WHERE person_id IS NOT NULL)
+           AND id NOT IN (SELECT person_id FROM room_messages WHERE person_id IS NOT NULL)
+           AND id NOT IN (SELECT brought_by FROM room_agents WHERE brought_by IS NOT NULL)`,
+      )
+      .run(this.ownerId());
   }
 
   renameRoom(id: string, name: string) {

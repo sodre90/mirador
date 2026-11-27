@@ -26,3 +26,12 @@ test("the door list shows someone whose name reads as one already in the room wi
   expect(textsOf(markup, "room-joiner-name")).toEqual(["Someone without a name"]);
   expect(textsOf(markup, "room-person-name-clash")).toEqual(["Gave the name “Alice”, which reads as a name already in the room."]);
 });
+
+test("the door list tells the owner when a knocker is already known under another name in another room, and offers Turn away all when several wait", () => {
+  const markup = doorList([
+    { ...joiner, name: "Mallory", knownAs: "Alice" },
+    { ...joiner, personId: "p2", name: "Bob" },
+  ]);
+  expect(textsOf(markup, "room-joiner-known-as")).toEqual(["Known in another room as “Alice”."]);
+  expect(markup).toContain("Turn away all and withdraw");
+});

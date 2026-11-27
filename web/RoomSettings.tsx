@@ -57,7 +57,7 @@ function waitingInviteText({ role, seats, taken, expiresAt }: RoomInvite) {
  * line of its own the name of the device they came on, which they chose themselves, and a name of theirs that reads as
  * one already in the room marked as the room marks it.
  */
-export function JoinerAtTheDoor({ joiner: { roomId, personId, role, name, nameClash, deviceName } }: { joiner: RoomJoiner }) {
+export function JoinerAtTheDoor({ joiner: { roomId, personId, role, name, nameClash, knownAs, deviceName } }: { joiner: RoomJoiner }) {
   const shownName = name || words.nameless;
   return (
     <li>
@@ -67,6 +67,7 @@ export function JoinerAtTheDoor({ joiner: { roomId, personId, role, name, nameCl
           <span className="room-role-label room-joiner-role">{words.roles[role]}</span>
         </div>
         <div className="room-joiner-device">{words.cameFromDevice(deviceName)}</div>
+        {knownAs && <div className="hint room-joiner-known-as">{words.knownInAnotherRoomAs(knownAs)}</div>}
         {nameClash && <div className="hint room-person-name-clash">{words.gaveNameInRoom(nameClash)}</div>}
       </div>
       <div className="room-joiner-actions">
@@ -90,9 +91,23 @@ export function JoinerAtTheDoor({ joiner: { roomId, personId, role, name, nameCl
 /** The people an invite took to the room's door, each to let in or turn away. */
 export function WaitingToJoin({ joiners }: { joiners: RoomJoiner[] }) {
   if (joiners.length === 0) return null;
+  const roomId = joiners[0]!.roomId;
   return (
     <>
-      <h3 className="room-joiners-heading">{words.waitingToJoin}</h3>
+      <div className="room-joiners-head">
+        <h3 className="room-joiners-heading">{words.waitingToJoin}</h3>
+        {joiners.length >= 2 && (
+          <ConfirmButton
+            className="link danger"
+            label={words.turnAwayAll}
+            armedText={words.turnAwayAllArmed}
+            armedHint={words.turnAwayAllArmedHint}
+            onConfirm={() => connection.send({ type: "room.turn-away-all", roomId })}
+          >
+            {words.turnAwayAll}
+          </ConfirmButton>
+        )}
+      </div>
       <ul className="room-joiners" aria-label={words.waitingToJoin}>
         {joiners.map((joiner) => (
           <JoinerAtTheDoor key={joiner.personId} joiner={joiner} />
