@@ -1618,7 +1618,7 @@ ${PAGE_FIND_SCRIPT}
     const url = new URL(link.href);
     if (withinThePage(url) && url.hash) return;
     event.preventDefault();
-    if (toAnotherSite(url)) post({ kind: "open-link", href: url.href });
+    if (event.isTrusted && toAnotherSite(url)) post({ kind: "open-link", href: url.href });
   });
   const messageOf = (error) => String((error && error.message) || error);
 ${DIAGRAM_ERRORS_SCRIPT}

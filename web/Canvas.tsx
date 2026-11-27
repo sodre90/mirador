@@ -90,6 +90,10 @@ const openable = (href: unknown): href is string => typeof href === "string" && 
 /** A web link goes the way the app's own do, so the desktop app hands it to the browser rather than dropping it. */
 const openFromPage = (href: string) => (/^mailto:/i.test(href) ? window.open(href, "_blank", "noopener,noreferrer") : openWebAddress(href));
 
+/** A canvas frame may open a link only while it is visible, focused, and right after a real user gesture there. */
+const frameMayOpenLink = (iframe: HTMLIFrameElement | null, visible: boolean) =>
+  visible && iframe !== null && iframe === document.activeElement && navigator.userActivation?.isActive === true;
+
 /** Whether the canvas is in sight, or kept live behind another conversation's canvas. */
 export const CanvasShown = createContext(true);
 
@@ -161,6 +165,9 @@ export function CanvasFrame({
       }),
     [html, frameId, assetsOrigin, padded, imagesFromOtherSites, markable, panelFinds, measuresNaturalWidth, followsTextSize, fitsContent],
   );
+  const shown = useContext(CanvasShown);
+  const shownRef = useRef(shown);
+  shownRef.current = shown;
   const onRenderedRef = useRef(onRendered);
   onRenderedRef.current = onRendered;
   const onContentWidthRef = useRef(onContentWidth);
@@ -197,7 +204,7 @@ export function CanvasFrame({
       }
       if (message.kind === "wheel") scrollPanelBy(frame.current, message);
       if (message.kind === "mouse-step" && frame.current && isStep(message.step)) stepPressedOn(frame.current, message.step);
-      if (message.kind === "open-link" && openable(message.href)) openFromPage(message.href);
+      if (message.kind === "open-link" && openable(message.href) && frameMayOpenLink(frame.current, shownRef.current)) openFromPage(message.href);
       onMessageRef.current?.(message);
     };
     window.addEventListener("message", listener);
@@ -219,7 +226,6 @@ export function CanvasFrame({
     postTextScaleTo(frame, zoom);
   }, [zoom]);
 
-  const shown = useContext(CanvasShown);
   useEffect(() => {
     if (!shown) frame.current?.contentWindow?.postMessage(canvasHiddenMessage(), "*");
   }, [shown]);

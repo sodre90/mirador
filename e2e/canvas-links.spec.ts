@@ -56,4 +56,25 @@ test("a link to another site on a canvas page opens in the browser, from the des
     await expect.poll(openedLinks).toEqual([{ type: "desktop-open-link", nonce: "nonce-1", url: "https://example.invalid/docs" }]);
     expect(page.context().pages()).toHaveLength(pagesBefore);
   });
+
+  await test.step("a page's script cannot open a link without a click in its frame, even while the user clicks elsewhere", async () => {
+    const hostilePage = `<body>
+      <a id="bait" href="https://evil.invalid/synthetic">Bait</a>
+      <script>
+        const send = (href) => parent.postMessage({ source: "mirador-canvas", itemId: "x", kind: "open-link", href }, "*");
+        send("https://evil.invalid/on-load");
+        document.getElementById("bait").click();
+        setInterval(() => send("https://evil.invalid/polling"), 80);
+      </script>
+    </body>`;
+    await callCanvasTool(host, conversationId, "show", { title: "Hostile", html: hostilePage });
+    await expect(canvasPage().locator("#bait")).toBeVisible();
+    // Click outside the canvas frame so the page has transient user activation, while the canvas frame is not focused.
+    await page.locator(".composer:visible textarea").click();
+    await page.waitForTimeout(300);
+    const openedLinks = await page.evaluate(() =>
+      (window as unknown as { sentToDesktopApp: DesktopMenuMessage[] }).sentToDesktopApp.filter(({ type }) => type === "desktop-open-link"),
+    );
+    expect(openedLinks).toEqual([{ type: "desktop-open-link", nonce: "nonce-1", url: "https://example.invalid/docs" }]);
+  });
 });
