@@ -33,7 +33,12 @@ export const rooms: Messages["rooms"] = {
   asItsProfile: "Como su perfil",
   modelFromNextSession: "Este agente cambia de modelo desde su próxima sesión.",
   moreOptions: "Más opciones",
-  tabs: { general: "General", people: "Personas", agents: "Agentes", permissions: "Permisos", usage: "Uso" },
+  tabs: { general: "General", people: "Personas", agents: "Agentes", plugins: "Plugins", permissions: "Permisos", usage: "Uso" },
+  plugins: "Plugins",
+  pluginsHint:
+    "Los plugins que actives aquí estarán disponibles para los agentes de la sala y sus elementos del lienzo se compartirán con todos en la sala. Miembros, colaboradores y aprobadores pueden interactuar con ellos; los invitados solo ven, y abrir archivos en tu editor sigue siendo solo tuyo.",
+  noPluginsInstalled: "No hay plugins de lienzo instalados en esta máquina.",
+  usePluginInRoom: (plugin) => `Usar en esta sala: ${plugin}`,
   whatDoesThisMean: "¿Qué significa esto?",
   whatDoesItMean: (setting: string) => `¿Qué significa «${setting}»?`,
   done: "Listo",

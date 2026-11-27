@@ -220,10 +220,15 @@ function buildCanvasServer(conversationId: string, parts: CanvasServerParts, cut
   const askWaitLimitMs = harness === "antigravity" ? antigravityAskWaitMs : null;
   const reviewFree = reviewFreeFor(harness);
   const { roomId, worksInRoomsWorkspace } = store?.findConversation(conversationId) ?? {};
+  const inHostRoom = typeof roomId === "string";
   const showAndAskAlone = worksForARoomHere(store, conversationId) || from === "sandbox" || runsInASandboxHere(store, conversationId);
   const plugins = canvasPlugins?.guidanceFor(conversationId) ?? NO_CANVAS_PLUGINS;
   const pluginsHere = getsPluginLinesInSystemPrompt(harness) ? withoutPluginLines(plugins) : plugins;
-  const instructions = showAndAskAlone ? canvasInstructions(assetsOrigin) : canvasServerInstructions(harness, store?.canvasUse() ?? "often", assetsOrigin, withAppTools(pluginsHere, apps, catalog));
+  const instructions = inHostRoom
+    ? canvasInstructions(assetsOrigin, pluginsHere)
+    : showAndAskAlone
+      ? canvasInstructions(assetsOrigin)
+      : canvasServerInstructions(harness, store?.canvasUse() ?? "often", assetsOrigin, withAppTools(pluginsHere, apps, catalog));
   cutInstructionsWarning.check(harness, instructions);
   const server = new McpServer({ name: CANVAS_SERVER_NAME, version: MIRADOR_VERSION }, { instructions });
 
@@ -302,7 +307,8 @@ function buildCanvasServer(conversationId: string, parts: CanvasServerParts, cut
   );
 
   if (showAndAskAlone) {
-    if (roomId && rooms) registerRoomTools(server, rooms, callingConversation, { _meta: loadedUpFront, ...reviewFree });
+    if (inHostRoom && rooms) registerRoomTools(server, rooms, callingConversation, { _meta: loadedUpFront, ...reviewFree });
+    if (inHostRoom) canvasPlugins?.registerTools(server, conversationId, callingConversation, reviewFree);
     if (worksInRoomsWorkspace && roomsWorkspaces && from === "this-computer") registerRoomWorkspaceTools(server, roomsWorkspaces, callingConversation, { _meta: loadedUpFront });
     return server;
   }
@@ -393,6 +399,15 @@ export class CanvasMcpEndpoints {
   toolsChangedForProfile(profileId: string) {
     for (const [conversationId, handler] of this.handlers["this-computer"]) {
       if (this.parts.store?.findConversation(conversationId)?.profileId === profileId) handler.notify.toolsChanged();
+    }
+  }
+
+  /** The room's conversations list their tools again, on this computer and in its sandbox, once its enabled plugins change. */
+  toolsChangedForRoom(roomId: string) {
+    for (const handlers of Object.values(this.handlers)) {
+      for (const [conversationId, handler] of handlers) {
+        if (this.parts.store?.findConversation(conversationId)?.roomId === roomId) handler.notify.toolsChanged();
+      }
     }
   }
 

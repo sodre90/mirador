@@ -32,7 +32,8 @@ import {
 import { parseReminderTime } from "../../shared/reminders.ts";
 import type { PluginCommand } from "../../shared/slash-commands.ts";
 import { argumentsHint, commandInput } from "../../shared/command-arguments.ts";
-import { worksForARoom, type Conversation, type PluginCanvasItem, type PluginContextHint, type PluginStatuslineChips, type Profile, type StartedBy } from "../../shared/model.ts";
+import { worksForARoom, type Conversation, type MadeInRoom, type PluginCanvasItem, type PluginContextHint, type PluginStatuslineChips, type Profile, type StartedBy } from "../../shared/model.ts";
+import { roomMessageAnswered } from "../../shared/rooms.ts";
 import type { ProfileDraft, ServerMessage } from "../../shared/protocol.ts";
 import { conversationSettingValue, type ConversationPlugin, isChoiceSetting, pluginsOffFor, isTextSetting, modelSettingsOf, PROFILE_ID_PLUGIN_API, profileSettingValue, readTextSetting, type PluginProfileSetting } from "../../shared/apps.ts";
 import { profileEnvironment } from "../acp/harnesses.ts";
@@ -89,6 +90,16 @@ const WINDOW_STATE_SETTLES_MS = 100;
 
 /** `fromPlugin`: the title of the plugin that sends it on its own, rather than for the user from its view. */
 export type SendPrompt = (conversationId: string, text: string, options: { afterTurn: boolean; fromPlugin?: string }) => Promise<void>;
+
+/** Routes a prompt triggered by a user's action in a room plugin view through the room timeline and its role/task rules. */
+export type SendRoomPrompt = (roomId: string, personId: string, profileId: string, answeringMessageId: string | undefined, text: string) => void | Promise<void>;
+
+/** Who triggered an action in a plugin item's view, so room-scoped rules (editor, approvals, room prompts) hold. */
+export interface PluginActionActor {
+  personId: string;
+  isOwner: boolean;
+  mayApprove: boolean;
+}
 
 /** `worktree`: "own" starts it in a git worktree of its own, rather than where the caller works; `{ from }` starts its branch at the commit it names. */
 export type StartBeside = (callerId: string, plugin: string, profileName: string, prompt: string, title?: string, choices?: ConversationChoices, worktree?: ConversationStart["worktree"]) => StartedConversation | Promise<StartedConversation>;
@@ -151,6 +162,10 @@ export class CanvasPlugins {
     throw new Error("Mirador can't send messages yet.");
   };
 
+  private sendRoomPrompt: SendRoomPrompt = async () => {
+    throw new Error("Mirador can't send room messages yet.");
+  };
+
   private startBeside: StartBeside = () => {
     throw new Error("Mirador can't start conversations yet.");
   };
@@ -196,6 +211,10 @@ export class CanvasPlugins {
   /** Conversations come after the plugins, whose guidance they take. */
   sendsPromptsWith(send: SendPrompt) {
     this.sendPrompt = send;
+  }
+
+  sendsRoomPromptsWith(send: SendRoomPrompt) {
+    this.sendRoomPrompt = send;
   }
 
   startsConversationsWith(start: StartBeside) {
@@ -268,8 +287,8 @@ export class CanvasPlugins {
   }
 
   /** Each plugin waiting to be loaded is told by its summary, and its use-often line says to load it first; the others by their instructions. */
-  private guidanceOf(plugins: CanvasPlugin[], waitsToBeLoaded: (plugin: CanvasPlugin) => boolean): CanvasPluginGuidance {
-    const offered = this.catalog?.notInstalled() ?? [];
+  private guidanceOf(plugins: CanvasPlugin[], waitsToBeLoaded: (plugin: CanvasPlugin) => boolean, { offerInstall = true } = {}): CanvasPluginGuidance {
+    const offered = offerInstall ? (this.catalog?.notInstalled() ?? []) : [];
     const loaded = plugins.filter((plugin) => !waitsToBeLoaded(plugin));
     const waiting = plugins.filter(waitsToBeLoaded);
     const useToolNames = this.useToolToolsOf(plugins).map(({ name }) => name);
@@ -312,11 +331,16 @@ export class CanvasPlugins {
     );
   }
 
-  /** The plugins a conversation gets: all but those its profile goes without, and none for a room. */
+  /** The plugins a conversation gets: all but those its profile goes without; in a room, only those the room opted in to (and not turned off on the profile). */
   private pluginsOf(conversationId: string): CanvasPlugin[] {
     const conversation = this.store.findConversation(conversationId);
-    if (conversation && worksForARoom(conversation)) return [];
     const turnedOff = this.pluginsOffFor(conversation?.profileId ? this.store.findProfile(conversation.profileId) : undefined);
+    if (conversation && worksForARoom(conversation)) {
+      if (!conversation.roomId) return [];
+      const room = this.store.findRoom(conversation.roomId);
+      if (!room || room.plugins.length === 0) return [];
+      return this.plugins.filter(({ manifest }) => room.plugins.includes(manifest.name) && !turnedOff.includes(manifest.name));
+    }
     return this.plugins.filter(({ manifest }) => !turnedOff.includes(manifest.name));
   }
 
@@ -327,10 +351,15 @@ export class CanvasPlugins {
       .map(({ manifest, host }) => ({ plugin: manifest.name, title: manifest.title, tools: Object.keys(host.tools) }));
   }
 
-  /** The guidance of the plugins the conversation's profile has on, with what each adds for that profile, which a conversation a plugin's tool started doesn't get. */
+  /** The guidance of the plugins the conversation's profile has on, with what each adds for that profile, which a conversation a plugin's tool started doesn't get. Rooms never offer plugin_install. */
   guidanceFor(conversationId: string): CanvasPluginGuidance {
     const conversation = this.store.findConversation(conversationId);
-    if (conversation && worksForARoom(conversation)) return NO_CANVAS_PLUGINS;
+    if (conversation && worksForARoom(conversation)) {
+      if (!conversation.roomId) return NO_CANVAS_PLUGINS;
+      const plugins = this.pluginsOf(conversationId);
+      if (plugins.length === 0) return NO_CANVAS_PLUGINS;
+      return this.guidanceOf(plugins, (plugin) => this.waitsToBeLoaded(plugin, conversation), { offerInstall: false });
+    }
     const plugins = this.pluginsOf(conversationId);
     const guidance = this.guidanceOf(plugins, (plugin) => this.waitsToBeLoaded(plugin, conversation));
     if (conversation?.startedBy) return this.withOfferedPlugins(guidance);
@@ -828,12 +857,12 @@ export class CanvasPlugins {
   }
 
   /** The user's action in an item's view, for the item's plugin to handle; resolves to the plugin's reply. */
-  async act(itemId: string, action: unknown): Promise<unknown> {
+  async act(itemId: string, action: unknown, actor: PluginActionActor = { personId: this.store.ownerId(), isOwner: true, mayApprove: true }): Promise<unknown> {
     const item = this.pluginItem(itemId);
     const plugin = this.plugins.find(({ manifest }) => manifest.name === item.plugin);
     if (!plugin) throw new HostProblemError({ code: "item-plugin-not-installed", plugin: item.plugin });
     if (!plugin.host.action) throw new HostProblemError({ code: "plugin-takes-no-actions", plugin: plugin.manifest.title });
-    return (await plugin.host.action(pluginItemOf(item), action, this.actionContext(plugin, item.conversationId))) ?? null;
+    return (await plugin.host.action(pluginItemOf(item), action, this.actionContext(plugin, item.conversationId, actor, item))) ?? null;
   }
 
   /** The user takes an item out of the tab; only a new item brings one back. */
@@ -938,21 +967,50 @@ export class CanvasPlugins {
     ].join("\n\n");
   }
 
-  private actionContext(plugin: CanvasPlugin, conversationId: string): CanvasActionContext {
+  private actionContext(
+    plugin: CanvasPlugin,
+    conversationId: string,
+    actor: PluginActionActor = { personId: this.store.ownerId(), isOwner: true, mayApprove: true },
+    item?: PluginCanvasItem,
+  ): CanvasActionContext {
+    const conversation = this.store.findConversation(conversationId);
+    const inRoom = conversation?.roomId !== undefined;
+    const assertApproverInRoom = () => {
+      if (inRoom && !actor.isOwner && !actor.mayApprove) {
+        throw new Error("Only the room's owner or an approver can manage conversations started by a plugin.");
+      }
+    };
     return {
       ...this.context(plugin, conversationId, { byAgent: false }),
       prompt: async (text, { afterTurn = false } = {}) => {
         this.recordLoaded(plugin, conversationId);
+        if (conversation?.roomId && conversation.profileId) {
+          await this.sendRoomPrompt(conversation.roomId, actor.personId, conversation.profileId, item?.madeInRoom?.answering, text);
+          return;
+        }
         return this.sendPrompt(conversationId, text, { afterTurn });
       },
       openInEditor: (file, line) => {
+        if (inRoom && !actor.isOwner) throw new Error("Only the room's owner can open files in their editor.");
         if (!isAbsolute(file) || !Number.isInteger(line) || line < 1) throw new Error(`${file}:${line} is not an absolute path and a line in it.`);
         launchEditor(this.store.editorSetting(), file, line);
       },
-      stopConversation: (startedConversationId) => this.stopStarted(conversationId, plugin.manifest.name, startedConversationId),
-      deleteStarted: (startedConversationId) => this.deleteStarted(conversationId, plugin.manifest.name, startedConversationId),
-      startConversation: this.startsConversationsFrom(plugin, conversationId),
-      promptStarted: (startedId, text) => this.promptStarted(conversationId, plugin.manifest.name, plugin.manifest.title, startedId, text),
+      stopConversation: (startedConversationId) => {
+        assertApproverInRoom();
+        return this.stopStarted(conversationId, plugin.manifest.name, startedConversationId);
+      },
+      deleteStarted: (startedConversationId) => {
+        assertApproverInRoom();
+        return this.deleteStarted(conversationId, plugin.manifest.name, startedConversationId);
+      },
+      startConversation: (start) => {
+        assertApproverInRoom();
+        return this.startsConversationsFrom(plugin, conversationId)(start);
+      },
+      promptStarted: (startedId, text) => {
+        assertApproverInRoom();
+        return this.promptStarted(conversationId, plugin.manifest.name, plugin.manifest.title, startedId, text);
+      },
     };
   }
 
@@ -1022,6 +1080,13 @@ export class CanvasPlugins {
     }
   }
 
+  private madeInRoom(conversationId: string): { madeInRoom?: MadeInRoom } {
+    const roomId = this.store.findConversation(conversationId)?.roomId;
+    const turn = roomId ? roomMessageAnswered(this.store.listEventsOfTypes(conversationId, ["user-message"])) : undefined;
+    if (!roomId || !turn) return {};
+    return { madeInRoom: { answering: turn.answering, afterSeq: this.store.lastRoomSeq(roomId) } };
+  }
+
   private publish(plugin: CanvasPlugin, conversationId: string, type: string, title: string, data: unknown) {
     const itemType = plugin.host.items[type];
     if (!itemType) throw new Error(`${plugin.manifest.name} has no kind of item named ${type}; it has ${Object.keys(plugin.host.items).join(", ")}.`);
@@ -1039,6 +1104,7 @@ export class CanvasPlugins {
       ...shownOf(itemType, data),
       status: "shown",
       createdAt: Date.now(),
+      ...this.madeInRoom(conversationId),
     });
   }
 
@@ -1070,6 +1136,8 @@ export class CanvasPlugins {
     const item = { ...change, updatedAt: Date.now() };
     this.store.saveCanvasItem(item);
     this.hub.publishToConversation(item.conversationId, { type: "canvas.upserted", item });
+    const roomId = this.store.findConversation(item.conversationId)?.roomId;
+    if (roomId) this.hub.publishToRoom(roomId, { type: "canvas.upserted", item });
     return item;
   }
 }

@@ -62,6 +62,7 @@ import {
   ROOM_MESSAGE_MOST_CHARACTERS,
   roomHistory,
   roomMessageLength,
+  roomPluginsIn,
   shownOnRoomCanvas,
   taskOf,
   taskWaits,
@@ -264,6 +265,7 @@ export class RoomService implements RoomRules, TurnListener {
   private postListener: PostListener = () => {};
   private waitingListener: WaitingListener = () => {};
   private broughtQuestionListener: RoomQuestionListener = () => {};
+  private pluginsChangedListener: (roomId: string) => void = () => {};
   private readonly pendingBroughtAskAnswers = new Map<string, { personId: string; roomId: string; agentId: string; itemId: string; answer: BroughtAskAnswer }>();
   private sandboxes = NO_SANDBOX_CONTROL;
   private readonly workspaceCalls: RoomWorkspaceCalls;
@@ -329,6 +331,11 @@ export class RoomService implements RoomRules, TurnListener {
     this.broughtQuestionListener = listener;
   }
 
+  /** Told each time a room's enabled Mirador plugins change. */
+  hearPluginsChangedWith(listener: (roomId: string) => void) {
+    this.pluginsChangedListener = listener;
+  }
+
   /** A person an invite just let into the room: pages hear of them as of one the owner let in, cleaning up if an existing member's role was lowered. */
   personCameIn(roomId: string, personId?: string, previousRole?: RoomRole | null) {
     const room = this.store.findRoom(roomId);
@@ -357,6 +364,7 @@ export class RoomService implements RoomRules, TurnListener {
       agentsReadGuests: true,
       membersBringAgents: true,
       sandbox: NO_SANDBOX,
+      plugins: [],
       createdAt: Date.now(),
     };
     this.store.insertRoom(room);
@@ -438,6 +446,30 @@ export class RoomService implements RoomRules, TurnListener {
     this.publish(roomId);
     const stopsTurn = narrowsClaudeSetup(room.claudeSetup, chosen);
     room.agents.filter(({ profileId }) => this.store.findProfile(profileId)?.harness === "claude").forEach((agent) => this.startAfresh(agent, stopsTurn));
+  }
+
+  /**
+   * The Mirador plugins enabled for the room; host agents already working there start afresh so their tools and
+   * instructions follow, stopping a turn under way when a plugin is turned off.
+   */
+  setPlugins(roomId: string, plugins: string[]) {
+    const room = this.existingRoom(roomId);
+    const chosen = roomPluginsIn(plugins);
+    if (chosen.length === room.plugins.length && chosen.every((name, index) => name === room.plugins[index])) return;
+    const stopsTurn = room.plugins.some((name) => !chosen.includes(name));
+    this.store.setRoomPlugins(roomId, chosen);
+    this.publish(roomId);
+    this.pluginsChangedListener(roomId);
+    room.agents.filter(({ brought }) => !brought).forEach((agent) => this.startAfresh(agent, stopsTurn));
+  }
+
+  /** Posts a prompt triggered by a user's action in a room plugin view through the room timeline and its role/task rules. */
+  writeFromPlugin(roomId: string, personId: string, profileId: string, answeringMessageId: string | undefined, text: string) {
+    const thread = answeringMessageId
+      ? this.store.listRoomThreads(roomId).find((each) => each.messageId === answeringMessageId && each.profileId === profileId)
+      : undefined;
+    if (thread) return this.write(roomId, personId, text, [], thread.id);
+    return this.write(roomId, personId, text, [profileId], null);
   }
 
   /**

@@ -47,7 +47,8 @@ import { AppFileRefused, type AppDocuments } from "./apps/documents.ts";
 import { WorkspaceGitRefused } from "./apps/workspace-git.ts";
 import { workspaceIcon } from "./workspace-icons.ts";
 import { shownProblemOf, type InstalledPlugins } from "./apps/installed-plugins.ts";
-import type { CanvasPlugins } from "./canvas/plugins.ts";
+import type { CanvasPlugins, PluginActionActor } from "./canvas/plugins.ts";
+import { approvesIn } from "../shared/rooms.ts";
 import { AppStorage } from "./apps/storage.ts";
 import { AppProblem, messageOf } from "./apps/plugins.ts";
 import { appKey, isPluginUpdateMode, type PluginLook, type PluginUpdate, type PluginUpdateMode, type RevokedPlugin } from "../shared/apps.ts";
@@ -292,7 +293,7 @@ export function startServer(services: HostServices) {
   } = services;
   const appStorage = new AppStorage(store, (name) => apps.installed().some((app) => app.name === name));
   conversations.deletesWithAllItHoldsBy(deleteConversation);
-  hub.showsPeople(personView(store));
+  hub.showsPeople(personView(store, () => canvasPlugins.viewPaths()));
   const roomInvites = new RoomInvites(store, devices, ownerKey.publicKey);
   const roomPresence = new RoomPresenceService(store, hub);
   rooms.hearPeopleOutOfEveryRoomWith(signOutPeopleInNoRoom);
@@ -385,6 +386,12 @@ export function startServer(services: HostServices) {
   const personInRooms = (personId: string): PersonInRooms => ({
     roleIn: (roomId) => store.findRoom(roomId)?.people.find((person) => person.personId === personId)?.role ?? null,
     conversationBehind: (standIn) => conversationBehindStandIn(store, personId, standIn),
+    roomOfCanvasItem: (itemId) => {
+      const item = store.findCanvasItem(itemId);
+      if (!item || item.kind !== "plugin") return null;
+      const roomId = store.findConversation(item.conversationId)?.roomId;
+      return typeof roomId === "string" ? roomId : null;
+    },
   });
 
   function authenticate(request: Request) {
@@ -1954,11 +1961,19 @@ export function startServer(services: HostServices) {
         return message.askPage
           ? canvas.reportAskPage(message.itemId, message.askPage, { errors: message.errors })
           : canvas.reportRender(message.itemId, { errors: message.errors });
-      case "canvas.item-action":
-        return void canvasPlugins.act(message.itemId, message.action).then(
+      case "canvas.item-action": {
+        const actorOf = (): PluginActionActor => {
+          if (socket.data.isOwner) return { personId: socket.data.personId, isOwner: true, mayApprove: true };
+          const item = store.findCanvasItem(message.itemId);
+          const roomId = item ? store.findConversation(item.conversationId)?.roomId : undefined;
+          const room = roomId ? store.findRoom(roomId) : undefined;
+          return { personId: socket.data.personId, isOwner: false, mayApprove: room !== undefined && approvesIn(room, socket.data.personId) };
+        };
+        return void canvasPlugins.act(message.itemId, message.action, actorOf()).then(
           (answer) => reply({ type: "canvas.item-acted", requestId: message.requestId, reply: answer, problem: null }),
           (error) => reply({ type: "canvas.item-acted", requestId: message.requestId, reply: null, ...problemFieldsOf(error, messageOf(error)) }),
         );
+      }
       case "canvas.run-command":
         return void canvasPlugins.runCommand(message.conversationId, message.command, message.arguments).then(
           (answer) => reply({ type: "canvas.command-ran", requestId: message.requestId, reply: answer, problem: null }),
@@ -2296,6 +2311,8 @@ export function startServer(services: HostServices) {
         return rooms.setPeoplesTasksWait(message.roomId, message.wait);
       case "room.set-claude-setup":
         return rooms.setClaudeSetup(message.roomId, message.setup);
+      case "room.set-plugins":
+        return rooms.setPlugins(message.roomId, message.plugins);
       case "room.set-sandbox":
         return rooms.setSandbox(message.roomId, message.sandbox);
       case "room.check-sandbox":

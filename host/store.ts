@@ -40,7 +40,7 @@ import { sidebarIds, sidebarItems } from "../shared/sidebar-order.ts";
 import { DEFAULT_PERMISSION_PRESET, type PermissionPreset } from "../shared/room-permissions.ts";
 import { claudeSetupIn, isVariableName, type ClaudeSetup, type VariablesChosen } from "../shared/room-agent-setup.ts";
 import { NO_SANDBOX, roomSandbox, sandboxSettingIn, workspaceSandbox, type SandboxFolder, type SandboxOwner, type SandboxSetting } from "../shared/sandbox.ts";
-import { writtenByAgent, type BroughtAgent, type BroughtAnswerEnd, type Room, type RoomAgent, type RoomAgentModel, type RoomAnswerEnd, type RoomAuthorRole, type RoomInvite, type RoomInviteLetsIn, type RoomJoiner, type RoomMessage, type RoomPerson, type RoomRole, type RoomThread, type TaskHeld } from "../shared/rooms.ts";
+import { roomPluginsIn, writtenByAgent, type BroughtAgent, type BroughtAnswerEnd, type Room, type RoomAgent, type RoomAgentModel, type RoomAnswerEnd, type RoomAuthorRole, type RoomInvite, type RoomInviteLetsIn, type RoomJoiner, type RoomMessage, type RoomPerson, type RoomRole, type RoomThread, type TaskHeld } from "../shared/rooms.ts";
 import type { BroughtAgentHere } from "../shared/brought-agents.ts";
 import { BROUGHT_STEP_MOST_CHARACTERS, MOST_BROUGHT_STEPS_KEPT, MOST_WORKSPACE_CALLS_KEPT, type BroughtStepKind, type RoomBroughtStep, type RoomWorkspaceAccess, type RoomWorkspaceCall } from "../shared/room-workspace.ts";
 import type { RoomMention } from "../shared/room-mentions.ts";
@@ -368,6 +368,7 @@ const addedColumns = [
   { table: "machines", column: "knocks", definition: "TEXT" },
   { table: "workspaces", column: "side_chat_access", definition: "TEXT" },
   { table: "workspaces", column: "for_brought_agents", definition: "INTEGER NOT NULL DEFAULT 0" },
+  { table: "rooms", column: "plugins", definition: "TEXT NOT NULL DEFAULT '[]'" },
   { table: "conversations", column: "side_chat_may_change_files", definition: "INTEGER NOT NULL DEFAULT 0" },
   { table: "conversations", column: "side_chat_access", definition: "TEXT" },
 ];
@@ -607,6 +608,7 @@ interface RoomRow {
   agents_read_guests: number;
   members_bring_agents: number;
   sandbox: string;
+  plugins: string;
   created_at: number;
 }
 
@@ -1381,8 +1383,8 @@ export class Store {
 
   insertRoom(room: Room) {
     this.db
-      .query("INSERT INTO rooms (id, name, workspace_id, permissions, peoples_tasks_wait, claude_setup, agents_read_guests, members_bring_agents, sandbox, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
-      .run(room.id, room.name, room.workspaceId, room.permissions, room.peoplesTasksWait ? 1 : 0, JSON.stringify(room.claudeSetup), room.agentsReadGuests ? 1 : 0, room.membersBringAgents ? 1 : 0, JSON.stringify(room.sandbox), room.createdAt);
+      .query("INSERT INTO rooms (id, name, workspace_id, permissions, peoples_tasks_wait, claude_setup, agents_read_guests, members_bring_agents, sandbox, plugins, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+      .run(room.id, room.name, room.workspaceId, room.permissions, room.peoplesTasksWait ? 1 : 0, JSON.stringify(room.claudeSetup), room.agentsReadGuests ? 1 : 0, room.membersBringAgents ? 1 : 0, JSON.stringify(room.sandbox), JSON.stringify(room.plugins), room.createdAt);
     this.setRoomAgents(room.id, room.agents.map(({ profileId }) => profileId));
     room.agents.forEach(({ profileId, model, effort }) => this.setRoomAgentModel(room.id, profileId, { model, effort }));
     room.people.forEach(({ personId, role }) => this.setRoomPersonRole(room.id, personId, role));
@@ -1398,7 +1400,7 @@ export class Store {
     return row ? this.toRoom(row) : undefined;
   }
 
-  private toRoom({ id, name, workspace_id, permissions, peoples_tasks_wait, claude_setup, agents_read_guests, members_bring_agents, sandbox, created_at }: RoomRow): Room {
+  private toRoom({ id, name, workspace_id, permissions, peoples_tasks_wait, claude_setup, agents_read_guests, members_bring_agents, sandbox, plugins, created_at }: RoomRow): Room {
     const agents = this.db
       .query("SELECT profile_id, conversation_id, answering, model, effort, variables, whole_host_environment, brought_by, brought_name, brought_harness, brought_here, brought_workspace FROM room_agents WHERE room_id = ? ORDER BY rowid")
       .all(id) as RoomAgentRow[];
@@ -1424,6 +1426,7 @@ export class Store {
       agentsReadGuests: agents_read_guests === 1,
       membersBringAgents: members_bring_agents === 1,
       sandbox: sandboxSettingIn(JSON.parse(sandbox)),
+      plugins: roomPluginsIn(JSON.parse(plugins)),
       createdAt: created_at,
     };
   }
@@ -1589,6 +1592,10 @@ export class Store {
 
   setRoomClaudeSetup(id: string, setup: ClaudeSetup) {
     this.db.query("UPDATE rooms SET claude_setup = ? WHERE id = ?").run(JSON.stringify(setup), id);
+  }
+
+  setRoomPlugins(id: string, plugins: string[]) {
+    this.db.query("UPDATE rooms SET plugins = ? WHERE id = ?").run(JSON.stringify(plugins), id);
   }
 
   setRoomAgentsReadGuests(id: string, read: boolean) {

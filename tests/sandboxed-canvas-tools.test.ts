@@ -18,7 +18,7 @@ const SANDBOX_ON: SandboxSetting = { on: true, workFreely: true, allowsSharedKer
 function canvasOfASandboxedWorkspace() {
   const store = storeWithConversation();
   const c1 = store.findConversation("c1")!;
-  store.insertRoom({ id: "r1", name: "Launch", workspaceId: "w1", agents: [], people: [], permissions: DEFAULT_PERMISSION_PRESET, peoplesTasksWait: true, claudeSetup: ALL_OF_CLAUDE_SETUP, agentsReadGuests: true, membersBringAgents: true, sandbox: SANDBOX_ON, createdAt: 1 });
+  store.insertRoom({ id: "r1", name: "Launch", workspaceId: "w1", agents: [], people: [], permissions: DEFAULT_PERMISSION_PRESET, peoplesTasksWait: true, claudeSetup: ALL_OF_CLAUDE_SETUP, agentsReadGuests: true, membersBringAgents: true, sandbox: SANDBOX_ON, plugins: [], createdAt: 1 });
   store.insertConversation({ ...c1, id: "c2", roomId: "r1" });
   store.insertConversation({ ...c1, id: "c3" });
   const conversations = { conversationOfSession: async () => "c3" } as unknown as ConversationService;

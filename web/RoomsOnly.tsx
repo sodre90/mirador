@@ -88,6 +88,7 @@ export function RoomsOnlyApp({
       canvasViews={state.canvasViews}
       itemToShow={itemToShow?.roomId === room.id ? itemToShow : null}
       readOnly
+      canActOnPlugins={!room.people.some(({ personId, role }) => personId === state.you && role === "guest")}
       onHide={toggleCanvas}
     />
   );

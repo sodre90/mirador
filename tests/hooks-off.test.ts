@@ -16,7 +16,7 @@ function storeWithARoom() {
   const store = new Store(":memory:");
   store.insertWorkspace({ id: "w1", name: "project", path: "/projects/one", defaultLaunch: LAUNCH, createdAt: 1 });
   store.insertWorkspace({ id: "w2", name: "other", path: "/projects/one-more", defaultLaunch: LAUNCH, createdAt: 1 });
-  store.insertRoom({ id: "r1", name: "Launch", workspaceId: "w1", agents: [], people: [], permissions: DEFAULT_PERMISSION_PRESET, peoplesTasksWait: true, claudeSetup: ALL_OF_CLAUDE_SETUP, agentsReadGuests: true, membersBringAgents: true, sandbox: NO_SANDBOX, createdAt: 1 });
+  store.insertRoom({ id: "r1", name: "Launch", workspaceId: "w1", agents: [], people: [], permissions: DEFAULT_PERMISSION_PRESET, peoplesTasksWait: true, claudeSetup: ALL_OF_CLAUDE_SETUP, agentsReadGuests: true, membersBringAgents: true, sandbox: NO_SANDBOX, plugins: [], createdAt: 1 });
   return store;
 }
 

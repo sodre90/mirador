@@ -32,7 +32,12 @@ export const rooms: Messages["rooms"] = {
   asItsProfile: "Ahogy a profilja",
   modelFromNextSession: "Ez az ágens a következő munkamenetétől vált modellt.",
   moreOptions: "További beállítások",
-  tabs: { general: "Általános", people: "Emberek", agents: "Ágensek", permissions: "Engedélyek", usage: "Használat" },
+  tabs: { general: "Általános", people: "Emberek", agents: "Ágensek", plugins: "Bővítmények", permissions: "Engedélyek", usage: "Használat" },
+  plugins: "Bővítmények",
+  pluginsHint:
+    "Az itt bekapcsolt bővítményeket a szoba ágensei használhatják, a vászonra tett elemeiket pedig mindenki látja a szobában. A tagok, munkatársak és jóváhagyók használhatják őket; a vendégek csak nézhetik, a fájlok megnyitása a szerkesztődben pedig továbbra is csak a tiéd.",
+  noPluginsInstalled: "Nincs vászonbővítmény telepítve ezen a gépen.",
+  usePluginInRoom: (plugin) => `Használat ebben a szobában: ${plugin}`,
   whatDoesThisMean: "Mit jelent ez?",
   whatDoesItMean: (setting: string) => `Mit jelent: „${setting}”?`,
   done: "Kész",

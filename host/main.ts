@@ -203,6 +203,7 @@ const rooms = new RoomService(
   undefined,
   config.canvasAssetsOrigin,
 );
+canvasPlugins.sendsRoomPromptsWith((roomId, personId, profileId, answeringMessageId, text) => void rooms.writeFromPlugin(roomId, personId, profileId, answeringMessageId, text));
 conversations.followsRoomRulesOf(rooms);
 const roomQuestions = new RoomQuestions(store, hub, canvas, undefined, (roomId, agentId, itemId, chosen, answers, authorId, answerer) =>
   rooms.deliverBroughtAskAnswer(roomId, agentId, itemId, chosen, answers, authorId, answerer),
@@ -235,6 +236,7 @@ const mcp = new CanvasMcpEndpoints({
   },
   antigravityAskWaitMs: config.antigravityAskWaitMs,
 });
+rooms.hearPluginsChangedWith((roomId) => mcp.toolsChangedForRoom(roomId));
 const sandboxSettingOf = (owner: SandboxOwner) => (owner.kind === "room" ? store.findRoom(owner.id) : store.findWorkspace(owner.id))?.sandbox;
 const podman = process.platform === "linux" ? Podman.here(config.sandboxContainer, currentPath() ?? "", config.selinuxEnforceFile) : null;
 const sandboxes = new Sandboxes(podman ?? AppleContainer.here(config.sandboxContainer, currentPath() ?? ""), {

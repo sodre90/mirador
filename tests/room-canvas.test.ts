@@ -88,6 +88,7 @@ describe("room canvas concurrent questions", () => {
       agentsReadGuests: true,
       membersBringAgents: true,
       sandbox: NO_SANDBOX,
+      plugins: [],
       createdAt: 1,
     };
     const profiles: Profile[] = [

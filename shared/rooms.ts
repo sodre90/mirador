@@ -171,8 +171,14 @@ export interface Room {
   membersBringAgents: boolean;
   /** Whether its agents run in a light VM of their own; for the owner's eyes. */
   sandbox: SandboxSetting;
+  /** Installed Mirador plugins enabled for this room, by plugin name; empty by default. */
+  plugins: string[];
   createdAt: number;
 }
+
+/** Cleans a room's list of enabled plugin names: distinct, non-empty, sorted. */
+export const roomPluginsIn = (value: unknown): string[] =>
+  Array.isArray(value) ? [...new Set(value.filter((each): each is string => typeof each === "string" && each.trim() !== ""))].sort() : [];
 
 /** Anyone but a guest makes agents take turns; a guest only talks. */
 export const asksAgentsAs = (role: RoomRole) => role !== "guest";
@@ -350,8 +356,8 @@ export const agentStandIn = (roomId: string, profileId: string) => `${roomId}/${
 /** The messages the room shows itself: those written in it and the agents' answers; follow-ups show in their threads. */
 export const shownInRoom = (message: RoomMessage) => message.threadId === null || message.answers !== undefined;
 
-/** A room's canvas holds its agents' pages and questions; plugins' items stay with the conversation that made them. */
-export const shownOnRoomCanvas = (item: CanvasItem) => item.kind !== "plugin";
+/** A room's canvas holds its agents' pages, questions, and plugin items. */
+export const shownOnRoomCanvas = (_item: CanvasItem) => true;
 
 const isFollowUp = (message: RoomMessage) => message.threadId !== null && message.answers === undefined;
 

@@ -583,7 +583,7 @@ test("a sandboxed workspace's agent gets none of this computer's own environment
 test("one workspace's VM sees neither another workspace's nor a room's: its own name, folder, config and conversations", async () => {
   const { store, sandboxes, launcher, config, project, other } = sandboxedWorkspace();
   store.setWorkspaceSandbox("w2", SANDBOX_ON);
-  store.insertRoom({ id: "r1", name: "Launch", workspaceId: "w1", agents: [], people: [], permissions: DEFAULT_PERMISSION_PRESET, peoplesTasksWait: true, claudeSetup: ALL_OF_CLAUDE_SETUP, agentsReadGuests: true, membersBringAgents: true, sandbox: SANDBOX_ON, createdAt: 1 });
+  store.insertRoom({ id: "r1", name: "Launch", workspaceId: "w1", agents: [], people: [], permissions: DEFAULT_PERMISSION_PRESET, peoplesTasksWait: true, claudeSetup: ALL_OF_CLAUDE_SETUP, agentsReadGuests: true, membersBringAgents: true, sandbox: SANDBOX_ON, plugins: [], createdAt: 1 });
   const owners = [workspaceSandbox("w1"), workspaceSandbox("w2"), roomSandbox("r1")];
   const agentOf = (owner: SandboxOwner, workingDirectory: string) => ({
     owner,

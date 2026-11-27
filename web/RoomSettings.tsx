@@ -12,6 +12,7 @@ import { formatNumber, locale, t } from "./i18n/index.ts";
 import type { RoomSettingsTab } from "./i18n/en/rooms.ts";
 import { Modal } from "./Palette.tsx";
 import { AgentsTab } from "./RoomAgentsSettings.tsx";
+import { RoomPluginsTab } from "./RoomPluginsSettings.tsx";
 import { PresetChoice } from "./RoomPresetChoice.tsx";
 import { ControlRow, RoomSection, SwitchRow } from "./RoomSection.tsx";
 import { SandboxField } from "./Sandbox.tsx";
@@ -22,7 +23,7 @@ import { compactTokenCount, formatCost } from "./usage.ts";
 
 const words = t.rooms;
 
-const ROOM_SETTINGS_TABS: RoomSettingsTab[] = ["general", "people", "agents", "permissions", "usage"];
+const ROOM_SETTINGS_TABS: RoomSettingsTab[] = ["general", "people", "agents", "plugins", "permissions", "usage"];
 
 /** How often the time an invite has left is told afresh. */
 const EXPIRY_TOLD_EVERY_MS = 30_000;
@@ -484,6 +485,7 @@ export function RoomSettingsDialog({
     general: () => <GeneralTab room={room} workspaces={workspaces} onDeleted={onClose} />,
     people: () => <PeopleTab room={room} people={people} ownerId={ownerId} invites={invites} joiners={joiners} onInvite={onInvite} />,
     agents: () => <AgentsTab room={room} profiles={profiles} people={people} roomConversations={roomConversations} openedId={openedAgentId} onOpen={setOpenedAgentId} />,
+    plugins: () => <RoomPluginsTab room={room} profiles={profiles} roomConversations={roomConversations} />,
     permissions: () => <PermissionsTab room={room} profiles={profiles} roomConversations={roomConversations} sandboxSetup={sandboxSetup} sandboxFolders={sandboxFolders} homeDir={homeDir} />,
     usage: () => <UsageTab room={room} profiles={profiles} people={people} ownerId={ownerId} />,
   };

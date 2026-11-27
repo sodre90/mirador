@@ -8,7 +8,7 @@ import type { OthersTasks } from "../../../shared/brought-agents.ts";
 import type { RoomWorkspaceAccess, WorkspaceCallKind, WorkspaceCallState } from "../../../shared/room-workspace.ts";
 
 /** The parts of a room's settings, each on a page of its own. */
-export type RoomSettingsTab = "general" | "people" | "agents" | "permissions" | "usage";
+export type RoomSettingsTab = "general" | "people" | "agents" | "plugins" | "permissions" | "usage";
 
 const counted = (count: number, one: string, many: string) => (count === 1 ? `1 ${one}` : `${count} ${many}`);
 const listed = (...parts: (string | false)[]) => parts.filter(Boolean).join(", ");
@@ -43,7 +43,12 @@ export const rooms = {
   asItsProfile: "As its profile",
   modelFromNextSession: "This agent takes a new model from its next session.",
   moreOptions: "More options",
-  tabs: { general: "General", people: "People", agents: "Agents", permissions: "Permissions", usage: "Usage" } satisfies Record<RoomSettingsTab, string>,
+  tabs: { general: "General", people: "People", agents: "Agents", plugins: "Plugins", permissions: "Permissions", usage: "Usage" } satisfies Record<RoomSettingsTab, string>,
+  plugins: "Plugins",
+  pluginsHint:
+    "Plugins you turn on here are available to the room's agents, and their canvas items are shared with everyone in the room. Members, collaborators and approvers can interact with them; guests only view, and opening files in your editor stays yours alone.",
+  noPluginsInstalled: "No canvas plugins are installed on this machine.",
+  usePluginInRoom: (plugin: string) => `Use ${plugin} in this room`,
   whatDoesThisMean: "What does this mean?",
   whatDoesItMean: (setting: string) => `What does “${setting}” mean?`,
   done: "Done",

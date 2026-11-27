@@ -26,7 +26,7 @@ test.afterAll(async () => {
   await host.cleanUp();
 });
 
-const PAGES = ["General", "People", "Agents", "Permissions", "Usage"] as const;
+const PAGES = ["General", "People", "Agents", "Plugins", "Permissions", "Usage"] as const;
 
 const agentNames = (settings: Locator) => settings.getByRole("list", { name: "Agents", exact: true }).locator(".room-settings-agent-name");
 

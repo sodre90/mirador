@@ -155,10 +155,23 @@ export function environmentInRoom(harness: HarnessId, host: Record<string, strin
 }
 
 /** What a room's agent session was started under: a session started under anything else is not taken up again. */
-export function roomSetupFingerprint(harness: HarnessId, environmentText: string, { variables, wholeHostEnvironment }: EnvironmentChoices, claudeSetup: ClaudeSetup, sandbox: SandboxSetting) {
+export function roomSetupFingerprint(
+  harness: HarnessId,
+  environmentText: string,
+  { variables, wholeHostEnvironment }: EnvironmentChoices,
+  claudeSetup: ClaudeSetup,
+  sandbox: SandboxSetting,
+  plugins: string[] = [],
+) {
   const given = profileVariablesInRoom(harness, environmentText, variables).flatMap(({ name, given: isGiven }) => (isGiven ? [name] : []));
   const loaded = harness === "claude" ? CLAUDE_SETUP_PARTS.filter((part) => claudeSetup[part]) : [];
-  return JSON.stringify({ given: given.toSorted(), wholeHostEnvironment, loaded, ...(sandbox.on && { sandbox: sandbox.workFreely ? "works-freely" : "preset" }) });
+  return JSON.stringify({
+    given: given.toSorted(),
+    wholeHostEnvironment,
+    loaded,
+    ...(sandbox.on && { sandbox: sandbox.workFreely ? "works-freely" : "preset" }),
+    ...(plugins.length > 0 && { plugins: [...plugins].sort() }),
+  });
 }
 
 /** Whether a change of what a room's agent gets leaves it with less: then its turn under way stops at once. */

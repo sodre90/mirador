@@ -306,12 +306,12 @@ export function sessionMeta(
   if (harness === "claude" && inRoomsWorkspace) return claudeRoomsWorkspaceSessionMeta(canvasUse, idleCompaction);
   if (harness === "claude")
     return inRoom
-      ? claudeRoomSessionMeta(canvasUse, { withoutUserSettings, idleCompaction, claudeSetup, keptProtections, sandbox })
+      ? claudeRoomSessionMeta(canvasUse, { withoutUserSettings, canvasPlugins, idleCompaction, claudeSetup, keptProtections, sandbox })
       : claudeSessionMeta(canvasUse, { withoutUserSettings, canvasPlugins, idleCompaction, keepCacheWarm, sandbox });
   if (harness === "pi")
-    return inRoom ? { systemPrompt: { append: [roomCanvasPromptAppendix(canvasUse, canvasAssetsOrigin), ...sandboxGuidance(sandbox)].join("\n\n") } } : piSessionMeta(canvasUse, canvasAssetsOrigin, canvasPlugins, sandbox);
+    return inRoom ? { systemPrompt: { append: [roomCanvasPromptAppendix(canvasUse, canvasAssetsOrigin, canvasPlugins), ...sandboxGuidance(sandbox)].join("\n\n") } } : piSessionMeta(canvasUse, canvasAssetsOrigin, canvasPlugins, sandbox);
   if (harness === "antigravity")
-    return inRoom ? { antigravity: { systemPrompt: { append: roomCanvasPromptAppendix(canvasUse, canvasAssetsOrigin) } } } : antigravitySessionMeta(canvasUse, canvasAssetsOrigin, canvasPlugins);
+    return inRoom ? { antigravity: { systemPrompt: { append: roomCanvasPromptAppendix(canvasUse, canvasAssetsOrigin, canvasPlugins) } } } : antigravitySessionMeta(canvasUse, canvasAssetsOrigin, canvasPlugins);
   return undefined;
 }
 
@@ -344,8 +344,9 @@ function canvasPromptAppendix(canvasUse: CanvasUse, canvasAssetsOrigin: string, 
   return [...canvasPromptParts(canvasUse, canvasAssetsOrigin, canvasPlugins), titleGuidance()].join("\n\n");
 }
 
-/** A room's agent is not asked to name its conversation, which only the owner opens, nor told of plugins. */
-const roomCanvasPromptAppendix = (canvasUse: CanvasUse, canvasAssetsOrigin: string) => canvasPromptParts(canvasUse, canvasAssetsOrigin, NO_CANVAS_PLUGINS).join("\n\n");
+/** A room's agent is not asked to name its conversation, which only the owner opens, and hears only of plugins enabled for its room. */
+const roomCanvasPromptAppendix = (canvasUse: CanvasUse, canvasAssetsOrigin: string, canvasPlugins = NO_CANVAS_PLUGINS) =>
+  canvasPromptParts(canvasUse, canvasAssetsOrigin, canvasPlugins).join("\n\n");
 
 const canvasPromptParts = (canvasUse: CanvasUse, canvasAssetsOrigin: string, canvasPlugins: CanvasPluginGuidance) => [
   `# Canvas server instructions\n${canvasInstructions(canvasAssetsOrigin, canvasPlugins)}`,
@@ -386,18 +387,20 @@ export function claudeSessionMeta(
 const ROOM_ASKS_BEFORE_EDITING = ["Edit(**/CLAUDE.md)", "Edit(**/CLAUDE.local.md)", "Edit(**/.claude/**)", "Edit(**/.mcp.json)"];
 
 /**
- * A room's agent hears of no job waits or plugins, and only the room's canvas tools run without asking. It loads of the
- * owner's Claude Code setup what the room's owner chose, keeping the protections of the settings it leaves out.
+ * A room's agent hears of no job waits, and only the room's canvas tools and plugins enabled for the room run without
+ * asking. It loads of the owner's Claude Code setup what the room's owner chose, keeping the protections of the settings
+ * it leaves out.
  */
 export function claudeRoomSessionMeta(
   canvasUse: CanvasUse,
   {
     withoutUserSettings = false,
+    canvasPlugins = NO_CANVAS_PLUGINS,
     idleCompaction = true,
     claudeSetup = ALL_OF_CLAUDE_SETUP,
     keptProtections = NO_PROTECTIONS,
     sandbox = null,
-  }: { withoutUserSettings?: boolean; idleCompaction?: boolean; claudeSetup?: ClaudeSetup; keptProtections?: ClaudeProtections; sandbox?: SessionInSandbox | null } = {},
+  }: { withoutUserSettings?: boolean; canvasPlugins?: CanvasPluginGuidance; idleCompaction?: boolean; claudeSetup?: ClaudeSetup; keptProtections?: ClaudeProtections; sandbox?: SessionInSandbox | null } = {},
 ) {
   const { env, disallowedTools } = claudeSessionMeta(canvasUse).claudeCode.options;
   const { deny, ask, sandbox: claudeSandbox } = keptProtections;
@@ -409,14 +412,14 @@ export function claudeRoomSessionMeta(
   };
   const loaded = settingSourcesLoaded(claudeSetup, withoutUserSettings);
   return {
-    systemPrompt: { append: [canvasUse === "often" ? canvasUseGuidance() : "", ...sandboxGuidance(sandbox)].filter(Boolean).join("\n\n") },
+    systemPrompt: { append: [canvasUse === "often" ? canvasUseGuidance(canvasPlugins) : "", canvasPluginInstructions(canvasPlugins), ...sandboxGuidance(sandbox)].filter(Boolean).join("\n\n") },
     claudeCode: {
       options: {
         ...(loaded.length < SETTING_SOURCES.length && { settingSources: loaded }),
         settings,
         ...(!claudeSetup.mcpServers && { strictMcpConfig: true }),
         env,
-        allowedTools: ROOM_CANVAS_TOOLS.map((tool) => `mcp__${CANVAS_SERVER_NAME}__${tool}`),
+        allowedTools: [...ROOM_CANVAS_TOOLS, ...canvasPlugins.toolNames].map((tool) => `mcp__${CANVAS_SERVER_NAME}__${tool}`),
         disallowedTools,
       },
     },

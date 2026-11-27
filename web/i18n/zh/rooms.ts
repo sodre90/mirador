@@ -32,7 +32,12 @@ export const rooms: Messages["rooms"] = {
   asItsProfile: "按其配置",
   modelFromNextSession: "这个 Agent 从下一个会话起换用新模型。",
   moreOptions: "更多选项",
-  tabs: { general: "常规", people: "人员", agents: "Agent", permissions: "权限", usage: "用量" },
+  tabs: { general: "常规", people: "人员", agents: "Agent", plugins: "插件", permissions: "权限", usage: "用量" },
+  plugins: "插件",
+  pluginsHint:
+    "你在这里启用的插件可供房间的 Agent 使用，它们在画布上发布的内容会与房间里的所有人共享。成员、协作者和批准人可以与之交互；访客仅可查看，而在你的编辑器中打开文件仍仅限你自己。",
+  noPluginsInstalled: "这台机器上还没有安装画布插件。",
+  usePluginInRoom: (plugin) => `在此房间中启用 ${plugin}`,
   whatDoesThisMean: "这是什么意思？",
   whatDoesItMean: (setting: string) => `“${setting}”是什么意思？`,
   done: "完成",

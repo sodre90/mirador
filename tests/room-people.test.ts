@@ -251,6 +251,7 @@ const EVERY_CLIENT_MESSAGE: Record<ClientMessage["type"], true> = {
   "room.answer-task": true,
   "room.set-peoples-tasks-wait": true,
   "room.set-claude-setup": true,
+  "room.set-plugins": true,
   "room.set-agent-variable": true,
   "room.set-agent-host-environment": true,
   "room.set-agents-read-guests": true,
@@ -284,7 +285,7 @@ const EVERY_CLIENT_MESSAGE: Record<ClientMessage["type"], true> = {
 };
 
 /** All a person other than the owner may get from the host. */
-const SHOWN_TO_PEOPLE = new Set<ServerMessage["type"]>(["conversation.upserted", "conversation.deleted", "conversation.history", "conversation.earlier", "conversation.event", "tool-raw-output.got", "snapshot", "people.listed", "profile.upserted", "room.upserted", "room.deleted", "room.timeline", "room.message", "room.presence", "canvas.upserted", "settings.saved", "error", "pong", "room.votes", "rooms.reading", "room.alert", "room.agent-brought", "room.brought-task", "rooms.waiting-to-join", "room.approvals"]);
+const SHOWN_TO_PEOPLE = new Set<ServerMessage["type"]>(["conversation.upserted", "conversation.deleted", "conversation.history", "conversation.earlier", "conversation.event", "tool-raw-output.got", "snapshot", "people.listed", "profile.upserted", "room.upserted", "room.deleted", "room.timeline", "room.message", "room.presence", "canvas.upserted", "canvas.item-acted", "plugins.views", "settings.saved", "error", "pong", "room.votes", "rooms.reading", "room.alert", "room.agent-brought", "room.brought-task", "rooms.waiting-to-join", "room.approvals"]);
 
 type Snapshot = Extract<ServerMessage, { type: "snapshot" }>;
 type SettingsSaved = Extract<ServerMessage, { type: "settings.saved" }>;

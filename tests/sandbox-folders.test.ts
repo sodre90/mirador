@@ -203,7 +203,7 @@ describe("a folder added read and write", () => {
     store.insertWorkspace({ id: "w1", name: "one", path: "/home/me/one", defaultLaunch: BUILDER, createdAt: 1 });
     store.insertWorkspace({ id: "w2", name: "two", path: "/home/me/two", defaultLaunch: BUILDER, createdAt: 1 });
     store.insertWorkspace({ id: "w3", name: "three", path: "/home/me/three", defaultLaunch: BUILDER, createdAt: 1 });
-    const room = (id: string, workspaceId: string, sandbox: SandboxSetting) => ({ id, name: id, workspaceId, agents: [], people: [], permissions: DEFAULT_PERMISSION_PRESET, peoplesTasksWait: true, claudeSetup: ALL_OF_CLAUDE_SETUP, agentsReadGuests: true, membersBringAgents: true, sandbox, createdAt: 1 });
+    const room = (id: string, workspaceId: string, sandbox: SandboxSetting) => ({ id, name: id, workspaceId, agents: [], people: [], permissions: DEFAULT_PERMISSION_PRESET, peoplesTasksWait: true, claudeSetup: ALL_OF_CLAUDE_SETUP, agentsReadGuests: true, membersBringAgents: true, sandbox, plugins: [], createdAt: 1 });
     store.insertRoom(room("r1", "w2", SANDBOX_ON));
     store.insertRoom(room("r2", "w3", NO_SANDBOX));
     store.setWorkspaceSandbox("w1", SANDBOX_ON);
@@ -650,7 +650,7 @@ describe("a change of a sandbox's folders", () => {
 describe("the folders added to a sandbox", () => {
   test("stay out of what a session is started under, so adding one never starts an agent afresh", async () => {
     const { store, conversations, owner } = sandboxedWorkspace();
-    store.insertRoom({ id: "r1", name: "Launch", workspaceId: "w1", agents: [], people: [], permissions: DEFAULT_PERMISSION_PRESET, peoplesTasksWait: true, claudeSetup: ALL_OF_CLAUDE_SETUP, agentsReadGuests: true, membersBringAgents: true, sandbox: SANDBOX_ON, createdAt: 1 });
+    store.insertRoom({ id: "r1", name: "Launch", workspaceId: "w1", agents: [], people: [], permissions: DEFAULT_PERMISSION_PRESET, peoplesTasksWait: true, claudeSetup: ALL_OF_CLAUDE_SETUP, agentsReadGuests: true, membersBringAgents: true, sandbox: SANDBOX_ON, plugins: [], createdAt: 1 });
     const conversation = conversations.create("w1", BUILDER);
     const inRoom = { ...conversation, roomId: "r1" };
     const setups = () => [inside(conversations).sessionSetupOf(conversation), inside(conversations).sessionSetupOf(inRoom)];
@@ -667,7 +667,7 @@ describe("the folders added to a sandbox", () => {
   test("go with their room or workspace", () => {
     const store = new Store(":memory:");
     store.insertWorkspace({ id: "w1", name: "project", path: "/p", defaultLaunch: BUILDER, createdAt: 1 });
-    const room = (id: string) => ({ id, name: id, workspaceId: "w1", agents: [], people: [], permissions: DEFAULT_PERMISSION_PRESET, peoplesTasksWait: true, claudeSetup: ALL_OF_CLAUDE_SETUP, agentsReadGuests: true, membersBringAgents: true, sandbox: NO_SANDBOX, createdAt: 1 });
+    const room = (id: string) => ({ id, name: id, workspaceId: "w1", agents: [], people: [], permissions: DEFAULT_PERMISSION_PRESET, peoplesTasksWait: true, claudeSetup: ALL_OF_CLAUDE_SETUP, agentsReadGuests: true, membersBringAgents: true, sandbox: NO_SANDBOX, plugins: [], createdAt: 1 });
     store.insertRoom(room("r1"));
     store.insertRoom(room("r2"));
     const add = (owner: SandboxOwner, path: string) => store.addSandboxFolder(owner, { path, writable: false, addedAt: 1 });

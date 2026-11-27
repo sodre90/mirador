@@ -3,7 +3,7 @@ import { Fragment, createContext, useContext, useEffect, useLayoutEffect, useMem
 import { buildCanvasDocument, canvasHiddenMessage, canvasPageMessage, canvasRoomMessage, canvasShellUrl, canvasTextScaleMessage, canvasThemeMessage, isCanvasFrameMessage, type CanvasFrameMessage, type CanvasPagePolicy } from "../shared/canvas-document.ts";
 import { appKey, type AppDocumentState, type InstalledApp, type OpenApp } from "../shared/apps.ts";
 import { answerPicking, answersSummary, answerTo, isNoneOfTheOptions, pickedIn, questionsOf, type AskPage } from "../shared/ask.ts";
-import type { AskAnswerEntry, AskItem, AskQuestion, CanvasItem, ShowItem } from "../shared/model.ts";
+import type { AskAnswerEntry, AskItem, AskQuestion, CanvasItem, PluginCanvasItem, ShowItem } from "../shared/model.ts";
 import { nextSelectionAfterSettle, nextSelectionOnArrival, waitingRoomAsks, type CanvasItemAuthor } from "../shared/room-canvas.ts";
 import { AppView } from "./AppView.tsx";
 import { BarMenu, type BarMenuEntry } from "./BarMenu.tsx";
@@ -893,6 +893,8 @@ export function CanvasPanel({
   onHide,
   inRoom = false,
   readOnly = false,
+  canActOnPlugins = true,
+  onPluginPrompt,
   itemToShow = null,
   authorOf,
 }: {
@@ -912,10 +914,14 @@ export function CanvasPanel({
   /** Where the canvas assets serve each canvas plugin's view, by plugin name. */
   canvasViews: Record<string, string>;
   onHide: () => void;
-  /** A room's canvas, which holds its agents' pages and questions: no changes of a workspace, no pointing at a page to ask about it, and its questions are voted on in the room. */
+  /** A room's canvas, which holds its agents' pages, questions and plugin items: no changes of a workspace, no pointing at a page to ask about it, and its questions are voted on in the room. */
   inRoom?: boolean;
-  /** Seen by a person other than the machine's owner, who reads its pages and questions but neither saves nor reports on them. */
+  /** Seen by a person other than the machine's owner, who neither saves, opens local files, pops out windows nor reports on pages. */
   readOnly?: boolean;
+  /** Whether the viewer may interact with or dismiss plugin items; false for guests in a room. */
+  canActOnPlugins?: boolean;
+  /** In a room, routes prompts from a plugin view through the room timeline. */
+  onPluginPrompt?: (item: PluginCanvasItem, text: string) => void;
   /** The item the user asked to see, brought in front once for each time they ask. */
   itemToShow?: { itemId: string } | null;
   /** Who made each item on a room's canvas, for attribution in the bar, history and waiting-question switcher. */
@@ -984,10 +990,14 @@ export function CanvasPanel({
   const older = selected ? newestFirst[selectedIndex + 1] : newest;
   const newer = selected ? newestFirst[selectedIndex - 1] : undefined;
   const pick = (id: string) => {
-    setSelectedId(id);
     setHistoryOpen(false);
-    setTab(null);
     edit.setAside();
+    if (tabItem && id === tabItem.id) {
+      setTab("checklist");
+      return;
+    }
+    setSelectedId(id);
+    setTab(null);
     placeForReview(pages.find((item) => item.id === id));
   };
   useEffect(() => {
@@ -1007,7 +1017,7 @@ export function CanvasPanel({
   };
   const toggleHistory = () => setHistoryOpen((open) => !open);
   const shownPluginItem = checklistOpen ? tabItem : !tab && selected?.kind === "plugin" ? selected : undefined;
-  const poppable = canOpenItemWindows() ? shownPluginItem : undefined;
+  const poppable = !readOnly && canOpenItemWindows() ? shownPluginItem : undefined;
   const popOut = () => poppable && openItemWindow({ conversationId, itemId: poppable.id }, poppable.title);
   const shownPage = !tab && selected?.kind === "show" ? selected : undefined;
   const pageExport = usePageExport(shownPage, shownPageFrame);
@@ -1039,7 +1049,7 @@ export function CanvasPanel({
         ...(checklistCountText ? [{ label: checklistCountText, checked: checklistOpen, onChoose: () => toggleTab("checklist") }] : []),
         ...apps.open.map(({ app, title }) => ({ label: title, checked: tab === appTab(app), onChoose: () => toggleTab(appTab(app)) })),
         ...workspaceTabs.map(({ plugin, title }) => ({ label: title, checked: tab === pluginTab(plugin), onChoose: () => toggleTab(pluginTab(plugin)) })),
-        ...(checklistOpen && tabItem ? [{ label: words.bar.dismiss, onChoose: dismissChecklist }] : []),
+        ...(checklistOpen && tabItem && canActOnPlugins ? [{ label: words.bar.dismiss, onChoose: dismissChecklist }] : []),
       ]
     : [];
   const foldedPageTools: BarMenuEntry[] = pageToolsFolded
@@ -1174,7 +1184,7 @@ export function CanvasPanel({
             <span className="canvas-title">{tabItem?.title ?? words.bar.agentsPlan}</span>
           </>
         )}
-        {checklistOpen && tabItem && (
+        {checklistOpen && tabItem && canActOnPlugins && (
           <button type="button" className="icon checklist-dismiss" aria-label={words.bar.dismissChecklist} data-hint={hints.checklistDismiss} onClick={dismissChecklist}>
             {words.bar.dismiss}
           </button>
@@ -1286,7 +1296,17 @@ export function CanvasPanel({
         {checklistOpen && (
           <ChecklistView plan={plan}>
             {tabItem && (
-              <PluginItemView key={tabItem.id} item={tabItem} viewPath={canvasViews[tabItem.plugin]} assetsOrigin={assetsOrigin} seenAgentEditAt={seenEdit.current.at ?? null} fitsContent />
+              <PluginItemView
+                key={tabItem.id}
+                item={tabItem}
+                viewPath={canvasViews[tabItem.plugin]}
+                assetsOrigin={assetsOrigin}
+                seenAgentEditAt={seenEdit.current.at ?? null}
+                fitsContent
+                opensFiles={!readOnly}
+                canAct={canActOnPlugins}
+                onPrompt={onPluginPrompt ? (text) => onPluginPrompt(tabItem, text) : undefined}
+              />
             )}
           </ChecklistView>
         )}
@@ -1313,7 +1333,17 @@ export function CanvasPanel({
           />
         )}
         {pageMarks.opened}
-        {!tab && selected?.kind === "plugin" && <PluginItemView key={selected.id} item={selected} viewPath={canvasViews[selected.plugin]} assetsOrigin={assetsOrigin} />}
+        {!tab && selected?.kind === "plugin" && (
+          <PluginItemView
+            key={selected.id}
+            item={selected}
+            viewPath={canvasViews[selected.plugin]}
+            assetsOrigin={assetsOrigin}
+            opensFiles={!readOnly}
+            canAct={canActOnPlugins}
+            onPrompt={onPluginPrompt ? (text) => onPluginPrompt(selected, text) : undefined}
+          />
+        )}
         {shownQuestion && (
           <AskView
             key={shownQuestion.id}

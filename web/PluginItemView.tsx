@@ -91,12 +91,21 @@ export function PluginItemView({
   assetsOrigin,
   seenAgentEditAt = null,
   fitsContent = false,
+  opensFiles = true,
+  canAct = true,
+  onPrompt,
 }: {
   item: PluginCanvasItem;
   viewPath: string | undefined;
   assetsOrigin: string;
   seenAgentEditAt?: number | null;
   fitsContent?: boolean;
+  /** Whether the view may open files on the host computer; false for non-owners in a room. */
+  opensFiles?: boolean;
+  /** Whether the viewer may act on or prompt through this item; false for guests in a room. */
+  canAct?: boolean;
+  /** When in a room, routes mirador.prompt(text) through the room instead of conversation.prompt. */
+  onPrompt?: (text: string) => void;
 }) {
   const frame = useRef<HTMLIFrameElement>(null);
   const latest = useRef(item);
@@ -114,8 +123,8 @@ export function PluginItemView({
   const opensConversations = conversations !== null;
   const viewUrl = viewPath && `${assetsOrigin}${viewPath}`;
   const page = useMemo(
-    () => viewUrl && pluginItemPage(viewUrl, item.id, { inTab: fitsContent, opensFiles: true, opensConversations }),
-    [viewUrl, item.id, fitsContent, opensConversations],
+    () => viewUrl && pluginItemPage(viewUrl, item.id, { inTab: fitsContent, opensFiles, opensConversations }),
+    [viewUrl, item.id, fitsContent, opensFiles, opensConversations],
   );
   const context: PluginItemContext = {
     seenAgentEditAt: seenWhenShown,
@@ -156,9 +165,19 @@ export function PluginItemView({
       postTheme();
       postItem();
     }
-    if (message.kind === "item-send" && typeof message.requestId === "string") void answer(message.requestId, () => replyTo(item.id, message.action));
+    if (message.kind === "item-send" && typeof message.requestId === "string") {
+      void answer(message.requestId, () => {
+        if (!canAct) throw new Error("Guests can only view plugin items in a room.");
+        return replyTo(item.id, message.action);
+      });
+    }
     if (message.kind === "item-prompt" && typeof message.requestId === "string") {
-      void answer(message.requestId, () => promptFrom(item.conversationId, String(message.text), enterWhileBusy === "after-turn"));
+      void answer(message.requestId, () => {
+        if (!canAct) throw new Error("Guests can only view plugin items in a room.");
+        const text = String(message.text);
+        if (onPrompt) return onPrompt(text);
+        return promptFrom(item.conversationId, text, enterWhileBusy === "after-turn");
+      });
     }
     if (message.kind === "item-open-conversation" && typeof message.requestId === "string") void answer(message.requestId, () => openStarted(String(message.conversationId)));
     if (message.kind === "item-fullscreen") fullscreen?.setFullscreen(message.on === true);
@@ -167,7 +186,9 @@ export function PluginItemView({
       showFramedHint(anchor && { text: message.text, anchor });
     }
     if (message.kind === "item-hint-gone") showFramedHint(null);
-    if (message.kind === "item-open-file" && typeof message.path === "string") connection.send({ type: "files.open", conversationId: item.conversationId, path: message.path });
+    if (message.kind === "item-open-file" && typeof message.path === "string" && opensFiles) {
+      connection.send({ type: "files.open", conversationId: item.conversationId, path: message.path });
+    }
   };
 
   if (!page) return <WithoutItsPlugin item={item} />;

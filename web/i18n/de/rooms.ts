@@ -33,7 +33,12 @@ export const rooms: Messages["rooms"] = {
   asItsProfile: "Wie im Profil",
   modelFromNextSession: "Dieser Agent wechselt das Modell ab seiner nächsten Sitzung.",
   moreOptions: "Weitere Optionen",
-  tabs: { general: "Allgemein", people: "Personen", agents: "Agenten", permissions: "Berechtigungen", usage: "Verbrauch" },
+  tabs: { general: "Allgemein", people: "Personen", agents: "Agenten", plugins: "Plugins", permissions: "Berechtigungen", usage: "Verbrauch" },
+  plugins: "Plugins",
+  pluginsHint:
+    "Plugins, die du hier einschaltest, stehen den Agenten des Raums zur Verfügung und ihre Canvas-Einträge werden mit allen im Raum geteilt. Mitglieder, Mitwirkende und Genehmiger können damit interagieren; Gäste schauen nur zu, und Dateien in deinem Editor zu öffnen bleibt allein dir vorbehalten.",
+  noPluginsInstalled: "Auf diesem Rechner sind keine Canvas-Plugins installiert.",
+  usePluginInRoom: (plugin) => `In diesem Raum nutzen: ${plugin}`,
   whatDoesThisMean: "Was bedeutet das?",
   whatDoesItMean: (setting: string) => `Was bedeutet „${setting}“?`,
   done: "Fertig",

@@ -1662,7 +1662,7 @@ export class ConversationService {
     const profile = profileId === null ? undefined : this.store.findProfile(profileId);
     if (!roomId || !profile) return null;
     const room = this.store.findRoom(roomId);
-    return roomSetupFingerprint(profile.harness, profile.environment, this.environmentChoicesOf(roomId, profile.id), room?.claudeSetup ?? ALL_OF_CLAUDE_SETUP, room?.sandbox ?? NO_SANDBOX);
+    return roomSetupFingerprint(profile.harness, profile.environment, this.environmentChoicesOf(roomId, profile.id), room?.claudeSetup ?? ALL_OF_CLAUDE_SETUP, room?.sandbox ?? NO_SANDBOX, room?.plugins ?? []);
   }
 
   /**
@@ -3627,11 +3627,11 @@ export class ConversationService {
     return sessionId;
   }
 
-  /** The canvas tools that only show things in Mirador run without asking; for a room, only the room's. */
+  /** The canvas tools that only show things in Mirador run without asking; for a room, the room's own tools and its enabled plugins' tools. */
   private preAllowsCanvasTool(conversationId: string, tool: string | null) {
     const conversation = this.get(conversationId);
     if (conversation.worksInRoomsWorkspace) return tool !== null && ROOMS_WORKSPACE_CANVAS_TOOLS.includes(tool);
-    if (worksForARoom(conversation)) return tool !== null && ROOM_CANVAS_TOOLS.includes(tool);
+    if (worksForARoom(conversation)) return tool !== null && (ROOM_CANVAS_TOOLS.includes(tool) || this.canvasPlugins(conversationId).toolNames.includes(tool));
     return isPreAllowedCanvasTool(tool, this.canvasPlugins(conversationId).toolNames);
   }
 

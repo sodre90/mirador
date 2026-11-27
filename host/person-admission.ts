@@ -16,6 +16,8 @@ export interface PersonInRooms {
   roleIn(roomId: string): RoomRole | null;
   /** The conversation a room's agent works in now, by the stand-in the person knows it by, where they read the agents' work. */
   conversationBehind(standIn: string): string | null;
+  /** The room a plugin canvas item belongs to; null for items outside rooms or unknown items. */
+  roomOfCanvasItem?(itemId: string): string | null;
 }
 
 const OWNER_ONLY = null;
@@ -208,13 +210,23 @@ const admissions: { [K in ClientMessage["type"]]: K extends PersonMessageType ? 
   "app.run": OWNER_ONLY,
   "app.open-file": OWNER_ONLY,
   "app.stop-task": OWNER_ONLY,
-  "canvas.item-action": OWNER_ONLY,
+  "canvas.item-action": ({ requestId, itemId }, person) => {
+    if (!isRequestId(requestId) || typeof itemId !== "string") throw unreadable();
+    const roomId = person.roomOfCanvasItem?.(itemId) ?? null;
+    if (roomId === null) throw new HostProblemError({ code: "only-the-owner" });
+    if (!asksAgentsAs(roleOf(person, roomId))) throw new HostProblemError({ code: "room-guests-only-write" });
+  },
   "canvas.run-command": OWNER_ONLY,
   "plugin-window.subscribe": OWNER_ONLY,
   "plugin-window.action": OWNER_ONLY,
   "plugin-tab.subscribe": OWNER_ONLY,
   "plugin-tab.action": OWNER_ONLY,
-  "canvas.dismiss": OWNER_ONLY,
+  "canvas.dismiss": ({ itemId }, person) => {
+    if (typeof itemId !== "string") throw unreadable();
+    const roomId = person.roomOfCanvasItem?.(itemId) ?? null;
+    if (roomId === null) throw new HostProblemError({ code: "only-the-owner" });
+    if (!asksAgentsAs(roleOf(person, roomId))) throw new HostProblemError({ code: "room-guests-only-write" });
+  },
   "canvas.export": OWNER_ONLY,
   "canvas.save-to-project": OWNER_ONLY,
   "canvas.save-image-to-project": OWNER_ONLY,
@@ -315,6 +327,7 @@ const admissions: { [K in ClientMessage["type"]]: K extends PersonMessageType ? 
   },
   "room.set-peoples-tasks-wait": OWNER_ONLY,
   "room.set-claude-setup": OWNER_ONLY,
+  "room.set-plugins": OWNER_ONLY,
   "room.set-sandbox": OWNER_ONLY,
   "room.check-sandbox": OWNER_ONLY,
   "sandbox.answer-held-change": OWNER_ONLY,

@@ -1021,7 +1021,7 @@ describe("a page that shows a room", () => {
   const builderInRoom = { ...conversationIn("r1", "w1", { harness: "opencode", profileId: "p1" }, "Launch: Builder"), position: 0 };
   const page = (id: string, conversationId: string, kind: CanvasItem["kind"] = "show") => ({ id, conversationId, kind, title: id, html: "", status: "shown", createdAt: 1 }) as CanvasItem;
   const serverSent = (state: AppState, message: ServerMessage) => reducer(state, { type: "server", message });
-  const launch: Room = { id: "r1", name: "Launch", workspaceId: "w1", agents: [{ profileId: "p1", conversationId: builderInRoom.id, answering: null, model: null, effort: null, variables: {}, wholeHostEnvironment: false }], permissions: "read-freely", people: [], peoplesTasksWait: true, claudeSetup: ALL_OF_CLAUDE_SETUP, agentsReadGuests: true, membersBringAgents: true, sandbox: NO_SANDBOX, createdAt: 1 };
+  const launch: Room = { id: "r1", name: "Launch", workspaceId: "w1", agents: [{ profileId: "p1", conversationId: builderInRoom.id, answering: null, model: null, effort: null, variables: {}, wholeHostEnvironment: false }], permissions: "read-freely", people: [], peoplesTasksWait: true, claudeSetup: ALL_OF_CLAUDE_SETUP, agentsReadGuests: true, membersBringAgents: true, sandbox: NO_SANDBOX, plugins: [], createdAt: 1 };
   const showingRoom = (messages: RoomMessage[], rooms = [launch]) =>
     serverSent(reducer({ ...initialState, rooms, roomConversations: [builderInRoom] }, { type: "select-room", roomId: "r1" }), {
       type: "room.timeline",
@@ -1034,10 +1034,10 @@ describe("a page that shows a room", () => {
       broughtSteps: [],
     });
 
-  test("puts the pages and questions of the room's agents on its canvas, and leaves out plugins' items and other conversations' pages", () => {
+  test("puts the pages, questions and plugin items of the room's agents on its canvas, and leaves out other conversations' pages", () => {
     const items = [page("plan", builderInRoom.id), page("which", builderInRoom.id, "ask"), page("checklist", builderInRoom.id, "plugin"), page("elsewhere", "another")];
     const state = items.reduce((before, item) => serverSent(before, { type: "canvas.upserted", item }), showingRoom([]));
-    expect(state.roomTimeline!.canvas.map(({ id }) => id)).toEqual(["plan", "which"]);
+    expect(state.roomTimeline!.canvas.map(({ id }) => id)).toEqual(["plan", "which", "checklist"]);
   });
 
   test("takes an agent's pages and questions off the canvas as soon as the agent is taken out of the room", () => {

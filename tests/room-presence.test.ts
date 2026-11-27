@@ -49,6 +49,7 @@ const room = (id: string, name: string, people: Room["people"]): Room => ({
   agentsReadGuests: true,
   membersBringAgents: true,
   sandbox: NO_SANDBOX,
+  plugins: [],
   createdAt: 1,
 });
 

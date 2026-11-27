@@ -1,6 +1,6 @@
 import { flushSync } from "react-dom";
 import { useContext, useEffect, useId, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type Dispatch, type KeyboardEvent, type ReactNode, type Ref } from "react";
-import type { AskItem, CanvasItem, Conversation, HarnessId, Person, Profile } from "../shared/model.ts";
+import type { AskItem, CanvasItem, Conversation, HarnessId, Person, PluginCanvasItem, Profile } from "../shared/model.ts";
 import { personGoesBy } from "../shared/people.ts";
 import { categoryChoices, chosenModel } from "../shared/config-options.ts";
 import { mentionAt, withMention } from "../shared/mentions.ts";
@@ -215,9 +215,9 @@ function ThreadLink({ text, onOpen, onOpenWork }: { text?: string; onOpen: () =>
   );
 }
 
-/** A line under an answer whose turn put pages or questions on the room's canvas, which opens the latest of them there. */
+/** A line under an answer whose turn put pages, plugin items or questions on the room's canvas, which opens the latest of them there. */
 function CanvasLine({ items, onOpen }: { items: CanvasItem[]; onOpen: (itemId: string) => void }) {
-  const shownPages = items.filter(({ kind }) => kind === "show");
+  const shownPages = items.filter(({ kind }) => kind === "show" || kind === "plugin");
   const pages = shownPages.length;
   const questions = items.filter(({ kind }) => kind === "ask").length;
   const latest = items.toSorted((a, b) => b.createdAt - a.createdAt)[0]!;
@@ -1376,7 +1376,7 @@ export function RoomView({
   );
 }
 
-/** The room's canvas: its agents' pages and questions, newest in front, which everyone in the room reads there and votes on in the room. */
+/** The room's canvas: its agents' pages, plugin items and questions, newest in front, which everyone in the room reads there and votes on in the room. */
 export function RoomCanvas({
   room,
   profiles,
@@ -1388,6 +1388,7 @@ export function RoomCanvas({
   canvasViews,
   itemToShow,
   readOnly,
+  canActOnPlugins = true,
   onHide,
 }: {
   room: Room;
@@ -1400,9 +1401,19 @@ export function RoomCanvas({
   canvasViews: Record<string, string>;
   itemToShow: { itemId: string } | null;
   readOnly: boolean;
+  canActOnPlugins?: boolean;
   onHide: () => void;
 }) {
   const authorOf = useMemo(() => roomCanvasAuthorOf(room, profiles, people, words.nameless), [room, profiles, people]);
+  const promptForPluginItem = (item: PluginCanvasItem, text: string) => {
+    const trimmed = text.trim();
+    if (!trimmed) throw new Error("The message is empty.");
+    const agent = room.agents.find(({ profileId, conversationId }) => conversationId === item.conversationId || agentStandIn(room.id, profileId) === item.conversationId);
+    if (!agent) throw new Error("That agent is no longer in the room.");
+    if (!connection.send({ type: "room.write", roomId: room.id, text: trimmed, tags: [agent.profileId], threadId: null })) {
+      throw new Error("Mirador is not connected.");
+    }
+  };
   return (
     <div className="kept-canvas" style={{ display: shown ? "contents" : "none" }}>
       <CanvasShown.Provider value={shown}>
@@ -1421,6 +1432,8 @@ export function RoomCanvas({
           onHide={onHide}
           inRoom
           readOnly={readOnly}
+          canActOnPlugins={canActOnPlugins}
+          onPluginPrompt={promptForPluginItem}
           itemToShow={itemToShow}
           authorOf={authorOf}
         />

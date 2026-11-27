@@ -522,6 +522,8 @@ export type ClientMessage =
   | { type: "room.set-peoples-tasks-wait"; roomId: string; wait: boolean }
   /** What the room's Claude Code agents load of your own Claude Code setup; those already there start afresh and read the room again, once. */
   | { type: "room.set-claude-setup"; roomId: string; setup: ClaudeSetup }
+  /** Installed Mirador plugins enabled for the room, by plugin name; host agents already working there start afresh. */
+  | { type: "room.set-plugins"; roomId: string; plugins: string[] }
   /** Whether the agent gets its profile's value of the variable, by name; already there, it starts afresh and reads the room again, once. */
   | { type: "room.set-agent-variable"; roomId: string; profileId: string; name: string; given: boolean }
   /** Whether the agent gets all of this computer's environment; already there, it starts afresh and reads the room again, once. */

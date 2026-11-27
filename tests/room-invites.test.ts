@@ -28,7 +28,7 @@ function keyPair() {
 }
 
 const addRoom = (store: Store, id: string) =>
-  store.insertRoom({ id, name: "Launch", workspaceId: "w1", agents: [], permissions: "read-freely", people: [], peoplesTasksWait: true, claudeSetup: ALL_OF_CLAUDE_SETUP, agentsReadGuests: true, membersBringAgents: true, sandbox: NO_SANDBOX, createdAt: 1 });
+  store.insertRoom({ id, name: "Launch", workspaceId: "w1", agents: [], permissions: "read-freely", people: [], peoplesTasksWait: true, claudeSetup: ALL_OF_CLAUDE_SETUP, agentsReadGuests: true, membersBringAgents: true, sandbox: NO_SANDBOX, plugins: [], createdAt: 1 });
 
 function machine(owners = keyPair()) {
   const clock = { now: 1_000_000 };
