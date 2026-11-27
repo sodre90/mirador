@@ -21,6 +21,7 @@ import {
   type StoredEvent,
   type UsageLimitWait,
 } from "../shared/model.ts";
+import type { SandboxSetup } from "../shared/sandbox.ts";
 import { markInitials } from "../shared/marks.ts";
 import { personGoesBy } from "../shared/people.ts";
 import { pastelVariables } from "./pastels.ts";
@@ -175,6 +176,7 @@ function ChatHeader({
   forkable,
   begun,
   onOpenSandbox,
+  sandboxSetup,
 }: {
   conversation: Conversation;
   profiles: Profile[];
@@ -190,8 +192,9 @@ function ChatHeader({
   begun: boolean;
   /** Opens the settings of the workspace sandbox the conversation's agent runs in; null where it runs on this computer. */
   onOpenSandbox: (() => void) | null;
+  sandboxSetup: SandboxSetup;
 }) {
-  const statusDetail = statusDetailOf(conversation);
+  const statusDetail = statusDetailOf(conversation, sandboxSetup);
   const settings = useConversationSettings();
   return (
     <header className="chat-header" data-pane-bar>
@@ -2515,6 +2518,7 @@ export function ChatPanel({
                         forkable={canFork(conversation, open)}
                         begun={begun}
                         onOpenSandbox={sandbox.sandboxed ? () => openWorkspaceSandbox(dispatch, conversation.workspaceId) : null}
+                        sandboxSetup={sandbox.setup}
                       />
                     )}
                     {find.query !== null && <FindBar find={find} />}

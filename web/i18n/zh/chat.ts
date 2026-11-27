@@ -81,7 +81,10 @@ export const chat: Messages["chat"] = {
     "making-worktree": "正在创建工作树…",
     "setting-up-worktree": "正在准备工作树…",
     "waiting-for-sandbox-folders": "正在等待沙箱带着新的文件夹重新启动…",
+    "preparing-sandbox": "正在准备沙箱；第一次需要几分钟…",
+    "starting-sandbox": "正在启动沙箱…",
   },
+  sandboxImageStep: (at, of) => `正在准备沙箱：构建 Agent 的镜像，第 ${at} 步，共 ${of} 步…`,
   notice: {
     lines: (count) => `${count} 行`,
     error: "错误",

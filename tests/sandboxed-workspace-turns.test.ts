@@ -184,6 +184,24 @@ test("a sandboxed workspace's conversation starts its agent in the workspace's V
   await conversations.shutdown();
 });
 
+test("while its sandbox's VM starts, a conversation says so, and so does one that starts meanwhile, until their agents started", async () => {
+  const { conversations, launcher } = sandboxedWorkspace();
+  let letStart = () => {};
+  launcher.starting = new Promise((resolve) => (letStart = resolve));
+  const first = conversations.create("w1", BUILDER);
+  const second = conversations.create("w1", BUILDER);
+
+  void conversations.send(first.id, "go").catch(() => {});
+  await until(() => conversations.get(first.id).busyWith === "starting-sandbox");
+  void conversations.send(second.id, "go").catch(() => {});
+  await until(() => conversations.get(second.id).busyWith === "starting-sandbox");
+  letStart();
+
+  await until(() => [first, second].every(({ id }) => conversations.get(id).status === "error"));
+  expect([first, second].map(({ id }) => conversations.get(id).busyWith)).toEqual([undefined, undefined]);
+  await conversations.shutdown();
+});
+
 test("a key a command of the profile gives is read as its agent starts in the VM, stays out of the VM, and keeps no sandbox off before it ran", async () => {
   const { store, conversations, launcher, workspaceSandboxes, claude, turnFailure } = sandboxedWorkspace();
   store.saveProfile(profileOf("vault", "Vault", "claude", `ANTHROPIC_API_KEY=$(printf sk-ant-from-the-vault)\nCLAUDE_CODE_EXECUTABLE=${claude.program}`));

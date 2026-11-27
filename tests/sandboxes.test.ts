@@ -197,6 +197,28 @@ describe("a room's sandbox", () => {
     rmSync(socketsParent, { recursive: true, force: true });
   });
 
+  test("tells a launch what it waits for: the sandbox set up and the VM started the first time, the VM alone once set up, nothing while it runs", async () => {
+    const workspace = repository();
+    const sandboxes = new Sandboxes(new AppleContainer(new FakeContainerCli(), AVAILABLE), hostFor(workspace).host, IDLE_STOP_MS);
+    const launchTelling = async (agent: AgentInSandbox) => {
+      const told: string[] = [];
+      return { launched: await sandboxes.launch(agent, (step) => told.push(step)), told };
+    };
+
+    const first = await launchTelling(agentIn(workspace));
+    const beside = await launchTelling(agentIn(workspace, { profileId: "reviewer" }));
+    first.launched.gone!();
+    beside.launched.gone!();
+    await sandboxes.stop(ROOM);
+    const again = await launchTelling(agentIn(workspace));
+
+    expect(first.told).toEqual(["preparing-sandbox", "starting-sandbox"]);
+    expect(beside.told).toEqual([]);
+    expect(again.told).toEqual(["starting-sandbox"]);
+    again.launched.gone!();
+    await sandboxes.stopAll();
+  });
+
   test("starts one VM for a room whose agents launch at once", async () => {
     const workspace = repository();
     const cli = new FakeContainerCli();

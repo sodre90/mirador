@@ -25,7 +25,7 @@ import {
   type SandboxSetting,
   type SandboxSetup,
 } from "../../shared/sandbox.ts";
-import type { Conversation } from "../../shared/model.ts";
+import type { BusyWith, Conversation } from "../../shared/model.ts";
 import type { AgentLaunch } from "../acp/harness.ts";
 import type { Store } from "../store.ts";
 import { addedFolderRefusal, foldersMounted, repositoryRefusal, type FolderSurroundings, type FoldersMounted, type LeftOutFolder, type MountedFolder, type OtherSandboxes } from "./added-folders.ts";
@@ -487,13 +487,19 @@ export class Sandboxes {
   }
 
   /**
-   * The command and environment that start the agent in its sandbox's VM, the VM started first where it isn't running.
-   * Throws SandboxNotReady when anything of it is not ready; nothing here ever runs the agent on this computer.
+   * The command and environment that start the agent in its sandbox's VM, the VM started first where it isn't running,
+   * telling as it goes what it waits for. Throws SandboxNotReady when anything of it is not ready; nothing here ever runs
+   * the agent on this computer.
    */
-  async launch(agent: AgentInSandbox): Promise<AgentLaunch> {
+  async launch(agent: AgentInSandbox, told: (step: SandboxStartStep) => void = () => {}): Promise<AgentLaunch> {
     this.assertMayLaunch(agent, false);
     const { harness } = agent.kind;
-    const vm = await this.oneLaunchAtATime(agent.owner, () => this.startedAgentsVm(agent.owner, { harness, version: agent.version }));
+    const image = { harness, version: agent.version };
+    let toldLast: SandboxStartStep | null = null;
+    const tell = (step: SandboxStartStep) => step !== toldLast && told((toldLast = step));
+    const first = this.firstStepOf(agent.owner, image);
+    if (first) tell(first);
+    const vm = await this.oneLaunchAtATime(agent.owner, () => this.startedAgentsVm(agent.owner, image, tell));
     const places = { configFolder: sandboxConfigFolder(this.host.dataDir, agent.owner, harness, harness === "pi" ? agent.profileId : undefined), modelBaseUrl: modelAddress(agent.profileId) };
     const environment = environmentInVm(agent.given, agent.kind, places, secretsOf(agent.route));
     const launched = this.launchedIn(vm, { workingDirectory: agent.workingDirectory, environment, command: agent.agent });
@@ -814,16 +820,24 @@ export class Sandboxes {
     return putBackIn(ran.stdout);
   }
 
+  /** What a launch of this agent waits for before it can start in the owner's VM, as things stand: nothing where the VM runs on its image. */
+  private firstStepOf(owner: SandboxOwner, agent: AgentImage): SandboxStartStep | null {
+    if (this.setupState.stage !== "ready" || !this.readyImage(agent)) return "preparing-sandbox";
+    return this.agentsVm(owner)?.running ? null : "starting-sandbox";
+  }
+
   /**
    * The VM of the sandbox's own agents, running: the one there is, or a new one where there is none, where the workspace
    * it works in changed, or where it runs another image or started with other added folders and no agent of it is at work.
    */
-  private async startedAgentsVm(owner: SandboxOwner, agent: AgentImage): Promise<SandboxVm> {
+  private async startedAgentsVm(owner: SandboxOwner, agent: AgentImage, told: (step: SandboxStartStep) => void): Promise<SandboxVm> {
     const image = await this.preparedImage(agent);
     const folders = this.host.foldersOf(owner);
     const existing = this.agentsVm(owner);
     const outdatedWhileIdle = (vm: SandboxVm) => vm.agents === 0 && (vm.image !== image || !sameFolders(vm.folders, folders));
     const outdated = existing && !existing.stopping && (existing.workspace !== this.host.workspaceOf(owner) || outdatedWhileIdle(existing));
+    const reused = existing && !existing.stopping && !outdated;
+    if (!reused || !existing.running) told("starting-sandbox");
     if (outdated) await this.stop(owner);
     if (existing && !existing.stopping) {
       if (existing.image !== image) throw new SandboxNotReady({ kind: "versions-differ" });
@@ -1147,6 +1161,9 @@ export class Sandboxes {
     }
   }
 }
+
+/** What a sandboxed agent's start waits for, where it waits: its sandbox set up, or its VM started. */
+export type SandboxStartStep = Extract<BusyWith, "preparing-sandbox" | "starting-sandbox">;
 
 /** What the conversations of sandboxed rooms and workspaces need of the sandboxes. */
 export type SandboxedAgents = Pick<Sandboxes, "launch" | "confirmedRunning" | "turnStarted" | "turnEnded" | "settleHeldFilesFor" | "stopSandboxesWorkingIn" | "stop" | "mountedFolders" | "runsWithOtherFolders">;

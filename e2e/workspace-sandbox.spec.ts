@@ -181,7 +181,7 @@ test("the switch stays off where the workspace's git config runs hooks from a fo
   await again.getByRole("button", { name: "Done" }).click();
 });
 
-test("turned on, the workspace's sandbox is set up with its progress shown, marked in the sidebar and the conversation, and its agent works in a VM of its own without the key", async ({ page }) => {
+test("turned on, the workspace's sandbox is set up with its progress shown, in a conversation waiting for it too, marked in the sidebar and the conversation, and its agent works in a VM of its own without the key", async ({ page }) => {
   test.skip(!sandboxesRunHere, "Sandboxes run on macOS 26 on Apple silicon only.");
   await signIn(page, host);
   const card = projectCard(page);
@@ -207,9 +207,6 @@ test("turned on, the workspace's sandbox is set up with its progress shown, mark
   const setup = dialog.locator(".room-sandbox-setup");
   await expect(setup).toHaveText("Building the agents' image on this Mac: step 2 of 3…");
   await keepScreenshot(dialog, "setup-progress");
-  writeFileSync(buildHeldBy(), "");
-  await expect(setup).toHaveText("Set up on this Mac.");
-  await keepScreenshot(dialog, "switch-on");
   await expect(networkChoice(dialog, "Only the model and Mirador")).toBeChecked();
   await dialog.getByRole("button", { name: "Done" }).click();
   await expect(dialog).toBeHidden();
@@ -222,7 +219,20 @@ test("turned on, the workspace's sandbox is set up with its progress shown, mark
   builderConversation = await startConversation(page);
   const headerMark = chatHeader(page).locator(".conversation-sandboxed");
   await expect(headerMark).toHaveText("Sandboxed");
-  await keepScreenshot(chatHeader(page), "header-mark");
+
+  await test.step("while the image builds, the conversation says how far it got, until its agent has started", async () => {
+    const waitingFor = chatHeader(page).locator(".status-detail");
+    await expect(waitingFor).toHaveText("Setting up the sandbox: building the agents' image, step 2 of 3…");
+    await keepScreenshot(chatHeader(page), "header-setting-up");
+    writeFileSync(buildHeldBy(), "");
+    await expect(waitingFor).toHaveCount(0);
+    await keepScreenshot(chatHeader(page), "header-mark");
+    const settings = await openSandboxOf(page, card, "project");
+    await expect(settings.locator(".room-sandbox-setup")).toHaveText("Set up on this Mac.");
+    await keepScreenshot(settings, "switch-on");
+    await settings.getByRole("button", { name: "Done" }).click();
+    await expect(settings).toBeHidden();
+  });
 
   await test.step("it starts in the project folder, as the sandbox sees no worktree", async () => {
     await sendMessage(page, "FOLDER");

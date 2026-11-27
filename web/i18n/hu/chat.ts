@@ -81,7 +81,10 @@ export const chat: Messages["chat"] = {
     "making-worktree": "A worktree létrehozása…",
     "setting-up-worktree": "A worktree beállítása…",
     "waiting-for-sandbox-folders": "Várakozás, amíg a sandbox újraindul a mappáival…",
+    "preparing-sandbox": "A sandbox előkészítése; először ez néhány percig tart…",
+    "starting-sandbox": "A sandbox indítása…",
   },
+  sandboxImageStep: (at, of) => `A sandbox előkészítése: az ágensek image-ének építése, ${of} lépésből a(z) ${at}.…`,
   notice: {
     lines: (count) => `${count} sor`,
     error: "Hiba",

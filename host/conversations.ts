@@ -115,7 +115,7 @@ import { canvasFollowUp, canvasUseOf, isCanvasFollowUp, type TurnToolCall } from
 import { HarnessProcess, type AgentLaunch, type ConfigValue } from "./acp/harness.ts";
 import type { SessionInSandbox } from "./sandbox/agent-guidance.ts";
 import { repositoryHooksOff } from "./sandbox/hooks-off.ts";
-import { belongsToSandbox, NO_SANDBOXES, sandboxCanvasAddress, sandboxConfigFolder, sandboxOfConversation, type AgentInSandbox, type ConversationSandbox, type SandboxedAgents } from "./sandbox/sandboxes.ts";
+import { belongsToSandbox, NO_SANDBOXES, sandboxCanvasAddress, sandboxConfigFolder, sandboxOfConversation, type AgentInSandbox, type ConversationSandbox, type SandboxedAgents, type SandboxStartStep } from "./sandbox/sandboxes.ts";
 import { SandboxNotReady } from "./sandbox/vm-launcher.ts";
 import { agentVersionIn } from "./sandbox/agent-version.ts";
 import { BUN_IN_VM } from "./sandbox/agent-environment.ts";
@@ -539,6 +539,10 @@ export class ConversationService {
   private readonly replaysBeingRead = new Map<string, acp.SessionNotification[]>();
   private readonly contextUsage: Map<string, ContextUsage>;
   private readonly creditReads = new Map<string, ReturnType<typeof setTimeout>>();
+  /** What each agent process starting in its sandbox waits for now: its sandbox set up, or its VM started. */
+  private readonly sandboxStartSteps = new Map<HarnessProcess, SandboxStartStep>();
+  /** The conversations whose sessions wait for each agent process to start. */
+  private readonly waitingForProcess = new Map<HarnessProcess, Set<string>>();
   /** Each workspace's last save of where its new conversations work, which checks the repository first; settled, failed or not. */
   private readonly worktreeSettingsSaved = new Map<string, Promise<unknown>>();
   private readonly planQuotas = new PlanQuotasByProfile();
@@ -2208,7 +2212,7 @@ export class ConversationService {
     this.forgetUnseenTurnEnd(conversationId);
     this.retitleFromFirstMessage(conversationId, text);
     const notes = this.notesForAgent(conversationId);
-    this.setStatus(conversationId, "starting");
+    if (!this.showsSandboxStart(conversationId)) this.setStatus(conversationId, "starting");
     this.store.turnStarted(conversationId);
     this.hearActivity(conversationId, { kind: "turn-started" });
     if (runtime.heldCodexSession) await this.ensureSession(conversationId).catch(() => {});
@@ -3335,7 +3339,7 @@ export class ConversationService {
     const isFirstSession = conversation.acpSessionId === null;
     const setupKept = this.keepsSessionSetup(conversation);
     const harness = this.processToOpenOn(conversation);
-    const capabilities = await harness.start();
+    const capabilities = await this.startedFor(conversationId, harness);
     const sessionRequest = await this.sessionRequest(conversationId);
 
     const canResume = Boolean(capabilities.agentCapabilities?.sessionCapabilities?.resume) && !replaysHistoryOnResume(conversation.harness);
@@ -3804,10 +3808,12 @@ export class ConversationService {
       this.startedOnThisComputer.add(harness);
       return onThisComputer;
     }
-    const launching = this.agentInSandbox(sandbox, launch, profile, onThisComputer).then((agent) => this.sandboxes.launch(agent));
-    const launched = await launching.catch((error: unknown) => {
-      throw sandbox.owner.kind === "workspace" && error instanceof SandboxNotReady ? new HostProblemError({ code: "workspace-sandbox-not-ready", why: error.why }) : error;
-    });
+    const launching = this.agentInSandbox(sandbox, launch, profile, onThisComputer).then((agent) => this.sandboxes.launch(agent, (step) => this.tellSandboxStart(harness, step)));
+    const launched = await launching
+      .catch((error: unknown) => {
+        throw sandbox.owner.kind === "workspace" && error instanceof SandboxNotReady ? new HostProblemError({ code: "workspace-sandbox-not-ready", why: error.why }) : error;
+      })
+      .finally(() => this.sandboxStartSteps.delete(harness));
     const start = {};
     this.sandboxStarts.set(harness, start);
     return {
@@ -3817,6 +3823,34 @@ export class ConversationService {
         launched.gone?.();
       },
     };
+  }
+
+  private tellSandboxStart(harness: HarnessProcess, step: SandboxStartStep) {
+    this.sandboxStartSteps.set(harness, step);
+    this.waitingForProcess.get(harness)?.forEach((conversationId) => this.setBusy(conversationId, step));
+  }
+
+  /**
+   * The agent's process, started: a conversation waiting for it says meanwhile what a sandbox starting for it waits for,
+   * a conversation that joins the wait part-way through too, and goes back to what it was doing once it started.
+   */
+  private async startedFor(conversationId: string, harness: HarnessProcess) {
+    const waiting = this.waitingForProcess.get(harness) ?? new Set<string>();
+    this.waitingForProcess.set(harness, waiting.add(conversationId));
+    const step = this.sandboxStartSteps.get(harness);
+    if (step) this.setBusy(conversationId, step);
+    try {
+      return await harness.start();
+    } finally {
+      waiting.delete(conversationId);
+      if (waiting.size === 0 && this.waitingForProcess.get(harness) === waiting) this.waitingForProcess.delete(harness);
+      if (this.showsSandboxStart(conversationId)) this.setStatus(conversationId, this.runtime(conversationId).running ? "starting" : "idle");
+    }
+  }
+
+  private showsSandboxStart(conversationId: string) {
+    const busyWith = this.statusOverrides.get(conversationId)?.busyWith;
+    return busyWith === "preparing-sandbox" || busyWith === "starting-sandbox";
   }
 
   /** A sandbox sees its workspace's folder alone, so a workspace's conversation that works in a worktree of its own can't start in it. */

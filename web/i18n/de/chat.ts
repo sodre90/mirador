@@ -83,7 +83,10 @@ export const chat: Messages["chat"] = {
     "making-worktree": "Worktree wird angelegt…",
     "setting-up-worktree": "Worktree wird eingerichtet…",
     "waiting-for-sandbox-folders": "Warten, bis die Sandbox mit ihren Ordnern neu startet…",
+    "preparing-sandbox": "Die Sandbox wird eingerichtet; beim ersten Mal dauert das einige Minuten…",
+    "starting-sandbox": "Die Sandbox wird gestartet…",
   },
+  sandboxImageStep: (at, of) => `Die Sandbox wird eingerichtet: Das Image der Agenten wird gebaut, Schritt ${at} von ${of}…`,
   notice: {
     lines: (count) => plural(count, "1 Zeile", `${count} Zeilen`),
     error: "Fehler",

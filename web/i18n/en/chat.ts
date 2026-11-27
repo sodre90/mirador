@@ -87,7 +87,10 @@ export const chat = {
     "making-worktree": "Making the worktree…",
     "setting-up-worktree": "Setting up the worktree…",
     "waiting-for-sandbox-folders": "Waiting for the sandbox to restart with its folders…",
+    "preparing-sandbox": "Setting up the sandbox; the first time, this takes a few minutes…",
+    "starting-sandbox": "Starting the sandbox…",
   } satisfies Record<BusyWith, string>,
+  sandboxImageStep: (at: number, of: number) => `Setting up the sandbox: building the agents' image, step ${at} of ${of}…`,
   notice: {
     lines: (count: number) => `${count} lines`,
     error: "Error",

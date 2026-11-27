@@ -163,18 +163,23 @@ export function SandboxedMark({ className, hint, wordless = false, onOpen }: { c
 
 export const openWorkspaceSandbox = (dispatch: Dispatch<AppAction>, workspaceId: string) => dispatch({ type: "open-overlay", overlay: { kind: "workspace-sandbox", workspaceId } });
 
-/** What a conversation shows of its workspace's sandbox: whether its agent runs there, and the changes held as it worked. */
+/**
+ * What a conversation shows of its workspace's sandbox: whether its agent runs there, and the changes held as it worked;
+ * and how far sandboxes are set up on this computer, which a conversation waiting for its sandbox shows.
+ */
 export interface ConversationSandbox {
   sandboxed: boolean;
   heldChanges: HeldChange[];
   holdsTooMany: boolean;
+  setup: SandboxSetup;
 }
 
-export function conversationSandboxOf(state: Pick<AppState, "workspaces" | "heldChanges" | "sandboxesHoldingTooMany">, { id, workspaceId, roomId }: Conversation): ConversationSandbox {
+export function conversationSandboxOf(state: Pick<AppState, "workspaces" | "heldChanges" | "sandboxesHoldingTooMany" | "sandboxSetup">, { id, workspaceId, roomId }: Conversation): ConversationSandbox {
   const owner = workspaceSandbox(workspaceId);
   return {
     sandboxed: roomId === undefined && state.workspaces.some((workspace) => workspace.id === workspaceId && workspace.sandbox.on),
     heldChanges: roomId === undefined ? state.heldChanges.filter((change) => ofSandbox(owner)(change) && change.conversationIds.includes(id)) : [],
     holdsTooMany: holdsTooMany(state.sandboxesHoldingTooMany, owner),
+    setup: state.sandboxSetup,
   };
 }
