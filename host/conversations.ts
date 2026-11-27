@@ -778,7 +778,7 @@ export class ConversationService {
       clearTimeout(stopUnanswered);
       runtime.outsideTurn = undefined;
       settle();
-      this.sendNextQueuedMessage(conversationId);
+      this.sendQueueAfterPromptsThatWaited(conversationId);
       this.stopOwnProcessOnceIdle(conversationId);
     }
   }
@@ -2444,6 +2444,14 @@ export class ConversationService {
     this.lookAtHeldFilesAgain(conversationId);
     this.leaveSandboxTurnedOff(conversationId);
     this.stopOwnProcessOnceIdle(conversationId);
+  }
+
+  /**
+   * A prompt that waited for Mirador's own to be answered starts its turn first, and the queue goes on after it. The
+   * waiting prompts resume in the microtasks that settling queued, so a microtask queued after them comes last.
+   */
+  private sendQueueAfterPromptsThatWaited(conversationId: string) {
+    queueMicrotask(() => this.sendNextQueuedMessage(conversationId));
   }
 
   /** Armed before anything that may start the next turn, which disarms it. */
