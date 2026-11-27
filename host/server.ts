@@ -2341,7 +2341,15 @@ export function startServer(services: HostServices) {
       case "room.subscribe": {
         const timeline = rooms.timeline(message.roomId);
         socket.data.roomSubscriptions.add(message.roomId);
-        reply({ type: "room.timeline", roomId: message.roomId, ...timeline, canvas: rooms.canvas(message.roomId), votes: roomQuestions.votesIn(message.roomId), workspaceCalls: rooms.workspaceCallsIn(message.roomId) });
+        reply({
+          type: "room.timeline",
+          roomId: message.roomId,
+          ...timeline,
+          canvas: rooms.canvas(message.roomId),
+          votes: roomQuestions.votesIn(message.roomId),
+          workspaceCalls: rooms.workspaceCallsIn(message.roomId),
+          broughtSteps: rooms.broughtStepsIn(message.roomId),
+        });
         return reply({ type: "room.presence", roomId: message.roomId, ...roomPresence.presenceIn(message.roomId) });
       }
       case "room.unsubscribe":
@@ -2377,6 +2385,9 @@ export function startServer(services: HostServices) {
         return rooms.broughtTaskStarted(socket.data.personId, message.roomId, message.agentId, message.taskId);
       case "room.brought-task-answered":
         return rooms.broughtTaskAnswered(socket.data.personId, message.roomId, message.agentId, message.taskId, message.text, message.ended);
+      case "room.brought-step":
+        if (socket.data.carriesAgents) return rooms.broughtStep(socket.data.personId, message.roomId, message.agentId, message.taskId, message.stepId, message.kind, message.delta);
+        throw new HostProblemError({ code: "room-agent-not-yours" });
       case "room.brought-canvas-show":
         if (socket.data.carriesAgents) return rooms.broughtCanvasShow(socket.data.personId, message.roomId, message.agentId, message.taskId, message.itemId, message.title, message.html);
         throw new HostProblemError({ code: "room-agent-not-yours" });

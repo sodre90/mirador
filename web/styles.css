@@ -11348,6 +11348,87 @@ button.link.more-rows {
   padding-bottom: 6px;
 }
 
+.brought-thread-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.brought-step-thought,
+.brought-step-text {
+  margin-left: 38px;
+}
+
+.room-workspace-files {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.room-workspace-file-chip {
+  padding: 1px 7px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--panel);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: calc(11.5px * var(--font-scale));
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.room-workspace-file-chip:hover {
+  border-color: var(--accent);
+}
+
+.room-workspace-activity-button {
+  padding: 3px 9px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--panel);
+  color: var(--text);
+  font-size: calc(12px * var(--font-scale));
+  white-space: nowrap;
+}
+
+.room-workspace-activity-button:hover,
+.room-workspace-activity-button[aria-pressed="true"] {
+  border-color: var(--accent);
+}
+
+.workspace-activity-list {
+  gap: 10px;
+  padding: 12px 16px;
+}
+
+.workspace-activity-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.workspace-activity-item .workspace-calls {
+  padding-left: 0;
+}
+
+.workspace-activity-meta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.workspace-activity-agent {
+  font-weight: 500;
+  color: var(--text);
+}
+
 .room-role-label {
   padding: 0 6px;
   border: 1px solid var(--border);

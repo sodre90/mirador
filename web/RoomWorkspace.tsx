@@ -1,10 +1,19 @@
-import { useState, type ReactNode } from "react";
-import type { RoomWorkspaceAccess, RoomWorkspaceAnswer, RoomWorkspaceApproval, RoomWorkspaceCall } from "../shared/room-workspace.ts";
+import { useState, type KeyboardEvent, type ReactNode } from "react";
+import {
+  interleavedThreadActivity,
+  summarizeWorkspaceCalls,
+  type RoomBroughtStep,
+  type RoomWorkspaceAccess,
+  type RoomWorkspaceAnswer,
+  type RoomWorkspaceApproval,
+  type RoomWorkspaceCall,
+  type ThreadActivityItem,
+} from "../shared/room-workspace.ts";
 import { Timestamp, usePersonName } from "./Chat.tsx";
 import { ConfirmButton } from "./ConfirmButton.tsx";
 import { connection } from "./connection.ts";
 import { t } from "./i18n/index.ts";
-import { HighlightedText } from "./Markdown.tsx";
+import { HighlightedText, MarkdownText } from "./Markdown.tsx";
 import { MeaningMark } from "./RoomSection.tsx";
 
 const words = t.rooms;
@@ -171,5 +180,144 @@ export function WorkspaceCalls({ calls }: { calls: RoomWorkspaceCall[] }) {
         <WorkspaceCallEntry key={call.id} call={call} />
       ))}
     </ul>
+  );
+}
+
+type ActivityGroup = { kind: "step"; step: RoomBroughtStep } | { kind: "calls"; calls: RoomWorkspaceCall[] };
+
+function groupActivity(items: ThreadActivityItem[]): ActivityGroup[] {
+  const groups: ActivityGroup[] = [];
+  for (const entry of items) {
+    if (entry.item === "step") {
+      groups.push({ kind: "step", step: entry.step });
+    } else {
+      const previous = groups.at(-1);
+      if (previous?.kind === "calls") previous.calls.push(entry.call);
+      else groups.push({ kind: "calls", calls: [entry.call] });
+    }
+  }
+  return groups;
+}
+
+/** Streamed thinking/text steps and workspace calls of a brought agent working in the room's workspace, interleaved in order. */
+export function BroughtThreadActivity({
+  calls,
+  steps,
+  finalAnswerText,
+}: {
+  calls: RoomWorkspaceCall[];
+  steps: RoomBroughtStep[];
+  finalAnswerText?: string | null;
+}) {
+  const groups = groupActivity(interleavedThreadActivity(calls, steps, finalAnswerText));
+  if (groups.length === 0) return null;
+  return (
+    <div className="brought-thread-steps">
+      {groups.map((group) => {
+        if (group.kind === "calls") return <WorkspaceCalls key={`calls:${group.calls[0]!.id}`} calls={group.calls} />;
+        const { step } = group;
+        if (step.kind === "thought") {
+          return (
+            <details key={`step:${step.id}`} className="thought brought-step-thought" data-brought-step={step.id}>
+              <summary>{t.chat.entry.thinking}</summary>
+              <MarkdownText text={step.text} />
+            </details>
+          );
+        }
+        return (
+          <div key={`step:${step.id}`} className="brought-step-text message agent" data-brought-step={step.id}>
+            <MarkdownText text={step.text} />
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+const MOST_CHANGED_FILE_CHIPS = 3;
+
+/** A compact summary under a room answer (or working line) of what a brought agent did in this room's workspace. */
+export function WorkspaceActivityLine({ calls, onOpenThread }: { calls: RoomWorkspaceCall[]; onOpenThread: () => void }) {
+  const summary = summarizeWorkspaceCalls(calls);
+  if (summary.total === 0) return null;
+  const parts = [
+    summary.read > 0 && words.workspaceCallSummary.read(summary.read),
+    summary.changed > 0 && words.workspaceCallSummary.changed(summary.changed),
+    summary.ran > 0 && words.workspaceCallSummary.ran(summary.ran),
+    summary.denied > 0 && words.workspaceCallSummary.denied(summary.denied),
+    summary.notDone > 0 && words.workspaceCallSummary.notDone(summary.notDone),
+  ].filter((part): part is string => typeof part === "string");
+  if (parts.length === 0) return null;
+  const shownFiles = summary.changedFiles.slice(0, MOST_CHANGED_FILE_CHIPS);
+  const extraFiles = summary.changedFiles.length - shownFiles.length;
+  return (
+    <div className="room-thread-line room-workspace-line">
+      <span>
+        {words.inWorkspace} {parts.join(" · ")}
+      </span>
+      {shownFiles.length > 0 && (
+        <span className="room-workspace-files">
+          {shownFiles.map((file) => (
+            <button key={file} type="button" className="room-workspace-file-chip" onClick={onOpenThread}>
+              {file}
+            </button>
+          ))}
+          {extraFiles > 0 && <span className="hint">{words.moreFiles(extraFiles)}</span>}
+        </span>
+      )}
+    </div>
+  );
+}
+
+/** Room-wide log of everything brought agents read, changed, or ran in this room's workspace, newest first. */
+export function WorkspaceActivityPanel({
+  calls,
+  agentNameOf,
+  onOpenThread,
+  onClose,
+}: {
+  calls: RoomWorkspaceCall[];
+  agentNameOf: (agentId: string) => string;
+  onOpenThread: (threadId: string) => void;
+  onClose: () => void;
+}) {
+  const closeOnEscape = (event: KeyboardEvent<HTMLElement>) => {
+    if (event.key !== "Escape" || event.defaultPrevented) return;
+    event.preventDefault();
+    onClose();
+  };
+  const newestFirst = [...calls].reverse();
+  return (
+    <aside className="side-chat workspace-activity-panel" aria-label={words.workspaceActivity} onKeyDown={closeOnEscape}>
+      <header className="side-chat-header">
+        <div className="side-chat-heading">
+          <h2>{words.workspaceActivity}</h2>
+        </div>
+        <button type="button" className="icon" aria-label={words.closeWorkspaceActivity} onClick={onClose}>
+          ×
+        </button>
+      </header>
+      <div className="timeline workspace-activity-timeline">
+        {newestFirst.length === 0 ? (
+          <div className="notice-line">{words.noWorkspaceActivityYet}</div>
+        ) : (
+          <ul className="workspace-calls workspace-activity-list" aria-label={words.workspaceActivity}>
+            {newestFirst.map((call) => (
+              <li key={call.id} className="workspace-activity-item">
+                <div className="workspace-activity-meta">
+                  <span className="workspace-activity-agent">{agentNameOf(call.agentId)}</span>
+                  <button type="button" className="link" onClick={() => onOpenThread(call.threadId)}>
+                    {words.openThread}
+                  </button>
+                </div>
+                <ul className="workspace-calls">
+                  <WorkspaceCallEntry call={call} />
+                </ul>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </aside>
   );
 }

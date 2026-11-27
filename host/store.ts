@@ -42,7 +42,7 @@ import { claudeSetupIn, isVariableName, type ClaudeSetup, type VariablesChosen }
 import { NO_SANDBOX, roomSandbox, sandboxSettingIn, workspaceSandbox, type SandboxFolder, type SandboxOwner, type SandboxSetting } from "../shared/sandbox.ts";
 import { writtenByAgent, type BroughtAgent, type BroughtAnswerEnd, type Room, type RoomAgent, type RoomAgentModel, type RoomAnswerEnd, type RoomAuthorRole, type RoomInvite, type RoomInviteLetsIn, type RoomJoiner, type RoomMessage, type RoomPerson, type RoomRole, type RoomThread, type TaskHeld } from "../shared/rooms.ts";
 import type { BroughtAgentHere } from "../shared/brought-agents.ts";
-import { MOST_WORKSPACE_CALLS_KEPT, type RoomWorkspaceAccess, type RoomWorkspaceCall } from "../shared/room-workspace.ts";
+import { BROUGHT_STEP_MOST_CHARACTERS, MOST_BROUGHT_STEPS_KEPT, MOST_WORKSPACE_CALLS_KEPT, type BroughtStepKind, type RoomBroughtStep, type RoomWorkspaceAccess, type RoomWorkspaceCall } from "../shared/room-workspace.ts";
 import type { RoomMention } from "../shared/room-mentions.ts";
 import type { RoomBallot } from "../shared/room-votes.ts";
 import type { TerminalLayout } from "../shared/terminal-layout.ts";
@@ -193,6 +193,9 @@ const schema = `
   CREATE TABLE IF NOT EXISTS room_workspace_calls (
     id TEXT PRIMARY KEY, room_id TEXT NOT NULL REFERENCES rooms(id) ON DELETE CASCADE, agent_id TEXT NOT NULL, thread_id TEXT NOT NULL,
     at INTEGER NOT NULL, kind TEXT NOT NULL, about TEXT NOT NULL, state TEXT NOT NULL, diff TEXT, result TEXT, answered_by TEXT);
+  CREATE TABLE IF NOT EXISTS room_brought_steps (
+    id TEXT PRIMARY KEY, room_id TEXT NOT NULL REFERENCES rooms(id) ON DELETE CASCADE, agent_id TEXT NOT NULL, thread_id TEXT NOT NULL,
+    at INTEGER NOT NULL, kind TEXT NOT NULL, text TEXT NOT NULL);
   CREATE TABLE IF NOT EXISTS room_brought_canvas_items (
     id TEXT PRIMARY KEY, room_id TEXT NOT NULL REFERENCES rooms(id) ON DELETE CASCADE, agent_id TEXT NOT NULL,
     created_at INTEGER NOT NULL, item TEXT NOT NULL);
@@ -202,6 +205,7 @@ const schema = `
     person_id TEXT NOT NULL REFERENCES people(id) ON DELETE CASCADE, question INTEGER NOT NULL, option INTEGER NOT NULL,
     PRIMARY KEY (item_id, person_id, question));
   CREATE INDEX IF NOT EXISTS room_workspace_calls_by_agent ON room_workspace_calls (room_id, agent_id, at);
+  CREATE INDEX IF NOT EXISTS room_brought_steps_by_agent ON room_brought_steps (room_id, agent_id, at);
   CREATE TABLE IF NOT EXISTS sandbox_left_folders (path TEXT PRIMARY KEY, left_at INTEGER NOT NULL);
   CREATE TABLE IF NOT EXISTS sandbox_folders (
     owner_kind TEXT NOT NULL, owner_id TEXT NOT NULL, path TEXT NOT NULL, writable INTEGER NOT NULL DEFAULT 0, added_at INTEGER NOT NULL,
@@ -1704,6 +1708,39 @@ export class Store {
   /** The calls the host stopped on: none waits or runs any more. */
   stopWorkspaceCallsUnderWay() {
     this.db.query("UPDATE room_workspace_calls SET state = 'stopped' WHERE state IN ('waiting', 'running')").run();
+  }
+
+  /** Inserts a brought agent's streamed step or appends `delta` to an existing one, up to `BROUGHT_STEP_MOST_CHARACTERS`. */
+  upsertBroughtStep(input: { id: string; roomId: string; agentId: string; threadId: string; at: number; kind: BroughtStepKind; delta: string }): RoomBroughtStep | null {
+    return this.db.transaction(() => {
+      const existing = this.db
+        .query("SELECT id, room_id AS roomId, agent_id AS agentId, thread_id AS threadId, at, kind, text FROM room_brought_steps WHERE id = ?")
+        .get(input.id) as RoomBroughtStep | null;
+      if (existing) {
+        if (existing.roomId !== input.roomId || existing.agentId !== input.agentId || existing.threadId !== input.threadId || existing.kind !== input.kind) return null;
+        if (existing.text.length >= BROUGHT_STEP_MOST_CHARACTERS) return null;
+        const text = (existing.text + input.delta).slice(0, BROUGHT_STEP_MOST_CHARACTERS);
+        this.db.query("UPDATE room_brought_steps SET text = ? WHERE id = ?").run(text, input.id);
+        return { ...existing, text };
+      }
+      const text = input.delta.slice(0, BROUGHT_STEP_MOST_CHARACTERS);
+      this.db
+        .query("INSERT INTO room_brought_steps (id, room_id, agent_id, thread_id, at, kind, text) VALUES (?, ?, ?, ?, ?, ?, ?)")
+        .run(input.id, input.roomId, input.agentId, input.threadId, input.at, input.kind, text);
+      this.db
+        .query(
+          `DELETE FROM room_brought_steps WHERE room_id = ?1 AND agent_id = ?2
+           AND id NOT IN (SELECT id FROM room_brought_steps WHERE room_id = ?1 AND agent_id = ?2 ORDER BY at DESC, rowid DESC LIMIT ?3)`,
+        )
+        .run(input.roomId, input.agentId, MOST_BROUGHT_STEPS_KEPT);
+      return { id: input.id, roomId: input.roomId, agentId: input.agentId, threadId: input.threadId, at: input.at, kind: input.kind, text };
+    })();
+  }
+
+  listBroughtSteps(roomId: string): RoomBroughtStep[] {
+    return this.db
+      .query("SELECT id, room_id AS roomId, agent_id AS agentId, thread_id AS threadId, at, kind, text FROM room_brought_steps WHERE room_id = ? ORDER BY at, rowid")
+      .all(roomId) as RoomBroughtStep[];
   }
 
   /** Takes the brought agent out of the room with the tasks it was sent and has not answered. */

@@ -1031,6 +1031,7 @@ describe("a page that shows a room", () => {
       canvas: [],
       votes: [],
       workspaceCalls: [],
+      broughtSteps: [],
     });
 
   test("puts the pages and questions of the room's agents on its canvas, and leaves out plugins' items and other conversations' pages", () => {

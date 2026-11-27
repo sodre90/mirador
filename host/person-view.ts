@@ -429,7 +429,13 @@ export function personView(store: PeopleSeen & Pick<Store, "findRoom" | "listPro
     "room-invites.listed": HIDDEN,
     "room-joiners.listed": HIDDEN,
     "rooms.waiting-to-join": (message, socket) => shownIf(message.personId === socket.personId, message),
-    "room.timeline": (message, socket) => shownIf(isIn(socket, message.roomId), { ...message, canvas: timelineCanvasSeen(message.roomId, message.canvas), workspaceCalls: readsAgentsWorkIn(socket, message.roomId) ? message.workspaceCalls : [] }),
+    "room.timeline": (message, socket) =>
+      shownIf(isIn(socket, message.roomId), {
+        ...message,
+        canvas: timelineCanvasSeen(message.roomId, message.canvas),
+        workspaceCalls: readsAgentsWorkIn(socket, message.roomId) ? message.workspaceCalls : [],
+        broughtSteps: readsAgentsWorkIn(socket, message.roomId) ? message.broughtSteps : [],
+      }),
     "room.message": (message, socket) => shownIf(isIn(socket, message.message.roomId), message),
     "room.votes": (message, socket) => shownIf(isIn(socket, message.roomId), message),
     "rooms.reading": ({ personId, readings }, socket) =>
@@ -439,6 +445,7 @@ export function personView(store: PeopleSeen & Pick<Store, "findRoom" | "listPro
     "room.approvals": ({ roomId, approvals, tasks, workspace }, socket) =>
       shownIf(isIn(socket, roomId), { type: "room.approvals", roomId, approvals: approvals.filter(waitsFor(socket)).map(approvalSeen), tasks: tasks.filter(waitsFor(socket)), workspace: workspace.filter(waitsFor(socket)) }),
     "room.workspace-call-shown": (message, socket) => shownIf(readsAgentsWorkIn(socket, message.call.roomId), message),
+    "room.brought-step-shown": (message, socket) => shownIf(readsAgentsWorkIn(socket, message.step.roomId), message),
     "room.workspace-answered": (message, socket) => shownIf(message.personId === socket.personId && socket.carriesAgents, message),
     "room.sandbox-checked": HIDDEN,
     "workspace.sandbox-checked": HIDDEN,

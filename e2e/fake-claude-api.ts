@@ -13,7 +13,10 @@ type MessagesRequest = {
   messages: { role: string; content: string | ContentBlock[] }[];
 };
 
-type Answer = { type: "text"; text: string } | { type: "tool_use" | "server_tool_use"; id: string; name: string; input: Record<string, unknown> };
+type Answer =
+  | { type: "text"; text: string }
+  | { type: "thinking"; thinking: string }
+  | { type: "tool_use" | "server_tool_use"; id: string; name: string; input: Record<string, unknown> };
 
 const systemTextOf = ({ system }: MessagesRequest) => (typeof system === "string" ? system : (system ?? []).map(({ text }) => text).join("\n"));
 
@@ -321,10 +324,17 @@ export class FakeClaudeApi {
   private toolCalls(typed: string): Answer[] {
     const [calls, replyAfter] = typed.split(/^THEN /m);
     if (replyAfter !== undefined) this.repliesAfterCalls.set(`${CALL_ID}${this.replies + 1}_`, replyAfter.trimEnd());
-    return calls!.split(/^CALL /m).filter(Boolean).map((call, index) => {
-      const [, name, input] = /^(\S+)\s+([\s\S]*)$/.exec(call.trim())!;
-      return { type: "tool_use", id: `${CALL_ID}${this.replies + 1}_${index}`, name: name!, input: JSON.parse(input!) };
-    });
+    let callIndex = 0;
+    return calls!
+      .split(/^(?=THINK |SAY |CALL )/m)
+      .map((part) => part.trim())
+      .filter(Boolean)
+      .map((part): Answer => {
+        if (part.startsWith("THINK ")) return { type: "thinking", thinking: part.slice("THINK ".length) };
+        if (part.startsWith("SAY ")) return { type: "text", text: part.slice("SAY ".length) };
+        const [, name, input] = /^CALL\s+(\S+)\s+([\s\S]*)$/.exec(part)!;
+        return { type: "tool_use", id: `${CALL_ID}${this.replies + 1}_${callIndex++}`, name: name!, input: JSON.parse(input!) };
+      });
   }
 
   private bashCall(command: string, inBackground: boolean): Answer {
@@ -358,8 +368,20 @@ export class FakeClaudeApi {
     const send = (event: { type: string } & Record<string, unknown>) => response.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
     send({ type: "message_start", message: { id, type: "message", role: "assistant", model: body.model, content: [], stop_reason: null, stop_sequence: null, usage } });
     blocks.forEach((block, index) => {
-      send({ type: "content_block_start", index, content_block: block.type === "text" ? { type: "text", text: "" } : { ...block, input: {} } });
-      send({ type: "content_block_delta", index, delta: block.type === "text" ? { type: "text_delta", text: block.text } : { type: "input_json_delta", partial_json: JSON.stringify(block.input) } });
+      const started =
+        block.type === "text"
+          ? { type: "text", text: "" }
+          : block.type === "thinking"
+            ? { type: "thinking", thinking: "" }
+            : { ...block, input: {} };
+      const delta =
+        block.type === "text"
+          ? { type: "text_delta", text: block.text }
+          : block.type === "thinking"
+            ? { type: "thinking_delta", thinking: block.thinking }
+            : { type: "input_json_delta", partial_json: JSON.stringify(block.input) };
+      send({ type: "content_block_start", index, content_block: started });
+      send({ type: "content_block_delta", index, delta });
       send({ type: "content_block_stop", index });
     });
     if (pingsAfterBlocks) return this.pingUntilStalled(response, () => send({ type: "ping" }));

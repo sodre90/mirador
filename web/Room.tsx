@@ -43,7 +43,9 @@ import {
   type RoomWriter,
   type WorkPending,
 } from "../shared/rooms.ts";
-import type { RoomWorkspaceApproval, RoomWorkspaceCall } from "../shared/room-workspace.ts";
+import { threadItemsBetween, type RoomBroughtStep, type RoomWorkspaceApproval, type RoomWorkspaceCall } from "../shared/room-workspace.ts";
+import { cutWithEllipsis } from "../shared/text-cut.ts";
+import { oneLine } from "../shared/written-text.ts";
 import type { HeldChange } from "../shared/sandbox.ts";
 import { placedBelowOnItsSide, useClosing, useKeptInWindow } from "./BarMenu.tsx";
 import { CanvasPanel, CanvasShown, type WorkspaceApps } from "./Canvas.tsx";
@@ -72,7 +74,7 @@ import { nameOf } from "./RoomAgentSetup.tsx";
 import { HeldChangeCard } from "./Sandbox.tsx";
 import { JoinerAtTheDoor, RemovePerson, WaitingToJoin } from "./RoomSettings.tsx";
 import { RoomVote } from "./RoomVote.tsx";
-import { WorkspaceAccessApproval, WorkspaceAccessLine, WorkspaceCallApproval, WorkspaceCalls } from "./RoomWorkspace.tsx";
+import { BroughtThreadActivity, WorkspaceAccessApproval, WorkspaceAccessLine, WorkspaceActivityLine, WorkspaceActivityPanel, WorkspaceCallApproval } from "./RoomWorkspace.tsx";
 import { useSpellCheck } from "./spell-check.ts";
 import { useTypingAidAttributes } from "./typing-aids.ts";
 import type { WorkspacePluginTab } from "./WorkspaceTabView.tsx";
@@ -544,8 +546,21 @@ const callsWaiting = (workspace: RoomWorkspaceApproval[]) => workspace.flatMap((
 /** The threads in which an agent waits for an approver, for a request or to do something in the room's workspace. */
 const threadsWaiting = (approvals: RoomApproval[], workspace: RoomWorkspaceApproval[]) => new Set([...approvals, ...callsWaiting(workspace)].flatMap(({ threadId }) => threadId ?? []));
 
-/** What an agent someone brought did in the room's workspace after the thread's message and before the next one. */
-const callsAfter = (calls: RoomWorkspaceCall[], message: RoomMessage, next: RoomMessage | undefined) => calls.filter(({ at }) => at >= message.at && (next === undefined || at < next.at));
+const isAnswerOfAgent = (message: RoomMessage, profileId: string) => writtenByAgent(message.author) && message.author.profileId === profileId;
+
+/** What an agent someone brought did in the room's workspace during the turn that produced `answer`. */
+function workspaceCallsOfAnswer(timeline: RoomTimelineWithCanvas, answer: RoomMessage): RoomWorkspaceCall[] {
+  if (answer.answers === undefined || !answer.threadId || !writtenByAgent(answer.author)) return [];
+  const thread = timeline.threads.find(({ id }) => id === answer.threadId);
+  if (!thread) return [];
+  const callsInThread = timeline.workspaceCalls.filter(({ threadId }) => threadId === thread.id);
+  if (callsInThread.length === 0) return [];
+  const threadMessages = messagesOfThread(timeline, thread);
+  const index = threadMessages.findIndex(({ id }) => id === answer.id);
+  if (index <= 0) return [];
+  const previous = threadMessages[index - 1]!;
+  return threadItemsBetween(callsInThread, { at: previous.at, byThisAgent: isAnswerOfAgent(previous, thread.profileId) }, { at: answer.at, byThisAgent: true });
+}
 
 /** A guest writes in the room, but tags none of its agents and follows up in none of their threads; the owner is no guest anywhere. */
 const isGuestIn = (room: Room, you: string | null) => room.people.some(({ personId, role }) => personId === you && role === "guest");
@@ -564,6 +579,7 @@ function ThreadColumn({
   waitedIn,
   waitingForYou,
   workspaceCalls,
+  broughtSteps,
   workspaceWaitingForYou,
   answersWorkspace,
   you,
@@ -583,6 +599,7 @@ function ThreadColumn({
   waitedIn: Set<string>;
   waitingForYou: RoomApproval[];
   workspaceCalls: RoomWorkspaceCall[];
+  broughtSteps: RoomBroughtStep[];
   workspaceWaitingForYou: RoomWorkspaceApproval[];
   /** You let agents people brought into the room's workspace, and take that away. */
   answersWorkspace: boolean;
@@ -597,8 +614,9 @@ function ThreadColumn({
   const shownHere = threadMessagesShown(timeline, thread, agent);
   const messagesById = useMemo(() => new Map(timeline.messages.map((message) => [message.id, message])), [timeline.messages]);
   const firstReached = firstReachingTheAgent(timeline, thread, agent.answering);
-  const workingLine = workUnderWay(pending, agentsById, waitedIn).find((work) => work.thread.id === thread.id)?.text;
+  const workingLine = workUnderWay(pending, agentsById, waitedIn, workspaceCalls).find((work) => work.thread.id === thread.id)?.text;
   const callsHere = workspaceCalls.filter(({ threadId }) => threadId === thread.id);
+  const stepsHere = broughtSteps.filter(({ threadId }) => threadId === thread.id);
   const access = agent.brought?.workspace;
   const { ref: threadTimeline, onScroll, jumpToLatest } = useScrollAnchor();
   const closeOnEscape = (event: KeyboardEvent<HTMLElement>) => {
@@ -631,14 +649,21 @@ function ThreadColumn({
       <div className="timeline" ref={threadTimeline} onScroll={onScroll}>
         {agent.conversation && opened?.loaded && firstReached && <HistoryReachingBack opened={opened} messageId={firstReached.id} />}
         {shownHere.map((message, index) => {
-          const askedThisAgent = !(writtenByAgent(message.author) && message.author.profileId === agent.profileId);
+          const askedThisAgent = !isAnswerOfAgent(message, agent.profileId);
+          const next = shownHere[index + 1];
+          const from = { at: message.at, byThisAgent: !askedThisAgent };
+          const to = next ? { at: next.at, byThisAgent: isAnswerOfAgent(next, agent.profileId) } : undefined;
+          const callsForTurn = threadItemsBetween(callsHere, from, to);
+          const stepsForTurn = threadItemsBetween(stepsHere, from, to);
+          const finalAnswerText = next && isAnswerOfAgent(next, agent.profileId) ? next.text : undefined;
+          const stepsStayOnComputer = access !== "allowed";
           return (
             <div key={message.id} className="room-thread-turn">
               <RoomEntry message={message} answered={message.answers === undefined ? undefined : messagesById.get(message.answers)} agentsById={agentsById} />
-              <WorkspaceCalls calls={callsAfter(callsHere, message, shownHere[index + 1])} />
-              {!agent.conversation && isYourBroughtAgent && askedThisAgent && (
+              <BroughtThreadActivity calls={callsForTurn} steps={stepsForTurn} finalAnswerText={finalAnswerText} />
+              {!agent.conversation && isYourBroughtAgent && askedThisAgent && (stepsStayOnComputer || opensWorkInParent) && (
                 <div className="room-brought-steps-link">
-                  <span className="hint">{words.broughtStepsOnYourComputer}</span>
+                  {stepsStayOnComputer && <span className="hint">{words.broughtStepsOnYourComputer}</span>}
                   {opensWorkInParent && (
                     <button
                       type="button"
@@ -689,16 +714,19 @@ function HistoryReachingBack({ opened, messageId }: { opened: OpenConversation; 
   return null;
 }
 
+const LIVE_CALL_ABOUT_MAX = 60;
+
 /**
  * What the room shows of its agents' work under way: a line for each message an agent has to answer, and whether it
- * works on it, waits for approval in it, comes to it later, or waits for its task to be allowed.
+ * works on it, runs a workspace call, waits for approval in it, comes to it later, or waits for its task to be allowed.
  */
-function workUnderWay(pending: WorkPending[], agentsById: Map<string, RoomAgentShown>, waitedIn: Set<string>) {
+function workUnderWay(pending: WorkPending[], agentsById: Map<string, RoomAgentShown>, waitedIn: Set<string>, workspaceCalls: RoomWorkspaceCall[]) {
   const sent = pending.filter(({ message }) => !taskWaits(message));
   return pending.map(({ message, thread }) => {
     const agent = agentsById.get(thread.profileId);
     const name = agent?.name ?? words.agentGone;
     const first = sent.find((each) => each.thread.profileId === thread.profileId)?.message === message;
+    const runningCall = first ? workspaceCalls.findLast((call) => call.threadId === thread.id && call.state === "running") : undefined;
     const text = taskWaits(message)
       ? words.taskWaits(name)
       : waitedIn.has(thread.id)
@@ -707,7 +735,9 @@ function workUnderWay(pending: WorkPending[], agentsById: Map<string, RoomAgentS
           ? words.waiting(name)
           : agent?.brought && agent.answering === null
             ? words.notStartedYet(name)
-            : words.working(name);
+            : runningCall
+              ? words.workingOnCall[runningCall.kind](name, cutWithEllipsis(oneLine(runningCall.about), LIVE_CALL_ABOUT_MAX))
+              : words.working(name);
     return { key: `${message.id}-${thread.id}`, thread, text };
   });
 }
@@ -778,7 +808,11 @@ function AgentChip({
     ? [
         words.agentCard.repliesInRoom,
         words.agentCard.usesRoomCanvas,
-        agent.brought.workspace ? words.agentCard.workspaceCallsInThread(agent.brought.bringer) : words.agentCard.stepsStayOnComputer(agent.brought.bringer),
+        agent.brought.workspace === "allowed"
+          ? words.agentCard.workspaceStepsAndCallsInThread
+          : agent.brought.workspace
+            ? words.agentCard.workspaceCallsInThread(agent.brought.bringer)
+            : words.agentCard.stepsStayOnComputer(agent.brought.bringer),
       ]
     : [words.agentCard.repliesInRoom, words.agentCard.usesRoomCanvas, words.agentCard.stepsInThread];
 
@@ -1139,8 +1173,11 @@ export function RoomView({
   dispatch: Dispatch<AppAction>;
   onOpenOnCanvas: (itemId: string) => void;
 }) {
-  const [threadId, setThreadId] = useState<string | null>(null);
+  const [sidePanel, setSidePanel] = useState<{ kind: "thread"; threadId: string } | { kind: "workspace" } | null>(null);
   const [peopleShown, setPeopleShown] = useState(false);
+  const openThread = (id: string) => setSidePanel({ kind: "thread", threadId: id });
+  const closeSidePanel = () => setSidePanel(null);
+  const threadId = sidePanel?.kind === "thread" ? sidePanel.threadId : null;
   const agents = room.agents.map(({ profileId, conversationId, answering, model, effort, brought }): RoomAgentShown => {
     const conversation = roomConversations.find(({ id }) => id === conversationId);
     if (brought) {
@@ -1221,6 +1258,16 @@ export function RoomView({
           </ul>
         )}
         <div className="room-header-actions">
+          {timeline && timeline.workspaceCalls.length > 0 && (
+            <button
+              type="button"
+              className="room-workspace-activity-button"
+              aria-pressed={sidePanel?.kind === "workspace"}
+              onClick={() => setSidePanel((current) => (current?.kind === "workspace" ? null : { kind: "workspace" }))}
+            >
+              {words.workspaceActivityCount(timeline.workspaceCalls.length)}
+            </button>
+          )}
           {owns && room.sandbox.on && (
             <button type="button" className="room-sandboxed" data-hint={words.sandboxedHint} onClick={() => openSettings("permissions")}>
               <LineIcon shape="shield" />
@@ -1251,25 +1298,27 @@ export function RoomView({
           const madeOnCanvas = canvasOfAnswers.get(message.id) ?? [];
           const answered = message.answers === undefined ? undefined : messagesById.get(message.answers);
           const answeringAgentId = writtenByAgent(message.author) ? message.author.profileId : null;
+          const callsForAnswer = timeline ? workspaceCallsOfAnswer(timeline, message) : [];
           const openWork =
             answeringAgentId !== null && canOpenBroughtWork(answeringAgentId)
               ? () => askParentToOpenBroughtWork({ roomId: room.id, agentId: answeringAgentId, ...(answered && { messageSeq: answered.seq }) })
               : undefined;
           return (
             <RoomEntry key={message.id} message={message} answered={answered} quoted={answered} agentsById={agentsById}>
+              {callsForAnswer.length > 0 && message.threadId && <WorkspaceActivityLine calls={callsForAnswer} onOpenThread={() => openThread(message.threadId!)} />}
               {madeOnCanvas.length > 0 && <CanvasLine items={madeOnCanvas} onOpen={onOpenOnCanvas} />}
               {madeOnCanvas.filter(isAsk).map(voteOn)}
-              {message.answers !== undefined && message.threadId && <ThreadLink onOpen={() => setThreadId(message.threadId)} onOpenWork={openWork} />}
+              {message.answers !== undefined && message.threadId && <ThreadLink onOpen={() => openThread(message.threadId!)} onOpenWork={openWork} />}
             </RoomEntry>
           );
         })}
         {timeline && questionsOfNoAnswer(timeline.canvas, canvasOfAnswers).map(voteOn)}
-        {workUnderWay(pending, agentsById, waitedIn).map(({ key, thread: working, text }) => {
+        {workUnderWay(pending, agentsById, waitedIn, timeline?.workspaceCalls ?? []).map(({ key, thread: working, text }) => {
           const pendingItem = pending.find(({ thread: each }) => each.id === working.id);
           const openWork = canOpenBroughtWork(working.profileId)
             ? () => askParentToOpenBroughtWork({ roomId: room.id, agentId: working.profileId, ...(pendingItem && { messageSeq: pendingItem.message.seq }) })
             : undefined;
-          return <ThreadLink key={key} text={text} onOpen={() => setThreadId(working.id)} onOpenWork={openWork} />;
+          return <ThreadLink key={key} text={text} onOpen={() => openThread(working.id)} onOpenWork={openWork} />;
         })}
         <WritingLine writing={writing} threadId={null} you={you} />
       </div>
@@ -1290,7 +1339,14 @@ export function RoomView({
     </>
   );
   const side =
-    thread && threadAgent && timeline ? (
+    sidePanel?.kind === "workspace" && timeline ? (
+      <WorkspaceActivityPanel
+        calls={timeline.workspaceCalls}
+        agentNameOf={(agentId) => agentsById.get(agentId)?.name ?? words.agentGone}
+        onOpenThread={openThread}
+        onClose={closeSidePanel}
+      />
+    ) : thread && threadAgent && timeline ? (
       <ThreadColumn
         key={thread.id}
         thread={thread}
@@ -1302,6 +1358,7 @@ export function RoomView({
         waitedIn={waitedIn}
         waitingForYou={waitingForYou}
         workspaceCalls={timeline.workspaceCalls}
+        broughtSteps={timeline.broughtSteps}
         workspaceWaitingForYou={workspaceWaitingForYou}
         answersWorkspace={owns || approvesIn(room, you)}
         you={you}
@@ -1309,7 +1366,7 @@ export function RoomView({
         onlyReads={!owns}
         peopleToTag={peopleToTag}
         writing={writing}
-        onClose={() => setThreadId(null)}
+        onClose={closeSidePanel}
       />
     ) : null;
   return (

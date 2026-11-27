@@ -270,6 +270,7 @@ const EVERY_CLIENT_MESSAGE: Record<ClientMessage["type"], true> = {
   "room.brought-agents-here": true,
   "room.brought-task-started": true,
   "room.brought-task-answered": true,
+  "room.brought-step": true,
   "room.brought-canvas-show": true,
   "room.brought-canvas-ask": true,
   "room.brought-canvas-cancel": true,

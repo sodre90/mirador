@@ -22,12 +22,22 @@ import {
 import { HostProblemError, type HostProblem } from "../shared/host-problems.ts";
 import { replyOf } from "../shared/last-words.ts";
 import { isRoomId, MOST_ROOMS_READ } from "../shared/machines.ts";
-import type { AskItem, Conversation, Launch, ShowItem, StoredEvent } from "../shared/model.ts";
+import type { AskItem, Conversation, ConversationEvent, Launch, ShowItem, StoredEvent } from "../shared/model.ts";
 import { authorNameIn, personName } from "../shared/people.ts";
 import type { ClientMessage, ServerMessage } from "../shared/protocol.ts";
 import { endsTurn } from "../shared/reverts.ts";
-import { MOST_WORKSPACE_CALLS_A_MINUTE, MOST_WORKSPACE_CALLS_AT_ONCE, WORKSPACE_TASK_MS, workspaceCallResultIn, type WorkspaceCall, type WorkspaceCallResult } from "../shared/room-workspace.ts";
+import {
+  BROUGHT_STEP_DELTA_MOST_CHARACTERS,
+  MOST_WORKSPACE_CALLS_A_MINUTE,
+  MOST_WORKSPACE_CALLS_AT_ONCE,
+  WORKSPACE_TASK_MS,
+  workspaceCallResultIn,
+  type BroughtStepKind,
+  type WorkspaceCall,
+  type WorkspaceCallResult,
+} from "../shared/room-workspace.ts";
 import { broughtTaskPrompt, isRoomAuthorRole, MOST_AGENTS_BROUGHT, ROOM_MESSAGE_MOST_CHARACTERS, type BroughtAnswerEnd, type FramedAuthor } from "../shared/rooms.ts";
+import { isInformational } from "../shared/timeline.ts";
 import { shownAsWritten } from "../shared/written-text.ts";
 import type { CanvasService } from "./canvas/service.ts";
 import type { Hub } from "./hub.ts";
@@ -51,6 +61,9 @@ export const ANSWERS_KEPT_MS = 24 * 60 * 60_000;
 /** How long past the time a room's machine gives a task your Mirador waits for it to answer a call in its workspace. */
 const ANSWER_LATE_MS = 60_000;
 
+/** How long streamed chunks of one brought-agent step are coalesced before going to the room's machine. */
+const STEP_FLUSH_MS = 120;
+
 const NOT_ON_A_TASK = "You work in the room's workspace only during a turn on a task the room gave you.";
 const NOT_ANSWERING = "The room's machine isn't answering, so nothing was done.";
 const CONNECTION_LOST = "The connection to the room's machine was lost before it answered, so this may or may not have been done: read what is there before you try again.";
@@ -72,6 +85,20 @@ interface WorkspaceCallUnderWay {
   roomId: string;
   agentId: string;
   settle(result: WorkspaceCallResult): void;
+}
+
+/** Buffered streamed text or thought for one step of a room-workspace brought agent before it is flushed to the room's machine. */
+interface OpenBroughtStep {
+  broughtId: string;
+  conversationId: string;
+  machineId: string;
+  roomId: string;
+  agentId: string;
+  taskId: string;
+  stepId: string;
+  kind: BroughtStepKind;
+  pending: string;
+  timer: ReturnType<typeof setTimeout> | null;
 }
 
 /** What a room's machine may say kept an agent out, which your Mirador passes on; anything else it says counts as not letting it in. */
@@ -142,6 +169,7 @@ export class BroughtAgents {
   /** The task each conversation's turn under way works on, and since when. */
   private readonly turnsOnTasks = new Map<string, { taskId: string; since: number }>();
   private readonly workspaceCalls = new Map<string, WorkspaceCallUnderWay>();
+  private readonly openSteps = new Map<string, OpenBroughtStep>();
   private readonly forwardedAsks = new Map<string, { broughtId: string; machineId: string; roomId: string; agentId: string }>();
   private canvas: Pick<CanvasService, "answer" | "hasWaiter"> | null = null;
   private holding: ReadonlySet<string>;
@@ -156,6 +184,7 @@ export class BroughtAgents {
     private readonly now: () => number = Date.now,
     private readonly lettingInMs = LETTING_IN_MS,
     private readonly canvasAssetsOrigins: readonly string[] = [],
+    private readonly stepFlushMs = STEP_FLUSH_MS,
   ) {
     this.tasksArriving = new SenderLimit(now, MOST_BROUGHT_TASKS_A_MINUTE);
     this.workspaceCallsMade = new SenderLimit(now, MOST_WORKSPACE_CALLS_A_MINUTE);
@@ -256,12 +285,14 @@ export class BroughtAgents {
 
   /** The socket to the machine closed, so what it would have answered is not coming. */
   disconnected(machineId: string) {
+    this.dropOpenSteps((step) => step.machineId === machineId);
     this.endWorkspaceCalls((call) => call.machineId === machineId, CONNECTION_LOST);
   }
 
   /** The machine is gone or signed this computer out: forget every agent brought there and drop their queued tasks. */
   forgotMachine(machineId: string) {
     this.you.delete(machineId);
+    this.dropOpenSteps((step) => step.machineId === machineId);
     this.endWorkspaceCalls((call) => call.machineId === machineId, OUT_OF_THE_ROOM);
     const here = this.store.listBroughtAgents().filter((brought) => brought.machineId === machineId);
     here.forEach((brought) => this.forget(brought));
@@ -282,6 +313,7 @@ export class BroughtAgents {
     if (this.now() - turn.since > WORKSPACE_TASK_MS) return callRefused(TIME_IS_OVER);
     if (this.callsUnderWay(conversationId) >= MOST_WORKSPACE_CALLS_AT_ONCE) return callRefused(TOO_MANY_AT_ONCE);
     if (!this.workspaceCallsMade.allows(machineId)) return callRefused(TOO_MANY_A_MINUTE);
+    this.closeOpenStep(conversationId);
     const callId = crypto.randomUUID();
     if (!this.machines.send(machineId, { type: "room.workspace-call", roomId, agentId, taskId: task.taskId, callId, call })) return callRefused(NOT_ANSWERING);
     return new Promise((resolve) => {
@@ -311,6 +343,7 @@ export class BroughtAgents {
   forwardShow(conversationId: string, item: ShowItem): boolean {
     const active = this.activeBroughtTask(conversationId);
     if (!active || !item.html) return false;
+    this.closeOpenStep(conversationId);
     const { brought, task } = active;
     const title = item.title.slice(0, MOST_BROUGHT_CANVAS_TITLE_CHARACTERS);
     const html = replaceAssetsOrigins(item.html, this.canvasAssetsOrigins, BROUGHT_ASSETS_ORIGIN_TOKEN);
@@ -330,6 +363,7 @@ export class BroughtAgents {
   forwardAsk(conversationId: string, item: AskItem): boolean {
     const active = this.activeBroughtTask(conversationId);
     if (!active) return false;
+    this.closeOpenStep(conversationId);
     const { brought, task } = active;
     const payload: BroughtCanvasAskPayload = rewriteAskAssets(
       {
@@ -403,20 +437,104 @@ export class BroughtAgents {
   }
 
   turnStarted(conversationId: string, turnSeq: number) {
+    this.dropOpenSteps((step) => step.conversationId === conversationId);
     const task = this.taskStarting(conversationId, turnSeq);
     if (!task) return;
     this.turnsOnTasks.set(conversationId, { taskId: task.id, since: this.now() });
     this.tellStarted(task);
   }
 
+  /** Streams thinking and text chunks of an agent working in the room's workspace to the room's machine for its thread. */
+  eventAppended(conversationId: string, event: ConversationEvent) {
+    if (event.type !== "acp") return;
+    const active = this.activeBroughtTask(conversationId);
+    if (!active || active.brought.workspaceId !== null) return;
+    const { update } = event;
+    if (update.sessionUpdate === "tool_call") {
+      this.closeOpenStep(conversationId);
+      return;
+    }
+    if ((update.sessionUpdate !== "agent_thought_chunk" && update.sessionUpdate !== "agent_message_chunk") || update.content.type !== "text" || isInformational(update._meta)) return;
+    const delta = update.content.text;
+    if (!delta) return;
+    const kind: BroughtStepKind = update.sessionUpdate === "agent_thought_chunk" ? "thought" : "text";
+    this.bufferStep(conversationId, active.brought, active.task.taskId, kind, delta);
+  }
+
   /** The turn on a task ended: its final answer goes to the room, or how it ended without one. */
   turnEnded(conversationId: string, turnSeq: number) {
+    this.closeOpenStep(conversationId);
     this.turnsOnTasks.delete(conversationId);
     this.stopWorkspaceCalls((call) => call.conversationId === conversationId);
     const task = this.taskStarting(conversationId, turnSeq);
     if (!task) return;
     const { text, ended } = answerOf(this.store.listEventsFrom(conversationId, turnSeq));
     this.finish(task, text, ended);
+  }
+
+  private bufferStep(conversationId: string, brought: BroughtAgentHere, taskId: string, kind: BroughtStepKind, delta: string) {
+    if (!brought.agentId) return;
+    let open = this.openSteps.get(conversationId);
+    if (open && (open.kind !== kind || open.taskId !== taskId)) {
+      this.closeOpenStep(conversationId);
+      open = undefined;
+    }
+    if (!open) {
+      open = {
+        broughtId: brought.id,
+        conversationId,
+        machineId: brought.machineId,
+        roomId: brought.roomId,
+        agentId: brought.agentId,
+        taskId,
+        stepId: crypto.randomUUID(),
+        kind,
+        pending: "",
+        timer: null,
+      };
+      this.openSteps.set(conversationId, open);
+    }
+    open.pending += delta;
+    if (open.pending.length >= BROUGHT_STEP_DELTA_MOST_CHARACTERS || this.stepFlushMs <= 0) {
+      this.flushOpenStep(conversationId);
+    } else if (!open.timer) {
+      open.timer = setTimeout(() => this.flushOpenStep(conversationId), this.stepFlushMs);
+    }
+  }
+
+  private flushOpenStep(conversationId: string) {
+    const open = this.openSteps.get(conversationId);
+    if (!open) return;
+    if (open.timer) {
+      clearTimeout(open.timer);
+      open.timer = null;
+    }
+    while (open.pending.length > 0) {
+      const delta = open.pending.slice(0, BROUGHT_STEP_DELTA_MOST_CHARACTERS);
+      open.pending = open.pending.slice(delta.length);
+      this.machines.send(open.machineId, {
+        type: "room.brought-step",
+        roomId: open.roomId,
+        agentId: open.agentId,
+        taskId: open.taskId,
+        stepId: open.stepId,
+        kind: open.kind,
+        delta,
+      });
+    }
+  }
+
+  private closeOpenStep(conversationId: string) {
+    this.flushOpenStep(conversationId);
+    this.openSteps.delete(conversationId);
+  }
+
+  private dropOpenSteps(which: (step: OpenBroughtStep) => boolean) {
+    for (const [conversationId, step] of this.openSteps) {
+      if (!which(step)) continue;
+      if (step.timer) clearTimeout(step.timer);
+      this.openSteps.delete(conversationId);
+    }
   }
 
   /** What came of a task no turn is left to answer: of the last turn on it, or that it was not taken where none began. */
@@ -658,6 +776,7 @@ export class BroughtAgents {
   private forget(brought: BroughtAgentHere) {
     const unanswered = this.store.broughtTasksQueued(brought.id).map(({ id }) => id);
     this.store.deleteBroughtAgentHere(brought.id);
+    this.dropOpenSteps((step) => step.broughtId === brought.id);
     this.endWorkspaceCalls((call) => call.broughtId === brought.id, OUT_OF_THE_ROOM);
     for (const [itemId, forwarded] of this.forwardedAsks) {
       if (forwarded.broughtId === brought.id) this.forwardedAsks.delete(itemId);

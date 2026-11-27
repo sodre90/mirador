@@ -184,7 +184,10 @@ test("Ann lets it in, and it reads the room's workspace, changes a file and runs
   });
 
   await test.step("a change shows as a diff to Ann, and is made once she allows it", async () => {
-    await giveTask("CHANGE THE NOTES", 'CALL mcp__canvas__room_edit {"path":"notes.txt","old":"beets","new":"peas"}\nTHEN Peas it is.');
+    await giveTask(
+      "CHANGE THE NOTES",
+      'THINK I should replace beets with peas in notes.txt.\nSAY Updating notes.txt now.\nCALL mcp__canvas__room_edit {"path":"notes.txt","old":"beets","new":"peas"}\nTHEN Peas it is.',
+    );
     await expect(callCard(ann)).toContainText("Coder (Mia) asks to change a file", { timeout: 60_000 });
     await expect(callCard(ann).locator(".workspace-call-path")).toHaveText("notes.txt");
     await expect(callCard(ann).locator(".diff-removed")).toHaveText("-Sow the beets");
@@ -197,6 +200,9 @@ test("Ann lets it in, and it reads the room's workspace, changes a file and runs
     await expect(callCard(ann)).toHaveCount(0);
     await expect(lastAnswer(ann)).toHaveText("Peas it is.", { timeout: 60_000 });
     expect(readFileSync(inRoomsWorkspace("notes.txt"), "utf8")).toBe("Sow the peas\n");
+    const changeEntry = answersOfCoder(ann).last();
+    await expect(changeEntry.locator(".room-workspace-line")).toContainText("In workspace: changed 1");
+    await expect(changeEntry.locator(".room-workspace-file-chip")).toHaveText("notes.txt");
   });
 
   await test.step("a command shows whole, with what it runs as, and runs in the room's workspace once she allows it", async () => {
@@ -237,6 +243,11 @@ test("a task's thread shows what it did there and who allowed it; Ann takes the 
     await expect(summaryOf(changed)).toContainText("Changenotes.txtdone");
     await expect(changed).toContainText("Allowed by Ann");
     await expect(changed.locator(".diff-added")).toHaveText("+Sow the peas");
+    const thought = thread(ann).locator(".brought-step-thought");
+    await expect(thought).toHaveCount(1);
+    await thought.locator("summary").click();
+    await expect(thought).toContainText("I should replace beets with peas in notes.txt.");
+    await expect(thread(ann).locator(".brought-step-text")).toHaveText("Updating notes.txt now.");
     const ran = await shownFor("COPY THE NOTES");
     await expect(summaryOf(ran).locator(".workspace-call-about .token.function").first()).toHaveText("cat");
     await expect(ran.locator(".workspace-call-text.highlighted-code .token.function").first()).toHaveText("cat");
@@ -247,6 +258,16 @@ test("a task's thread shows what it did there and who allowed it; Ann takes the 
     await expect(summaryOf(denied)).toContainText("denied");
     await expect(denied).toContainText("Denied by Ann");
     await expect(thread(ann).locator(".workspace-access")).toContainText("Works in this room's workspace");
+    const activityButton = ann.locator(".room-workspace-activity-button");
+    await expect(activityButton).toHaveText("Workspace (4)");
+    await activityButton.click();
+    const activityPanel = ann.locator(".workspace-activity-panel");
+    await expect(activityPanel).toBeVisible();
+    await expect(activityPanel.locator(".workspace-activity-item")).toHaveCount(4);
+    await activityPanel.locator(".workspace-activity-item").last().getByRole("button", { name: "Open thread" }).click();
+    await expect(thread(ann)).toBeVisible();
+    await expect(callsInThread(ann)).toHaveCount(1);
+    await expect(callsInThread(ann).locator("summary")).toContainText("Readnotes.txtdone");
   });
 
   await test.step("taken away, what waits stops, and its next call is refused", async () => {
@@ -293,7 +314,10 @@ test("an approver allows its calls too, a guest sees none of them, and a member'
   const [pat, gus, max] = await Promise.all([pageOf(admitted.Pat), pageOf(admitted.Gus), pageOf(admitted.Max)]);
 
   await test.step("Max's task waits for an approver, and opens the workspace once Pat allows it", async () => {
-    api.callsWhenSaid.set("WEED THE NOTES", 'CALL mcp__canvas__room_edit {"path":"notes.txt","old":"peas","new":"beans"}\nTHEN Beans it is.');
+    api.callsWhenSaid.set(
+      "WEED THE NOTES",
+      'THINK Replacing peas with beans for Max.\nSAY Changing peas to beans.\nCALL mcp__canvas__room_edit {"path":"notes.txt","old":"peas","new":"beans"}\nTHEN Beans it is.',
+    );
     await composer(max).fill("@Co");
     await max.getByRole("listbox", { name: "Agents and people of the room" }).getByRole("option", { name: "@Coder (Mia)" }).click();
     await composer(max).fill("@Coder (Mia) WEED THE NOTES");
@@ -314,14 +338,18 @@ test("an approver allows its calls too, a guest sees none of them, and a member'
   });
 
   await test.step("its thread shows what it did to Pat, and to Gus and Max only its answers", async () => {
+    await expect(pat.locator(".room-workspace-activity-button")).toBeVisible();
     await openThreadOf(pat, "WEED THE NOTES");
     await callsInThread(pat).locator("summary").click();
     await expect(callsInThread(pat)).toContainText("Allowed by Pat");
+    await expect(thread(pat).locator(".brought-step-text")).toHaveText("Changing peas to beans.");
     await expect(thread(pat).getByRole("button", { name: "Take this room's workspace away from Coder (Mia)" })).toBeVisible();
     for (const page of [gus, max]) {
+      await expect(page.locator(".room-workspace-activity-button")).toHaveCount(0);
       await openThreadOf(page, "WEED THE NOTES");
       await expect(thread(page)).toContainText("Beans it is.");
       await expect(callsInThread(page)).toHaveCount(0);
+      await expect(thread(page).locator("[data-brought-step]")).toHaveCount(0);
       await expect(thread(page).getByRole("button", { name: "Take this room's workspace away from Coder (Mia)" })).toHaveCount(0);
     }
   });

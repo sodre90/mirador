@@ -124,3 +124,117 @@ export const WORKSPACE_ABOUT_KEPT_CHARACTERS = 8_000;
 
 /** How many of one agent's reads the room keeps, and how many of its changes and commands. */
 export const MOST_WORKSPACE_CALLS_KEPT = 100;
+
+/** A streamed reasoning or assistant text step of an agent someone brought to work in the room's workspace. */
+export type BroughtStepKind = "thought" | "text";
+
+export const isBroughtStepKind = (value: unknown): value is BroughtStepKind => value === "thought" || value === "text";
+
+export interface RoomBroughtStep {
+  id: string;
+  roomId: string;
+  agentId: string;
+  threadId: string;
+  at: number;
+  kind: BroughtStepKind;
+  text: string;
+}
+
+/** Caps on what a bringer's Mirador streams of an agent working in the room's workspace. */
+export const BROUGHT_STEP_DELTA_MOST_CHARACTERS = 16_000;
+export const BROUGHT_STEP_MOST_CHARACTERS = 20_000;
+export const MOST_BROUGHT_STEPS_KEPT = 200;
+export const MOST_BROUGHT_STEP_UPDATES_A_MINUTE = 600;
+
+/** A chronological item in a brought agent's room thread: either a streamed step or a workspace call on the room's machine. */
+export type ThreadActivityItem =
+  | { item: "step"; step: RoomBroughtStep }
+  | { item: "call"; call: RoomWorkspaceCall };
+
+export interface WorkspaceCallsSummary {
+  read: number;
+  changed: number;
+  ran: number;
+  denied: number;
+  notDone: number;
+  changedFiles: string[];
+  total: number;
+}
+
+/** Summarises what a brought agent did in the room's workspace across a set of calls. */
+export function summarizeWorkspaceCalls(calls: readonly RoomWorkspaceCall[]): WorkspaceCallsSummary {
+  let read = 0;
+  let changed = 0;
+  let ran = 0;
+  let denied = 0;
+  let notDone = 0;
+  const changedFiles: string[] = [];
+  const seenFiles = new Set<string>();
+  for (const call of calls) {
+    if (call.state === "denied") {
+      denied += 1;
+      continue;
+    }
+    if (call.state === "refused" || call.state === "stopped") {
+      notDone += 1;
+      continue;
+    }
+    if (call.state === "waiting") continue;
+    if (call.kind === "read") read += 1;
+    else if (call.kind === "run") ran += 1;
+    else {
+      changed += 1;
+      if (call.state === "done" && !seenFiles.has(call.about)) {
+        seenFiles.add(call.about);
+        changedFiles.push(call.about);
+      }
+    }
+  }
+  return { read, changed, ran, denied, notDone, changedFiles, total: calls.length };
+}
+
+const matchesFinalAnswer = (stepText: string, finalAnswerText: string) => {
+  const stepTrimmed = stepText.trim();
+  const answerTrimmed = finalAnswerText.trim();
+  if (!answerTrimmed) return false;
+  if (stepTrimmed === answerTrimmed) return true;
+  return answerTrimmed.endsWith("…") && stepTrimmed.startsWith(answerTrimmed.slice(0, -1).trim());
+};
+
+/**
+ * Interleaves a brought agent's streamed steps and authoritative workspace calls in chronological order.
+ * Once the turn's final answer is posted right below, a trailing text step identical to it is omitted so it does not show twice.
+ */
+export function interleavedThreadActivity(
+  calls: readonly RoomWorkspaceCall[],
+  steps: readonly RoomBroughtStep[],
+  finalAnswerText?: string | null,
+): ThreadActivityItem[] {
+  const merged: (ThreadActivityItem & { at: number; tie: number; order: number })[] = [
+    ...steps.map((step, order) => ({ item: "step" as const, step, at: step.at, tie: 0, order })),
+    ...calls.map((call, order) => ({ item: "call" as const, call, at: call.at, tie: 1, order })),
+  ].sort((a, b) => a.at - b.at || a.tie - b.tie || a.order - b.order);
+  const items: ThreadActivityItem[] = merged.map((entry) => (entry.item === "step" ? { item: "step", step: entry.step } : { item: "call", call: entry.call }));
+  const last = items.at(-1);
+  if (finalAnswerText && last?.item === "step" && last.step.kind === "text" && matchesFinalAnswer(last.step.text, finalAnswerText)) {
+    items.pop();
+  }
+  return items;
+}
+
+/**
+ * Items (calls or steps) belonging to the stretch right after `message` and before `next` in a brought agent's thread.
+ * When `next` is the agent's answer, `at <= next.at` keeps items flushed in the same millisecond before it;
+ * when `message` itself is the agent's answer, `at > message.at` avoids duplicating them after it.
+ */
+export function threadItemsBetween<T extends { at: number }>(
+  items: readonly T[],
+  message: { at: number; byThisAgent: boolean },
+  next: { at: number; byThisAgent: boolean } | undefined,
+): T[] {
+  return items.filter(({ at }) => {
+    const afterStart = message.byThisAgent ? at > message.at : at >= message.at;
+    const beforeEnd = next === undefined ? true : next.byThisAgent ? at <= next.at : at < next.at;
+    return afterStart && beforeEnd;
+  });
+}

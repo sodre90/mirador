@@ -100,7 +100,7 @@ import {
 } from "../shared/sandbox.ts";
 import { assertSandboxCanRun, NO_SANDBOX_CONTROL, profileSandboxBlocker, type SandboxControl } from "./sandbox/sandbox-control.ts";
 import { sandboxLeft, sandboxLeftWritableFolders } from "./sandbox/hooks-off.ts";
-import { isRoomWorkspaceAnswer, type RoomWorkspaceAnswer, type RoomWorkspaceApproval, type RoomWorkspaceCall } from "../shared/room-workspace.ts";
+import { isRoomWorkspaceAnswer, MOST_BROUGHT_STEP_UPDATES_A_MINUTE, type BroughtStepKind, type RoomBroughtStep, type RoomWorkspaceAnswer, type RoomWorkspaceApproval, type RoomWorkspaceCall } from "../shared/room-workspace.ts";
 import { shownAsWritten } from "../shared/written-text.ts";
 import { firstGraphemes } from "../shared/text-cut.ts";
 import type { RoomAnswerer, RoomQuestionListener } from "./canvas/service.ts";
@@ -283,6 +283,7 @@ export class RoomService implements RoomRules, TurnListener {
     private readonly broughtTaskStarts = new SenderLimit(Date.now, MOST_BROUGHT_TASK_STARTS_A_MINUTE),
     private readonly canvasAssetsOrigin = "",
     private readonly broughtCanvas = new SenderLimit(Date.now, MOST_BROUGHT_CANVAS_A_MINUTE),
+    private readonly broughtStepUpdates = new SenderLimit(Date.now, MOST_BROUGHT_STEP_UPDATES_A_MINUTE),
   ) {
     this.orphanedAnswering = new Set(
       store.listRooms().flatMap(({ agents }) => agents.flatMap(({ conversationId, answering, brought }) => (!brought && conversationId && answering ? [conversationId] : []))),
@@ -662,6 +663,27 @@ export class RoomService implements RoomRules, TurnListener {
   /** What agents people brought did in the room's workspace, and have under way there. */
   workspaceCallsIn(roomId: string): RoomWorkspaceCall[] {
     return this.store.listWorkspaceCalls(roomId);
+  }
+
+  /** Streamed thinking and text steps of agents people brought to work in the room's workspace. */
+  broughtStepsIn(roomId: string): RoomBroughtStep[] {
+    return this.store.listBroughtSteps(roomId);
+  }
+
+  /** A streamed thinking or text chunk of an agent working in the room's workspace, shown in its thread. */
+  broughtStep(personId: string, roomId: string, agentId: string, taskId: string, stepId: string, kind: BroughtStepKind, delta: string) {
+    const room = this.existingRoom(roomId);
+    const agent = this.broughtAgentOf(room, agentId, personId);
+    if (agent.brought?.workspace !== "allowed") return;
+    const task = this.store.findRoomBroughtTask(taskId);
+    if (task?.roomId !== roomId || task.agentId !== agentId) return;
+    const asked = this.store.findRoomMessage(task.messageId);
+    const thread = asked && this.threadOf(asked, agentId);
+    if (!thread || !this.broughtStepUpdates.allows(personId)) return;
+    const cleaned = shownAsWritten(delta);
+    if (!cleaned) return;
+    const step = this.store.upsertBroughtStep({ id: stepId, roomId, agentId, threadId: thread.id, at: Date.now(), kind, delta: cleaned });
+    if (step) this.hub.publishToRoom(roomId, { type: "room.brought-step-shown", step });
   }
 
   /** What agents people brought wait on for an approver, to work in the room's workspace: those still to be let in first. */

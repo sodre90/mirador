@@ -8,7 +8,7 @@ import { harnessIds } from "../shared/model.ts";
 import { LONGEST_PERSON_NAME } from "../shared/people.ts";
 import { MOST_OWN_ANSWER_CHARACTERS } from "../shared/room-votes.ts";
 import { isRoomApprovalAnswer } from "../shared/room-permissions.ts";
-import { isRoomWorkspaceAnswer, workspaceCallIn } from "../shared/room-workspace.ts";
+import { BROUGHT_STEP_DELTA_MOST_CHARACTERS, isBroughtStepKind, isRoomWorkspaceAnswer, workspaceCallIn } from "../shared/room-workspace.ts";
 import { approvesAs, asksAgentsAs, isBroughtAnswerEnd, mayWriteAs, ROOM_MESSAGE_MOST_CHARACTERS, type RoomRole } from "../shared/rooms.ts";
 
 /** A signed-in person other than the machine's owner, as far as what they send goes: the role they have in each room they are in. */
@@ -376,6 +376,10 @@ const admissions: { [K in ClientMessage["type"]]: K extends PersonMessageType ? 
     assertTaskNamed(message);
     if (typeof message.text !== "string" || message.text.length > MOST_ANSWER_SENT || !(message.ended === null || isBroughtAnswerEnd(message.ended))) throw unreadable();
     void roleOf(person, message.roomId);
+  },
+  "room.brought-step": ({ roomId, agentId, taskId, stepId, kind, delta }, person) => {
+    assertTaskNamed({ agentId, taskId });
+    if (!isRoomId(stepId) || !isBroughtStepKind(kind) || typeof delta !== "string" || delta.length === 0 || delta.length > BROUGHT_STEP_DELTA_MOST_CHARACTERS || !asksAgentsAs(roleOf(person, roomId))) throw unreadable();
   },
   "room.brought-canvas-show": ({ type, roomId, agentId, taskId, itemId, title, html }, person) => {
     assertTaskNamed({ agentId, taskId });

@@ -19,7 +19,7 @@ import { lastsUntilOpened } from "../shared/waiting.ts";
 import type { WorkspaceIcon } from "../shared/workspace-icon.ts";
 import { describedText, hostErrorText } from "./host-error.ts";
 import type { RoomSettingsTab } from "./i18n/en/rooms.ts";
-import type { RoomWorkspaceApproval, RoomWorkspaceCall } from "../shared/room-workspace.ts";
+import type { RoomBroughtStep, RoomWorkspaceApproval, RoomWorkspaceCall } from "../shared/room-workspace.ts";
 import { agentStandIn, shownOnRoomCanvas, type Room, type RoomApproval, type RoomInvite, type RoomJoiner, type RoomPresence, type RoomTaskApproval, type RoomTimeline } from "../shared/rooms.ts";
 import type { RoomReading } from "../shared/room-reading.ts";
 import type { BroughtAgentHere, BroughtTaskWaiting } from "../shared/brought-agents.ts";
@@ -74,7 +74,7 @@ export type SettingsPage = "appearance" | "conversations" | "agents" | "voice" |
 export type DevicesListed = Extract<ServerMessage, { type: "devices.listed" }>;
 
 /** A room's messages and threads, with the pages and questions of its canvas. */
-export type RoomTimelineWithCanvas = RoomTimeline & { canvas: CanvasItem[]; votes: RoomQuestionVotes[]; workspaceCalls: RoomWorkspaceCall[] };
+export type RoomTimelineWithCanvas = RoomTimeline & { canvas: CanvasItem[]; votes: RoomQuestionVotes[]; workspaceCalls: RoomWorkspaceCall[]; broughtSteps: RoomBroughtStep[] };
 
 /** A plugin's tab in a workspace, as its host code last said. */
 export interface PluginTabState {
@@ -898,8 +898,10 @@ function applyServerMessage(state: AppState, message: ServerMessage): AppState {
       return state.selectedRoomId === message.roomId ? leavingRoom(next) : next;
     }
     case "room.timeline": {
-      const { roomId, messages, threads, canvas, votes, workspaceCalls } = message;
-      return state.selectedRoomId === roomId ? { ...state, roomTimeline: { roomId, messages, threads, votes, workspaceCalls, canvas: canvas.map((item) => withThisPagesAssetsOrigin(state, item)) } } : state;
+      const { roomId, messages, threads, canvas, votes, workspaceCalls, broughtSteps = [] } = message;
+      return state.selectedRoomId === roomId
+        ? { ...state, roomTimeline: { roomId, messages, threads, votes, workspaceCalls, broughtSteps, canvas: canvas.map((item) => withThisPagesAssetsOrigin(state, item)) } }
+        : state;
     }
     case "room.votes":
       return withRoomTimeline(state, message.roomId, (timeline) => ({ ...timeline, votes: [...timeline.votes.filter(({ itemId }) => itemId !== message.votes.itemId), message.votes] }));
@@ -925,6 +927,8 @@ function applyServerMessage(state: AppState, message: ServerMessage): AppState {
       };
     case "room.workspace-call-shown":
       return withRoomTimeline(state, message.call.roomId, (timeline) => ({ ...timeline, workspaceCalls: upsert(timeline.workspaceCalls, message.call) }));
+    case "room.brought-step-shown":
+      return withRoomTimeline(state, message.step.roomId, (timeline) => ({ ...timeline, broughtSteps: upsert(timeline.broughtSteps, message.step) }));
     case "room.workspace-answered":
       return state;
     case "sandbox.setup":

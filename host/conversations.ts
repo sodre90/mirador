@@ -262,6 +262,8 @@ export interface TurnListener {
   turnEnded(conversationId: string, turnSeq: number): void;
   /** Called on startup for conversations whose turn was not resumed after a stop or crash. */
   turnLost?(conversationId: string, cutShortByCrash: boolean): void;
+  /** Called when an event is appended to a conversation, e.g. to stream room-workspace brought agent steps. */
+  eventAppended?(conversationId: string, event: ConversationEvent): void;
 }
 
 /** What the rooms decide for their agents' conversations: which permission requests go through, and what an agent that lost its session hears. */
@@ -4653,6 +4655,7 @@ export class ConversationService {
     if (!this.store.hasConversation(conversationId)) return;
     const stored = this.store.appendEvent(conversationId, event);
     this.hub.publishEvent(conversationId, stored);
+    this.turnsHeard.eventAppended?.(conversationId, event);
     if (event.type === "user-message" || event.type === "turn-end" || (event.type === "error" && event.endsTurn)) this.republish(conversationId);
     const activity = activityOf(event);
     if (activity) this.hearActivity(conversationId, activity);

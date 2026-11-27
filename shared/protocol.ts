@@ -22,7 +22,7 @@ import type {
   RoomThread,
   RoomTimeline,
 } from "./rooms.ts";
-import type { RoomWorkspaceAnswer, RoomWorkspaceApproval, RoomWorkspaceCall, WorkspaceCall, WorkspaceCallResult } from "./room-workspace.ts";
+import type { BroughtStepKind, RoomBroughtStep, RoomWorkspaceAnswer, RoomWorkspaceApproval, RoomWorkspaceCall, WorkspaceCall, WorkspaceCallResult } from "./room-workspace.ts";
 import type { BroughtAgentHere, BroughtTaskWaiting, OthersTasks } from "./brought-agents.ts";
 import type { BroughtAskAnswer, BroughtCanvasAskPayload } from "./brought-canvas.ts";
 import type { RoomAlert, RoomReading } from "./room-reading.ts";
@@ -563,6 +563,8 @@ export type ClientMessage =
   | { type: "room.brought-task-started"; roomId: string; agentId: string; taskId: string }
   /** From a person's own Mirador: the final answer of the agent they brought to the task, or how it ended without one. */
   | { type: "room.brought-task-answered"; roomId: string; agentId: string; taskId: string; text: string; ended: BroughtAnswerEnd | null }
+  /** From a person's own Mirador: a streamed thinking or text chunk of an agent working in the room's workspace. */
+  | { type: "room.brought-step"; roomId: string; agentId: string; taskId: string; stepId: string; kind: BroughtStepKind; delta: string }
   /** From a person's own Mirador: a canvas page drawn by an agent they brought during a room task. */
   | { type: "room.brought-canvas-show"; roomId: string; agentId: string; taskId: string; itemId: string; title: string; html: string }
   /** From a person's own Mirador: a canvas question asked by an agent they brought during a room task. */
@@ -756,9 +758,11 @@ export type ServerMessage =
   /** To a person other than the owner alone: the rooms they wait to be let into, by id alone, each time that changes. */
   | { type: "rooms.waiting-to-join"; personId: string; roomIds: string[] }
   /** With the pages and questions of the room's canvas, which come as `canvas.upserted` from then on, and the votes on its questions, which come as `room.votes`. */
-  | ({ type: "room.timeline"; roomId: string; canvas: CanvasItem[]; votes: RoomQuestionVotes[]; workspaceCalls: RoomWorkspaceCall[] } & RoomTimeline)
+  | ({ type: "room.timeline"; roomId: string; canvas: CanvasItem[]; votes: RoomQuestionVotes[]; workspaceCalls: RoomWorkspaceCall[]; broughtSteps: RoomBroughtStep[] } & RoomTimeline)
   /** A call of an agent someone brought, in the room's workspace, as it begins and each time it changes. */
   | { type: "room.workspace-call-shown"; call: RoomWorkspaceCall }
+  /** A streamed thinking or text step of an agent someone brought to work in the room's workspace, as it starts and grows. */
+  | { type: "room.brought-step-shown"; step: RoomBroughtStep }
   /** To the person's own Mirador alone: what came of a call of the agent they brought. */
   | { type: "room.workspace-answered"; personId: string; roomId: string; agentId: string; callId: string; result: WorkspaceCallResult }
   /** The picks on a question of a subscribed room's agent, and who may confirm its answer, each time either changes. */
