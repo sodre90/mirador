@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { contrastRatio } from "../web/readable-color.ts";
 import { FakeClaudeApi, subscriptionEnvironment } from "./fake-claude-api.ts";
-import { addWorkspace, chooseInSettings, createProfile, sendMessage, signIn, startConversation, waitForTurnToEnd } from "./helpers.ts";
+import { addWorkspace, chooseInSettings, conversationSettings, createProfile, sendMessage, signIn, startConversation, waitForTurnToEnd } from "./helpers.ts";
 import { ScriptedModel, scriptedOpencodeEnvironment } from "./scripted-model.ts";
 import { TestHost } from "./test-host.ts";
 
@@ -24,7 +24,8 @@ function claudeSettingsWithStatusline() {
     [
       "const input = JSON.parse(await Bun.stdin.text());",
       "const used = input.context_window.used_percentage ?? 'none';",
-      "console.log(`\\x1b[1;32mstatus\\x1b[0m context ${used} ${process.env.STATUSLINE_MARKER} cols ${process.env.COLUMNS}`);",
+      "const effort = input.effort?.level ?? 'none';",
+      "console.log(`\\x1b[1;32mstatus\\x1b[0m effort ${effort} context ${used} ${process.env.STATUSLINE_MARKER} cols ${process.env.COLUMNS}`);",
     ].join("\n"),
   );
   writeFileSync(join(configDir, "settings.json"), JSON.stringify({ statusLine: { type: "command", command: `bun '${script}'` } }));
@@ -80,6 +81,17 @@ test("in a Claude Code conversation, the statusline command from the profile's C
   await sendMessage(page, "hello");
   await waitForTurnToEnd(page);
   await expect(printed).toHaveAttribute("aria-label", /context \d+ from-the-profile/);
+
+  await test.step("the command gets the effort chosen in the conversation, and none while it is left on Default, as Claude Code sends none then", async () => {
+    const effort = (await conversationSettings(page)).getByLabel("Effort", { exact: true });
+    await effort.selectOption("high");
+    await expect(printed).toHaveAttribute("aria-label", /effort high context/);
+    await effort.selectOption("default");
+    await expect(printed).toHaveAttribute("aria-label", /effort none context/);
+    await effort.selectOption("low");
+    await expect(printed).toHaveAttribute("aria-label", /effort low context/);
+    await page.keyboard.press("Escape");
+  });
 
   await statusline.getByRole("button", { name: "Built-in" }).click();
   await expect(printed).toHaveCount(0);

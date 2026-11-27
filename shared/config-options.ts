@@ -81,6 +81,11 @@ export function ranOnOf(configOptions: SessionConfigOption[], answeringModel: st
   const chosen = chosenModel(configOptions);
   const model = answeringModel ? { id: answeringModel, name: modelLabel(answeringModel) } : chosen && (modelBehindDefault(configOptions) ?? { id: chosen.id, name: chosen.name });
   if (!model) return null;
-  const effortOption = configOptions.find(({ category }) => category === "thought_level");
-  return { model, effort: effortOption ? String(effortOption.currentValue) : null };
+  return { model, effort: chosenEffort(configOptions) };
+}
+
+/** The effort chosen in a conversation's options; null when its agent offers no choice of effort. */
+export function chosenEffort(configOptions: SessionConfigOption[]): string | null {
+  const option = configOptions.find(({ category }) => category === "thought_level");
+  return option ? String(option.currentValue) : null;
 }
