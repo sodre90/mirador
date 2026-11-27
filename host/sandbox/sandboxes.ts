@@ -584,6 +584,19 @@ export class Sandboxes {
     await vm.stopping;
   }
 
+  /**
+   * The sandbox was turned off, or its room moved to another workspace: once its VMs stopped, whose last look at the
+   * held files is still its own, it hears of no new held changes where it worked, and still answers those it was told
+   * of; unless it started working again meanwhile.
+   */
+  async ownerLeft(owner: SandboxOwner) {
+    await Promise.all(this.vmsOf(owner).map((vm) => this.stopVm(vm)));
+    if (this.vmsOf(owner).length > 0) return;
+    this.allHelds().forEach((held) => held.left(owner));
+    [...this.stoppedHeld].filter((held) => held.owners().length === 0).forEach((held) => this.stoppedHeld.delete(held));
+    this.heldChanged(owner);
+  }
+
   /** A deleted room's or workspace's VMs stop, and what they held goes unanswered, where no other sandbox works among it: the files are as they were. */
   async ownerGone(owner: SandboxOwner) {
     await Promise.all(this.vmsOf(owner).map((vm) => this.stopVm(vm)));

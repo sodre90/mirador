@@ -507,6 +507,7 @@ export class RoomService implements RoomRules, TurnListener {
     const workspace = this.store.findWorkspace(room.workspaceId);
     if (workspace) sandboxLeft(this.store, workspace.path);
     sandboxLeftWritableFolders(this.store, roomSandbox(room.id));
+    void this.sandboxes.ownerLeft(roomSandbox(room.id));
   }
 
   async sandboxCheck(roomId: string): Promise<SandboxCheck> {

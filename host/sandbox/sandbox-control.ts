@@ -33,6 +33,8 @@ export interface SandboxControl {
   answerHeldChange(owner: SandboxOwner, changeId: string, answer: HeldChangeAnswer): Promise<void>;
   /** The room or workspace is deleted: its VM stops, and what it held goes unanswered. */
   ownerGone(owner: SandboxOwner): Promise<void>;
+  /** The sandbox was turned off, or its room moved to another workspace: it hears of no new held changes there. */
+  ownerLeft(owner: SandboxOwner): Promise<void>;
   /** Why a sandbox can't work in the workspace, or the room's or workspace's sandbox `turningOn` can't turn on there; null where it can. */
   workspaceRefusal(workspace: string, turningOn?: SandboxOwner): Promise<SandboxBlocker | null>;
   /** The command that does the call in that agent's own VM of the sandbox, started first where it isn't running. */
@@ -50,6 +52,7 @@ export const NO_SANDBOX_CONTROL: SandboxControl = {
   prepare: () => {},
   answerHeldChange: async () => {},
   ownerGone: async () => {},
+  ownerLeft: async () => {},
   workspaceRefusal: async () => null,
   launchForBrought: () => Promise.reject(new SandboxNotReady({ kind: "unavailable", why: "turned-off" })),
   stopBrought: async () => {},

@@ -128,6 +128,7 @@ export class WorkspaceSandboxes {
   private sandboxLeaves(workspaceId: string, path: string) {
     sandboxLeft(this.store, path);
     sandboxLeftWritableFolders(this.store, workspaceSandbox(workspaceId));
+    void this.sandboxes.ownerLeft(workspaceSandbox(workspaceId));
   }
 
   private existingWorkspace(workspaceId: string) {

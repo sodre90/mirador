@@ -16,10 +16,14 @@ export class HeldFilesRefused extends Error {}
 /** A change as it is held, for every sandbox that works in the folder. */
 type ChangeKept = Omit<HeldChange, "owner" | "folder">;
 
-/** A room or workspace whose sandbox works in the folder: as its workspace, or as one added to it read and write. */
+/**
+ * A room or workspace whose sandbox works in the folder: as its workspace, or as one added to it read and write; or one
+ * that left it, turned off or moved elsewhere, which still answers the changes it was told of there, and hears of no more.
+ */
 interface WorksThere {
   owner: SandboxOwner;
   asAddedFolder: boolean;
+  left: boolean;
 }
 
 /** What the held files of a folder ask of the sandboxes that work in it, all of whose VMs that write there share them. */
@@ -76,6 +80,8 @@ interface Held {
   before: PlaceEntry;
   proposed: PlaceEntry;
   byBrought: boolean;
+  /** Whose sandboxes are told of it, by `ownerKey`: those working there as it came, or that came to work there since. */
+  toldTo: Set<string>;
 }
 
 /**
@@ -104,12 +110,32 @@ export class HeldFiles {
     private readonly sandbox: HeldSandbox,
   ) {}
 
+  /** The sandbox works in the folder from now on, and is told of every change waiting there too. */
   worksThere(owner: SandboxOwner, asAddedFolder = false) {
-    this.working.set(ownerKey(owner), { owner, asAddedFolder });
+    const key = ownerKey(owner);
+    this.working.set(key, { owner, asAddedFolder, left: false });
+    this.held.forEach(({ toldTo }) => toldTo.add(key));
   }
 
   worksThereNoLonger(owner: SandboxOwner) {
     this.working.delete(ownerKey(owner));
+  }
+
+  /** The sandbox was turned off, or its room moved to another workspace: it still answers what it was told of here, and is told of nothing new. */
+  left(owner: SandboxOwner) {
+    const working = this.working.get(ownerKey(owner));
+    if (!working) return;
+    working.left = true;
+    this.forgetLeftWithNothingToAnswer();
+  }
+
+  private forgetLeftWithNothingToAnswer() {
+    const toAnswer = new Set([...this.held.values()].flatMap(({ toldTo }) => [...toldTo]));
+    [...this.working].filter(([key, { left }]) => left && !toAnswer.has(key)).forEach(([key]) => this.working.delete(key));
+  }
+
+  private stillThere(): string[] {
+    return [...this.working].filter(([, { left }]) => !left).map(([key]) => key);
   }
 
   owners(): SandboxOwner[] {
@@ -167,9 +193,10 @@ export class HeldFiles {
 
   /** What it holds, as the room or workspace is told of it; nothing where its sandbox doesn't work there. */
   changesFor(owner: SandboxOwner): HeldChange[] {
-    const working = this.working.get(ownerKey(owner));
+    const key = ownerKey(owner);
+    const working = this.working.get(key);
     if (!working) return [];
-    return [...this.held.values()].map(({ change }) => ({ ...change, owner: working.owner, folder: working.asAddedFolder ? this.workspace : null }));
+    return [...this.held.values()].filter(({ toldTo }) => toldTo.has(key)).map(({ change }) => ({ ...change, owner: working.owner, folder: working.asAddedFolder ? this.workspace : null }));
   }
 
   holdsAny() {
@@ -212,6 +239,7 @@ export class HeldFiles {
       await this.queue(path);
     }
     this.sandbox.changed();
+    this.forgetLeftWithNothingToAnswer();
   }
 
   private async heard(path: string) {
@@ -307,7 +335,8 @@ export class HeldFiles {
       ...(unshown && { unshown: true as const }),
       at: Date.now(),
     };
-    this.held.set(path, { change, before, proposed, byBrought: kept?.byBrought ?? byBrought });
+    this.held.set(path, { change, before, proposed, byBrought: kept?.byBrought ?? byBrought, toldTo: new Set(this.stillThere()) });
+    this.forgetLeftWithNothingToAnswer();
     return true;
   }
 

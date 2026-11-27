@@ -100,6 +100,7 @@ function sandboxedWorkspace(sandbox: SandboxSetting = SANDBOX_ON) {
   conversations.startsSandboxedAgentsIn(sandboxes);
   const preparedFor: string[][] = [];
   const networkTold: string[] = [];
+  const leftBy: string[] = [];
   const control: SandboxControl = {
     ...NO_SANDBOX_CONTROL,
     availability: () => sandboxes.availability(),
@@ -107,13 +108,14 @@ function sandboxedWorkspace(sandbox: SandboxSetting = SANDBOX_ON) {
     answerHeldChange: (owner, changeId, answer) => sandboxes.answerHeldChange(owner, changeId, answer),
     workspaceRefusal: (workspace, turningOn) => sandboxes.workspaceRefusal(workspace, turningOn),
     ownerGone: (owner) => sandboxes.ownerGone(owner),
+    ownerLeft: async (owner) => void leftBy.push(ownerKey(owner)),
     networkChanged: (owner) => void networkTold.push(`${ownerKey(owner)} ${store.findWorkspace(owner.id)!.sandbox.network}`),
   };
   const agentTabsClosed: string[] = [];
   const workspaceSandboxes = new WorkspaceSandboxes(store, hub, conversations, { closeAgentPrograms: (conversationId) => void agentTabsClosed.push(conversationId) });
   workspaceSandboxes.keepsSandboxesWith(control);
   const turnFailure = (conversationId: string) => store.listEvents(conversationId).findLast(({ event }) => event.type === "error" && event.endsTurn)?.event as { problem?: HostProblem } | undefined;
-  return { store, config, conversations, conversationsOnThisHost, launcher, sandboxes, workspaceSandboxes, agentTabsClosed, claude, project, other, turnFailure, preparedFor, networkTold };
+  return { store, config, conversations, conversationsOnThisHost, launcher, sandboxes, workspaceSandboxes, agentTabsClosed, claude, project, other, turnFailure, preparedFor, networkTold, leftBy };
 }
 
 type Inside = {
@@ -346,6 +348,17 @@ test("turned on, the workspace's sandbox prepares the image of the profile its n
   store.setWorkspaceDefaultLaunch("w1", { harness: "claude", profileId: "subscriber" });
   await workspaceSandboxes.setSandbox("w1", SANDBOX_ON);
   expect(preparedFor).toEqual([["builder"], []]);
+});
+
+test("turned off, or gone with its workspace, the workspace's sandbox tells the sandboxes it left, so it hears of no new held change there", async () => {
+  const { workspaceSandboxes, leftBy } = sandboxedWorkspace(NO_SANDBOX);
+  await workspaceSandboxes.setSandbox("w1", SANDBOX_ON);
+  expect(leftBy).toEqual([]);
+  await workspaceSandboxes.setSandbox("w1", NO_SANDBOX);
+  expect(leftBy).toEqual([ownerKey(workspaceSandbox("w1"))]);
+  await workspaceSandboxes.setSandbox("w1", SANDBOX_ON);
+  workspaceSandboxes.workspaceGone("w1");
+  expect(leftBy).toHaveLength(2);
 });
 
 test("what a workspace's sandbox reaches changes by itself, its conversations going on in their sessions, stays as it is however else the sandbox is set, and is closed again once that is turned off", async () => {

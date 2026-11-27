@@ -254,6 +254,7 @@ const sandboxControl: SandboxControl = {
   stopBrought: (owner, agentId) => sandboxes.stopBrought(owner, agentId),
   turnEnded: (owner) => sandboxes.turnEnded(owner),
   networkChanged: (owner) => sandboxes.networkChanged(owner),
+  ownerLeft: (owner) => sandboxes.ownerLeft(owner),
   ownerGone: (owner) => {
     sandboxFolders.ownerGone(owner);
     return sandboxes.ownerGone(owner);

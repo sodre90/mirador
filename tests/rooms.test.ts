@@ -54,7 +54,7 @@ import {
   type RoomTaskApproval,
 } from "../shared/rooms.ts";
 import { ALL_OF_CLAUDE_SETUP, type ClaudeSetup } from "../shared/room-agent-setup.ts";
-import { NO_SANDBOX, roomSandbox, type SandboxNetwork, type SandboxOwner, type SandboxSetting } from "../shared/sandbox.ts";
+import { NO_SANDBOX, ownerKey, roomSandbox, type SandboxNetwork, type SandboxOwner, type SandboxSetting } from "../shared/sandbox.ts";
 import { NO_SANDBOX_CONTROL } from "../host/sandbox/sandbox-control.ts";
 import { snapshotMessage } from "./snapshot-message.ts";
 
@@ -2171,5 +2171,19 @@ describe("a room's sandbox leaving its workspace", () => {
     const leftLately = store.foldersSandboxesLeft().filter(({ leftAt }) => leftAt > lastLeft);
     expect(leftLately).toHaveLength(2);
     expect(leftLately.map(({ path }) => path)).toContain("/tmp/tools");
+  });
+
+  test("turned off or moved to another workspace, it tells the sandboxes, which tell it of no new held change in its former one", async () => {
+    const { store, rooms, room } = machineWithRooms();
+    const left: string[] = [];
+    rooms.keepsSandboxesWith({ ...NO_SANDBOX_CONTROL, availability: () => ({ available: true, kind: "apple-container" }), ownerLeft: async (owner) => void left.push(ownerKey(owner)) });
+    store.insertWorkspace({ id: "w2", name: "other", path: "/tmp/other", defaultLaunch: { harness: "opencode", profileId: "p1" }, createdAt: 2 });
+    store.setRoomSandbox(room.id, SANDBOX_ON);
+    rooms.setWorkspace(room.id, "w2");
+    expect(left).toEqual([ownerKey(roomSandbox(room.id))]);
+    await rooms.setSandbox(room.id, NO_SANDBOX);
+    expect(left).toHaveLength(2);
+    rooms.setWorkspace(room.id, "w1");
+    expect(left).toHaveLength(2);
   });
 });
