@@ -65,6 +65,9 @@ async function openSandboxOf(page: Page, card: Locator, workspace: string) {
 let conversation = "";
 const openConversation = (page: Page) => page.locator(`li[data-reorder-id="${conversation}"] .conversation-title`).click();
 
+/** As long as an agent may take to start in a VM that starts for it, on a Mac busy with other runs. */
+const startedInItsOwnVm = { timeout: 60_000 };
+
 const vmsStarted = () =>
   readFileSync(join(containerState(), "calls.log"), "utf8")
     .trim()
@@ -93,7 +96,7 @@ test("a workspace's sandbox and a room's in the same folder protect the same of 
   await settings.getByRole("switch", { name: "Run the agents in a sandbox" }).check();
   await settings.getByRole("button", { name: "Close" }).click();
   await tagBuilder(page, `WAIT ${turnsMayEnd()} SAY Reviewed.`);
-  await expect.poll(() => promptsSoFar().split(turnsMayEnd()).length).toBe(3);
+  await expect.poll(() => promptsSoFar().split(turnsMayEnd()).length, startedInItsOwnVm).toBe(3);
 
   const [ofWorkspace, ofRoom] = vmsStarted().map((run) => guardedIn(mountsOfRun(run)));
   expect(ofWorkspace!.map(({ folder, parts }) => [folder, parts.gitFolders])).toEqual([[realpathSync(host.projectDir), [".git"]]]);
@@ -127,7 +130,7 @@ test("where the owner has git run hooks from another folder meanwhile, the agent
   await tagBuilder(page, `WAIT ${neverMade} SAY Reviewed again.`);
   await openConversation(page);
   await sendMessage(page, `WRITE ${JSON.stringify([{ waitFor: neverMade }])}`);
-  await expect.poll(() => promptsSoFar().split(neverMade).length).toBe(3);
+  await expect.poll(() => promptsSoFar().split(neverMade).length, startedInItsOwnVm).toBe(3);
 
   const foldersKept = () => vmsStarted().map((run) => guardedIn(mountsOfRun(run))[0]!.parts.folders);
   const startedBefore = foldersKept();
