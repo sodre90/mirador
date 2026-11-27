@@ -675,10 +675,8 @@ export class RoomService implements RoomRules, TurnListener {
     if (workspace === null) return null;
     if (!room.sandbox.on) return onThisComputer(workspace, this.dataDir, commandEnvironment);
     const owner = roomSandbox(room.id);
-    const worksHere = ({ id }: Profile) => room.agents.some(({ profileId }) => profileId === id);
-    const profiles = this.store.listProfiles().toSorted((a, b) => Number(worksHere(b)) - Number(worksHere(a)));
     return inRoomsSandbox(workspace, {
-      launch: (command) => this.sandboxes.launchForBrought({ owner, agentId, allowsSharedKernel: room.sandbox.allowsSharedKernel, profiles, workingDirectory: workspace, command }),
+      launch: (command) => this.sandboxes.launchForBrought({ owner, agentId, allowsSharedKernel: room.sandbox.allowsSharedKernel, workingDirectory: workspace, command }),
       stop: () => this.sandboxes.stopBrought(owner, agentId),
     });
   }

@@ -1,9 +1,11 @@
 /**
  * Stands in for Apple's `container` in e2e. It keeps its service, builder, images and VMs in state.json under
- * FAKE_CONTAINER_STATE and notes each call it gets in calls.log there. `exec` starts the agent "in" a VM by running
+ * FAKE_CONTAINER_STATE and notes each call it gets in calls.log there, but the throwaway runs that install the sandbox's
+ * tools, which it notes in installs.log. `exec` starts the agent "in" a VM by running
  * e2e/fake-acp-agent.ts on this computer, in the folder `-w` names, with only the values `-e` names, and runs the
- * script that puts held files back in a VM here, from host/sandbox/in-vm; what it runs ends with the VM. With
- * FAKE_CONTAINER_BUILD_HELD_BY, the image build stops after its second step until that file exists.
+ * script that puts held files back in a VM here, from host/sandbox/in-vm; what it runs ends with the VM. A throwaway
+ * `run`, which installs a tool, installs nothing and succeeds. With FAKE_CONTAINER_BUILD_HELD_BY, the base image's build
+ * stops after its second step until that file exists; with FAKE_CONTAINER_INSTALL_HELD_BY, so does Claude Code's install.
  */
 import { appendFileSync, existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -24,7 +26,8 @@ const HELD_PLACES_HERE = join(import.meta.dirname, "../host/sandbox/in-vm/held-p
 const stateFolder = process.env.FAKE_CONTAINER_STATE!;
 const statePath = join(stateFolder, "state.json");
 const args = process.argv.slice(2);
-appendFileSync(join(stateFolder, "calls.log"), `${JSON.stringify(args)}\n`);
+const isInstall = args[0] === "run" && !args.includes("--detach");
+appendFileSync(join(stateFolder, isInstall ? "installs.log" : "calls.log"), `${JSON.stringify(args)}\n`);
 
 const read = (): State => (existsSync(statePath) ? JSON.parse(readFileSync(statePath, "utf8")) : { serviceRunning: false, builderRunning: false, images: [], vms: {} });
 const write = (state: State) => {
@@ -50,16 +53,20 @@ async function waitForFile(path: string | undefined) {
 
 async function build() {
   const tag = valueAfter("-t");
-  console.log("#1 [internal] load build definition from room-agent.Containerfile");
-  console.log("#5 [stage-1 1/3] FROM docker.io/library/node:22-bookworm-slim");
-  console.log("#6 [stage-1 2/3] RUN apt-get update");
+  console.log("#1 [internal] load build definition from base.Containerfile");
+  console.log("#5 [1/3] FROM docker.io/library/debian:bookworm-slim");
+  console.log("#6 [2/3] RUN apt-get update");
   await waitForFile(process.env.FAKE_CONTAINER_BUILD_HELD_BY);
-  console.log(`#7 [stage-1 3/3] RUN npm install -g @anthropic-ai/claude-code`);
+  console.log("#7 [3/3] RUN find / -xdev -perm /6000 -type f -exec chmod a-s {} +");
   change((state) => state.images.push(tag));
 }
 
+async function installTool() {
+  if (args.some((arg) => arg.includes("@anthropic-ai/claude-code@"))) await waitForFile(process.env.FAKE_CONTAINER_INSTALL_HELD_BY);
+}
+
 /**
- * `exec [-i] [--user U] [-w DIR] [-e NAME[=VALUE]]… VM setpriv … -- COMMAND…`: the fake agent, given what a VM's process
+ * `exec [-i] [--user U] [-w DIR] [-e NAME[=VALUE]]… VM mirador-guard as U -- COMMAND…`: the fake agent, given what a VM's process
  * would get, and the FAKE_ACP_ values of this program's own for the fake agent itself; or the put-back of held files.
  */
 async function exec() {
@@ -108,6 +115,10 @@ switch (command) {
     if (sub === "delete") change((state) => (state.images = state.images.filter((name) => !args.slice(2).includes(name))));
     break;
   case "run":
+    if (isInstall) {
+      await installTool();
+      break;
+    }
     change((state) => {
       state.vms[valueAfter("--name")] = Object.fromEntries(valuesAfter("--label").map((label) => label.split("=") as [string, string]));
       state.mounts = { ...state.mounts, [valueAfter("--name")]: mountsOfRun() };

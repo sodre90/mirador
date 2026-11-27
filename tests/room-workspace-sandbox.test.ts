@@ -32,6 +32,9 @@ beforeEach(() => {
 
 afterEach(() => rmSync(workspace, { recursive: true, force: true }));
 
+/** The environment the sandbox starts a brought agent's calls with in its VM. */
+const THE_VMS_OWN = { HOME: "/tmp/mirador-home", USER: "mirador" };
+
 const LIMITS = { commandMs: 20_000, spareMs: 20_000, stopWithinMs: 20_000 };
 
 /** The VM of a brought agent, its processes this computer's own: the call's runner, or a program standing in for one gone wrong. */
@@ -43,7 +46,7 @@ function vm({ running = null as string | null, limits = {} as Partial<typeof LIM
       launch: async (command) => {
         await launching();
         happened.push("launched");
-        return { command: running === null ? commandHere(command) : programRunning(running), environment: {}, gone: () => void happened.push("gone") };
+        return { command: running === null ? commandHere(command) : programRunning(running), environment: THE_VMS_OWN, gone: () => void happened.push("gone") };
       },
       stop: async () => void happened.push("stopped"),
     },
@@ -96,7 +99,8 @@ posix("a call of a brought agent in the room's sandbox", () => {
     const { text } = await commandRun("pwd; env; exit 3", place, unstopped);
     delete process.env.MIRADOR_TEST_SECRET;
     expect(text).toStartWith(`It exited with 3.\n${workspace}\n`);
-    expect(text).toContain("HOME=/home/node");
+    expect(text).toContain("HOME=/tmp/mirador-home");
+    expect(text).toContain("USER=mirador");
     expect(text).not.toContain("secret");
     expect(happened).toEqual(["launched", "gone"]);
   });

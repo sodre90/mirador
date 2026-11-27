@@ -11,8 +11,11 @@ export type CallInVm =
 
 export type CallAnswered = { refused: string } | { entry: EntryFound } | { changed: true } | { ran: CommandRan };
 
+/** A command runs in the VM's environment for the agent, which this call was started with, and what it was given besides. */
+const inTheVmsEnvironment = (command: CommandToRun): CommandToRun => ({ ...command, environment: { ...(process.env as Record<string, string>), ...command.environment } });
+
 async function answerTo(call: CallInVm, stopped: AbortSignal): Promise<CallAnswered> {
-  if (call.asks === "run") return { ran: await runToItsEnd(call.command, stopped) };
+  if (call.asks === "run") return { ran: await runToItsEnd(inTheVmsEnvironment(call.command), stopped) };
   const folders = { workspace: call.workspace, miradorsData: null, fileMostBytes: call.fileMostBytes };
   if (call.asks === "entry") return { entry: await entryAt(call.path, folders) };
   await makeChange(call.change, folders);

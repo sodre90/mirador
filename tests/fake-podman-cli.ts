@@ -7,7 +7,10 @@ const failed = (output: string, exitCode = 125): ContainerRun => ({ exitCode, ou
 const valueAfter = (args: string[], flag: string) => args[args.indexOf(flag) + 1]!;
 
 /** The image the recipe builds on, which a build pulls where it is not there. */
-export const NODE_IMAGE = "docker.io/library/node:22-bookworm-slim";
+export const DEBIAN_IMAGE = "docker.io/library/debian:bookworm-slim";
+
+/** A throwaway run, which installs a tool: `podman run --rm` that runs to its end, not a sandbox started detached. */
+const isThrowaway = ([command, ...args]: string[]) => command === "run" && !args.includes("--detach");
 
 /** Podman as it names an image built here. */
 const localName = (tag: string) => (tag.includes("/") ? tag : `localhost/${tag}`);
@@ -33,7 +36,11 @@ export class FakePodmanCli implements ContainerCli {
     return this.calls.filter(([first]) => first === command);
   }
 
+  /** The throwaway runs, apart from `calls`: what the tools' installers ran. */
+  readonly ranOnce: string[][] = [];
+
   async run(args: string[], options: ContainerRunOptions = {}): Promise<ContainerRun> {
+    if (isThrowaway(args)) return this.runOnce(args);
     this.calls.push(args);
     const failure = this.failing(args);
     if (failure !== null) return failed(failure);
@@ -56,8 +63,8 @@ export class FakePodmanCli implements ContainerCli {
   }
 
   private build(args: string[], { onLine }: ContainerRunOptions) {
-    onLine?.(`STEP 1/${this.buildSteps}: FROM ${NODE_IMAGE}`);
-    this.images.add(NODE_IMAGE);
+    onLine?.(`STEP 1/${this.buildSteps}: FROM ${DEBIAN_IMAGE}`);
+    this.images.add(DEBIAN_IMAGE);
     Array.from({ length: this.buildSteps - 1 }, (_, index) => index + 2).forEach((step) => onLine?.(`STEP ${step}/${this.buildSteps}: RUN something`));
     onLine?.("COMMIT");
     this.images.add(localName(valueAfter(args, "-t")));
@@ -68,6 +75,12 @@ export class FakePodmanCli implements ContainerCli {
   private listImages() {
     const listed: { Names: string[] | null }[] = [...[...this.images].map((name) => ({ Names: [name] })), { Names: null }];
     return done(JSON.stringify(listed));
+  }
+
+  private runOnce(args: string[]) {
+    this.ranOnce.push(args);
+    const failure = this.failing(args);
+    return failure === null ? done() : failed(failure);
   }
 
   private readonly ending = new Map<string, string>();

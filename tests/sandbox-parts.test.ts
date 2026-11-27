@@ -7,7 +7,8 @@ import { CONTAINER_READS, execArguments, vmIdsLabelled, writtenByOthersIn } from
 import { appleContainerAvailability, appleContainerRuntime, podmanAvailability, podmanStorageIn, selinuxEnforcingAt } from "../host/sandbox/availability.ts";
 import { execProcessEnvironment } from "../host/sandbox/exec-environment.ts";
 import { versionSaidIn } from "../host/sandbox/agent-version.ts";
-import { baseImageOf, buildArguments, buildStepIn, imageReferencesIn, imageTag, RECIPE } from "../host/sandbox/image.ts";
+import { BASE_RECIPE, baseImageOf, buildStepIn, defaultBaseTag, imageReferencesIn } from "../host/sandbox/image.ts";
+import { GUARD_IN_VM } from "../host/sandbox/tools-folder.ts";
 import { PODMAN_READS } from "../host/sandbox/podman.ts";
 import { guardPlanOf, sandboxRefusalOf, type MiradorPlaces, type ProtectedParts } from "../host/sandbox/guarded-workspace.ts";
 import { keepingNetworkOf, narrowsSandbox, NO_SANDBOX, reachesMoreThan, SANDBOX_NETWORKS, sandboxSettingIn, sameSandbox, sharesKernel, signInElsewhere, type SandboxNetwork, type SandboxSetting } from "../shared/sandbox.ts";
@@ -35,7 +36,6 @@ const NOTHING_OF_ITS_OWN: ProtectedParts = { files: [], folders: [], onTheWay: [
 
 const MAC_26 = { platform: "darwin" as const, arch: "arm64", darwinMajor: 25 };
 
-const valuesAfterFlag = (args: string[], flag: string) => args.flatMap((arg, index) => (args[index - 1] === flag ? [arg] : []));
 
 test("sandboxes run on macOS 26 on Apple silicon with Apple's container, and each other computer is told why not", () => {
   expect(appleContainerAvailability(MAC_26, "/usr/local/bin/container")).toEqual({ available: true, kind: "apple-container" });
@@ -115,26 +115,22 @@ test("an agent that signs in with a key works in a sandbox; one on a subscriptio
   expect(signInElsewhere({ ANTHROPIC_API_KEY: "k", CLAUDE_CODE_USE_FOUNDRY: "on" })).toBe("foundry");
 });
 
-test("the image is told apart by its agent's kind and version, Bun's, the recipe's and the guard's, installs that agent, and its build says which step it is on", async () => {
+test("the base image is told apart by its recipe, which builds on Debian, and its build says which step it is on; an agent's version is read from what its program says", async () => {
   expect(versionSaidIn("2.1.330 (Claude Code)")).toBe("2.1.330");
   expect(versionSaidIn("2.2.0-beta.1 (Claude Code)")).toBe("2.2.0-beta.1");
   expect(versionSaidIn("1.6.0")).toBe("1.6.0");
   expect(versionSaidIn("command not found")).toBeNull();
   expect(versionSaidIn(null)).toBeNull();
-  expect(await imageTag({ harness: "claude", version: "2.1.330" }, "1.4.4")).toMatch(/^mirador-room-agent:claude-2\.1\.330-bun-1\.4\.4-[0-9a-f]{10}$/);
-  expect(await imageTag({ harness: "pi", version: "1.6.0" }, "1.4.4")).toMatch(/^mirador-room-agent:pi-1\.6\.0-bun-1\.4\.4-[0-9a-f]{10}$/);
-  const piBuild = await buildArguments({ harness: "pi", version: "1.6.0" });
-  expect(valuesAfterFlag(piBuild, "--build-arg")).toEqual([`BUN_VERSION=${Bun.version}`, "AGENT_PACKAGE=@earendil-works/pi-coding-agent@1.6.0", "AGENT_PROGRAM=pi", expect.stringMatching(/^GUARD_SOURCE=[A-Za-z0-9+/]+=*$/)]);
-  expect(valuesAfterFlag(await buildArguments({ harness: "claude", version: "2.1.330" }), "--build-arg")).toContain("AGENT_PACKAGE=@anthropic-ai/claude-code@2.1.330");
+  expect(await defaultBaseTag()).toMatch(/^mirador-sandbox-base:[0-9a-f]{10}$/);
   expect(buildStepIn("#7 [stage-1 3/6] RUN npm install -g @anthropic-ai/claude-code@2.1.330")).toEqual({ at: 3, of: 6 });
   expect(buildStepIn("#5 [2/4] RUN apt-get update")).toEqual({ at: 2, of: 4 });
   expect(buildStepIn("#7 DONE 12.3s")).toBeNull();
   expect(buildStepIn("STEP 5/8: RUN npm install -g bun@1.4.4 @anthropic-ai/claude-code@2.1.330")).toEqual({ at: 5, of: 8 });
   expect(buildStepIn("[1/2] STEP 2/5: RUN apt-get update")).toEqual({ at: 2, of: 5 });
   expect(buildStepIn("--> 3f2a1b")).toBeNull();
-  expect(baseImageOf(await Bun.file(RECIPE).text())).toBe("docker.io/library/node:22-bookworm-slim");
-  const listed = `[{"descriptor":{"digest":"sha256:abc"},"fullSize":"79,9 MB","reference":"docker.io/library/node:22"},{"descriptor":{"annotations":{"io.containerd.image.name":"docker.io/library/mirador-room-agent:claude-2"}},"reference":"mirador-room-agent:claude-2"}]`;
-  expect(imageReferencesIn(listed)).toEqual(new Set(["docker.io/library/node:22", "mirador-room-agent:claude-2"]));
+  expect(baseImageOf(await Bun.file(BASE_RECIPE).text())).toBe("docker.io/library/debian:bookworm-slim");
+  const listed = `[{"descriptor":{"digest":"sha256:abc"},"fullSize":"79,9 MB","reference":"docker.io/library/node:22"},{"descriptor":{"annotations":{"io.containerd.image.name":"docker.io/library/mirador-sandbox-base:0123456789"}},"reference":"mirador-sandbox-base:0123456789"}]`;
+  expect(imageReferencesIn(listed)).toEqual(new Set(["docker.io/library/node:22", "mirador-sandbox-base:0123456789"]));
   expect(imageReferencesIn("not json")).toEqual(new Set());
 });
 
@@ -162,8 +158,8 @@ test("what other Miradors' VMs write is read from container's list: their mounts
 
 test("the agent's environment in the VM keeps the key, this Mac's own places and what has programs load code out, and passes its values by name", () => {
   const given = { ANTHROPIC_AUTH_TOKEN: "token-of-the-profile", ANTHROPIC_API_KEY: "another-key", CLAUDE_CODE_OAUTH_TOKEN: "subscription-token", ANTHROPIC_BASE_URL: "https://gateway.example", CLAUDE_CONFIG_DIR: "/Users/me/.claude", SSH_AUTH_SOCK: "/tmp/ssh", MIRADOR_SCRIPT_TOKEN: "s", HOME: "/Users/me", LD_PRELOAD: "/work/lib.so", LD_LIBRARY_PATH: "/work", GCONV_PATH: "/work", DEPLOY: "staging" };
-  const inVm = environmentInVm(given, { harness: "claude", keyVariable: "ANTHROPIC_AUTH_TOKEN" }, { configFolder: "/data/sandbox/r/claude", modelBaseUrl: "http://127.0.0.1:7702/p/p1" }, ["token-of-the-profile"]);
-  expect(inVm).toMatchObject({ ANTHROPIC_AUTH_TOKEN: KEY_PLACEHOLDER, ANTHROPIC_BASE_URL: "http://127.0.0.1:7702/p/p1", CLAUDE_CONFIG_DIR: "/data/sandbox/r/claude", HOME: "/home/node", DEPLOY: "staging" });
+  const inVm = environmentInVm(given, { kind: { harness: "claude", keyVariable: "ANTHROPIC_AUTH_TOKEN" }, version: "2.1.330", base: { image: "b", path: null } }, { configFolder: "/data/sandbox/r/claude", modelBaseUrl: "http://127.0.0.1:7702/p/p1" }, ["token-of-the-profile"]);
+  expect(inVm).toMatchObject({ ANTHROPIC_AUTH_TOKEN: KEY_PLACEHOLDER, ANTHROPIC_BASE_URL: "http://127.0.0.1:7702/p/p1", CLAUDE_CONFIG_DIR: "/data/sandbox/r/claude", HOME: "/tmp/mirador-home", DEPLOY: "staging" });
   expect(inVm.ANTHROPIC_API_KEY).toBeUndefined();
   expect(inVm.CLAUDE_CODE_OAUTH_TOKEN).toBeUndefined();
   expect(inVm.SSH_AUTH_SOCK).toBeUndefined();
@@ -171,9 +167,9 @@ test("the agent's environment in the VM keeps the key, this Mac's own places and
   expect(Object.keys(inVm).filter((name) => name.startsWith("LD_") || name === "GCONV_PATH")).toEqual([]);
   const args = execArguments({ vm: "vm-1", user: "1000:1000", workingDirectory: "/work", environment: inVm, command: ["bun", "agent.js"] });
   expect(args.slice(0, 6)).toEqual(["exec", "-i", "--user", "0:0", "-w", "/work"]);
-  expect(args.slice(args.indexOf("vm-1"))).toEqual(["vm-1", "/usr/bin/setpriv", "--reuid=1000", "--regid=1000", "--clear-groups", "--inh-caps=-all", "--bounding-set=-all", "--no-new-privs", "--", "bun", "agent.js"]);
+  expect(args.slice(args.indexOf("vm-1"))).toEqual(["vm-1", GUARD_IN_VM, "as", "1000:1000", "--", "bun", "agent.js"]);
   expect(args).toContain("DEPLOY");
-  expect(args).toContain("HOME=/home/node");
+  expect(args).toContain("HOME=/tmp/mirador-home");
   expect(args.join(" ")).not.toContain("staging");
   const { PATH, HOME, TMPDIR, USER, LOGNAME, SHELL, ...notReadByContainer } = inVm;
   expect(execProcessEnvironment(inVm, { HOME: "/Users/me", PATH: "/opt/mac/bin", SECRET_OF_THE_MAC: "s" }, CONTAINER_READS)).toEqual({ ...notReadByContainer, HOME: "/Users/me", PATH: "/opt/mac/bin" });

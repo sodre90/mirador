@@ -1,8 +1,10 @@
 // The guard of a sandbox's folders: the only way its agents reach them. Each folder Mirador mounts read and write lies
 // under a place only root enters, and is shown at its own path through here, where a write is refused by name
 // (rules.hpp), whatever is replaced on the owner's computer meanwhile. Everything else goes on to the folder as the
-// agents' user. usage: mirador-guard <manifest> <uid>:<gid> -- <command>...
-// Runs the command once each folder is guarded, and ends when it does, or when a folder is no longer guarded.
+// agents' user. usage: mirador-guard <manifest> <uid>:<gid> <sockets folder> -- <command>...
+// Opens the sockets to the agents' user, runs the command as nobody once each folder is guarded, and ends when it does,
+// or when a folder is no longer guarded. `mirador-guard as <uid>:<gid> -- <command>...` runs a command as that user
+// alone. It is linked statically and called by its whole path, so nothing of the VM's image runs as root.
 #define FUSE_USE_VERSION 312
 
 #include <dirent.h>
@@ -11,6 +13,7 @@
 #include <fuse_lowlevel.h>
 #include <grp.h>
 #include <linux/capability.h>
+#include <linux/fs.h>
 #include <sys/file.h>
 #include <sys/fsuid.h>
 #include <sys/prctl.h>
@@ -24,12 +27,14 @@
 
 #include <atomic>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <filesystem>
 #include <iostream>
 #include <memory>
 #include <mutex>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <unordered_map>
 #include <utility>
@@ -647,6 +652,19 @@ void mustNotFail(int result, const std::string& what) {
   if (result == -1) throw std::runtime_error(what + ": " + std::strerror(errno));
 }
 
+/** Dropping from the bounding set and the ambient set takes CAP_SETPCAP, which goes with root: so this comes before the user changes. */
+void giveUpWhatItCouldGain() {
+  for (int capability = 0; prctl(PR_CAPBSET_READ, capability) >= 0; ++capability) mustNotFail(prctl(PR_CAPBSET_DROP, capability), "giving up what it could gain");
+  mustNotFail(prctl(PR_CAP_AMBIENT, PR_CAP_AMBIENT_CLEAR_ALL, 0, 0, 0), "giving up what it would pass on");
+}
+
+void giveUpEveryCapability() {
+  __user_cap_header_struct header{_LINUX_CAPABILITY_VERSION_3, 0};
+  __user_cap_data_struct none[2] = {};
+  mustNotFail(static_cast<int>(syscall(SYS_capset, &header, none)), "giving up its capabilities");
+  mustNotFail(prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0), "never gaining any");
+}
+
 /** From here on, everything is done as the agents' user, and nothing they do can reach this process or be done by it as root. */
 void actOnlyAs(const Agent& agent) {
   mustNotFail(setgroups(0, nullptr), "leaving every group");
@@ -654,13 +672,29 @@ void actOnlyAs(const Agent& agent) {
   setfsuid(agent.uid);
   if (static_cast<uid_t>(setfsuid(static_cast<uid_t>(-1))) != agent.uid) throw std::runtime_error("could not act as the agents' user");
   if (static_cast<gid_t>(setfsgid(static_cast<gid_t>(-1))) != agent.gid) throw std::runtime_error("could not act as the agents' group");
-  for (int capability = 0; prctl(PR_CAPBSET_READ, capability) >= 0; ++capability) mustNotFail(prctl(PR_CAPBSET_DROP, capability), "giving up what it could gain");
-  __user_cap_header_struct header{_LINUX_CAPABILITY_VERSION_3, 0};
-  __user_cap_data_struct none[2] = {};
-  mustNotFail(static_cast<int>(syscall(SYS_capset, &header, none)), "giving up its capabilities");
-  mustNotFail(prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0), "never gaining any");
+  giveUpWhatItCouldGain();
+  giveUpEveryCapability();
   mustNotFail(prctl(PR_SET_DUMPABLE, 0), "keeping others out");
   umask(0);
+}
+
+/** Becomes this user for good, in no group, with no capability, none to gain and no way back to root. */
+void becomeOnly(const Agent& user) {
+  mustNotFail(setgroups(0, nullptr), "leaving every group");
+  giveUpWhatItCouldGain();
+  mustNotFail(setresgid(user.gid, user.gid, user.gid), "becoming the group");
+  mustNotFail(setresuid(user.uid, user.uid, user.uid), "becoming the user");
+  giveUpEveryCapability();
+}
+
+const Agent NOBODY{65534, 65534};
+
+/** Lets the agents' user reach each socket Mirador forwarded into the folder; nothing else there changes, and no link is followed. */
+void openSocketsIn(const std::string& folder) {
+  for (const auto& entry : std::filesystem::directory_iterator(folder)) {
+    struct stat found {};
+    if (lstat(entry.path().c_str(), &found) == 0 && S_ISSOCK(found.st_mode)) mustNotFail(chmod(entry.path().c_str(), 0666), "opening " + entry.path().string());
+  }
 }
 
 void allowManyOpenFiles() {
@@ -696,25 +730,44 @@ void serve(fuse_session* session) {
   _exit(1);
 }
 
-pid_t started(char** command) {
-  const pid_t child = fork();
-  mustNotFail(child, "starting the command");
-  if (child > 0) return child;
-  execvp(command[0], command);
-  std::cerr << "mirador-guard: " << command[0] << ": " << std::strerror(errno) << std::endl;
+[[noreturn]] void couldNotRun(const char* program) {
+  std::cerr << "mirador-guard: " << program << ": " << std::strerror(errno) << std::endl;
   _exit(127);
 }
 
-int run(int argc, char** argv) {
-  if (argc < 5 || std::string(argv[3]) != "--") throw std::runtime_error("usage: mirador-guard <manifest> <uid>:<gid> -- <command>...");
+/** The base image's environment never reaches what runs as nobody beside the agents: it gets a PATH, and its program by whole path. */
+char* const NOTHING_OF_THE_IMAGE[] = {const_cast<char*>("PATH=/usr/sbin:/usr/bin:/sbin:/bin"), nullptr};
+
+pid_t startedAsNobody(char** command) {
+  if (command[0][0] != '/') throw std::runtime_error(std::string("not a whole path: ") + command[0]);
+  const pid_t child = fork();
+  mustNotFail(child, "starting the command");
+  if (child > 0) return child;
+  try {
+    becomeOnly(NOBODY);
+  } catch (const std::exception& error) {
+    std::cerr << "mirador-guard: " << error.what() << std::endl;
+    _exit(1);
+  }
+  execve(command[0], command, NOTHING_OF_THE_IMAGE);
+  couldNotRun(command[0]);
+}
+
+const char* const USAGE =
+    "usage: mirador-guard <manifest> <uid>:<gid> <sockets folder> -- <command>...\n"
+    "       mirador-guard as <uid>:<gid> -- <command>...";
+
+int guardAndRun(int argc, char** argv) {
+  if (argc < 6 || std::string(argv[4]) != "--") throw std::runtime_error(USAGE);
   const auto roots = guard::readManifest(argv[1]);
   const auto agent = agentIn(argv[2]);
   allowManyOpenFiles();
   for (const auto& root : roots) mustNotFail(chmod(std::filesystem::path(root.raw).parent_path().c_str(), 0700), "keeping the agents out of " + root.raw);
+  openSocketsIn(argv[3]);
   const auto ops = operations();
   std::vector<Served> served;
   for (const auto& root : roots) served.push_back(guarded(root, ops));
-  const pid_t command = started(argv + 4);
+  const pid_t command = startedAsNobody(argv + 5);
   actOnlyAs(agent);
   for (const auto& each : served) std::thread(serve, each.session).detach();
   int status = 0;
@@ -723,11 +776,45 @@ int run(int argc, char** argv) {
   return WIFEXITED(status) ? WEXITSTATUS(status) : 1;
 }
 
+/** Its home lies in the VM's own /tmp, made by the user it is for, so nothing of the base image is touched as root. */
+void makeHome() {
+  if (const char* home = std::getenv("HOME"); home && home[0] == '/') mkdir(home, 0700);
+}
+
+/**
+ * Apple's `container exec` gives a command the image's values first and then those it was given, a name twice where both
+ * have it; the program found and getenv() would go by the image's. As a shell does, the last of each name wins.
+ */
+std::vector<char*> lastOfEachName(char** given) {
+  std::vector<char*> kept;
+  std::unordered_map<std::string_view, size_t> keptAt;
+  for (char** entry = given; *entry != nullptr; ++entry) {
+    const std::string_view whole(*entry);
+    const auto [found, isNew] = keptAt.try_emplace(whole.substr(0, whole.find('=')), kept.size());
+    if (isNew) kept.push_back(*entry);
+    else kept[found->second] = *entry;
+  }
+  kept.push_back(nullptr);
+  return kept;
+}
+
+/** A command started as root in the VM, dropped to the user at once: its environment is what it was given, its own user's to use. */
+[[noreturn]] void runAs(int argc, char** argv) {
+  if (argc < 5 || std::string(argv[3]) != "--") throw std::runtime_error(USAGE);
+  auto environment = lastOfEachName(environ);
+  environ = environment.data();
+  becomeOnly(agentIn(argv[2]));
+  makeHome();
+  execvp(argv[4], argv + 4);
+  couldNotRun(argv[4]);
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
   try {
-    _exit(run(argc, argv));
+    if (argc > 1 && std::string(argv[1]) == "as") runAs(argc, argv);
+    _exit(guardAndRun(argc, argv));
   } catch (const std::exception& error) {
     std::cerr << "mirador-guard: " << error.what() << std::endl;
     _exit(1);

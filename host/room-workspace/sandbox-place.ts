@@ -1,6 +1,7 @@
 import { WORKSPACE_COMMAND_MS, WORKSPACE_FILE_MOST_BYTES } from "../../shared/room-workspace.ts";
 import type { AgentLaunch } from "../acp/harness.ts";
-import { BUN_IN_VM, IN_VM, SCRIPTS_IN_VM } from "../sandbox/agent-environment.ts";
+import { SCRIPTS_IN_VM, SHELL_IN_VM } from "../sandbox/agent-environment.ts";
+import { BUN_IN_VM } from "../sandbox/tools-folder.ts";
 import type { CommandEnded, CommandRan } from "../sandbox/in-vm/run-command.ts";
 import type { CallAnswered, CallInVm } from "../sandbox/in-vm/workspace-call.ts";
 import { MOST_ENTRIES_LISTED, refused, type EntryFound } from "../sandbox/in-vm/workspace-files.ts";
@@ -132,7 +133,7 @@ export function inRoomsSandbox(workspace: string, vm: BroughtVm, { commandMs = W
       if (!("changed" in answer)) throw refused(NO_ANSWER);
     },
     run: async (command, stopped) => {
-      const asRun = { commandLine: [IN_VM.SHELL, "-c", command], folder: workspace, environment: { ...IN_VM }, timeoutMs: commandMs, keeping: OUTPUT_KEPT };
+      const asRun = { commandLine: [SHELL_IN_VM, "-c", command], folder: workspace, environment: {}, timeoutMs: commandMs, keeping: OUTPUT_KEPT };
       const answer = await answerFrom(vm, { asks: "run", command: asRun }, stopped, commandMs + spareMs, stopWithinMs);
       if (!("ran" in answer)) throw refused(NO_ANSWER);
       return answer.ran;

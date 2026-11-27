@@ -2,8 +2,8 @@ import type { SandboxAvailability, SandboxSetup } from "../../shared/sandbox.ts"
 import { appleContainerRuntime } from "./availability.ts";
 import { containerCli, lastLineOf, type ContainerCli } from "./container-cli.ts";
 import { droppedTo, environmentFlags, execProcessEnvironment, readByTool } from "./exec-environment.ts";
-import { buildImage, imageExists, imageTag, serviceRuns, startService, type AgentImage } from "./image.ts";
-import { HOST_LABEL, isAnotherMiradors, SandboxNotReady, VM_READY_LINE, withoutTrailingSlash, type AgentInVm, type Mount, type VmPlan, type VmLauncher } from "./vm-launcher.ts";
+import { buildImage, DEFAULT_BASE_PATH, defaultBaseTag, imageExists, serviceRuns, startService } from "./image.ts";
+import { HOST_LABEL, isAnotherMiradors, SandboxNotReady, VM_READY_LINE, withoutTrailingSlash, type AgentInVm, type Mount, type ThrowawayRun, type VmPlan, type VmLauncher } from "./vm-launcher.ts";
 
 const READY_WITHIN_S = 30;
 
@@ -13,10 +13,10 @@ export const CONTAINER_READS = readByTool(["PATH", "HOME", "TMPDIR", "USER", "LO
 const mountFlags = ({ source, target, readOnly }: Mount) => ["-v", `${source}:${target}${readOnly ? ":ro" : ""}`];
 
 /**
- * `container run` of a room's VM: detached, removed once stopped, its first process, as root that may mount, under an
- * init that passes signals on, with no network at all.
+ * `container run` of a room's VM: detached, removed once stopped, its first process, as root that may mount whatever
+ * user the image names, under an init that passes signals on, with no network at all.
  */
-export const runArguments = ({ name, labels, image, memory, mounts, entry }: VmPlan) => [
+export const runArguments = ({ name, labels, image, memory, mounts, entrypoint, args }: VmPlan) => [
   "run",
   "--detach",
   "--rm",
@@ -24,6 +24,8 @@ export const runArguments = ({ name, labels, image, memory, mounts, entry }: VmP
   "--name",
   name,
   ...Object.entries(labels).flatMap(([label, value]) => ["--label", `${label}=${value}`]),
+  "--user",
+  "0:0",
   "--cap-add",
   "CAP_SYS_ADMIN",
   "--memory",
@@ -33,8 +35,26 @@ export const runArguments = ({ name, labels, image, memory, mounts, entry }: VmP
   "--progress",
   "none",
   ...mounts.flatMap(mountFlags),
+  "--entrypoint",
+  entrypoint,
   image,
-  ...entry,
+  ...args,
+];
+
+/** `container run` of a throwaway container, removed once it ends. */
+export const runOnceArguments = ({ image, mounts, entrypoint, args, user, network }: ThrowawayRun) => [
+  "run",
+  "--rm",
+  "--progress",
+  "none",
+  "--user",
+  user,
+  ...(network ? [] : ["--network", "none"]),
+  ...mounts.flatMap(mountFlags),
+  "--entrypoint",
+  entrypoint,
+  image,
+  ...args,
 ];
 
 /** The most a command run as the agent user may print: what a put-back of held files tells, with room to spare. */
@@ -85,7 +105,7 @@ export function writtenByOthersIn(listed: string, hostLabel: string): string[] {
   return othersVms.flatMap(({ configuration }) => writableSourcesOf(configuration?.mounts));
 }
 
-/** Rooms' VMs on Apple's `container`, macOS 26 on Apple silicon: its service started and the image built on first use. */
+/** Rooms' VMs on Apple's `container`, macOS 26 on Apple silicon: its service started and the base image built on first use. */
 export class AppleContainer implements VmLauncher {
   constructor(
     private readonly cli: ContainerCli | null,
@@ -102,12 +122,20 @@ export class AppleContainer implements VmLauncher {
     return this.available;
   }
 
-  async prepare(agent: AgentImage, progress: (setup: SandboxSetup) => void) {
+  async prepare(progress: (setup: SandboxSetup) => void) {
+    await startService(this.usable(), progress);
+  }
+
+  async defaultBase(progress: (setup: SandboxSetup) => void) {
     const cli = this.usable();
-    await startService(cli, progress);
-    const tag = await imageTag(agent);
-    if (!(await imageExists(cli, tag))) await buildImage(cli, tag, agent, progress);
-    return tag;
+    const tag = await defaultBaseTag();
+    if (!(await imageExists(cli, tag))) await buildImage(cli, tag, progress);
+    return { image: tag, path: DEFAULT_BASE_PATH };
+  }
+
+  async runOnce(run: ThrowawayRun, timeoutMs: number) {
+    const ran = await this.usable().run(runOnceArguments(run), { timeoutMs });
+    return { exitCode: ran.exitCode, output: ran.output };
   }
 
   async start(plan: VmPlan) {

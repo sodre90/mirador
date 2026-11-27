@@ -525,7 +525,6 @@ export const problems: Messages["problems"] = {
   sandboxNotReadyInTime: (seconds: number) => `Nem állt készen ${seconds} mp alatt.`,
   sandboxNoAgentVersion: (program: string) => `A Mirador nem tudta megállapítani, a ${program} melyik verzióját tegye bele.`,
   sandboxNotReadyFixed: {
-    "versions-differ": "Az ágenseinek különböző image-ek kellenek, más ágensfajtához vagy más verzióhoz, a sandbox pedig egyszerre egyet futtat. Ez a beszélgetés akkor indulhat, ha a sandbox többi ágense már 10 perce tétlen.",
     "shared-kernel-not-allowed": "Ezen a gépen egy Podman-konténer lenne, amely osztozik a gép kernelén, és ezt nem engedélyezték neki: engedélyezd ott, ahol a sandboxát bekapcsoltad.",
   },
   workspaceSandboxNotReady: (why: string) => `A munkaterület sandboxa nem áll készen, ezért az ágense nem indult el. ${why}`,

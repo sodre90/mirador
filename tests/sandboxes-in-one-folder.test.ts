@@ -84,7 +84,6 @@ function computer({ planLookedAtMs = 60_000 } = {}) {
       owner,
       agentId: "mias-coder",
       allowsSharedKernel: false,
-      images: async () => [{ harness: "claude", version: "2.1.330" }],
       workingDirectory: workspace,
       command: ["/usr/local/bin/bun", "/mirador/sandbox/workspace-call.ts"],
     });

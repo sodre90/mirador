@@ -237,24 +237,27 @@ export const rooms: Messages["rooms"] = {
     },
     setup: {
       "apple-container": {
-        "not-started": "Első használatkor beállítódik ezen a Macen: az Apple container szolgáltatása, majd az ágensek image-e.",
+        "not-started": "Első használatkor beállítódik ezen a Macen: az Apple container szolgáltatása, a sandbox alap-image-e, majd az ágensek programjai.",
         "starting-service": "Az Apple container szolgáltatásának indítása; első alkalommal letölt egy Linux-kernelt…",
-        "building-image": "Az ágensek image-ének építése ezen a Macen…",
+        "building-image": "A sandbox alap-image-ének építése ezen a Macen…",
+        "installing-tool": "Az ágensek programjainak telepítése ezen a Macen…",
         ready: "Beállítva ezen a Macen.",
         failed: "A beállítás nem sikerült.",
       },
       podman: {
-        "not-started": "Első használatkor beállítódik ezen a gépen: a Podman megépíti az ágensek image-ét.",
+        "not-started": "Első használatkor beállítódik ezen a gépen: a Podman megépíti a sandbox alap-image-ét, majd telepíti az ágensek programjait.",
         "starting-service": "A Podman indítása…",
-        "building-image": "Az ágensek image-ének építése ezen a gépen…",
+        "building-image": "A sandbox alap-image-ének építése ezen a gépen…",
+        "installing-tool": "Az ágensek programjainak telepítése ezen a gépen…",
         ready: "Beállítva ezen a gépen.",
         failed: "A beállítás nem sikerült.",
       },
     },
     buildingStep: {
-      "apple-container": (at: number, of: number) => `Az ágensek image-ének építése ezen a Macen: ${of} lépésből a(z) ${at}.…`,
-      podman: (at: number, of: number) => `Az ágensek image-ének építése ezen a gépen: ${of} lépésből a(z) ${at}.…`,
+      "apple-container": (at: number, of: number) => `A sandbox alap-image-ének építése ezen a Macen: ${of} lépésből a(z) ${at}.…`,
+      podman: (at: number, of: number) => `A sandbox alap-image-ének építése ezen a gépen: ${of} lépésből a(z) ${at}.…`,
     },
+    installingTool: (tool: string) => `${tool} telepítése a sandboxhoz…`,
     setupFailed: (problem: string) => `A beállítás nem sikerült: ${problem}`,
     wholeEnvironmentIgnored: "Amíg a szoba sandboxolt, ez nem számít: a sandboxába csak az itt kiválasztott értékek kerülnek.",
     meaning: [

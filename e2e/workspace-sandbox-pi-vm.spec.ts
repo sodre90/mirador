@@ -6,17 +6,19 @@ import { join } from "node:path";
 import { expect, test } from "@playwright/test";
 import { addWorkspace, clickWorkspaceButton, createProfile, lastAgentMessage, sendMessage, signIn, waitForTurnToEnd, workspaceCard } from "./helpers.ts";
 import { modelServerStatus, ownersModelServer } from "./model-server.ts";
+import { BUN_IN_VM } from "./sandbox-vm-tools.ts";
 import { TestHost } from "./test-host.ts";
 
 /**
  * A sandboxed workspace's pi agent on Apple's real `container`, opted into with MIRADOR_SANDBOX_VM_E2E=1 on macOS 26 on
- * Apple silicon: it builds the pi image on this Mac, and a real pi turn runs in the VM on the owner's model server, set
- * up in a pi agent folder made for the test, its key in the host's environment alone.
+ * Apple silicon: it sets the sandbox up on this Mac, its base image and tools, and a real pi turn runs in the VM on the
+ * owner's model server, set up in a pi agent folder made for the test, its key in the host's environment alone; then a
+ * Claude Code turn runs in the same VM beside it.
  */
 const containerProgram = ["/usr/local/bin/container", "/opt/homebrew/bin/container"].find((path) => existsSync(path));
 const sandboxesRunHere = process.platform === "darwin" && process.arch === "arm64" && Number(release().split(".")[0]) >= 25;
 const optedIn = process.env.MIRADOR_SANDBOX_VM_E2E === "1";
-/** The pi the image installs, as npm has it; the host asks the profile's pi for it. */
+/** The pi installed in the sandbox's tools folder, as npm has it; the host asks the profile's pi for it. */
 const PI_VERSION = "1.6.0";
 const MODEL = "radiance-qwen3.8-flash-next";
 
@@ -77,6 +79,14 @@ const seen = pids.flatMap((pid) => [read("/proc/" + pid + "/environ"), read("/pr
 console.log(JSON.stringify({ agentUids: agents.map(uidOf), seen: Buffer.from(seen).toString("base64") }));
 `;
 
+/** The kinds of agent whose processes run in the VM, by their ACP adapters. */
+const AGENT_KINDS_SCRIPT = `
+const fs = require("fs");
+const read = (path) => { try { return fs.readFileSync(path, "latin1"); } catch { return ""; } };
+const commands = fs.readdirSync("/proc").filter((name) => /^\\d+$/.test(name)).map((pid) => read("/proc/" + pid + "/cmdline"));
+console.log(JSON.stringify(["claude-agent-acp/", "pi-acp/"].filter((adapter) => commands.some((command) => command.includes(adapter)))));
+`;
+
 const ANSWERS_SCRIPT = `
 const answer = (url) => fetch(url).then(async (response) => response.status + " " + (await response.text()).trim().slice(0, 40), (error) => String(error.cause?.code ?? error.message));
 const urls = JSON.parse(process.argv[1]);
@@ -122,7 +132,7 @@ test("a sandboxed workspace's pi agent answers from its VM, on a model of its mo
   });
 
   await test.step("the model's key is in none of the VM's processes nor the sandbox's folders, pi runs as the agent user, and the test's pi folder isn't in the VM", () => {
-    const { agentUids, seen } = JSON.parse(asAgent(vm!, "node", "-e", PROCESSES_SCRIPT)) as { agentUids: string[]; seen: string };
+    const { agentUids, seen } = JSON.parse(asAgent(vm!, BUN_IN_VM, "-e", PROCESSES_SCRIPT)) as { agentUids: string[]; seen: string };
     expect(agentUids.length).toBeGreaterThan(0);
     expect(new Set(agentUids)).toEqual(new Set(["1000"]));
     expect(modelKey().length).toBeGreaterThan(8);
@@ -135,8 +145,23 @@ test("a sandboxed workspace's pi agent answers from its VM, on a model of its mo
   await test.step("from the VM, the model proxy goes on to the model's own API with the key added there, and refuses another API's path", () => {
     const { providers } = JSON.parse(readFileSync(piModelsInVm!, "utf8")) as { providers: Record<string, { baseUrl: string }> };
     const relay = providers["e2e-server"]!.baseUrl;
-    const [models, otherApi] = JSON.parse(asAgent(vm!, "node", "-e", ANSWERS_SCRIPT, JSON.stringify([`${relay}/models`, `${relay}/v1/messages`]))) as string[];
+    const [models, otherApi] = JSON.parse(asAgent(vm!, BUN_IN_VM, "-e", ANSWERS_SCRIPT, JSON.stringify([`${relay}/models`, `${relay}/v1/messages`]))) as string[];
     expect(models).toMatch(/^200 /);
     expect(otherApi).toBe("404 not a path of the model API");
+  });
+
+  await test.step("a Claude Code profile's agent works in the same VM while pi's runs there, its Claude Code installed beside pi", async () => {
+    const builder = await createProfile(page, "Builder", "");
+    await builder.getByRole("button", { name: "Close" }).click();
+    await card.getByLabel("Agent", { exact: true }).selectOption({ label: "Builder · Claude Code" });
+    const piConversation = page.url();
+    await card.getByRole("button", { name: "+ New conversation" }).click();
+    await expect(page).not.toHaveURL(piConversation);
+    await sendMessage(page, "Use your Bash tool to run `printf 'written-by-claude\\n' > claude-note.txt`. Reply with what it printed.");
+    await waitForTurnToEnd(page, 10 * 60_000);
+    await expect.poll(() => existsSync(join(host.projectDir, "claude-note.txt")) && readFileSync(join(host.projectDir, "claude-note.txt"), "utf8")).toBe("written-by-claude\n");
+    expect(ourVms()).toEqual([vm]);
+    expect(JSON.parse(asAgent(vm!, BUN_IN_VM, "-e", AGENT_KINDS_SCRIPT))).toEqual(["claude-agent-acp/", "pi-acp/"]);
+    expect(asAgent(vm!, "ls", "/opt/mirador").trim().split("\n").filter((tool) => /^(claude|pi)-/.test(tool)).map((tool) => tool.split("-")[0])).toEqual(["claude", "pi"]);
   });
 });

@@ -204,7 +204,6 @@ export type SandboxNotReadyWhy =
   | { kind: "setup-failed"; cause: string }
   | { kind: "could-not-start"; cause: string }
   | { kind: "no-agent-version"; harness: SandboxedHarness }
-  | { kind: "versions-differ" }
   | { kind: "shared-kernel-not-allowed" }
   | { kind: "not-ready-in-time"; seconds: number }
   | { kind: "too-many-held-changes"; most: number };
@@ -217,7 +216,7 @@ export const MODEL_KEY_VARIABLES = ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"]
 
 export type ModelKeyVariable = (typeof MODEL_KEY_VARIABLES)[number];
 
-/** The agent kinds a sandbox runs in this version, each from an image of its own. */
+/** The agent kinds a sandbox runs in this version. */
 export const SANDBOXED_HARNESSES = ["claude", "pi"] as const satisfies readonly HarnessId[];
 
 export type SandboxedHarness = (typeof SANDBOXED_HARNESSES)[number];
@@ -242,13 +241,29 @@ export function signInElsewhere(environment: Record<string, string>): SignInElse
 /** The key variable a profile's environment text sets, as the model proxy reads it. */
 export const modelKeyVariableOf = (environment: Record<string, string>): ModelKeyVariable | null => MODEL_KEY_VARIABLES.find((name) => environment[name]?.trim()) ?? null;
 
-/** Where first use of the sandbox stands: the service, where its kind has one, then the image, built on this computer. */
-export type SandboxSetupStage = "not-started" | "starting-service" | "building-image" | "ready" | "failed";
+/**
+ * What a sandbox's VM runs from this computer's tools folder: Mirador's guard, the Bun of this computer, and each agent
+ * kind's programs at the version it runs here.
+ */
+export type SandboxTool = { kind: "guard" } | { kind: "bun" | "node"; version: string } | { kind: SandboxedHarness; version: string };
+
+const TOOL_PROGRAMS: Record<SandboxTool["kind"], string> = { guard: "mirador-guard", bun: "Bun", node: "Node.js", claude: "Claude Code", pi: "pi" };
+
+/** A tool by its program's name, and its version where it has one: the same in every language. */
+export const toolNameOf = (tool: SandboxTool) => ("version" in tool ? `${TOOL_PROGRAMS[tool.kind]} ${tool.version}` : TOOL_PROGRAMS[tool.kind]);
+
+/**
+ * Where setting up the sandbox stands: the service, where its kind has one, then the base image, built on this computer,
+ * then the tools its agents need, each installed on first use.
+ */
+export type SandboxSetupStage = "not-started" | "starting-service" | "building-image" | "installing-tool" | "ready" | "failed";
 
 export interface SandboxSetup {
   stage: SandboxSetupStage;
   /** While the image builds: the step it is on, of how many, as the build says. */
   step?: { at: number; of: number };
+  /** While a tool is installed: which. */
+  tool?: SandboxTool;
   /** Only when it failed: what went wrong, in a line. */
   problem?: string;
 }

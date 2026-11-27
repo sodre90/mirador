@@ -10,11 +10,13 @@ import { promisify } from "node:util";
 import { expect, test, type Page } from "@playwright/test";
 import { addWorkspace, createProfile, createRoom, openRoomSettings, signIn } from "./helpers.ts";
 import { modelServerStatus, ownersModelServer } from "./model-server.ts";
+import { BUN_IN_VM } from "./sandbox-vm-tools.ts";
 import { TestHost } from "./test-host.ts";
 
 /**
  * A sandboxed room on Apple's real `container`, opted into with MIRADOR_SANDBOX_VM_E2E=1 on macOS 26 on Apple silicon:
- * it builds the image on this Mac, and a real Claude turn runs in the VM, on the owner's model server.
+ * it sets the sandbox up on this Mac, its base image and tools, and a real Claude turn runs in the VM, on the owner's
+ * model server.
  */
 const containerProgram = ["/usr/local/bin/container", "/opt/homebrew/bin/container"].find((path) => existsSync(path));
 const sandboxesRunHere = process.platform === "darwin" && process.arch === "arm64" && Number(release().split(".")[0]) >= 25;
@@ -176,10 +178,10 @@ function mountInVm(vm: string, folder: string) {
 
 /** Waits without blocking this process, as the command may reach a server of the test's own. */
 async function asAgentsTool(vm: string, command: string) {
-  const { stdout } = await promisify(execFile)(containerProgram!, inVmAsAgent(vm, ["node", "-e", AS_AGENTS_TOOL_SCRIPT, command]), { timeout: 60_000 });
+  const { stdout } = await promisify(execFile)(containerProgram!, inVmAsAgent(vm, [BUN_IN_VM, "-e", AS_AGENTS_TOOL_SCRIPT, command]), { timeout: 60_000 });
   return JSON.parse(stdout) as { stdout: string; stderr: string };
 }
-const tunnelsFrom = (vm: string, targets: string[]) => JSON.parse(asAgent(vm, "node", "-e", TUNNELS_SCRIPT, JSON.stringify(targets))) as Record<string, number | string>;
+const tunnelsFrom = (vm: string, targets: string[]) => JSON.parse(asAgent(vm, BUN_IN_VM, "-e", TUNNELS_SCRIPT, JSON.stringify(targets))) as Record<string, number | string>;
 
 /** The programs an agent works with, each fetching something of the internet's: what each prints once it got it. */
 const FETCHED_FROM_THE_INTERNET: Record<string, RegExp> = {
@@ -211,7 +213,7 @@ console.log(fs.readdirSync("/proc").some((pid) => /^\\d+$/.test(pid) && pid !== 
 `;
 const agentRunsIn = (vm: string) => {
   try {
-    return asAgent(vm, "node", "-e", AGENT_RUNS_SCRIPT).trim() === "true";
+    return asAgent(vm, BUN_IN_VM, "-e", AGENT_RUNS_SCRIPT).trim() === "true";
   } catch {
     return false;
   }
@@ -248,7 +250,7 @@ test("a sandboxed room's Claude agent works in the workspace from its VM, reache
   await roomComposer(page).fill("@Bu");
   await page.getByRole("listbox", { name: "Agents and people of the room" }).getByRole("option", { name: "@Builder" }).click();
   await roomComposer(page).fill(
-    "@Builder Use your Bash tool to run these commands one by one: `ls -a`, then `printf 'written-in-the-vm\\n' > sandbox-note.txt`, then `printf '{\"mcpServers\":{}}\\n' > .mcp.json`, then `node -e \"fetch('https://example.com').then(r => console.log('reached', r.status), e => console.log('blocked', String(e.cause?.code ?? e.message)))\"`. Reply with what each printed. Last, use your show tool to show a page saying: made in the VM.",
+    "@Builder Use your Bash tool to run these commands one by one: `ls -a`, then `printf 'written-in-the-vm\\n' > sandbox-note.txt`, then `printf '{\"mcpServers\":{}}\\n' > .mcp.json`, then `bun -e \"fetch('https://example.com').then(r => console.log('reached', r.status), e => console.log('blocked', String(e.cause?.code ?? e.message)))\"`. Reply with what each printed. Last, use your show tool to show a page saying: made in the VM.",
   );
   await roomComposer(page).press("Enter");
   const turnFailed = page.locator(".room-timeline").getByText("The turn failed.");
@@ -274,11 +276,11 @@ test("a sandboxed room's Claude agent works in the workspace from its VM, reache
   await test.step("from the VM, only the relays to Mirador are reached: not the internet, nor this Mac's ports", async () => {
     const outside = ["example.com 443", "1.1.1.1 443", "192.168.64.1 22", `192.168.64.1 ${host.port}`, `127.0.0.1 ${host.port}`, ...ipv4AddressesOfThisMac().map((address) => `${address} ${host.port}`)];
     const relays = ["127.0.0.1 7701", "127.0.0.1 7702", "127.0.0.1 7703"];
-    const reached = JSON.parse(asAgent(vm!, "node", "-e", CONNECT_SCRIPT, JSON.stringify([...outside, ...relays]))) as Record<string, string>;
+    const reached = JSON.parse(asAgent(vm!, BUN_IN_VM, "-e", CONNECT_SCRIPT, JSON.stringify([...outside, ...relays]))) as Record<string, string>;
     expect(Object.fromEntries(outside.map((target) => [target, reached[target] === "reached"]))).toEqual(Object.fromEntries(outside.map((target) => [target, false])));
     expect(relays.map((target) => reached[target])).toEqual(["reached", "reached", "reached"]);
     const refused = ["http://127.0.0.1:7701/mcp/not-a-conversation-of-the-room", "http://127.0.0.1:7702/v1/messages"];
-    expect(JSON.parse(asAgent(vm!, "node", "-e", ANSWERS_SCRIPT, JSON.stringify(refused)))).toEqual({ [refused[0]!]: "404 not found", [refused[1]!]: "404 not a path of the model API" });
+    expect(JSON.parse(asAgent(vm!, BUN_IN_VM, "-e", ANSWERS_SCRIPT, JSON.stringify(refused)))).toEqual({ [refused[0]!]: "404 not found", [refused[1]!]: "404 not a path of the model API" });
   });
 
   await test.step("through Mirador's web proxy it reaches what the owner chooses under Network, at once, and Mirador itself and what else is on localhost never", async () => {
@@ -307,13 +309,13 @@ test("a sandboxed room's Claude agent works in the workspace from its VM, reache
     const fetched = Object.fromEntries(await Promise.all(Object.keys(FETCHED_FROM_THE_INTERNET).map(async (command) => [command, await asAgentsTool(vm!, command)] as const)));
     console.log(`sandbox VM e2e fetched through the web proxy: ${JSON.stringify(fetched)}`);
     for (const [command, printed] of Object.entries(FETCHED_FROM_THE_INTERNET)) expect(fetched[command]!.stdout, command).toMatch(printed);
-    expect(await asAgentsTool(vm!, `node -e "console.log('quiet')"`), "what a program prints is its own").toEqual({ stdout: "quiet\n", stderr: "" });
+    expect(await asAgentsTool(vm!, `bun -e "console.log('quiet')"`), "what a program prints is its own").toEqual({ stdout: "quiet\n", stderr: "" });
 
     await choose("Everything: the internet and this computer's networks");
     expect(tunnels()).toEqual({ "example.com:443": 200, [ofTheNetwork]: 200, ...refused });
     expect(await asAgentsTool(vm!, `bun -e "fetch('http://${ofTheNetwork}/').then((answer) => answer.text()).then(console.log)"`)).toMatchObject({ stdout: expect.stringContaining("on this Mac's network") });
 
-    const held = spawn(containerProgram!, inVmAsAgent(vm!, ["node", "-e", HELD_TUNNEL_SCRIPT, ofTheNetwork]));
+    const held = spawn(containerProgram!, inVmAsAgent(vm!, [BUN_IN_VM, "-e", HELD_TUNNEL_SCRIPT, ofTheNetwork]));
     let said = "";
     held.stdout.on("data", (chunk) => (said += chunk));
     await expect.poll(() => said).toBe("opened 200\n");
@@ -326,7 +328,7 @@ test("a sandboxed room's Claude agent works in the workspace from its VM, reache
   });
 
   await test.step("the agents run as the agent user, with no capability and none to gain, and the key is nowhere in the VM nor in the room's Claude Code folder", async () => {
-    const { claudeUids, privileges, commands, seen } = JSON.parse(asAgent(vm!, "node", "-e", PROCESSES_SCRIPT)) as { claudeUids: string[]; privileges: Record<string, string>[]; commands: string[]; seen: string };
+    const { claudeUids, privileges, commands, seen } = JSON.parse(asAgent(vm!, BUN_IN_VM, "-e", PROCESSES_SCRIPT)) as { claudeUids: string[]; privileges: Record<string, string>[]; commands: string[]; seen: string };
     test.info().annotations.push({ type: "agent processes", description: JSON.stringify(commands.map((command, index) => ({ command, uid: claudeUids[index], ...privileges[index] }))) });
     expect(claudeUids.length).toBeGreaterThan(0);
     expect(new Set(claudeUids)).toEqual(new Set(["1000"]));

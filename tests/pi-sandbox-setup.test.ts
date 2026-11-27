@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { environmentInVm, KEY_PLACEHOLDER, PI_IN_VM } from "../host/sandbox/agent-environment.ts";
 import { secretsOf } from "../host/sandbox/model-proxy.ts";
+import { BUN_FOLDER_IN_VM, NODE_FOLDER_IN_VM } from "../host/sandbox/tools-folder.ts";
 import { piConfigValue, piSandboxSetupOf, type PiAgentFiles, type PiThroughProxy } from "../host/sandbox/pi-setup.ts";
 
 const GATEWAY_KEY = "gw-key-of-the-gateway-4321";
@@ -145,13 +146,15 @@ describe("pi's environment in the VM", () => {
     HOME: "/Users/me",
     DEPLOY: "staging",
   };
-  const inVm = environmentInVm(given, { harness: "pi", model: setup.inVm, keyVariables: setup.keyVariables }, { configFolder: "/data/sandbox/workspaces/w1/pi", modelBaseUrl: "http://127.0.0.1:7702/p/pier" }, secretsOf(setup.route));
+  const agent = { kind: { harness: "pi" as const, model: setup.inVm, keyVariables: setup.keyVariables }, version: "1.6.0", base: { image: "debian", path: "/usr/bin:/bin" } };
+  const inVm = environmentInVm(given, agent, { configFolder: "/data/sandbox/workspaces/w1/pi", modelBaseUrl: "http://127.0.0.1:7702/p/pier" }, secretsOf(setup.route));
 
   test("has no key, no header value, no model provider's values and none of this computer's pi places", () => {
     expect(JSON.stringify(inVm)).not.toContain(GATEWAY_KEY);
     expect(JSON.stringify(inVm)).not.toContain(TEAM);
     expect(["LLM_GATEWAY_KEY", "GATEWAY_TEAM", "OPENAI_API_KEY", "ANTHROPIC_BASE_URL", "ECHOED", "PI_CODING_AGENT_SESSION_DIR"].filter((name) => Object.hasOwn(inVm, name))).toEqual([]);
-    expect(inVm).toMatchObject({ PI_CODING_AGENT_DIR: "/data/sandbox/workspaces/w1/pi", PI_ACP_PI_COMMAND: PI_IN_VM, PI_OFFLINE: "1", PI_ACP_QUIET_STARTUP: "true", HOME: "/home/node", DEPLOY: "staging" });
+    expect(inVm).toMatchObject({ PI_CODING_AGENT_DIR: "/data/sandbox/workspaces/w1/pi", PI_ACP_PI_COMMAND: PI_IN_VM, PI_OFFLINE: "1", PI_ACP_QUIET_STARTUP: "true", HOME: "/tmp/mirador-home", DEPLOY: "staging" });
+    expect(inVm.PATH).toBe(`/opt/mirador/pi-1.6.0/bin:${BUN_FOLDER_IN_VM}:${NODE_FOLDER_IN_VM}:/usr/bin:/bin`);
   });
 
   test("gives pi its default provider alone, at the proxy's relay, with a key that is none, and only the settings that choose its model", () => {

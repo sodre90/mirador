@@ -1,7 +1,6 @@
 import { HostProblemError } from "../../shared/host-problems.ts";
 import type { SandboxAvailability, SandboxNotReadyWhy, SandboxSetup } from "../../shared/sandbox.ts";
 import type { AgentLaunch } from "../acp/harness.ts";
-import type { AgentImage } from "./image.ts";
 
 /** A folder or file of this computer shown in the VM at `target`, read-only or not. */
 export interface Mount {
@@ -32,7 +31,8 @@ export const VM_READY_LINE = "relays ready";
 
 /**
  * A sandbox's VM: its name, labels and image, its memory, what of this computer is mounted in it, and its first process,
- * which is root there, able to mount the folders it guards.
+ * which is root there, able to mount the folders it guards: a program of a mount by its whole path, in place of any the
+ * image names, and its arguments.
  */
 export interface VmPlan {
   name: string;
@@ -40,7 +40,27 @@ export interface VmPlan {
   image: string;
   memory: string;
   mounts: Mount[];
-  entry: string[];
+  entrypoint: string;
+  args: string[];
+}
+
+/**
+ * A container run once and removed, outside every sandbox: an installer of a tool, with the network, or a look at an
+ * image, without. Its program is given by whole path, in place of any the image names, and runs as this user.
+ */
+export interface ThrowawayRun {
+  image: string;
+  mounts: Mount[];
+  entrypoint: string;
+  args: string[];
+  user: string;
+  network: boolean;
+}
+
+/** The image a sandbox's VM runs on, as the runtime is to run it, and the PATH it sets, where it sets one. */
+export interface BaseImage {
+  image: string;
+  path: string | null;
 }
 
 /** An agent run in a sandbox's VM as an unprivileged user that can't regain root, in its folder, with only the environment it is given. */
@@ -59,8 +79,12 @@ export interface AgentInVm {
 export interface VmLauncher {
   /** Whether VMs run here, and why not where they don't. */
   availability(): SandboxAvailability;
-  /** The runtime runs and the image of this agent kind and version is there, built where it was not, its progress told; the image. */
-  prepare(agent: AgentImage, progress: (setup: SandboxSetup) => void): Promise<string>;
+  /** The runtime runs, started where it was not, its progress told. */
+  prepare(progress: (setup: SandboxSetup) => void): Promise<void>;
+  /** Mirador's own base image, built from its recipe where it is not here yet, its progress told. */
+  defaultBase(progress: (setup: SandboxSetup) => void): Promise<BaseImage>;
+  /** Runs a throwaway container to its end: its exit code and what it said. */
+  runOnce(run: ThrowawayRun, timeoutMs: number): Promise<{ exitCode: number; output: string }>;
   /** Starts the VM, once its first process says it is ready; throws SandboxNotReady where it does not get there. */
   start(plan: VmPlan): Promise<void>;
   /** The process on this computer that runs the agent in its VM, its stdin, stdout and signals the agent's. */

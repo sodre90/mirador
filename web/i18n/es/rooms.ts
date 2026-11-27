@@ -238,24 +238,27 @@ export const rooms: Messages["rooms"] = {
     },
     setup: {
       "apple-container": {
-        "not-started": "Se prepara en este Mac la primera vez que se usa: el servicio container de Apple y luego la imagen de los agentes.",
+        "not-started": "Se prepara en este Mac la primera vez que se usa: el servicio container de Apple, la imagen base del sandbox y luego los programas de los agentes.",
         "starting-service": "Iniciando el servicio container de Apple; la primera vez descarga un kernel de Linux…",
-        "building-image": "Construyendo la imagen de los agentes en este Mac…",
+        "building-image": "Construyendo la imagen base del sandbox en este Mac…",
+        "installing-tool": "Instalando los programas de los agentes en este Mac…",
         ready: "Preparado en este Mac.",
         failed: "No se pudo preparar.",
       },
       podman: {
-        "not-started": "Se prepara en este equipo la primera vez que se usa: Podman construye la imagen de los agentes.",
+        "not-started": "Se prepara en este equipo la primera vez que se usa: Podman construye la imagen base del sandbox y luego se instalan los programas de los agentes.",
         "starting-service": "Iniciando Podman…",
-        "building-image": "Construyendo la imagen de los agentes en este equipo…",
+        "building-image": "Construyendo la imagen base del sandbox en este equipo…",
+        "installing-tool": "Instalando los programas de los agentes en este equipo…",
         ready: "Preparado en este equipo.",
         failed: "No se pudo preparar.",
       },
     },
     buildingStep: {
-      "apple-container": (at: number, of: number) => `Construyendo la imagen de los agentes en este Mac: paso ${at} de ${of}…`,
-      podman: (at: number, of: number) => `Construyendo la imagen de los agentes en este equipo: paso ${at} de ${of}…`,
+      "apple-container": (at: number, of: number) => `Construyendo la imagen base del sandbox en este Mac: paso ${at} de ${of}…`,
+      podman: (at: number, of: number) => `Construyendo la imagen base del sandbox en este equipo: paso ${at} de ${of}…`,
     },
+    installingTool: (tool: string) => `Instalando ${tool} para el sandbox…`,
     setupFailed: (problem: string) => `No se pudo preparar: ${problem}`,
     wholeEnvironmentIgnored: "Se ignora mientras la sala tenga sandbox: en su sandbox solo entran los valores elegidos aquí.",
     meaning: [

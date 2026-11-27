@@ -4,7 +4,8 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { HELD_CHANGES_MOST, roomSandbox, workspaceSandbox, type HeldChange, type SandboxAvailability, type SandboxNetwork, type SandboxNotReadyWhy, type SandboxSetup } from "../shared/sandbox.ts";
 import { KEY_PLACEHOLDER } from "../host/sandbox/agent-environment.ts";
-import { IMAGE_NAME } from "../host/sandbox/image.ts";
+import { BASE_IMAGE_NAME } from "../host/sandbox/image.ts";
+import { BUN_IN_VM, GUARD_IN_VM, NODE_FOLDER_IN_VM, toolsFolderOf } from "../host/sandbox/tools-folder.ts";
 import { ANTHROPIC_API } from "../host/sandbox/model-proxy.ts";
 import { AppleContainer } from "../host/sandbox/apple-container.ts";
 import { Sandboxes, type AgentInSandbox, type SandboxHost } from "../host/sandbox/sandboxes.ts";
@@ -83,23 +84,43 @@ describe("a room's sandbox", () => {
     const manifestFolder = mounts.find(({ target }) => target === "/mirador/guard")!.source;
     expect(manifestFolder.startsWith(`${join(host.dataDir, "sandbox", "room-1", "guard")}/`)).toBe(true);
     expect(mounts.filter(({ source }) => source.startsWith(`${manifestFolder}/`))).toEqual([]);
+    expect(mounts).toContainEqual({ source: toolsFolderOf(host.dataDir), target: "/opt/mirador", readOnly: true });
     expect(run).toContain("mirador.owner=room:room-1");
-    expect(run!.slice(-9)).toEqual(["mirador-guard", "/mirador/guard/folders", "1000:1000", "--", "sh", "/mirador/sandbox/room-vm.sh", "7701=/run/mirador/canvas.sock", "7702=/run/mirador/model.sock", "7703=/run/mirador/network.sock"]);
+    expect(run![run!.indexOf("--user") + 1]).toBe("0:0");
+    expect(run!.slice(run!.indexOf("--entrypoint"))).toEqual([
+      "--entrypoint",
+      GUARD_IN_VM,
+      expect.stringMatching(new RegExp(`^${BASE_IMAGE_NAME}:[0-9a-f]{10}$`)),
+      "/mirador/guard/folders",
+      "1000:1000",
+      "/run/mirador",
+      "--",
+      BUN_IN_VM,
+      "/mirador/sandbox/relays.mjs",
+      "7701=/run/mirador/canvas.sock",
+      "7702=/run/mirador/model.sock",
+      "7703=/run/mirador/network.sock",
+    ]);
     expect(["canvas.sock", "model.sock", "network.sock"].map((socket) => statSync(join(socketsFolderOf(run!), socket)).mode & 0o777)).toEqual([0o600, 0o600, 0o600]);
     const [program, ...exec] = launched.command;
     expect(program).toBe(cli.program);
     expect(exec.slice(0, 6)).toEqual(["exec", "-i", "--user", "0:0", "-w", workspace]);
-    expect(exec).toEqual(expect.arrayContaining(["/usr/bin/setpriv", "--reuid=1000", "--regid=1000", "--no-new-privs", "--bounding-set=-all"]));
-    expect(exec.slice(-2)).toEqual(agentIn(workspace).agent);
-    expect(exec).toContain("PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin");
+    expect(exec.slice(-6)).toEqual([GUARD_IN_VM, "as", "1000:1000", "--", ...agentIn(workspace).agent]);
+    expect(exec).toContain(`PATH=/opt/mirador/claude-2.1.330/bin:${dirname(BUN_IN_VM)}:${NODE_FOLDER_IN_VM}:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin`);
     expect(JSON.stringify([run, launched.command, launched.environment])).not.toContain(KEY);
     expect(launched.environment).toMatchObject({ ANTHROPIC_API_KEY: KEY_PLACEHOLDER, ANTHROPIC_BASE_URL: "http://127.0.0.1:7702/p/builder", DEPLOY_TARGET: "staging", HTTPS_PROXY: "http://127.0.0.1:7703", NO_PROXY: "localhost,127.0.0.1,::1" });
     expect(launched.environment.ECHOED).toBeUndefined();
     expect(sandboxes.confirmedRunning(ROOM)).toBe(true);
-    expect(setups.map(({ stage }) => stage)).toEqual(["starting-service", "building-image", "building-image", "building-image", "building-image", "ready"]);
+    expect(setups.map(({ stage }) => stage)).toEqual(["starting-service", "building-image", "building-image", "building-image", "building-image", "installing-tool", "installing-tool", "installing-tool", "installing-tool", "ready"]);
     expect(setups.flatMap(({ step }) => (step ? [`${step.at}/${step.of}`] : []))).toEqual(["1/3", "2/3", "3/3"]);
+    expect(setups.flatMap(({ tool }) => (tool ? [tool] : []))).toEqual([{ kind: "guard" }, { kind: "bun", version: Bun.version }, { kind: "node", version: "22" }, { kind: "claude", version: "2.1.330" }]);
     expect(cli.callsOf("builder").map(([, sub]) => sub)).toEqual(["status", "start", "stop", "delete"]);
-    expect([...cli.images].filter((name) => !name.startsWith(IMAGE_NAME))).toEqual(["docker.io/library/node:22-bookworm-slim"]);
+    expect([...cli.images].filter((name) => !name.startsWith(BASE_IMAGE_NAME))).toEqual(["docker.io/library/node:22-bookworm-slim"]);
+    for (const install of cli.ranOnce) expect(install).not.toContain("--network");
+    expect(cli.ranOnce.map((install) => install.find((arg) => arg.startsWith("docker.io/")))).toEqual(["docker.io/library/alpine:3.22", "docker.io/library/node:22-bookworm-slim", "docker.io/library/node:22-bookworm-slim", "docker.io/library/node:22-bookworm-slim"]);
+    expect(readdirSync(toolsFolderOf(host.dataDir)).toSorted()).toEqual([`bun-${Bun.version}`, "claude-2.1.330", expect.stringMatching(/^guard-[0-9a-f]{10}$/), "node-22"]);
+    const tools = toolsFolderOf(host.dataDir);
+    expect([tools, ...readdirSync(tools).map((tool) => join(tools, tool))].map((folder) => statSync(folder).mode & 0o777)).toEqual([0o755, 0o755, 0o755, 0o755, 0o755]);
 
     launched.gone!();
     await Bun.sleep(IDLE_STOP_MS * 4);
@@ -109,38 +130,38 @@ describe("a room's sandbox", () => {
     await sandboxes.stopAll();
   });
 
-  test("builds the image once per Claude Code version: another version builds anew, and the earlier one goes", async () => {
+  test("builds the base image once, and installs each Claude Code version once, beside the others", async () => {
     const workspace = repository();
+    const { host } = hostFor(workspace);
     const cli = new FakeContainerCli();
-    const sandboxes = new Sandboxes(new AppleContainer(cli, AVAILABLE), hostFor(workspace).host, IDLE_STOP_MS);
+    const sandboxes = new Sandboxes(new AppleContainer(cli, AVAILABLE), host, IDLE_STOP_MS);
 
     (await sandboxes.launch(agentIn(workspace))).gone!();
     await sandboxes.stop(ROOM);
     (await sandboxes.launch(agentIn(workspace))).gone!();
     await sandboxes.stop(ROOM);
-    expect(cli.callsOf("build")).toHaveLength(1);
+    expect([cli.callsOf("build").length, cli.ranOnce.length]).toEqual([1, 4]);
 
     (await sandboxes.launch(agentIn(workspace, { version: "2.1.331" }))).gone!();
-    expect(cli.callsOf("build")).toHaveLength(2);
-    expect([...cli.images].filter((name) => name.startsWith(`${IMAGE_NAME}:`)).map((name) => name.split("-bun-")[0])).toEqual([`${IMAGE_NAME}:claude-2.1.331`]);
+    expect([cli.callsOf("build").length, cli.ranOnce.length]).toEqual([1, 5]);
+    expect(cli.ranOnce.at(-1)!.join(" ")).toContain("@anthropic-ai/claude-code@2.1.331");
+    expect(readdirSync(toolsFolderOf(host.dataDir)).filter((name) => name.startsWith("claude-")).toSorted()).toEqual(["claude-2.1.330", "claude-2.1.331"]);
     await sandboxes.stopAll();
   });
 
-  test("starts its VM anew on another Claude Code version's image once no agent works in it, and never runs an agent on a mismatched one", async () => {
+  test("runs an agent of another version in the VM its agents are at work in, at once, from that version's tools", async () => {
     const workspace = repository();
     const cli = new FakeContainerCli();
     const sandboxes = new Sandboxes(new AppleContainer(cli, AVAILABLE), hostFor(workspace).host, 60_000);
     const atWork = await sandboxes.launch(agentIn(workspace));
 
-    await expect(sandboxes.launch(agentIn(workspace, { profileId: "reviewer", version: "2.1.331" }))).rejects.toMatchObject(notReady({ kind: "versions-differ" }));
-    atWork.gone!();
-    const onNewImage = await sandboxes.launch(agentIn(workspace, { version: "2.1.331" }));
+    const beside = await sandboxes.launch(agentIn(workspace, { profileId: "reviewer", version: "2.1.331" }));
 
-    const [first, second] = cli.callsOf("run");
-    expect(first!.find((arg) => arg.startsWith(`${IMAGE_NAME}:`))).toContain("claude-2.1.330-");
-    expect(second!.find((arg) => arg.startsWith(`${IMAGE_NAME}:`))).toContain("claude-2.1.331-");
-    expect(cli.vms.size).toBe(1);
-    onNewImage.gone!();
+    expect(cli.callsOf("run")).toHaveLength(1);
+    expect(beside.environment.CLAUDE_CODE_EXECUTABLE).toBe("/opt/mirador/claude-2.1.331/bin/claude");
+    expect(atWork.environment.CLAUDE_CODE_EXECUTABLE).toBe("/opt/mirador/claude-2.1.330/bin/claude");
+    atWork.gone!();
+    beside.gone!();
     await sandboxes.stopAll();
   });
 
@@ -372,9 +393,30 @@ describe("a room's sandbox that is not ready fails the agent's start, and starts
     expect(cli.callsOf("builder").map(([, sub]) => sub)).toEqual(["status", "start", "stop", "delete"]);
   });
 
+  test("where a tool does not install, saying which and why, with nothing of it left, and installs it again on the next start", async () => {
+    const workspace = repository();
+    const { host, setups } = hostFor(workspace);
+    const cli = new FakeContainerCli();
+    const installsClaudeCode = (args: string[]) => args.some((arg) => arg.includes("@anthropic-ai/claude-code@2.1.330"));
+    cli.failing = (args) => (installsClaudeCode(args) ? "npm error 404 Not Found" : null);
+    const sandboxes = new Sandboxes(new AppleContainer(cli, AVAILABLE), host, IDLE_STOP_MS);
+
+    const problem = "installing Claude Code 2.1.330: npm error 404 Not Found";
+    await expect(sandboxes.launch(agentIn(workspace))).rejects.toMatchObject(notReady({ kind: "setup-failed", cause: problem }));
+    expect(setups.at(-1)).toEqual({ stage: "failed", problem });
+    expect(cli.vms.size).toBe(0);
+    expect(readdirSync(toolsFolderOf(host.dataDir)).toSorted()).toEqual([`bun-${Bun.version}`, expect.stringMatching(/^guard-[0-9a-f]{10}$/), "node-22"]);
+
+    cli.failing = () => null;
+    (await sandboxes.launch(agentIn(workspace))).gone!();
+    expect(readdirSync(toolsFolderOf(host.dataDir))).toContain("claude-2.1.330");
+    expect(cli.ranOnce.filter(installsClaudeCode)).toHaveLength(2);
+    await sandboxes.stopAll();
+  });
+
   test("where the VM does not start", async () => {
     await failingStart({ kind: "could-not-start", cause: "Error: not enough memory" }, (cli) => {
-      cli.failing = ([command]) => (command === "run" ? "Error: not enough memory" : null);
+      cli.failing = ([command, ...args]) => (command === "run" && args.includes("--detach") ? "Error: not enough memory" : null);
     });
   });
 

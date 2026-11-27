@@ -6,11 +6,10 @@ import { AGENT_USER } from "./agent-environment.ts";
 import { askPodman, podmanAvailability, podmanProgram, podmanStorageIn, SELINUX_ENFORCE } from "./availability.ts";
 import { containerCli, lastLineOf, type ContainerCli } from "./container-cli.ts";
 import { droppedTo, environmentFlags, execProcessEnvironment, readByTool } from "./exec-environment.ts";
-import { baseImageOf, buildArguments, buildStepIn, imagesOfKind, imageTag, mustRun, RECIPE, type AgentImage } from "./image.ts";
-import { HOST_LABEL, isAnotherMiradors, SandboxNotReady, VM_READY_LINE, withoutTrailingSlash, type AgentInVm, type Mount, type VmPlan, type VmLauncher } from "./vm-launcher.ts";
+import { BASE_RECIPE, baseImageOf, BUILD_TIMEOUT_MS, buildProgress, DEFAULT_BASE_PATH, defaultBaseTag, isMiradorsBase, mustRun } from "./image.ts";
+import { HOST_LABEL, isAnotherMiradors, SandboxNotReady, VM_READY_LINE, withoutTrailingSlash, type AgentInVm, type Mount, type ThrowawayRun, type VmPlan, type VmLauncher } from "./vm-launcher.ts";
 
 const READY_WITHIN_S = 30;
-const BUILD_TIMEOUT_MS = 30 * 60_000;
 /** The first start of an image as the agent user's own may copy its files for that user, which takes a while. */
 const RUN_TIMEOUT_MS = 10 * 60_000;
 
@@ -45,7 +44,7 @@ const mountFlags = ({ source, target, readOnly }: Mount) => ["-v", `${source}:${
  * nor any to gain. The container has no network at all, and a log of its own that keeps only so much. SELinux labels are
  * left off, so the workspace is shown as it is rather than relabelled.
  */
-export function runArguments({ name, labels, image, memory, mounts, entry }: VmPlan) {
+export function runArguments({ name, labels, image, memory, mounts, entrypoint, args }: VmPlan) {
   const [uid, gid] = AGENT_USER.split(":");
   return [
     "run",
@@ -85,10 +84,28 @@ export function runArguments({ name, labels, image, memory, mounts, entry }: VmP
     "--log-opt",
     `max-size=${LOG_MOST}`,
     ...mounts.flatMap(mountFlags),
+    "--entrypoint",
+    JSON.stringify([entrypoint]),
     image,
-    ...entry,
+    ...args,
   ];
 }
+
+/** `podman run` of a throwaway container, removed once it ends, its mounts shown as they are rather than relabelled. */
+export const runOnceArguments = ({ image, mounts, entrypoint, args, user, network }: ThrowawayRun) => [
+  "run",
+  "--rm",
+  "--user",
+  user,
+  "--security-opt",
+  "label=disable",
+  ...(network ? [] : ["--network", "none"]),
+  ...mounts.flatMap(mountFlags),
+  "--entrypoint",
+  JSON.stringify([entrypoint]),
+  image,
+  ...args,
+];
 
 /** `podman exec` of an agent, as its user, in its folder, its values by name. */
 export const execArguments = ({ vm, user, workingDirectory, environment, command }: AgentInVm) => [
@@ -139,7 +156,7 @@ export const writableSourcesIn = (inspected: string): string[] | null =>
     (Array.isArray(Mounts) ? Mounts : []).flatMap(({ Source, RW }) => (RW === true && typeof Source === "string" ? [withoutTrailingSlash(Source)] : [])),
   ) ?? null;
 
-/** The names `podman images --format json` lists, `localhost/mirador-room-agent:…` among them; an image without a name has none. */
+/** The names `podman images --format json` lists, `localhost/mirador-sandbox-base:…` among them; an image without a name has none. */
 export function imageNamesIn(listed: string): string[] {
   try {
     const images = JSON.parse(listed) as { Names?: unknown }[];
@@ -152,41 +169,33 @@ export function imageNamesIn(listed: string): string[] {
 const imageExists = async (cli: ContainerCli, image: string) => (await cli.run(["image", "exists", image])).exitCode === 0;
 
 /**
- * Builds the image on this computer from the recipe, with an empty folder as the build's context and no layers kept
- * besides the image's own, then removes the image it builds on where the build pulled it, and the images of the agent's
- * other versions built before. Every other image is left as it was, other agent kinds' too: other programs share
- * Podman's images.
+ * Builds Mirador's base image on this computer from its recipe, with an empty folder as the build's context and no layers
+ * kept besides the image's own, then removes the image it builds on where the build pulled it, and the bases of other
+ * recipes built before. Every other image is left as it was: other programs share Podman's images.
  */
-async function buildImage(cli: ContainerCli, tag: string, agent: AgentImage, progress: (setup: SandboxSetup) => void) {
+async function buildImage(cli: ContainerCli, tag: string, progress: (setup: SandboxSetup) => void) {
   progress({ stage: "building-image" });
-  const base = baseImageOf(await readFile(RECIPE, "utf8"));
+  const base = baseImageOf(await readFile(BASE_RECIPE, "utf8"));
   const baseWasThere = base !== null && (await imageExists(cli, base));
   const emptyContext = await mkdtemp(join(tmpdir(), "mirador-image-"));
   try {
-    const build = ["build", "--layers=false", "-f", RECIPE, ...(await buildArguments(agent)), "-t", tag, emptyContext];
-    await mustRun(cli, build, {
-      timeoutMs: BUILD_TIMEOUT_MS,
-      onLine: (line) => {
-        const step = buildStepIn(line);
-        if (step) progress({ stage: "building-image", step });
-      },
-    });
+    await mustRun(cli, ["build", "--layers=false", "-f", BASE_RECIPE, "-t", tag, emptyContext], { timeoutMs: BUILD_TIMEOUT_MS, onLine: buildProgress(progress) });
   } finally {
     await rm(emptyContext, { recursive: true, force: true });
     if (base !== null && !baseWasThere) await cli.run(["image", "rm", base]);
   }
-  await removeOtherVersions(cli, tag, agent);
+  await removeOtherBases(cli, tag);
 }
 
-async function removeOtherVersions(cli: ContainerCli, kept: string, { harness }: AgentImage) {
+async function removeOtherBases(cli: ContainerCli, kept: string) {
   const listed = await cli.run(["images", "--format", "json"]);
-  const others = imageNamesIn(listed.stdout).filter((name) => name.split("/").at(-1)!.startsWith(imagesOfKind(harness)) && !name.endsWith(`/${kept}`) && name !== kept);
+  const others = imageNamesIn(listed.stdout).filter((name) => isMiradorsBase(name) && !name.endsWith(`/${kept}`) && name !== kept);
   if (others.length > 0) await cli.run(["image", "rm", ...others]);
 }
 
 /**
  * Rooms' sandboxes on rootless Podman on Linux, each in a plain container, which shares this computer's kernel. The
- * image is built on first use.
+ * base image is built on first use.
  */
 export class Podman implements VmLauncher {
   constructor(
@@ -210,11 +219,20 @@ export class Podman implements VmLauncher {
     return this.available;
   }
 
-  async prepare(agent: AgentImage, progress: (setup: SandboxSetup) => void) {
+  async prepare() {
+    this.usable();
+  }
+
+  async defaultBase(progress: (setup: SandboxSetup) => void) {
     const cli = this.usable();
-    const tag = await imageTag(agent);
-    if (!(await imageExists(cli, tag))) await buildImage(cli, tag, agent, progress);
-    return tag;
+    const tag = await defaultBaseTag();
+    if (!(await imageExists(cli, tag))) await buildImage(cli, tag, progress);
+    return { image: tag, path: DEFAULT_BASE_PATH };
+  }
+
+  async runOnce(run: ThrowawayRun, timeoutMs: number) {
+    const ran = await this.usable().run(runOnceArguments(run), { timeoutMs });
+    return { exitCode: ran.exitCode, output: ran.output };
   }
 
   async start(plan: VmPlan) {

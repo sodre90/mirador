@@ -20,15 +20,13 @@ import { piSandboxSetupFor } from "./pi-setup.ts";
 import type { BroughtAgentInSandbox } from "./sandboxes.ts";
 import { SandboxNotReady } from "./vm-launcher.ts";
 
-/** A call of an agent someone brought, with the profiles whose images its VM may run, the likeliest to be there first. */
-export interface BroughtCallInSandbox extends Omit<BroughtAgentInSandbox, "images"> {
-  profiles: Profile[];
-}
+/** A call of an agent someone brought. */
+export type BroughtCallInSandbox = BroughtAgentInSandbox;
 
 /** What a room's or workspace's settings need of the sandboxes. */
 export interface SandboxControl {
   availability(): SandboxAvailability;
-  /** Sets up what every sandbox needs, and the images of these profiles' agents, so the first turn need not wait for it. */
+  /** Sets up what every sandbox needs, and the tools of these profiles' agents, so the first turn need not wait for it. */
   prepare(profiles: Profile[]): void;
   answerHeldChange(owner: SandboxOwner, changeId: string, answer: HeldChangeAnswer): Promise<void>;
   /** The room or workspace is deleted: its VM stops, and what it held goes unanswered. */

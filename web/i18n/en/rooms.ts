@@ -248,24 +248,27 @@ export const rooms = {
     },
     setup: {
       "apple-container": {
-        "not-started": "It is set up on this Mac on first use: Apple's container service, then the agents' image.",
+        "not-started": "It is set up on this Mac on first use: Apple's container service, the sandbox's base image, then the agents' programs.",
         "starting-service": "Starting Apple's container service; the first time, it downloads a Linux kernel…",
-        "building-image": "Building the agents' image on this Mac…",
+        "building-image": "Building the sandbox's base image on this Mac…",
+        "installing-tool": "Installing the agents' programs on this Mac…",
         ready: "Set up on this Mac.",
         failed: "Setting it up failed.",
       },
       podman: {
-        "not-started": "It is set up on this computer on first use: Podman builds the agents' image.",
+        "not-started": "It is set up on this computer on first use: Podman builds the sandbox's base image, then the agents' programs are installed.",
         "starting-service": "Starting Podman…",
-        "building-image": "Building the agents' image on this computer…",
+        "building-image": "Building the sandbox's base image on this computer…",
+        "installing-tool": "Installing the agents' programs on this computer…",
         ready: "Set up on this computer.",
         failed: "Setting it up failed.",
       },
     } satisfies Record<SandboxKind, Record<SandboxSetupStage, string>>,
     buildingStep: {
-      "apple-container": (at: number, of: number) => `Building the agents' image on this Mac: step ${at} of ${of}…`,
-      podman: (at: number, of: number) => `Building the agents' image on this computer: step ${at} of ${of}…`,
+      "apple-container": (at: number, of: number) => `Building the sandbox's base image on this Mac: step ${at} of ${of}…`,
+      podman: (at: number, of: number) => `Building the sandbox's base image on this computer: step ${at} of ${of}…`,
     } satisfies Record<SandboxKind, (at: number, of: number) => string>,
+    installingTool: (tool: string) => `Installing ${tool} for the sandbox…`,
     setupFailed: (problem: string) => `Setting it up failed: ${problem}`,
     wholeEnvironmentIgnored: "Ignored while the room is sandboxed: only the values chosen here go into its sandbox.",
     meaning: [

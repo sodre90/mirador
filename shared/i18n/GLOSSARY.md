@@ -85,6 +85,7 @@ These terms stay the same everywhere:
 | approver (a room role: asks the agents as a member does, and approves their requests and people's tasks) | jóváhagyó | aprobador | 批准人 | Genehmiger |
 | sandbox (a light VM a room's agents run in on a Mac, a Podman container on Linux) | sandbox | sandbox | 沙箱 | Sandbox (die) |
 | Podman container (the sandbox on Linux, which shares this computer's kernel, weaker than a VM) | Podman-konténer | contenedor de Podman | Podman 容器 | Podman-Container (der) |
+| base image (the system a sandbox runs on, the agents' programs installed beside it) | alap-image | imagen base | 基础镜像 | Basis-Image (das) |
 | kernel (the Linux kernel a Podman container shares) | kernel | kernel | 内核 | Kernel (der) |
 | SELinux confinement (what SELinux keeps a container to, which the sandbox runs without) | SELinux korlátai | confinamiento de SELinux | SELinux 的约束 | Einschränkungen von SELinux (die) |
 | network (what a sandbox reaches besides the model and Mirador) | hálózat | red | 网络 | Netzwerk (das) |

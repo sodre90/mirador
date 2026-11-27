@@ -1,6 +1,5 @@
 import type { SandboxAvailability, SandboxSetup } from "../shared/sandbox.ts";
-import type { AgentImage } from "../host/sandbox/image.ts";
-import { SandboxNotReady, type AgentInVm, type VmPlan, type VmLauncher } from "../host/sandbox/vm-launcher.ts";
+import { SandboxNotReady, type AgentInVm, type ThrowawayRun, type VmPlan, type VmLauncher } from "../host/sandbox/vm-launcher.ts";
 import { runHere } from "./in-vm-here.ts";
 
 /** A launcher of rooms' VMs that starts nothing: it notes what it was asked, and fails where a test says. */
@@ -21,13 +20,39 @@ export class FakeVmLauncher implements VmLauncher {
     return this.available;
   }
 
-  readonly prepared: AgentImage[] = [];
+  /** The base image built, each time it was. */
+  readonly basesBuilt: string[] = [];
+  /** The throwaway containers run, the installers of tools among them. */
+  readonly ranOnce: ThrowawayRun[] = [];
+  /** A throwaway container's run waits for this. */
+  runningOnce: Promise<void> = Promise.resolve();
+  /** A throwaway container whose arguments name this fails, saying so. */
+  runOnceFailsFor: string | null = null;
 
-  async prepare(agent: AgentImage, progress: (setup: SandboxSetup) => void) {
-    this.prepared.push(agent);
-    progress({ stage: "building-image" });
+  async prepare() {
     if (this.prepareFails) throw new Error(this.prepareFails);
-    return `fake-image:${agent.harness}-${agent.version}`;
+  }
+
+  async defaultBase(progress: (setup: SandboxSetup) => void) {
+    const image = "fake-base:1";
+    if (!this.basesBuilt.includes(image)) progress({ stage: "building-image" });
+    this.basesBuilt.push(image);
+    return { image, path: null };
+  }
+
+  async runOnce(run: ThrowawayRun) {
+    this.ranOnce.push(run);
+    await this.runningOnce;
+    const fails = this.runOnceFailsFor !== null && run.args.join(" ").includes(this.runOnceFailsFor);
+    return fails ? { exitCode: 1, output: `npm error 404 ${this.runOnceFailsFor} is not in this registry` } : { exitCode: 0, output: "" };
+  }
+
+  /** What the throwaway containers installed: each npm package at its version, `@anthropic-ai/claude-code@2.1.330`, the guard or Node.js. */
+  installed() {
+    return this.ranOnce.map(({ args }) => {
+      const script = args.join(" ");
+      return /--loglevel=error ([^\s;]+)/.exec(script)?.[1] ?? (script.includes("/src/build.sh") ? "guard" : "node");
+    });
   }
 
   async start(plan: VmPlan) {

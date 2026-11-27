@@ -6,6 +6,8 @@ const failed = (output: string): ContainerRun => ({ exitCode: 1, output, stdout:
 
 const valueAfter = (args: string[], flag: string) => args[args.indexOf(flag) + 1]!;
 
+const isThrowaway = ([command, ...args]: string[]) => command === "run" && !args.includes("--detach");
+
 /** Each `-v source:target[:ro]` of a run, as `container list` shows a folder's: its source with a slash at its end. */
 const mountsOf = (args: string[]) =>
   args.flatMap((arg, index) => {
@@ -14,8 +16,8 @@ const mountsOf = (args: string[]) =>
     return [{ source: `${source}/`, options: access === "ro" ? ["ro"] : [] }];
   });
 
-/** The images a build of the recipe pulls for its stages. */
-export const BASE_IMAGES = ["docker.io/library/node:22-bookworm-slim", "docker.io/oven/bun:1.4.4-slim"];
+/** The images a build of the base recipe pulls. */
+export const BASE_IMAGES = ["docker.io/library/debian:bookworm-slim"];
 
 /** Apple's `container`, as far as the sandboxes use it: a service, a builder, images and VMs, all in memory. */
 export class FakeContainerCli implements ContainerCli {
@@ -36,6 +38,7 @@ export class FakeContainerCli implements ContainerCli {
   }
 
   async run(args: string[], options: ContainerRunOptions = {}): Promise<ContainerRun> {
+    if (isThrowaway(args)) return this.runOnce(args);
     this.calls.push(args);
     const failure = this.failing(args);
     if (failure !== null) return failed(failure);
@@ -91,6 +94,15 @@ export class FakeContainerCli implements ContainerCli {
     if (sub === "inspect") return names.every((name) => this.images.has(name)) ? done("[]") : failed("image not found");
     if (sub === "delete") names.forEach((name) => this.images.delete(name));
     return done();
+  }
+
+  /** The throwaway containers run, installers of tools among them, by their arguments: kept apart from the calls, as VMs' runs are what those tell. */
+  readonly ranOnce: string[][] = [];
+
+  private runOnce(args: string[]) {
+    this.ranOnce.push(args);
+    const failure = this.failing(args);
+    return failure === null ? done() : failed(failure);
   }
 
   private start(args: string[]) {

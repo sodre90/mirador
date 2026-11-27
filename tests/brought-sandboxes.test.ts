@@ -4,7 +4,9 @@ import { networkInterfaces, tmpdir } from "node:os";
 import { join } from "node:path";
 import { HELD_CHANGES_MOST, roomSandbox, type HeldChange, type SandboxAvailability, type SandboxFolder, type SandboxNetwork, type SandboxNotReadyWhy } from "../shared/sandbox.ts";
 import { AppleContainer } from "../host/sandbox/apple-container.ts";
-import { IN_VM } from "../host/sandbox/agent-environment.ts";
+import { vmEnvironment, withAnyFolderSafe } from "../host/sandbox/agent-environment.ts";
+import { DEFAULT_BASE_PATH } from "../host/sandbox/image.ts";
+import { BUN_FOLDER_IN_VM, BUN_IN_VM, GUARD_IN_VM, NODE_FOLDER_IN_VM } from "../host/sandbox/tools-folder.ts";
 import { mayDial } from "../host/sandbox/dialable-addresses.ts";
 import { ANTHROPIC_API } from "../host/sandbox/model-proxy.ts";
 import { Sandboxes, type AgentInSandbox, type BroughtAgentInSandbox, type SandboxHost } from "../host/sandbox/sandboxes.ts";
@@ -66,7 +68,6 @@ const brought = (workspace: string, changes: Partial<BroughtAgentInSandbox> = {}
   owner: ROOM,
   agentId: "mias-coder",
   allowsSharedKernel: false,
-  images: async () => [{ harness: "claude", version: "2.1.330" }],
   workingDirectory: workspace,
   command: ["/usr/local/bin/bun", "/mirador/sandbox/workspace-call.ts"],
   ...changes,
@@ -124,20 +125,22 @@ describe("the VM of an agent someone brought into a sandboxed room", () => {
     expect(nameIn(run!)).not.toBe(nameIn(ownRun!));
     expect(run![run!.indexOf("--network") + 1]).toBe("none");
     const mounts = mountsOfRun(run!);
-    expect(mounts.map(({ target }) => target)).toEqual(["/mirador/raw/0", "/mirador/guard", "/mirador/sandbox", "/run/mirador/network.sock"]);
+    expect(mounts.map(({ target }) => target)).toEqual(["/mirador/raw/0", "/mirador/guard", "/opt/mirador", "/mirador/sandbox", "/run/mirador/network.sock"]);
     expect(guardedIn(mounts)).toEqual([{ folder: workspace, parts: { files: ["CLAUDE.md"], folders: [], onTheWay: [], gitFolders: [".git"] } }]);
     expect(guardedIn(mountsOfRun(ownRun!))).toEqual(guardedIn(mounts));
     const manifests = readdirSync(join(host.dataDir, "sandbox", "room-1", "guard")).toSorted();
     expect(manifests).toEqual([nameIn(ownRun!), nameIn(run!)].toSorted());
-    expect(run!.slice(-4)).toEqual(["--", "sh", "/mirador/sandbox/room-vm.sh", "7703=/run/mirador/network.sock"]);
+    expect(run!.slice(-4)).toEqual(["--", BUN_IN_VM, "/mirador/sandbox/relays.mjs", "7703=/run/mirador/network.sock"]);
     expect(run).toContain("mirador.owner=room:room-1");
 
     const [program, ...exec] = launched.command;
     expect(program).toBe(cli.program);
     expect(exec).toContain(nameIn(run!));
-    expect(exec).toEqual(expect.arrayContaining(["/usr/bin/setpriv", "--reuid=1000", "--no-new-privs"]));
+    expect(exec.slice(-6, -2)).toEqual([GUARD_IN_VM, "as", "1000:1000", "--"]);
     expect(Object.keys(launched.environment).filter((name) => /^(ANTHROPIC|CLAUDE|DEPLOY)/.test(name))).toEqual([]);
-    expect(exec.flatMap((arg, index) => (exec[index - 1] === "-e" ? [arg.split("=")[0]!] : [])).toSorted()).toEqual(Object.keys(IN_VM).toSorted());
+    const setByTheVm = Object.keys(withAnyFolderSafe(vmEnvironment({ image: "", path: null }, null)));
+    expect(exec.flatMap((arg, index) => (exec[index - 1] === "-e" ? [arg.split("=")[0]!] : [])).toSorted()).toEqual(setByTheVm.toSorted());
+    expect(exec).toContain(`PATH=${BUN_FOLDER_IN_VM}:${NODE_FOLDER_IN_VM}:${DEFAULT_BASE_PATH}`);
     own.gone!();
     launched.gone!();
     await sandboxes.stopAll();
@@ -243,16 +246,15 @@ describe("the VM of an agent someone brought into a sandboxed room", () => {
     await sandboxes.stopAll();
   });
 
-  test("runs whatever image is set up already, builds one where none is, and goes on with it once another is", async () => {
+  test("runs on the base image the room's own VM runs on, with none of the agent kinds installed for it", async () => {
     const launcher = new FakeVmLauncher();
     const { workspace, sandboxes } = sandboxedRoom({ launcher });
-    const images = async () => [{ harness: "pi" as const, version: "1.6.0" }, { harness: "claude" as const, version: "2.1.330" }];
+    await sandboxes.launchForBrought(brought(workspace));
+    expect(launcher.installed()).toEqual(["guard", `bun@${Bun.version}`, "node"]);
     await sandboxes.launch(ownAgent(workspace));
-    await sandboxes.launchForBrought(brought(workspace, { images }));
-    await sandboxes.launchForBrought(brought(workspace, { agentId: "bobs-coder", images: async () => [{ harness: "pi", version: "1.6.0" }] }));
-    await sandboxes.launchForBrought(brought(workspace, { agentId: "bobs-coder", images: () => Promise.reject(new Error("asked again")) }));
-    expect(launcher.started.map(({ image }) => image)).toEqual(["fake-image:claude-2.1.330", "fake-image:claude-2.1.330", "fake-image:pi-1.6.0"]);
-    await expect(sandboxes.launchForBrought(brought(workspace, { agentId: "max", images: async () => [] }))).rejects.toMatchObject(notReady({ kind: "no-agent-version" }));
+    await sandboxes.launchForBrought(brought(workspace, { agentId: "bobs-coder" }));
+    expect(launcher.started.map(({ image }) => image)).toEqual(["fake-base:1", "fake-base:1", "fake-base:1"]);
+    expect(launcher.installed()).toEqual(["guard", `bun@${Bun.version}`, "node", "@anthropic-ai/claude-code@2.1.330"]);
     await sandboxes.stopAll();
   });
 

@@ -18,7 +18,7 @@ const callsSoFar = () => (existsSync(podmanCalls()) ? readFileSync(podmanCalls()
 test.describe.configure({ mode: "serial" });
 test.skip(process.platform !== "linux", "Podman sandboxes run on Linux only.");
 
-/** Rootless Podman, whose agents' image is there already: the sandbox it gives shares this computer's kernel. */
+/** Rootless Podman, whose base image is there already and whose installs succeed: the sandbox it gives shares this computer's kernel. */
 function writeFakePodman() {
   mkdirSync(join(host.root, "fake-podman"), { recursive: true });
   writeFileSync(

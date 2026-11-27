@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import type { Conversation, Profile } from "../shared/model.ts";
 import type { Room } from "../shared/rooms.ts";
 import {
+  toolNameOf,
   HELD_CHANGES_MOST,
   narrowsSandbox,
   roomSandbox,
@@ -24,17 +25,32 @@ import { sandboxBlockerText, sandboxUnavailableText } from "./problem-text.ts";
 import { SandboxFolderList } from "./SandboxFolders.tsx";
 import { withHomeAsTilde } from "./workspace-folder.ts";
 import { useSentChoice } from "./sent-choice.ts";
-import { nameOf, roomStartsAfreshText, StartsAfreshWarning, useChangeStartingAfresh, workingThere } from "./RoomAgentSetup.tsx";
+import {
+  nameOf,
+  roomStartsAfreshText,
+  StartsAfreshWarning,
+  useChangeStartingAfresh,
+  workingThere,
+} from "./RoomAgentSetup.tsx";
 
 const words = t.rooms.sandbox;
 const heldWords = t.rooms.held;
 
 /** What the host's check of the room hangs on: its workspace, and its agents with what each is given. */
 function checkedAgainst(room: Room, profiles: Profile[]) {
-  const agents = room.agents.map(({ profileId, brought, variables, wholeHostEnvironment }) => {
-    const profile = profiles.find(({ id }) => id === profileId);
-    return [profileId, Boolean(brought), variables, wholeHostEnvironment, profile?.harness, profile?.environment];
-  });
+  const agents = room.agents.map(
+    ({ profileId, brought, variables, wholeHostEnvironment }) => {
+      const profile = profiles.find(({ id }) => id === profileId);
+      return [
+        profileId,
+        Boolean(brought),
+        variables,
+        wholeHostEnvironment,
+        profile?.harness,
+        profile?.environment,
+      ];
+    },
+  );
   return JSON.stringify([room.workspaceId, agents]);
 }
 
@@ -46,8 +62,16 @@ function useRoomSandboxCheck(room: Room, profiles: Profile[]) {
     let wanted = true;
     connection
       .sendAndAwait(
-        (requestId) => ({ type: "room.check-sandbox", requestId, roomId: room.id }),
-        (message, requestId) => (message.type === "room.sandbox-checked" && message.requestId === requestId ? { availability: message.availability, blockers: message.blockers } : undefined),
+        (requestId) => ({
+          type: "room.check-sandbox",
+          requestId,
+          roomId: room.id,
+        }),
+        (message, requestId) =>
+          message.type === "room.sandbox-checked" &&
+          message.requestId === requestId
+            ? { availability: message.availability, blockers: message.blockers }
+            : undefined,
       )
       .then(
         (got) => wanted && setCheck(got),
@@ -62,31 +86,75 @@ function useRoomSandboxCheck(room: Room, profiles: Profile[]) {
 
 /** What stands in the sandbox's way, in plain words: this computer's reason alone, or else the room's or workspace's. */
 const reasonsOf = ({ availability, blockers }: SandboxCheck) =>
-  availability.available ? blockers.map((blocker) => sandboxBlockerText(blocker, t.problems)) : [sandboxUnavailableText(availability.why, t.problems)];
+  availability.available
+    ? blockers.map((blocker) => sandboxBlockerText(blocker, t.problems))
+    : [sandboxUnavailableText(availability.why, t.problems)];
 
 /** The kind of sandbox this computer gives, where it gives any. */
-const kindOf = (check: SandboxCheck | null): SandboxKind | null => (check?.availability.available ? check.availability.kind : null);
+const kindOf = (check: SandboxCheck | null): SandboxKind | null =>
+  check?.availability.available ? check.availability.kind : null;
 
 /** Whether this computer's sandbox runs outside the SELinux confinement Linux enforces here. */
-const outsideSelinux = (check: SandboxCheck | null) => check?.availability.available === true && check.availability.kind === "podman" && check.availability.selinuxEnforcing;
+const outsideSelinux = (check: SandboxCheck | null) =>
+  check?.availability.available === true &&
+  check.availability.kind === "podman" &&
+  check.availability.selinuxEnforcing;
 
-function SetupProgress({ setup, kind }: { setup: SandboxSetup; kind: SandboxKind }) {
-  const { stage, step, problem } = setup;
+function setupText(
+  { stage, step, tool, problem }: SandboxSetup,
+  kind: SandboxKind,
+) {
+  if (stage === "failed" && problem) return words.setupFailed(problem);
+  if (stage === "building-image" && step)
+    return words.buildingStep[kind](step.at, step.of);
+  if (stage === "installing-tool" && tool)
+    return words.installingTool(toolNameOf(tool));
+  return words.setup[kind][stage];
+}
+
+function SetupProgress({
+  setup,
+  kind,
+}: {
+  setup: SandboxSetup;
+  kind: SandboxKind;
+}) {
+  const { stage, step } = setup;
   const stages = words.setup[kind];
   return (
     <div className="room-sandbox-setup" role="status">
-      <span>{stage === "failed" && problem ? words.setupFailed(problem) : stage === "building-image" && step ? words.buildingStep[kind](step.at, step.of) : stages[stage]}</span>
-      {stage === "building-image" && <progress value={step?.at} max={step?.of} aria-label={stages["building-image"]} />}
+      <span>{setupText(setup, kind)}</span>
+      {stage === "building-image" && (
+        <progress
+          value={step?.at}
+          max={step?.of}
+          aria-label={stages["building-image"]}
+        />
+      )}
     </div>
   );
 }
 
 /** What a sandbox sharing this computer's kernel keeps the agents from, and what not, said before it is turned on. */
-function SharedKernelWarning({ withoutSelinux, confirmation, onConfirm, onKeepOff }: { withoutSelinux: boolean; confirmation: string; onConfirm: () => void; onKeepOff?: () => void }) {
+function SharedKernelWarning({
+  withoutSelinux,
+  confirmation,
+  onConfirm,
+  onKeepOff,
+}: {
+  withoutSelinux: boolean;
+  confirmation: string;
+  onConfirm: () => void;
+  onKeepOff?: () => void;
+}) {
   return (
     <div className="room-sandbox-shared-kernel" role="alert">
       <p>{words.sharedKernel.warning}</p>
-      {withoutSelinux && <p className="room-sandbox-without-selinux">{words.sharedKernel.withoutSelinux}</p>}
+      {withoutSelinux && (
+        <p className="room-sandbox-without-selinux">
+          {words.sharedKernel.withoutSelinux}
+        </p>
+      )}
       {!onKeepOff && <p>{words.sharedKernel.turnsFailUntilAllowed}</p>}
       <button type="button" className="primary" onClick={onConfirm}>
         {confirmation}
@@ -111,22 +179,48 @@ export interface SandboxSwitchWords {
 }
 
 /** What the sandbox reaches, which changes at once, in turns under way too, so no change of it waits for the owner to confirm it. */
-function NetworkChoice({ id, owner, setting, othersReachToo }: { id: string; owner: SandboxOwner; setting: SandboxSetting; othersReachToo?: string }) {
+function NetworkChoice({
+  id,
+  owner,
+  setting,
+  othersReachToo,
+}: {
+  id: string;
+  owner: SandboxOwner;
+  setting: SandboxSetting;
+  othersReachToo?: string;
+}) {
   const labelId = `${id}-sandbox-network`;
-  const [network, choose] = useSentChoice(setting.network, (chosen) => connection.send({ type: "sandbox.set-network", owner, network: chosen }));
+  const [network, choose] = useSentChoice(setting.network, (chosen) =>
+    connection.send({ type: "sandbox.set-network", owner, network: chosen }),
+  );
   return (
-    <div className="room-sandbox-work room-sandbox-network" role="radiogroup" aria-labelledby={labelId}>
+    <div
+      className="room-sandbox-work room-sandbox-network"
+      role="radiogroup"
+      aria-labelledby={labelId}
+    >
       <span className="hint" id={labelId}>
         {words.network.label}
       </span>
       {SANDBOX_NETWORKS.map((each) => (
         <label key={each} className="room-agent-choice">
-          <input type="radio" name={labelId} checked={network === each} disabled={!setting.on} onChange={() => choose(each)} />
+          <input
+            type="radio"
+            name={labelId}
+            checked={network === each}
+            disabled={!setting.on}
+            onChange={() => choose(each)}
+          />
           {words.network.choices[each]}
         </label>
       ))}
       {network !== "closed" && (
-        <p className="hint room-sandbox-reaches">{[words.network.meaning[network], othersReachToo].filter(Boolean).join(" ")}</p>
+        <p className="hint room-sandbox-reaches">
+          {[words.network.meaning[network], othersReachToo]
+            .filter(Boolean)
+            .join(" ")}
+        </p>
       )}
     </div>
   );
@@ -163,9 +257,13 @@ export function SandboxSwitch({
   send: (sandbox: SandboxSetting) => void;
   folders: ReactNode;
 }) {
-  const { shown, change, pending, confirm, keep } = useChangeStartingAfresh(setting, send);
+  const { shown, change, pending, confirm, keep } = useChangeStartingAfresh(
+    setting,
+    send,
+  );
   const [askingToShareKernel, setAskingToShareKernel] = useState(false);
-  const choose = (sandbox: SandboxSetting) => change(sandbox, startsAfresh, narrowsSandbox(setting, sandbox));
+  const choose = (sandbox: SandboxSetting) =>
+    change(sandbox, startsAfresh, narrowsSandbox(setting, sandbox));
   const reasons = check ? reasonsOf(check) : [];
   const turnsOn = check !== null && reasons.length === 0;
   const reasonsId = `${id}-sandbox-reasons`;
@@ -174,7 +272,8 @@ export function SandboxSwitch({
   const withoutSelinux = outsideSelinux(check);
   const turn = (on: boolean) => {
     setAskingToShareKernel(on && kernelShared);
-    if (!on || !kernelShared) choose({ ...shown, on, allowsSharedKernel: false });
+    if (!on || !kernelShared)
+      choose({ ...shown, on, allowsSharedKernel: false });
   };
   const turnOnSharingKernel = () => {
     setAskingToShareKernel(false);
@@ -188,18 +287,40 @@ export function SandboxSwitch({
           type="checkbox"
           role="switch"
           checked={shown.on}
-          disabled={pending !== null || askingToShareKernel || (!shown.on && !turnsOn)}
+          disabled={
+            pending !== null || askingToShareKernel || (!shown.on && !turnsOn)
+          }
           aria-describedby={reasons.length > 0 ? reasonsId : undefined}
           onChange={(event) => turn(event.target.checked)}
         />
         {switchWords.turnOn}
       </label>
       {check === null && <p className="hint">{switchWords.checking}</p>}
-      {kind !== null && <p className={`hint room-sandbox-kind${kernelShared ? " shares-kernel" : ""}`}>{words.kinds[kind]}</p>}
-      {askingToShareKernel && <SharedKernelWarning withoutSelinux={withoutSelinux} confirmation={words.sharedKernel.turnOn} onConfirm={turnOnSharingKernel} onKeepOff={() => setAskingToShareKernel(false)} />}
-      {shown.on && kernelShared && !shown.allowsSharedKernel && pending === null && (
-        <SharedKernelWarning withoutSelinux={withoutSelinux} confirmation={words.sharedKernel.allow} onConfirm={() => choose({ ...shown, allowsSharedKernel: true })} />
+      {kind !== null && (
+        <p
+          className={`hint room-sandbox-kind${kernelShared ? " shares-kernel" : ""}`}
+        >
+          {words.kinds[kind]}
+        </p>
       )}
+      {askingToShareKernel && (
+        <SharedKernelWarning
+          withoutSelinux={withoutSelinux}
+          confirmation={words.sharedKernel.turnOn}
+          onConfirm={turnOnSharingKernel}
+          onKeepOff={() => setAskingToShareKernel(false)}
+        />
+      )}
+      {shown.on &&
+        kernelShared &&
+        !shown.allowsSharedKernel &&
+        pending === null && (
+          <SharedKernelWarning
+            withoutSelinux={withoutSelinux}
+            confirmation={words.sharedKernel.allow}
+            onConfirm={() => choose({ ...shown, allowsSharedKernel: true })}
+          />
+        )}
       {reasons.length > 0 && (
         <div className="room-sandbox-reasons" id={reasonsId}>
           {shown.on && <p>{words.turnsFailUntil}</p>}
@@ -212,14 +333,31 @@ export function SandboxSwitch({
       )}
       {shown.on && (
         <>
-          <NetworkChoice id={id} owner={owner} setting={setting} othersReachToo={switchWords.othersReachToo} />
+          <NetworkChoice
+            id={id}
+            owner={owner}
+            setting={setting}
+            othersReachToo={switchWords.othersReachToo}
+          />
           <div className="room-sandbox-work">
             <label className="room-agent-choice">
-              <input type="radio" name={`${id}-sandbox-work`} checked={shown.workFreely} disabled={pending !== null} onChange={() => choose({ ...shown, workFreely: true })} />
+              <input
+                type="radio"
+                name={`${id}-sandbox-work`}
+                checked={shown.workFreely}
+                disabled={pending !== null}
+                onChange={() => choose({ ...shown, workFreely: true })}
+              />
               {words.workFreely}
             </label>
             <label className="room-agent-choice">
-              <input type="radio" name={`${id}-sandbox-work`} checked={!shown.workFreely} disabled={pending !== null} onChange={() => choose({ ...shown, workFreely: false })} />
+              <input
+                type="radio"
+                name={`${id}-sandbox-work`}
+                checked={!shown.workFreely}
+                disabled={pending !== null}
+                onChange={() => choose({ ...shown, workFreely: false })}
+              />
               {switchWords.stillAsks}
             </label>
           </div>
@@ -227,12 +365,23 @@ export function SandboxSwitch({
           {folders}
         </>
       )}
-      {pending && <StartsAfreshWarning text={startsAfreshText(startsAfresh, pending.narrows)} onConfirm={confirm} onKeep={keep} />}
+      {pending && (
+        <StartsAfreshWarning
+          text={startsAfreshText(startsAfresh, pending.narrows)}
+          onConfirm={confirm}
+          onKeep={keep}
+        />
+      )}
     </fieldset>
   );
 }
 
-const roomSwitchWords: SandboxSwitchWords = { turnOn: words.turnOn, checking: words.checking, stillAsks: words.presetApplies, othersReachToo: words.network.broughtReachToo };
+const roomSwitchWords: SandboxSwitchWords = {
+  turnOn: words.turnOn,
+  checking: words.checking,
+  stillAsks: words.presetApplies,
+  othersReachToo: words.network.broughtReachToo,
+};
 
 /** The room's sandbox switch; changing it starts the room's agents at work afresh. */
 export function SandboxField({
@@ -251,7 +400,9 @@ export function SandboxField({
   homeDir: string;
 }) {
   const check = useRoomSandboxCheck(room, profiles);
-  const startsAfresh = room.agents.filter((agent) => !agent.brought && workingThere(agent, roomConversations)).map(({ profileId }) => nameOf(profiles, profileId));
+  const startsAfresh = room.agents
+    .filter((agent) => !agent.brought && workingThere(agent, roomConversations))
+    .map(({ profileId }) => nameOf(profiles, profileId));
   return (
     <SandboxSwitch
       id={`room-${room.id}`}
@@ -262,15 +413,27 @@ export function SandboxField({
       switchWords={roomSwitchWords}
       startsAfresh={startsAfresh}
       startsAfreshText={roomStartsAfreshText}
-      send={(sandbox) => connection.send({ type: "room.set-sandbox", roomId: room.id, sandbox })}
+      send={(sandbox) =>
+        connection.send({ type: "room.set-sandbox", roomId: room.id, sandbox })
+      }
       folders={<SandboxFolderList folders={folders} homeDir={homeDir} />}
     />
   );
 }
 
-const heldTitles = { add: heldWords.wantsToAdd, change: heldWords.wantsToChange, delete: heldWords.wantsToDelete } satisfies Record<HeldChange["kind"], unknown>;
+const heldTitles = {
+  add: heldWords.wantsToAdd,
+  change: heldWords.wantsToChange,
+  delete: heldWords.wantsToDelete,
+} satisfies Record<HeldChange["kind"], unknown>;
 
-const answerHeld = ({ owner, id }: HeldChange, answer: HeldChangeAnswer) => connection.send({ type: "sandbox.answer-held-change", owner, changeId: id, answer });
+const answerHeld = ({ owner, id }: HeldChange, answer: HeldChangeAnswer) =>
+  connection.send({
+    type: "sandbox.answer-held-change",
+    owner,
+    changeId: id,
+    answer,
+  });
 
 const UNSHOWN: HeldChangeText = { unshown: true };
 
@@ -284,8 +447,17 @@ function useHeldText({ owner, id, at, unshown }: HeldChange) {
     if (!unshown)
       connection
         .sendAndAwait(
-          (requestId) => ({ type: "sandbox.held-change-text", requestId, owner: { kind, id: ownerId }, changeId: id }),
-          (message, requestId): HeldChangeText | undefined => (message.type === "sandbox.held-change-text" && message.requestId === requestId ? (message.text ?? UNSHOWN) : undefined),
+          (requestId) => ({
+            type: "sandbox.held-change-text",
+            requestId,
+            owner: { kind, id: ownerId },
+            changeId: id,
+          }),
+          (message, requestId): HeldChangeText | undefined =>
+            message.type === "sandbox.held-change-text" &&
+            message.requestId === requestId
+              ? (message.text ?? UNSHOWN)
+              : undefined,
         )
         .then(
           (got) => wanted && setText(got),
@@ -298,15 +470,34 @@ function useHeldText({ owner, id, at, unshown }: HeldChange) {
   return text;
 }
 
-function HeldText({ change, shownPath }: { change: HeldChange; shownPath: string }) {
+function HeldText({
+  change,
+  shownPath,
+}: {
+  change: HeldChange;
+  shownPath: string;
+}) {
   const text = useHeldText(change);
   if (text === null) return <p className="hint">{heldWords.loading}</p>;
-  if ("unshown" in text) return <p className="room-held-unshown">{heldWords.unshown}</p>;
-  return <DiffView path={shownPath} oldText={text.before} newText={text.after ?? ""} />;
+  if ("unshown" in text)
+    return <p className="room-held-unshown">{heldWords.unshown}</p>;
+  return (
+    <DiffView
+      path={shownPath}
+      oldText={text.before}
+      newText={text.after ?? ""}
+    />
+  );
 }
 
 /** A held file as the owner reads where it is: its path in the workspace, or in which folder added read and write. */
-const heldPlace = ({ folder, path }: HeldChange, homeDir: string) => (folder === null ? { title: path, diff: path } : { title: heldWords.inFolder(path, withHomeAsTilde(folder, homeDir)), diff: withHomeAsTilde(`${folder}/${path}`, homeDir) });
+const heldPlace = ({ folder, path }: HeldChange, homeDir: string) =>
+  folder === null
+    ? { title: path, diff: path }
+    : {
+        title: heldWords.inFolder(path, withHomeAsTilde(folder, homeDir)),
+        diff: withHomeAsTilde(`${folder}/${path}`, homeDir),
+      };
 
 /**
  * The oldest agent config file change of a sandbox, put back as it was and held for the owner: which agents may have
@@ -331,13 +522,25 @@ export function HeldChangeCard({
 }) {
   const first = changes[0];
   if (!first) return null;
-  const agents = first.agents.length === 0 && unknownAgent ? [unknownAgent] : first.agents.map(agentName);
+  const agents =
+    first.agents.length === 0 && unknownAgent
+      ? [unknownAgent]
+      : first.agents.map(agentName);
   const place = heldPlace(first, homeDir);
   return (
-    <section className="room-held" aria-label={heldWords.label} data-held-path={first.path} data-held-folder={first.folder ?? undefined}>
+    <section
+      className="room-held"
+      aria-label={heldWords.label}
+      data-held-path={first.path}
+      data-held-folder={first.folder ?? undefined}
+    >
       <div className="room-held-head">
-        <span className="room-held-title">{heldTitles[first.kind](agents, place.title)}</span>
-        {changes.length > 1 && <span className="room-approval-count">{countOf(changes.length)}</span>}
+        <span className="room-held-title">
+          {heldTitles[first.kind](agents, place.title)}
+        </span>
+        {changes.length > 1 && (
+          <span className="room-approval-count">{countOf(changes.length)}</span>
+        )}
       </div>
       {holdsTooMany && (
         <p className="room-held-too-many" role="status">
@@ -347,7 +550,11 @@ export function HeldChangeCard({
       <HeldText key={first.id} change={first} shownPath={place.diff} />
       <p className="room-held-kept">{heldWords.keptAsItWas}</p>
       <div className="permission-options">
-        <button type="button" className="option-allow_once" onClick={() => answerHeld(first, "allow")}>
+        <button
+          type="button"
+          className="option-allow_once"
+          onClick={() => answerHeld(first, "allow")}
+        >
           {heldWords.allow}
         </button>
         <button type="button" onClick={() => answerHeld(first, "discard")}>

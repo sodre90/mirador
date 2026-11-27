@@ -11,6 +11,7 @@ import {
   SANDBOXED_HARNESSES,
   SETUP_NOT_STARTED,
   sharesKernel,
+  toolNameOf,
   workspaceSandbox,
   type HeldChange,
   type HeldChangeAnswer,
@@ -24,25 +25,27 @@ import {
   type SandboxOwner,
   type SandboxSetting,
   type SandboxSetup,
+  type SandboxTool,
 } from "../../shared/sandbox.ts";
 import type { BusyWith, Conversation } from "../../shared/model.ts";
 import type { AgentLaunch } from "../acp/harness.ts";
 import type { Store } from "../store.ts";
 import { addedFolderRefusal, foldersMounted, repositoryRefusal, type FolderSurroundings, type FoldersMounted, type LeftOutFolder, type MountedFolder, type OtherSandboxes } from "./added-folders.ts";
-import { AGENT_USER, BUN_IN_VM, environmentInVm, IN_VM, NETWORK_RELAY_PORT, SCRIPTS_IN_VM, type SandboxedKind } from "./agent-environment.ts";
+import { AGENT_USER, environmentInVm, NETWORK_RELAY_PORT, SCRIPTS_IN_VM, vmEnvironment, withAnyFolderSafe, type SandboxedKind } from "./agent-environment.ts";
 import { startCanvasSocket, type SandboxCanvas } from "./canvas-socket.ts";
 import { behindGuard, guardMounts, MANIFEST_FOLDER_IN_VM, RAW_FOLDERS_IN_VM, type GuardedFolder } from "./guard.ts";
 import { guardPlanOf, partsNamedFrom, sandboxRefusalOf, withMoreParts, type GuardPlan, type MiradorPlaces, type NamedByGit } from "./guarded-workspace.ts";
 import { HeldFiles, HeldFilesRefused, type HeldSandbox } from "./held-files.ts";
 import type { PlacesPutBack, PlacesRequest } from "./in-vm/held-places.ts";
-import type { AgentImage } from "./image.ts";
+import { SetupFailed } from "./image.ts";
 import { secretsOf, startModelProxy, type ModelRoute } from "./model-proxy.ts";
 import { startNetworkProxy, type NetworkProxy } from "./network-proxy.ts";
 import { entryOf, isInside, realOrAsIs, wayTo, type WayTo } from "./paths-on-disk.ts";
 import { PlanWatch } from "./plan-watch.ts";
 import { removeLeftSocketFolders, SOCKETS_FOLDER_PREFIX } from "./socket-folders.ts";
+import { BUN_IN_VM, TOOLS_IN_VM, TOOLS_OF_EVERY_VM, toolOfAgent, ToolInstallFailed, ToolsFolder, type AgentTools } from "./tools-folder.ts";
 import type { RunningSocket } from "./vm-connections.ts";
-import { HOST_LABEL, OWNER_LABEL, SandboxNotReady, type AgentInVm, type Mount, type VmLauncher } from "./vm-launcher.ts";
+import { HOST_LABEL, OWNER_LABEL, SandboxNotReady, type AgentInVm, type BaseImage, type Mount, type VmLauncher } from "./vm-launcher.ts";
 
 /** The ports a sandbox's VM gives its agents on its own 127.0.0.1, relayed to Mirador's sockets on this computer. */
 export const CANVAS_RELAY_PORT = 7701;
@@ -128,7 +131,7 @@ export interface AgentInSandbox {
   allowsSharedKernel: boolean;
   profileId: string;
   kind: SandboxedKind;
-  /** The version of its kind's program on this computer, which its image installs. */
+  /** The version of its kind's program on this computer, which its VM runs from the tools folder. */
   version: string;
   workingDirectory: string;
   given: Record<string, string>;
@@ -138,13 +141,12 @@ export interface AgentInSandbox {
 
 /**
  * An agent someone brought into a room, which runs on their own computer and has its calls in the room's workspace done
- * in a VM: the images that VM may run, as whatever agent's they are it runs none of it, and the command of one call.
+ * in a VM, which runs none of the agent kinds: the command of one call.
  */
 export interface BroughtAgentInSandbox {
   owner: SandboxOwner;
   agentId: string;
   allowsSharedKernel: boolean;
-  images(): Promise<AgentImage[]>;
   workingDirectory: string;
   command: string[];
 }
@@ -155,7 +157,7 @@ interface SandboxVm {
   /** The agent someone brought that the VM is for alone; null for the VM of the room's or workspace's own agents. */
   broughtAgent: string | null;
   name: string;
-  image: string;
+  base: BaseImage;
   /** The workspace as its room or workspace named it when the VM started. */
   workspace: string | null;
   /** What the VM's agents can write, without links, as the VM starts on it: the workspace, then each folder added read and write it mounts. */
@@ -295,7 +297,8 @@ const hostLabelOf = (dataDir: string) => shortHash(dataDir);
 
 /**
  * One light VM per sandboxed room and per sandboxed workspace, run by the launcher this computer has: set up on first use
- * (the runtime, then the image, built here), started on its first turn, and stopped once its last agent has gone. Its
+ * (the runtime, the base image, built here, then the tools folder, with each agent kind at its version as one first
+ * starts), started on its first turn, and stopped once its last agent has gone. Agents of every kind run in it at once. Its
  * agents start in it as the agent user; it has no network, only Mirador's canvas, model and web proxy sockets relayed in,
  * the proxy letting through what the owner has the sandbox reach, and the workspace, through a guard in the VM that keeps
  * its repository's config and hooks, and its held files, as they are. No VM sees another's sockets, config folder or canvases.
@@ -311,7 +314,11 @@ const hostLabelOf = (dataDir: string) => shortHash(dataDir);
  */
 export class Sandboxes {
   private setupState: SandboxSetup = SETUP_NOT_STARTED;
-  private settingUp?: Promise<string>;
+  /** What of the setup is ready on this computer, by piece: the runtime, the base image and each tool. */
+  private readonly ready = new Map<string, unknown>();
+  /** The last piece of setup asked for: each is set up once the one before is over, one at a time. */
+  private settingUp: Promise<unknown> = Promise.resolve();
+  private readonly tools: ToolsFolder;
   /** The VMs by their keys. */
   private readonly vms = new Map<string, SandboxVm>();
   /** Each sandbox's launch under way: one at a time, so no two VMs of one room or workspace ever start. */
@@ -330,6 +337,7 @@ export class Sandboxes {
     private readonly planLookedAtMs = 2_000,
   ) {
     this.hostLabel = hostLabelOf(host.dataDir);
+    this.tools = new ToolsFolder(host.dataDir, launcher);
   }
 
   availability() {
@@ -475,9 +483,23 @@ export class Sandboxes {
     await Promise.all(working.map((vm) => this.stopVm(vm)));
   }
 
-  /** Sets up what every sandbox needs, and the image of this agent, as the owner turns one on, so the first turn need not wait for it. */
-  prepareInBackground(agent: AgentImage) {
-    if (this.availability().available) void this.preparedImage(agent).catch(() => {});
+  /** Sets up what every sandbox needs, and this agent kind at its version, as the owner turns one on, so the first turn need not wait for it. */
+  prepareInBackground(agent: AgentTools) {
+    if (this.availability().available) void this.preparedFor(agent).catch(() => {});
+  }
+
+  /**
+   * Removes the tools of agents' versions no profile runs any more, and what an install cut short left: only while no VM
+   * runs, as a running one may run any of them.
+   */
+  async removeToolsNoneUses(used: AgentTools[]) {
+    if (!this.availability().available) return;
+    const kept: SandboxTool[] = [...TOOLS_OF_EVERY_VM, ...used.map(toolOfAgent)];
+    await this.setupStep(async () => {
+      if (this.vms.size > 0) return;
+      await this.tools.keepOnly(kept);
+      [...this.ready.keys()].filter(isToolKey).forEach((key) => this.ready.delete(key));
+    });
   }
 
   /** The VMs a previous run of this host left behind, from a crash, and the socket folders of any host gone since. */
@@ -494,14 +516,14 @@ export class Sandboxes {
   async launch(agent: AgentInSandbox, told: (step: SandboxStartStep) => void = () => {}): Promise<AgentLaunch> {
     this.assertMayLaunch(agent, false);
     const { harness } = agent.kind;
-    const image = { harness, version: agent.version };
+    const tools = { harness, version: agent.version };
     let toldLast: SandboxStartStep | null = null;
     const tell = (step: SandboxStartStep) => step !== toldLast && told((toldLast = step));
-    const first = this.firstStepOf(agent.owner, image);
+    const first = this.firstStepOf(agent.owner, tools);
     if (first) tell(first);
-    const vm = await this.oneLaunchAtATime(agent.owner, () => this.startedAgentsVm(agent.owner, image, tell));
+    const vm = await this.oneLaunchAtATime(agent.owner, () => this.startedAgentsVm(agent.owner, tools, tell));
     const places = { configFolder: sandboxConfigFolder(this.host.dataDir, agent.owner, harness, harness === "pi" ? agent.profileId : undefined), modelBaseUrl: modelAddress(agent.profileId) };
-    const environment = environmentInVm(agent.given, agent.kind, places, secretsOf(agent.route));
+    const environment = environmentInVm(agent.given, { kind: agent.kind, version: agent.version, base: vm.base }, places, secretsOf(agent.route));
     const launched = this.launchedIn(vm, { workingDirectory: agent.workingDirectory, environment, command: agent.agent });
     vm.routes.set(agent.profileId, agent.route);
     return launched;
@@ -514,7 +536,7 @@ export class Sandboxes {
   async launchForBrought(agent: BroughtAgentInSandbox): Promise<AgentLaunch> {
     this.assertMayLaunch(agent, true);
     const vm = await this.oneLaunchAtATime(agent.owner, () => this.startedBroughtVm(agent));
-    return this.launchedIn(vm, { workingDirectory: agent.workingDirectory, environment: { ...IN_VM }, command: agent.command });
+    return this.launchedIn(vm, { workingDirectory: agent.workingDirectory, environment: withAnyFolderSafe(vmEnvironment(vm.base, null)), command: agent.command });
   }
 
   private assertMayLaunch({ owner, allowsSharedKernel }: Pick<AgentInSandbox, "owner" | "allowsSharedKernel">, brought: boolean) {
@@ -820,35 +842,35 @@ export class Sandboxes {
     return putBackIn(ran.stdout);
   }
 
-  /** What a launch of this agent waits for before it can start in the owner's VM, as things stand: nothing where the VM runs on its image. */
-  private firstStepOf(owner: SandboxOwner, agent: AgentImage): SandboxStartStep | null {
-    if (this.setupState.stage !== "ready" || !this.readyImage(agent)) return "preparing-sandbox";
+  /** What a launch of this agent waits for before it can start in the owner's VM, as things stand: nothing where the VM runs and its tools are there. */
+  private firstStepOf(owner: SandboxOwner, agent: AgentTools): SandboxStartStep | null {
+    if (!this.readyFor(agent)) return "preparing-sandbox";
     return this.agentsVm(owner)?.running ? null : "starting-sandbox";
   }
 
   /**
-   * The VM of the sandbox's own agents, running: the one there is, or a new one where there is none, where the workspace
-   * it works in changed, or where it runs another image or started with other added folders and no agent of it is at work.
+   * The VM of the sandbox's own agents, running, whatever kinds of agent are at work in it: the one there is, or a new
+   * one where there is none, where the workspace it works in changed, or where it runs on another base image or started
+   * with other added folders and no agent of it is at work.
    */
-  private async startedAgentsVm(owner: SandboxOwner, agent: AgentImage, told: (step: SandboxStartStep) => void): Promise<SandboxVm> {
-    const image = await this.preparedImage(agent);
+  private async startedAgentsVm(owner: SandboxOwner, agent: AgentTools, told: (step: SandboxStartStep) => void): Promise<SandboxVm> {
+    const base = await this.preparedFor(agent);
     const folders = this.host.foldersOf(owner);
     const existing = this.agentsVm(owner);
-    const outdatedWhileIdle = (vm: SandboxVm) => vm.agents === 0 && (vm.image !== image || !sameFolders(vm.folders, folders));
+    const outdatedWhileIdle = (vm: SandboxVm) => vm.agents === 0 && (vm.base.image !== base.image || !sameFolders(vm.folders, folders));
     const outdated = existing && !existing.stopping && (existing.workspace !== this.host.workspaceOf(owner) || outdatedWhileIdle(existing));
     const reused = existing && !existing.stopping && !outdated;
     if (!reused || !existing.running) told("starting-sandbox");
     if (outdated) await this.stop(owner);
     if (existing && !existing.stopping) {
-      if (existing.image !== image) throw new SandboxNotReady({ kind: "versions-differ" });
       await existing.started;
       return existing;
     }
-    return this.startedNew({ key: agentsVmKey(owner), owner, broughtAgent: null, image, folders });
+    return this.startedNew({ key: agentsVmKey(owner), owner, broughtAgent: null, base, folders });
   }
 
   /** The VM of an agent someone brought, running: the one there is, where it works in the workspace as it now is, or a new one. */
-  private async startedBroughtVm({ owner, agentId, images }: BroughtAgentInSandbox): Promise<SandboxVm> {
+  private async startedBroughtVm({ owner, agentId }: BroughtAgentInSandbox): Promise<SandboxVm> {
     const key = broughtVmKey(owner, agentId);
     const existing = this.vms.get(key);
     if (existing && !existing.stopping && existing.workspace === this.host.workspaceOf(owner)) {
@@ -856,17 +878,10 @@ export class Sandboxes {
       return existing;
     }
     if (existing) await this.stopVm(existing);
-    return this.startedNew({ key, owner, broughtAgent: agentId, image: await this.anyImageOf(await images()), folders: [] });
+    return this.startedNew({ key, owner, broughtAgent: agentId, base: await this.preparedFor(null), folders: [] });
   }
 
-  /** Any of these images, one that is set up before one to be built: they differ only in their agent's program. */
-  private anyImageOf(images: AgentImage[]) {
-    const image = images.find((each) => this.readyImage(each) !== null) ?? images[0];
-    if (!image) throw new SandboxNotReady({ kind: "no-agent-version", harness: "claude" });
-    return this.preparedImage(image);
-  }
-
-  private async startedNew(given: Pick<SandboxVm, "key" | "owner" | "broughtAgent" | "image" | "folders">): Promise<SandboxVm> {
+  private async startedNew(given: Pick<SandboxVm, "key" | "owner" | "broughtAgent" | "base" | "folders">): Promise<SandboxVm> {
     await this.untilNoneStops(given.owner);
     const vm: SandboxVm = {
       ...given,
@@ -923,16 +938,17 @@ export class Sandboxes {
     vm.launching = this.launcher.start({
       name: vm.name,
       labels: { [HOST_LABEL]: this.hostLabel, [OWNER_LABEL]: ownerKey(vm.owner) },
-      image: vm.image,
+      image: vm.base.image,
       memory: VM_MEMORY,
       mounts: [
         ...guarded,
         ...(folders?.readOnly ?? []),
         ...seen.mounts,
+        { source: this.tools.root, target: TOOLS_IN_VM, readOnly: true },
         { source: IN_VM_SCRIPTS, target: SCRIPTS_IN_VM, readOnly: true },
         ...relays.map(({ socket }) => ({ source: socket, target: inVm(socket), readOnly: false })),
       ],
-      entry: behindGuard(["sh", `${SCRIPTS_IN_VM}/room-vm.sh`, ...relays.map(({ port, socket }) => `${port}=${inVm(socket)}`)]),
+      ...behindGuard(SOCKETS_IN_VM, [BUN_IN_VM, `${SCRIPTS_IN_VM}/relays.mjs`, ...relays.map(({ port, socket }) => `${port}=${inVm(socket)}`)]),
     });
     await vm.launching;
     this.assertNotStopped(vm);
@@ -1123,44 +1139,70 @@ export class Sandboxes {
     return { folder, parts: planned.parts, named: planned.named };
   }
 
+  /** Whether every piece of setup a VM of this agent needs is ready, as far as this host knows. */
+  private readyFor(agent: AgentTools | null) {
+    return [RUNTIME, DEFAULT_BASE, ...toolsOf(agent).map(toolKey)].every((key) => this.ready.has(key));
+  }
+
   /**
-   * The runtime runs and the image of this agent kind and version is there: set up once for every sandbox, one image at
-   * a time, its progress told as it goes.
+   * The runtime runs, the base image is there and so is each tool a VM of this agent needs, the agent kind's own at its
+   * version: each set up once, on first use, one at a time, its progress told as it goes. The base image, to run on.
    */
-  private async preparedImage(agent: AgentImage): Promise<string> {
-    const image = this.readyImage(agent);
-    if (this.setupState.stage === "ready" && image) return image;
-    const previous = this.settingUp ?? Promise.resolve("");
-    const settingUp = previous.catch(() => "").then(async () => this.readyImage(agent) ?? this.setUp(agent));
-    this.settingUp = settingUp;
-    return settingUp;
-  }
-
-  /** Each agent kind's image as last set up: building another version of a kind removes the one before. */
-  private readonly ready = new Map<SandboxedHarness, { version: string; image: string }>();
-
-  private readyImage({ harness, version }: AgentImage) {
-    const ready = this.ready.get(harness);
-    return ready?.version === version ? ready.image : null;
-  }
-
-  private async setUp(agent: AgentImage) {
-    const progress = (setup: SandboxSetup) => {
-      this.setupState = setup;
-      this.host.setupChanged(setup);
-    };
+  private async preparedFor(agent: AgentTools | null): Promise<BaseImage> {
     try {
-      const image = await this.launcher.prepare(agent, progress);
-      this.ready.set(agent.harness, { version: agent.version, image });
-      progress({ stage: "ready" });
-      return image;
+      await this.piece(RUNTIME, () => this.launcher.prepare(this.progress));
+      const base = await this.piece(DEFAULT_BASE, () => this.launcher.defaultBase(this.progress));
+      for (const tool of toolsOf(agent)) await this.piece(toolKey(tool), () => this.installed(tool));
+      if (this.setupState.stage !== "ready") this.progress({ stage: "ready" });
+      return base;
     } catch (error) {
       const problem = messageOf(error);
-      progress({ stage: "failed", problem });
+      this.progress({ stage: "failed", problem });
       throw new SandboxNotReady({ kind: "setup-failed", cause: problem });
     }
   }
+
+  private readonly progress = (setup: SandboxSetup) => {
+    this.setupState = setup;
+    this.host.setupChanged(setup);
+  };
+
+  /** A piece of setup, made once: its result where it is ready, else made after the pieces asked for before. */
+  private async piece<T>(key: string, make: () => Promise<T>): Promise<T> {
+    if (this.ready.has(key)) return this.ready.get(key) as T;
+    return this.setupStep(async () => {
+      if (this.ready.has(key)) return this.ready.get(key) as T;
+      const made = await make();
+      this.ready.set(key, made);
+      return made;
+    });
+  }
+
+  private setupStep<T>(step: () => Promise<T>): Promise<T> {
+    const done = this.settingUp.catch(() => {}).then(step);
+    this.settingUp = done;
+    return done;
+  }
+
+  private async installed(tool: SandboxTool) {
+    if (await this.tools.has(tool)) return;
+    this.progress({ stage: "installing-tool", tool });
+    try {
+      await this.tools.install(tool);
+    } catch (error) {
+      throw error instanceof ToolInstallFailed ? new SetupFailed(`installing ${toolNameOf(tool)}: ${error.message}`) : error;
+    }
+  }
 }
+
+const RUNTIME = "runtime";
+const DEFAULT_BASE = "base:default";
+const TOOL_KEY = "tool:";
+const toolKey = (tool: SandboxTool) => `${TOOL_KEY}${tool.kind}${"version" in tool ? `-${tool.version}` : ""}`;
+const isToolKey = (key: string) => key.startsWith(TOOL_KEY);
+
+/** The tools a VM of this agent runs on: those of every VM, and its kind's at its version. */
+const toolsOf = (agent: AgentTools | null): SandboxTool[] => [...TOOLS_OF_EVERY_VM, ...(agent ? [toolOfAgent(agent)] : [])];
 
 /** What a sandboxed agent's start waits for, where it waits: its sandbox set up, or its VM started. */
 export type SandboxStartStep = Extract<BusyWith, "preparing-sandbox" | "starting-sandbox">;

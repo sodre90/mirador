@@ -75,7 +75,7 @@ import { conversationCanvasToken } from "./canvas-token.ts";
 import { currentPath } from "./current-path.ts";
 import { homedir } from "node:os";
 import { AppleContainer } from "./sandbox/apple-container.ts";
-import { agentImagesOf } from "./sandbox/agent-version.ts";
+import { agentToolsOf } from "./sandbox/agent-version.ts";
 import { computersOwnOnLinux, Podman } from "./sandbox/podman.ts";
 import { belongsToSandbox, Sandboxes } from "./sandbox/sandboxes.ts";
 import type { SandboxControl } from "./sandbox/sandbox-control.ts";
@@ -247,10 +247,10 @@ const sandboxFolders = new SandboxFolderService(store, hub, conversations, sandb
 conversations.startsSandboxedAgentsIn(sandboxes);
 const sandboxControl: SandboxControl = {
   availability: () => sandboxes.availability(),
-  prepare: (profiles) => void agentImagesOf(profiles, store.claudeProgramSetting()).then((images) => images.forEach((image) => sandboxes.prepareInBackground(image))),
+  prepare: (profiles) => void agentToolsOf(profiles, store.claudeProgramSetting()).then((agents) => agents.forEach((agent) => sandboxes.prepareInBackground(agent))),
   answerHeldChange: (owner, changeId, answer) => sandboxes.answerHeldChange(owner, changeId, answer),
   workspaceRefusal: (workspace, turningOn) => sandboxes.workspaceRefusal(workspace, turningOn),
-  launchForBrought: ({ profiles, ...call }) => sandboxes.launchForBrought({ ...call, images: () => agentImagesOf(profiles, store.claudeProgramSetting()) }),
+  launchForBrought: (call) => sandboxes.launchForBrought(call),
   stopBrought: (owner, agentId) => sandboxes.stopBrought(owner, agentId),
   turnEnded: (owner) => sandboxes.turnEnded(owner),
   networkChanged: (owner) => sandboxes.networkChanged(owner),
@@ -264,7 +264,10 @@ rooms.keepsSandboxesWith(sandboxControl);
 const terminals = new TerminalService(hub, store);
 const workspaceSandboxes = new WorkspaceSandboxes(store, hub, conversations, terminals);
 workspaceSandboxes.keepsSandboxesWith(sandboxControl);
-void sandboxes.reapLeftovers().catch((error: unknown) => console.error("removing the sandboxes a previous run left failed:", error));
+void sandboxes
+  .reapLeftovers()
+  .then(async () => sandboxes.removeToolsNoneUses(await agentToolsOf(store.listProfiles(), store.claudeProgramSetting())))
+  .catch((error: unknown) => console.error("removing the sandboxes a previous run left failed:", error));
 const appViewCode = (pathname: string) => apps.viewCode(pathname) ?? canvasPlugins.viewCode(pathname);
 const appMediaFile = (pathname: string) => apps.mediaFile(pathname);
 const assetsServer = serveCanvasAssets(config.canvasAssetsPort, { knownOrigins: canvasAssetsOrigins, appViewCode, appMediaFile });

@@ -1,14 +1,11 @@
-/** The image's own, by its whole path: what runs as root is never looked up by name. */
-const SETPRIV_IN_VM = "/usr/bin/setpriv";
+import { GUARD_IN_VM } from "./tools-folder.ts";
 
 /**
- * A command started as root in the VM and dropped to the agent user at once, with no capabilities, none it could gain,
- * and none left for regaining root: it can't unmount what the guard shows, nor mount what it keeps from agents.
+ * A command started as root in the VM and dropped to the agent user at once by the guard, from the tools folder by its
+ * whole path, so nothing of the image runs as root: with no group, no capabilities, none it could gain, and none left for
+ * regaining root, it can't unmount what the guard shows, nor mount what it keeps from agents.
  */
-export function droppedTo(user: string, command: string[]) {
-  const [uid, gid] = user.split(":");
-  return [SETPRIV_IN_VM, `--reuid=${uid}`, `--regid=${gid}`, "--clear-groups", "--inh-caps=-all", "--bounding-set=-all", "--no-new-privs", "--", ...command];
-}
+export const droppedTo = (user: string, command: string[]) => [GUARD_IN_VM, "as", user, "--", ...command];
 
 /** Whether a variable is one the container tool's own process reads, by its name. */
 export type ReadByTool = (name: string) => boolean;

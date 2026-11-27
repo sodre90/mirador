@@ -238,24 +238,27 @@ export const rooms: Messages["rooms"] = {
     },
     setup: {
       "apple-container": {
-        "not-started": "Sie wird bei der ersten Nutzung auf diesem Mac eingerichtet: Apples container-Dienst, dann das Image der Agenten.",
+        "not-started": "Sie wird bei der ersten Nutzung auf diesem Mac eingerichtet: Apples container-Dienst, das Basis-Image der Sandbox, dann die Programme der Agenten.",
         "starting-service": "Apples container-Dienst startet; beim ersten Mal lädt er einen Linux-Kernel herunter…",
-        "building-image": "Das Image der Agenten wird auf diesem Mac gebaut…",
+        "building-image": "Das Basis-Image der Sandbox wird auf diesem Mac gebaut…",
+        "installing-tool": "Die Programme der Agenten werden auf diesem Mac installiert…",
         ready: "Auf diesem Mac eingerichtet.",
         failed: "Das Einrichten ist fehlgeschlagen.",
       },
       podman: {
-        "not-started": "Sie wird bei der ersten Nutzung auf diesem Rechner eingerichtet: Podman baut das Image der Agenten.",
+        "not-started": "Sie wird bei der ersten Nutzung auf diesem Rechner eingerichtet: Podman baut das Basis-Image der Sandbox, dann werden die Programme der Agenten installiert.",
         "starting-service": "Podman startet…",
-        "building-image": "Das Image der Agenten wird auf diesem Rechner gebaut…",
+        "building-image": "Das Basis-Image der Sandbox wird auf diesem Rechner gebaut…",
+        "installing-tool": "Die Programme der Agenten werden auf diesem Rechner installiert…",
         ready: "Auf diesem Rechner eingerichtet.",
         failed: "Das Einrichten ist fehlgeschlagen.",
       },
     },
     buildingStep: {
-      "apple-container": (at: number, of: number) => `Das Image der Agenten wird auf diesem Mac gebaut: Schritt ${at} von ${of}…`,
-      podman: (at: number, of: number) => `Das Image der Agenten wird auf diesem Rechner gebaut: Schritt ${at} von ${of}…`,
+      "apple-container": (at: number, of: number) => `Das Basis-Image der Sandbox wird auf diesem Mac gebaut: Schritt ${at} von ${of}…`,
+      podman: (at: number, of: number) => `Das Basis-Image der Sandbox wird auf diesem Rechner gebaut: Schritt ${at} von ${of}…`,
     },
+    installingTool: (tool: string) => `${tool} wird für die Sandbox installiert…`,
     setupFailed: (problem: string) => `Das Einrichten ist fehlgeschlagen: ${problem}`,
     wholeEnvironmentIgnored: "Wird ignoriert, solange der Raum eine Sandbox hat: In seine Sandbox kommen nur die hier gewählten Werte.",
     meaning: [

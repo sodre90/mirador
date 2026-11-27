@@ -154,7 +154,7 @@ test("turned on, the sandbox is set up on this Mac with its progress shown, and 
   await expect(presets(dialog)).toHaveAccessibleDescription(PRESETS_ASIDE);
   await expect(dialog.getByText(PRESETS_ASIDE)).toBeVisible();
   const setup = dialog.locator(".room-sandbox-setup");
-  await expect(setup).toHaveText("Building the agents' image on this Mac: step 2 of 3…");
+  await expect(setup).toHaveText("Building the sandbox's base image on this Mac: step 2 of 3…");
   await expect(setup.getByRole("progressbar")).toHaveAttribute("value", "2");
   await keepScreenshot(dialog, "setup-progress");
   writeFileSync(buildHeldBy(), "");
@@ -162,7 +162,7 @@ test("turned on, the sandbox is set up on this Mac with its progress shown, and 
   const optionsStart = (await dialog.getByRole("radio", { name: "Agents work freely inside" }).boundingBox())!.x;
   for (const underTheSwitch of [network(dialog).getByText("Network", { exact: true }), setup]) expect(Math.abs((await textStart(underTheSwitch)) - optionsStart)).toBeLessThan(2);
   await keepScreenshot(dialog, "switch-on");
-  expect(containerStateNow()).toMatchObject({ builderRunning: false, images: [expect.stringMatching(/^mirador-room-agent:claude-2\.1\.330-bun-/)] });
+  expect(containerStateNow()).toMatchObject({ builderRunning: false, images: [expect.stringMatching(/^mirador-sandbox-base:[0-9a-f]{10}$/)] });
   await dialog.getByRole("button", { name: "Close" }).click();
 
   await test.step("the room's bar says it is sandboxed, and opens the sandbox's settings", async () => {
@@ -181,7 +181,8 @@ test("turned on, the sandbox is set up on this Mac with its progress shown, and 
   const run = calls.find(([command]) => command === "run")!;
   expect(run[run.indexOf("--network") + 1]).toBe("none");
   const execs = calls.filter(([command]) => command === "exec");
-  expect(execs.every((exec) => exec[exec.indexOf("--user") + 1] === "0:0" && exec.includes("--reuid=1000") && exec.includes("--no-new-privs"))).toBe(true);
+  const droppedToTheAgentUser = (exec: string[]) => exec.some((argument, at) => argument.endsWith("/mirador-guard") && exec[at + 1] === "as" && exec[at + 2] === "1000:1000");
+  expect(execs.every((exec) => exec[exec.indexOf("--user") + 1] === "0:0" && droppedToTheAgentUser(exec))).toBe(true);
   expect(JSON.stringify(calls)).not.toContain(KEY);
 });
 

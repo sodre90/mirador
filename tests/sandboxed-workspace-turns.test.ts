@@ -10,6 +10,7 @@ import { Hub } from "../host/hub.ts";
 import { HOOKS_OFF_AFTER_SANDBOX_MS, repositoryHooksOff } from "../host/sandbox/hooks-off.ts";
 import { NO_SANDBOX_CONTROL, type SandboxControl } from "../host/sandbox/sandbox-control.ts";
 import { belongsToSandbox, NO_SANDBOXES, sandboxConfigFolder, Sandboxes, type SandboxHost } from "../host/sandbox/sandboxes.ts";
+import { BUN_IN_VM } from "../host/sandbox/tools-folder.ts";
 import { OWNER_LABEL } from "../host/sandbox/vm-launcher.ts";
 import { Store } from "../host/store.ts";
 import { SystemNotifications } from "../host/system-notifications.ts";
@@ -290,10 +291,10 @@ test("a sandboxed workspace's pi conversation starts pi in the VM from its own i
 
   await conversations.send(conversation.id, "go");
 
-  expect(launcher.prepared).toContainEqual({ harness: "pi", version: "1.6.0" });
+  expect(launcher.installed()).toContain("@earendil-works/pi-coding-agent@1.6.0");
   const [agent] = launcher.agents.filter(({ environment }) => environment.MIRADOR_PI_MODELS !== undefined);
   expect(agent).toBeDefined();
-  expect(agent!.command.slice(0, 2)).toEqual(["/usr/local/bin/bun", join(dirname(Bun.resolveSync("pi-acp/package.json", import.meta.dir)), "dist", "index.js")]);
+  expect(agent!.command.slice(0, 2)).toEqual([BUN_IN_VM, join(dirname(Bun.resolveSync("pi-acp/package.json", import.meta.dir)), "dist", "index.js")]);
   const { environment } = agent!;
   expect(JSON.stringify(environment)).not.toContain(GATEWAY_KEY);
   expect(JSON.stringify(environment)).not.toContain(pi.agentFolder);
@@ -302,7 +303,7 @@ test("a sandboxed workspace's pi conversation starts pi in the VM from its own i
   expect(JSON.parse(environment.MIRADOR_PI_MODELS!)).toEqual({ providers: { gateway: { api: "openai-responses", models: [{ id: "gpt-6.1" }], baseUrl: "http://127.0.0.1:7702/p/pier", apiKey: "kept-by-mirador" } } });
   expect(JSON.parse(environment.MIRADOR_PI_SETTINGS!)).toEqual({ defaultProvider: "gateway", defaultModel: "gpt-6.1" });
   const [vm] = vmOf(launcher, workspaceSandbox("w1"));
-  expect(vm!.image).toBe("fake-image:pi-1.6.0");
+  expect(vm!.image).toBe("fake-base:1");
   expect(vm!.mounts.some(({ source }) => source.startsWith(pi.agentFolder))).toBe(false);
   const piFolder = sandboxConfigFolder(config.dataDir, workspaceSandbox("w1"), "pi");
   expect(vm!.mounts).toContainEqual({ source: piFolder, target: piFolder, readOnly: false });

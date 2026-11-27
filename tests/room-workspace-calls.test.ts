@@ -240,8 +240,8 @@ describe("a brought agent in a sandboxed room", () => {
     const { rooms, room, agentId, path, ownerTasks, call, answerTo, started, inWorkspace } = await sandboxedRoom(freely);
     const taskId = ownerTasks();
     expect(await answerTo(call(taskId, read))).toEqual({ done: true, text: "Lines 1 to 2 of 2:\none\n" });
-    expect(started.map(({ owner, agentId: agent, allowsSharedKernel, workingDirectory, profiles }) => ({ owner, agent, allowsSharedKernel, workingDirectory, profiles: profiles.map(({ id }) => id) }))).toEqual([
-      { owner: { kind: "room", id: room.id }, agent: agentId, allowsSharedKernel: false, workingDirectory: path, profiles: ["p1", "p0"] },
+    expect(started.map(({ owner, agentId: agent, allowsSharedKernel, workingDirectory }) => ({ owner, agent, allowsSharedKernel, workingDirectory }))).toEqual([
+      { owner: { kind: "room", id: room.id }, agent: agentId, allowsSharedKernel: false, workingDirectory: path },
     ]);
     rooms.keepsSandboxesWith(NO_SANDBOX_CONTROL);
     expect(await answerTo(call(taskId, run("touch ran")))).toEqual({ done: false, text: "The room's sandbox can't run now (unavailable)." });

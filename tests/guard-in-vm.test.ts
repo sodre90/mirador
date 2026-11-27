@@ -7,15 +7,16 @@ import { AppleContainer } from "../host/sandbox/apple-container.ts";
 import { ANTHROPIC_API } from "../host/sandbox/model-proxy.ts";
 import { Podman } from "../host/sandbox/podman.ts";
 import { Sandboxes, type SandboxHost } from "../host/sandbox/sandboxes.ts";
+import { agentProgramsInVm, GUARD_IN_VM } from "../host/sandbox/tools-folder.ts";
 
 /**
  * A sandbox's guard in a real VM, started as Mirador starts one: with Apple's `container` on a Mac, in a rootless Podman
- * container on Linux. Opted into, as it builds the agents' image on this computer first:
+ * container on Linux. Opted into, as it sets the sandbox up on this computer first, its base image and tools:
  * `MIRADOR_SANDBOX_VM_E2E=1 bun test tests/guard-in-vm.test.ts --timeout 60000`.
  */
 const optedIn = process.env.MIRADOR_SANDBOX_VM_E2E === "1";
 const CLAUDE_VERSION = "2.1.330";
-const WITH_THE_IMAGES_BUILD_MS = 30 * 60_000;
+const WITH_THE_SETUP_MS = 30 * 60_000;
 const RACE_S = 10;
 const SHOWN_WITHIN_MS = 5_000;
 
@@ -112,7 +113,7 @@ const script = (name: string) => readFileSync(join(import.meta.dir, "guard", nam
 /** How the processes of the VM run, as anyone there may read it. */
 const PROCESSES = `
 const read = (path) => { try { return fs.readFileSync(path, "utf8"); } catch { return ""; } };
-const told = (path) => Object.fromEntries(read(path).split("\\n").map((line) => line.split(/:\\s+/)).filter(([name]) => /^(Uid|Cap...|NoNewPrivs)$/.test(name)));
+const told = (path) => Object.fromEntries(read(path).split("\\n").map((line) => line.split(/:\\s+/)).filter(([name]) => /^(Uid|Gid|Groups|Cap...|NoNewPrivs)$/.test(name)));
 const pids = fs.readdirSync("/proc").filter((name) => /^\\d+$/.test(name));
 console.log(JSON.stringify(pids.map((pid) => ({ pid: Number(pid), name: read("/proc/" + pid + "/comm").trim(), command: read("/proc/" + pid + "/cmdline").replaceAll("\\0", " ").trim(), threads: fs.readdirSync("/proc/" + pid + "/task").map((thread) => told("/proc/" + pid + "/task/" + thread + "/status")) }))));
 `;
@@ -144,31 +145,39 @@ describe.skipIf(!optedIn)("a sandbox's guard, in a real VM", () => {
       expect(readFileSync(at("CLAUDE.md"), "utf8")).toBe("the owner's\n");
       expect(readdirSync(toldGuards)).toHaveLength(1);
     },
-    WITH_THE_IMAGES_BUILD_MS,
+    WITH_THE_SETUP_MS,
   );
 
   test("runs, as the relays and the agents do, with no capability and none to gain, and alone holds the device it serves the files through", async () => {
-    const launched = await sandbox.launch(["node", "-e", PROCESSES]);
-    const processes = JSON.parse((await ran(launched.command, launched.environment)).stdout) as ProcessInVm[];
-    const called = (name: string) => processes.filter((each) => each.name === name);
-    const threadsOf = (name: string) => called(name).flatMap(({ threads }) => threads);
-    const [guard, ...otherGuards] = called("mirador-guard");
-    expect(otherGuards).toEqual([]);
+    const launched = await sandbox.launch(["bun", "-e", PROCESSES]);
+    const listed = await ran(launched.command, launched.environment);
+    expect({ stderr: listed.stderr, exitCode: listed.exitCode }).toEqual({ stderr: "", exitCode: 0 });
+    const processes = JSON.parse(listed.stdout) as ProcessInVm[];
+    const [guard, ...otherGuards] = processes.filter(({ name }) => name === "mirador-guard");
+    const [relays, ...otherRelays] = processes.filter(({ name, command }) => name === "bun" && command.includes("/relays.mjs"));
+    const [agent, ...otherAgents] = processes.filter(({ name, command }) => name === "bun" && command.includes(" -e "));
+    expect([otherGuards, otherRelays, otherAgents]).toEqual([[], [], []]);
     expect(guard!.threads.length).toBeGreaterThan(1);
     expect(new Set(guard!.threads.map(({ Uid }) => Uid))).toEqual(new Set(["0\t0\t0\t1000"]));
-    expect(new Set(threadsOf("bun").map(({ Uid }) => Uid))).toEqual(new Set(["65534\t65534\t65534\t65534"]));
-    expect(new Set(threadsOf("node").map(({ Uid }) => Uid))).toEqual(new Set(["1000\t1000\t1000\t1000"]));
-    for (const { Uid, ...privileges } of [...guard!.threads, ...threadsOf("bun"), ...threadsOf("node")]) expect(privileges, Uid).toEqual(NO_CAPABILITY);
-    const others = processes.filter(({ name, pid }) => pid !== 1 && !["mirador-guard", "bun", "node"].includes(name));
+    for (const { Uid, Gid, Groups } of relays!.threads) expect({ Uid, Gid, Groups }).toEqual({ Uid: "65534\t65534\t65534\t65534", Gid: "65534\t65534\t65534\t65534", Groups: "" });
+    for (const { Uid, Gid, Groups } of agent!.threads) expect({ Uid, Gid, Groups }).toEqual({ Uid: "1000\t1000\t1000\t1000", Gid: "1000\t1000\t1000\t1000", Groups: "" });
+    for (const { Uid, Gid, Groups, ...privileges } of [...guard!.threads, ...relays!.threads, ...agent!.threads]) expect(privileges, Uid).toEqual(NO_CAPABILITY);
+    const others = processes.filter(({ pid }) => pid !== 1 && ![guard, relays, agent].some((known) => known!.pid === pid));
     expect(others).toEqual([]);
 
-    const asRelays = launched.command.map((arg) => arg.replace(/^--(reuid|regid)=1000$/, "--$1=65534"));
-    const openIn = async (command: string[], pid: string) => (await ran([...command.slice(0, command.indexOf("node")), "ls", "-l", `/proc/${pid}/fd`], launched.environment)).stdout;
-    const [relays] = called("bun");
-    const openInRelays = await openIn(asRelays, String(relays!.pid));
+    const asRelays = launched.command.with(launched.command.indexOf(GUARD_IN_VM) + 2, "65534:65534");
+    const openIn = async (command: string[], pid: number | "self") => (await ran([...command.slice(0, command.indexOf("bun")), "ls", "-l", `/proc/${pid}/fd`], launched.environment)).stdout;
+    const openInRelays = await openIn(asRelays, relays!.pid);
     expect(openInRelays).toContain("socket:");
     expect(openInRelays + (await openIn(launched.command, "self"))).not.toContain("/dev/fuse");
     launched.gone!();
+  });
+
+  test("gives an agent the values Mirador gives it, each name once, over the base image's own", async () => {
+    const { stdout } = await sandbox.asAgent(["cat", "/proc/self/environ"]);
+    const paths = stdout.split("\0").filter((entry) => entry.startsWith("PATH="));
+    expect(paths).toHaveLength(1);
+    expect(paths[0]).toStartWith(`PATH=${agentProgramsInVm({ harness: "claude", version: CLAUDE_VERSION })}:`);
   });
 
   test("shows what the owner changes within seconds, and gives them what agents make", async () => {

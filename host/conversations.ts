@@ -118,7 +118,7 @@ import { repositoryHooksOff } from "./sandbox/hooks-off.ts";
 import { belongsToSandbox, NO_SANDBOXES, sandboxCanvasAddress, sandboxConfigFolder, sandboxOfConversation, type AgentInSandbox, type ConversationSandbox, type SandboxedAgents, type SandboxStartStep } from "./sandbox/sandboxes.ts";
 import { SandboxNotReady } from "./sandbox/vm-launcher.ts";
 import { agentVersionIn } from "./sandbox/agent-version.ts";
-import { BUN_IN_VM } from "./sandbox/agent-environment.ts";
+import { BUN_IN_VM } from "./sandbox/tools-folder.ts";
 import { modelInSandbox } from "./sandbox/sandbox-control.ts";
 import { NO_SANDBOX, ownerKey, type SandboxOwner } from "../shared/sandbox.ts";
 import { awaitsItsInput, ToolCallReportsHeard, withReportedToolCall } from "./acp/reported-tool-call.ts";

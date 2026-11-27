@@ -86,7 +86,8 @@ export const chat: Messages["chat"] = {
     "preparing-sandbox": "Preparando el sandbox; la primera vez tarda unos minutos…",
     "starting-sandbox": "Iniciando el sandbox…",
   },
-  sandboxImageStep: (at, of) => `Preparando el sandbox: construyendo la imagen de los agentes, paso ${at} de ${of}…`,
+  sandboxImageStep: (at: number, of: number) => `Preparando el sandbox: construyendo su imagen base, paso ${at} de ${of}…`,
+  sandboxInstalling: (tool: string) => `Preparando el sandbox: instalando ${tool}…`,
   notice: {
     lines: (count) => plural(count, "1 línea", `${count} líneas`),
     error: "Error",

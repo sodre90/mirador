@@ -1,8 +1,9 @@
-import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { AGENT_USER } from "./agent-environment.ts";
 import type { ProtectedParts } from "./guarded-workspace.ts";
-import type { Mount } from "./vm-launcher.ts";
+import { GUARD_IN_VM } from "./tools-folder.ts";
+import type { Mount, VmPlan } from "./vm-launcher.ts";
 
 /** Where each folder agents write in is mounted in the VM, which its first process keeps them out of. */
 export const RAW_FOLDERS_IN_VM = "/mirador/raw";
@@ -11,9 +12,6 @@ export const RAW_FOLDERS_IN_VM = "/mirador/raw";
 export const MANIFEST_FOLDER_IN_VM = "/mirador/guard";
 
 const MANIFEST = "folders";
-
-/** Where the guard's source is, which the image's recipe compiles. */
-const SOURCE = join(import.meta.dir, "guard");
 
 /** A folder of this computer agents work in, shown to them at its own path through the guard, which keeps `parts` of it as they are. */
 export interface GuardedFolder {
@@ -44,11 +42,11 @@ export async function guardMounts(guarded: GuardedFolder[], manifestFolder: stri
   return [...raw, { source: manifestFolder, target: MANIFEST_FOLDER_IN_VM, readOnly: true }];
 }
 
-/** The VM's first process: the guard, which runs the command once the folders are guarded, and ends with it. */
-export const behindGuard = (command: string[]) => ["mirador-guard", `${MANIFEST_FOLDER_IN_VM}/${MANIFEST}`, AGENT_USER, "--", ...command];
-
-/** The guard's source files by name. */
-export async function guardSource(): Promise<Record<string, string>> {
-  const names = (await readdir(SOURCE)).filter((name) => /\.[ch]pp$/.test(name)).toSorted();
-  return Object.fromEntries(await Promise.all(names.map(async (name) => [name, await readFile(join(SOURCE, name), "utf8")] as const)));
-}
+/**
+ * The VM's first process: the guard, which opens the sockets in their folder to the agents, runs the command as nobody
+ * once the folders are guarded, and ends with it.
+ */
+export const behindGuard = (socketsFolder: string, command: string[]): Pick<VmPlan, "entrypoint" | "args"> => ({
+  entrypoint: GUARD_IN_VM,
+  args: [`${MANIFEST_FOLDER_IN_VM}/${MANIFEST}`, AGENT_USER, socketsFolder, "--", ...command],
+});

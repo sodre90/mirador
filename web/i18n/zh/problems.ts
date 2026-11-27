@@ -492,7 +492,6 @@ export const problems: Messages["problems"] = {
   sandboxNotReadyInTime: (seconds: number) => `它没有在 ${seconds} 秒内就绪。`,
   sandboxNoAgentVersion: (program: string) => `Mirador 无法确定要放入哪个版本的 ${program}。`,
   sandboxNotReadyFixed: {
-    "versions-differ": "它的 Agent 需要不同的镜像（另一种 Agent 或另一个版本），而一个沙箱一次只运行一个。等沙箱中的其他 Agent 闲置 10 分钟后，这个对话即可启动。",
     "shared-kernel-not-allowed": "在这台电脑上它会是一个与这台电脑共用内核的 Podman 容器，而它还没有被允许：请在开启它的沙箱的地方允许。",
   },
   workspaceSandboxNotReady: (why: string) => `这个工作区的沙箱还没有就绪，因此它的 Agent 没有启动。${why}`,

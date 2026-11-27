@@ -1,6 +1,8 @@
 import { isModelProviderVariable } from "../../shared/room-agent-setup.ts";
 import { MODEL_KEY_VARIABLES, type ModelKeyVariable } from "../../shared/sandbox.ts";
 import type { PiModelInVm } from "./pi-setup.ts";
+import { agentProgramsInVm, BUN_FOLDER_IN_VM, NODE_FOLDER_IN_VM, type AgentTools } from "./tools-folder.ts";
+import type { BaseImage } from "./vm-launcher.ts";
 
 /** What the agent's key variable holds in the VM: the model proxy on this computer puts the real key on each request. */
 export const KEY_PLACEHOLDER = "kept-by-mirador";
@@ -21,31 +23,58 @@ const THROUGH_THE_PROXY = {
   no_proxy: THE_VMS_OWN,
 } as const;
 
-/** Where the agent runs in the VM: the image's programs, the agent user's home, and its way out. */
-export const IN_VM = {
-  PATH: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
-  HOME: "/home/node",
-  SHELL: "/bin/bash",
-  USER: "node",
-  LOGNAME: "node",
+/** The agent user's home, in the VM's own /tmp: made by that user as its commands start, so no image need have it. */
+export const HOME_IN_VM = "/tmp/mirador-home";
+
+/** The shell the agents' commands run in. */
+export const SHELL_IN_VM = "/bin/bash";
+
+/**
+ * What the agent programs read as they did in the image they came in: no updates of their own, nor any traffic besides
+ * their model's, and pi only on what it was given.
+ */
+const AS_INSTALLED = { DISABLE_AUTOUPDATER: "1", CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1", PI_OFFLINE: "1" } as const;
+
+/**
+ * Where the agent runs in the VM: its kind's programs, Bun and Node.js from the tools folder before the base image's own,
+ * the agent user's home, and its way out.
+ */
+export const vmEnvironment = (base: BaseImage, agent: AgentTools | null): Record<string, string> => ({
+  PATH: [...(agent ? [agentProgramsInVm(agent)] : []), BUN_FOLDER_IN_VM, NODE_FOLDER_IN_VM, base.path ?? DEFAULT_PATH].join(":"),
+  HOME: HOME_IN_VM,
+  SHELL: SHELL_IN_VM,
+  USER: AGENT_NAME,
+  LOGNAME: AGENT_NAME,
   TMPDIR: "/tmp",
   ...THROUGH_THE_PROXY,
-} as const;
+});
 
-/** The Bun of the image, which runs Mirador's ACP adapters from this computer's packages, mounted read-only. */
-export const BUN_IN_VM = "/usr/local/bin/bun";
+const DEFAULT_PATH = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin";
 
-/** Where the image's agent programs are, installed from npm. */
-const CLAUDE_CODE_IN_VM = "/usr/local/bin/claude";
+/** The agent user's name, which no image need know. */
+const AGENT_NAME = "mirador";
+
+/** The names the VM sets for every agent, which nothing given to one replaces. */
+const SET_BY_THE_VM = [...Object.keys(vmEnvironment({ image: "", path: null }, null)), ...Object.keys(AS_INSTALLED)];
 
 /** Where Mirador's scripts are in the VM: host/sandbox/in-vm, mounted read-only. */
 export const SCRIPTS_IN_VM = "/mirador/sandbox";
 
-/** What pi-acp starts for pi in the VM: the image's pi, on the model setup Mirador gives it. */
+/** What pi-acp starts for pi in the VM: pi from the tools folder, on the model setup Mirador gives it. */
 export const PI_IN_VM = `${SCRIPTS_IN_VM}/pi.sh`;
 
-/** The agent user of the image, never root: root could lift what the VM is held to. */
+/** The agent user in the VM, never root: root could lift what the VM is held to. */
 export const AGENT_USER = "1000:1000";
+
+/**
+ * Git in the VM works in any folder whoever owns it, as the VM's files are the owner's or the guard's: said in the
+ * environment, which git trusts as it would its command line, after any config the agent was given there.
+ */
+export function withAnyFolderSafe(environment: Record<string, string>): Record<string, string> {
+  const given = Number.parseInt(environment.GIT_CONFIG_COUNT ?? "", 10);
+  const at = Number.isInteger(given) && given > 0 ? given : 0;
+  return { ...environment, GIT_CONFIG_COUNT: String(at + 1), [`GIT_CONFIG_KEY_${at}`]: "safe.directory", [`GIT_CONFIG_VALUE_${at}`]: "*" };
+}
 
 /**
  * The agent kind of an agent in the VM: Claude Code, with the variable its key goes in, or pi, with the model setup it
@@ -76,12 +105,14 @@ const keptFrom = (kind: SandboxedKind) => (kind.harness === "pi" ? keptFromPi(ki
 /** The models.json of the VM's pi: its default provider alone, reached through the model proxy, with a key that is none. */
 const piModelsIn = ({ providerId, provider }: PiModelInVm, modelBaseUrl: string) => ({ providers: { [providerId]: { ...provider, baseUrl: modelBaseUrl, apiKey: KEY_PLACEHOLDER } } });
 
-function ownValuesInVm(kind: SandboxedKind, { modelBaseUrl, configFolder }: AgentPlacesInVm): Record<string, string> {
-  if (kind.harness === "claude") return { CLAUDE_CONFIG_DIR: configFolder, ANTHROPIC_BASE_URL: modelBaseUrl, [kind.keyVariable]: KEY_PLACEHOLDER, CLAUDE_CODE_EXECUTABLE: CLAUDE_CODE_IN_VM, DISABLE_AUTOUPDATER: "1" };
+function ownValuesInVm(kind: SandboxedKind, version: string, { modelBaseUrl, configFolder }: AgentPlacesInVm): Record<string, string> {
+  if (kind.harness === "claude") {
+    const claudeCode = `${agentProgramsInVm({ harness: "claude", version })}/claude`;
+    return { CLAUDE_CONFIG_DIR: configFolder, ANTHROPIC_BASE_URL: modelBaseUrl, [kind.keyVariable]: KEY_PLACEHOLDER, CLAUDE_CODE_EXECUTABLE: claudeCode };
+  }
   return {
     PI_CODING_AGENT_DIR: configFolder,
     PI_ACP_PI_COMMAND: PI_IN_VM,
-    PI_OFFLINE: "1",
     MIRADOR_PI_MODELS: JSON.stringify(piModelsIn(kind.model, modelBaseUrl)),
     MIRADOR_PI_SETTINGS: JSON.stringify(kind.model.settings),
   };
@@ -92,14 +123,22 @@ const SECRET_LEAST_LENGTH = 8;
 
 export const holdsASecret = (secrets: string[]) => (text: string) => secrets.some((secret) => secret.length >= SECRET_LEAST_LENGTH && text.includes(secret));
 
+/** An agent in the VM: its kind, at the version its programs are, on the base image its VM runs. */
+export interface AgentInItsVm {
+  kind: SandboxedKind;
+  version: string;
+  base: BaseImage;
+}
+
 /**
  * The environment of an agent in the VM: what its room or workspace gives it, without its key or headers, which never
  * enter the VM, nor any value that holds one of them; with the VM's own places, its kind's folder, and the model proxy's
  * relay as its API.
  */
-export function environmentInVm(given: Record<string, string>, kind: SandboxedKind, places: AgentPlacesInVm, secrets: string[]): Record<string, string> {
+export function environmentInVm(given: Record<string, string>, { kind, version, base }: AgentInItsVm, places: AgentPlacesInVm, secrets: string[]): Record<string, string> {
   const kept = keptFrom(kind);
   const holdsOne = holdsASecret(secrets);
-  const passedOn = Object.entries(given).filter(([name, value]) => !KEPT_ON_THIS_COMPUTER.includes(name) && !loadsCode(name) && !Object.hasOwn(IN_VM, name) && !kept(name) && !holdsOne(value));
-  return { ...Object.fromEntries(passedOn), ...IN_VM, ...ownValuesInVm(kind, places) };
+  const passedOn = Object.entries(given).filter(([name, value]) => !KEPT_ON_THIS_COMPUTER.includes(name) && !loadsCode(name) && !SET_BY_THE_VM.includes(name) && !kept(name) && !holdsOne(value));
+  const inVm = vmEnvironment(base, { harness: kind.harness, version });
+  return withAnyFolderSafe({ ...Object.fromEntries(passedOn), ...inVm, ...AS_INSTALLED, ...ownValuesInVm(kind, version, places) });
 }

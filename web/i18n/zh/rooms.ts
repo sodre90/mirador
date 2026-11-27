@@ -230,24 +230,27 @@ export const rooms: Messages["rooms"] = {
     },
     setup: {
       "apple-container": {
-        "not-started": "首次使用时在这台 Mac 上设置：先是 Apple 的 container 服务，然后是 Agent 的镜像。",
+        "not-started": "首次使用时在这台 Mac 上设置：先是 Apple 的 container 服务，然后是沙箱的基础镜像，最后是 Agent 的程序。",
         "starting-service": "正在启动 Apple 的 container 服务；第一次会下载一个 Linux 内核…",
-        "building-image": "正在这台 Mac 上构建 Agent 的镜像…",
+        "building-image": "正在这台 Mac 上构建沙箱的基础镜像…",
+        "installing-tool": "正在这台 Mac 上安装 Agent 的程序…",
         ready: "已在这台 Mac 上设置好。",
         failed: "设置失败。",
       },
       podman: {
-        "not-started": "首次使用时在这台电脑上设置：由 Podman 构建 Agent 的镜像。",
+        "not-started": "首次使用时在这台电脑上设置：由 Podman 构建沙箱的基础镜像，然后安装 Agent 的程序。",
         "starting-service": "正在启动 Podman…",
-        "building-image": "正在这台电脑上构建 Agent 的镜像…",
+        "building-image": "正在这台电脑上构建沙箱的基础镜像…",
+        "installing-tool": "正在这台电脑上安装 Agent 的程序…",
         ready: "已在这台电脑上设置好。",
         failed: "设置失败。",
       },
     },
     buildingStep: {
-      "apple-container": (at: number, of: number) => `正在这台 Mac 上构建 Agent 的镜像：第 ${at} 步，共 ${of} 步…`,
-      podman: (at: number, of: number) => `正在这台电脑上构建 Agent 的镜像：第 ${at} 步，共 ${of} 步…`,
+      "apple-container": (at: number, of: number) => `正在这台 Mac 上构建沙箱的基础镜像：第 ${at} 步，共 ${of} 步…`,
+      podman: (at: number, of: number) => `正在这台电脑上构建沙箱的基础镜像：第 ${at} 步，共 ${of} 步…`,
     },
+    installingTool: (tool: string) => `正在为沙箱安装 ${tool}…`,
     setupFailed: (problem: string) => `设置失败：${problem}`,
     wholeEnvironmentIgnored: "房间开着沙箱时此项无效：只有这里选中的值会进入它的沙箱。",
     meaning: [

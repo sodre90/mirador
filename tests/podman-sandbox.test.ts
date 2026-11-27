@@ -4,11 +4,12 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { roomSandbox, type SandboxAvailability, type SandboxNotReadyWhy, type SandboxSetup } from "../shared/sandbox.ts";
 import { KEY_PLACEHOLDER } from "../host/sandbox/agent-environment.ts";
-import { IMAGE_NAME } from "../host/sandbox/image.ts";
+import { BASE_IMAGE_NAME } from "../host/sandbox/image.ts";
 import { ANTHROPIC_API } from "../host/sandbox/model-proxy.ts";
 import { computersOwnOnLinux, containersLabelled, imageNamesIn, othersContainersIn, Podman, writableSourcesIn } from "../host/sandbox/podman.ts";
 import { Sandboxes, type AgentInSandbox, type SandboxHost } from "../host/sandbox/sandboxes.ts";
-import { FakePodmanCli, NODE_IMAGE } from "./fake-podman-cli.ts";
+import { BUN_IN_VM, GUARD_IN_VM, toolsFolderOf } from "../host/sandbox/tools-folder.ts";
+import { DEBIAN_IMAGE, FakePodmanCli } from "./fake-podman-cli.ts";
 import { guardedIn, mountsOfRun } from "./guard-told.ts";
 import { RUNS_SANDBOXES } from "./sandbox-computer.ts";
 
@@ -91,7 +92,21 @@ describe("a room's sandbox on rootless Podman", () => {
     const mounts = mountsOfRun(run!);
     expect(mounts.filter(({ source }) => source === workspace || source.startsWith(`${workspace}/`))).toEqual([{ source: workspace, target: "/mirador/raw/0", readOnly: false }]);
     expect(guardedIn(mounts)).toEqual([{ folder: workspace, parts: { files: [], folders: [], onTheWay: [], gitFolders: [".git"] } }]);
-    expect(run!.slice(-9)).toEqual(["mirador-guard", "/mirador/guard/folders", "1000:1000", "--", "sh", "/mirador/sandbox/room-vm.sh", "7701=/run/mirador/canvas.sock", "7702=/run/mirador/model.sock", "7703=/run/mirador/network.sock"]);
+    expect(mounts).toContainEqual({ source: toolsFolderOf(host.dataDir), target: "/opt/mirador", readOnly: true });
+    expect(run!.slice(run!.indexOf("--entrypoint"))).toEqual([
+      "--entrypoint",
+      JSON.stringify([GUARD_IN_VM]),
+      expect.stringMatching(new RegExp(`^${BASE_IMAGE_NAME}:[0-9a-f]{10}$`)),
+      "/mirador/guard/folders",
+      "1000:1000",
+      "/run/mirador",
+      "--",
+      BUN_IN_VM,
+      "/mirador/sandbox/relays.mjs",
+      "7701=/run/mirador/canvas.sock",
+      "7702=/run/mirador/model.sock",
+      "7703=/run/mirador/network.sock",
+    ]);
     const sockets = ["canvas", "model", "network"].map((name) => mountedAt(run!, `/run/mirador/${name}.sock`));
     expect(sockets.map(modeOf)).toEqual([0o600, 0o600, 0o600]);
     expect(modeOf(dirname(sockets[0]!))).toBe(0o700);
@@ -100,19 +115,20 @@ describe("a room's sandbox on rootless Podman", () => {
     const [program, ...exec] = launched.command;
     expect(program).toBe(cli.program);
     expect(exec.slice(0, 6)).toEqual(["exec", "-i", "--user", "0:0", "-w", workspace]);
-    expect(exec).toEqual(expect.arrayContaining(["/usr/bin/setpriv", "--reuid=1000", "--regid=1000", "--clear-groups", "--inh-caps=-all", "--bounding-set=-all", "--no-new-privs"]));
-    expect(exec.slice(-2)).toEqual(agentIn(workspace).agent);
-    expect(exec).toContain("HOME=/home/node");
+    expect(exec.slice(-6)).toEqual([GUARD_IN_VM, "as", "1000:1000", "--", ...agentIn(workspace).agent]);
+    expect(exec).toContain("HOME=/tmp/mirador-home");
     expect(exec).toContain("XDG_RUNTIME_DIR=/run/user/given");
     expect(exec).toContain("DEPLOY_TARGET");
     expect(exec.join(" ")).not.toContain("staging");
     expect(launched.environment).toMatchObject({ ANTHROPIC_API_KEY: KEY_PLACEHOLDER, DEPLOY_TARGET: "staging", HOME: process.env.HOME });
     expect(JSON.stringify([cli.calls, launched.command, launched.environment])).not.toContain(KEY);
 
-    expect(setups.map(({ stage }) => stage)).toEqual(["building-image", ...Array.from({ length: 8 }, () => "building-image" as const), "ready"]);
+    expect(setups.map(({ stage }) => stage)).toEqual(["building-image", ...Array.from({ length: 8 }, () => "building-image" as const), "installing-tool", "installing-tool", "installing-tool", "installing-tool", "ready"]);
     expect(setups.flatMap(({ step }) => (step ? [`${step.at}/${step.of}`] : []))).toEqual(["1/8", "2/8", "3/8", "4/8", "5/8", "6/8", "7/8", "8/8"]);
     expect(cli.callsOf("build")[0]).toContain("--layers=false");
     expect(cli.callsOf("build")[0]).not.toContain("--platform");
+    for (const install of cli.ranOnce) expect(install).toEqual(expect.arrayContaining(["--rm", "--user", "0:0", "--security-opt", "label=disable"]));
+    expect(cli.ranOnce.map((install) => install[install.indexOf("--entrypoint") + 2])).toEqual(["docker.io/library/alpine:3.22", "docker.io/library/node:22-bookworm-slim", "docker.io/library/node:22-bookworm-slim", "docker.io/library/node:22-bookworm-slim"]);
 
     launched.gone!();
     await Bun.sleep(IDLE_STOP_MS * 4);
@@ -157,10 +173,10 @@ describe("a room's sandbox on rootless Podman", () => {
     await sandboxes.stopAll();
   });
 
-  test("builds the image once, removes the image it builds on where the build pulled it and the earlier versions, and leaves every other image", async () => {
+  test("builds the base image once, removes the image it builds on where the build pulled it and the bases of other recipes, and leaves every other image", async () => {
     const workspace = repository();
     const cli = new FakePodmanCli();
-    cli.images.add(`localhost/${IMAGE_NAME}:claude-2.1.329-bun-1.4.3-0123456789`);
+    cli.images.add(`localhost/${BASE_IMAGE_NAME}:0123456789`);
     const sandboxes = new Sandboxes(new Podman(cli, PLAIN), hostFor(workspace).host, IDLE_STOP_MS);
 
     (await sandboxes.launch(agentIn(workspace))).gone!();
@@ -168,10 +184,10 @@ describe("a room's sandbox on rootless Podman", () => {
     (await sandboxes.launch(agentIn(workspace))).gone!();
 
     expect(cli.callsOf("build")).toHaveLength(1);
-    expect([...cli.images].filter((name) => !name.includes(`${IMAGE_NAME}:claude-2.1.330-`))).toEqual(["docker.io/library/postgres:16"]);
+    expect([...cli.images].filter((name) => !name.startsWith(`localhost/${BASE_IMAGE_NAME}:`))).toEqual(["docker.io/library/postgres:16"]);
     expect(cli.callsOf("image").filter(([, sub]) => sub === "rm")).toEqual([
-      ["image", "rm", NODE_IMAGE],
-      ["image", "rm", `localhost/${IMAGE_NAME}:claude-2.1.329-bun-1.4.3-0123456789`],
+      ["image", "rm", DEBIAN_IMAGE],
+      ["image", "rm", `localhost/${BASE_IMAGE_NAME}:0123456789`],
     ]);
     await sandboxes.stopAll();
   });
@@ -179,12 +195,12 @@ describe("a room's sandbox on rootless Podman", () => {
   test("keeps the image it builds on where it was there before", async () => {
     const workspace = repository();
     const cli = new FakePodmanCli();
-    cli.images.add(NODE_IMAGE);
+    cli.images.add(DEBIAN_IMAGE);
     const sandboxes = new Sandboxes(new Podman(cli, PLAIN), hostFor(workspace).host, IDLE_STOP_MS);
 
     (await sandboxes.launch(agentIn(workspace))).gone!();
 
-    expect(cli.images.has(NODE_IMAGE)).toBe(true);
+    expect(cli.images.has(DEBIAN_IMAGE)).toBe(true);
     await sandboxes.stopAll();
   });
 
@@ -230,13 +246,13 @@ describe("a room's sandbox on rootless Podman", () => {
     cli.containers.set("mirador-vm", {});
     const ran = await new Podman(cli, PLAIN).runAsAgent("mirador-vm", "1000:1000", [process.execPath, "-e", "process.stdin.pipe(process.stdout)"], "held", 5_000);
     expect(ran).toEqual({ exitCode: 0, stdout: "held" });
-    expect(cli.callsOf("exec")[0]!.slice(0, 7)).toEqual(["exec", "-i", "--user", "0:0", "mirador-vm", "/usr/bin/setpriv", "--reuid=1000"]);
+    expect(cli.callsOf("exec")[0]!.slice(0, 9)).toEqual(["exec", "-i", "--user", "0:0", "mirador-vm", GUARD_IN_VM, "as", "1000:1000", "--"]);
   });
 
   test("runs nothing where Podman can't run sandboxes, and tells why", async () => {
     const cli = new FakePodmanCli();
     const podman = new Podman(cli, { available: false, why: "podman-not-rootless" });
-    await expect(podman.prepare({ harness: "claude", version: "2.1.330" }, () => {})).rejects.toMatchObject(notReady({ kind: "unavailable", why: "podman-not-rootless" }));
+    await expect(podman.prepare()).rejects.toMatchObject(notReady({ kind: "unavailable", why: "podman-not-rootless" }));
     await podman.removeLeftovers("abc");
     expect(cli.calls).toEqual([]);
     expect(Podman.here("off", "/usr/bin").availability()).toEqual({ available: false, why: "turned-off" });
@@ -286,55 +302,4 @@ test("Podman's lists are read for what the sandboxes need of them, and nothing e
   expect(writableSourcesIn(inspected)).toEqual(["/home/me/project"]);
   expect(writableSourcesIn("[]")).toEqual([]);
   expect(writableSourcesIn("")).toBeNull();
-});
-
-test.skipIf(!runsShellScripts)("a room's VM lets the agents' user reach Mirador's sockets, then runs the relays as nobody, with no capability nor any to gain", () => {
-  const bin = join(scratch, `bin-${crypto.randomUUID()}`);
-  mkdirSync(bin);
-  for (const program of ["chmod", "setpriv"]) writeFileSync(join(bin, program), `#!/bin/sh\necho "${program} $*"\n`, { mode: 0o755 });
-  const ran = Bun.spawnSync(["sh", join(import.meta.dir, "../host/sandbox/in-vm/room-vm.sh"), "7701=/run/mirador/canvas.sock"], { env: { PATH: `${bin}:/usr/bin:/bin` } });
-  expect(ran.stdout.toString().trim().split("\n")).toEqual([
-    "chmod 666 /run/mirador/*.sock",
-    "setpriv --reuid=65534 --regid=65534 --clear-groups --inh-caps=-all --bounding-set=-all --no-new-privs -- bun /mirador/sandbox/relays.mjs 7701=/run/mirador/canvas.sock",
-  ]);
-  expect(ran.exitCode).toBe(0);
-});
-
-describe("two Miradors on one computer, on rootless Podman", () => {
-  test("a container doesn't start where another Mirador's writes, and does once that one has stopped", async () => {
-    const cli = new FakePodmanCli();
-    const workspace = repository();
-    const first = new Sandboxes(new Podman(cli, PLAIN), hostFor(workspace).host, IDLE_STOP_MS);
-    const second = new Sandboxes(new Podman(cli, PLAIN), hostFor(workspace).host, IDLE_STOP_MS);
-    await first.launch(agentIn(workspace));
-    expect(cli.callsOf("inspect")).toEqual([]);
-
-    await expect(second.launch(agentIn(workspace))).rejects.toMatchObject(notReady({ kind: "blocked", blocker: { kind: "workspace-overlaps-other-mirador", folder: workspace } }));
-    expect(cli.callsOf("run")).toHaveLength(1);
-
-    await first.stopAll();
-    await second.launch(agentIn(workspace));
-    expect(cli.callsOf("run")).toHaveLength(2);
-    await second.stopAll();
-  });
-
-  test("a container doesn't start where Podman can't list the others or look at them, and does once it can, with another's that mounts nothing", async () => {
-    const cli = new FakePodmanCli();
-    const workspace = repository();
-    const sandboxes = new Sandboxes(new Podman(cli, PLAIN), hostFor(workspace).host, IDLE_STOP_MS);
-    cli.failing = ([command]) => (command === "ps" ? "Error: database is locked" : null);
-    await expect(sandboxes.launch(agentIn(workspace))).rejects.toMatchObject(notReady({ kind: "could-not-start" }));
-    expect(cli.callsOf("run")).toEqual([]);
-
-    cli.failing = () => null;
-    cli.containers.set("mirador-of-another-host", { "mirador.host": "another-host" });
-    cli.failing = ([command]) => (command === "inspect" ? "Error: database is locked" : null);
-    await expect(sandboxes.launch(agentIn(workspace))).rejects.toMatchObject(notReady({ kind: "could-not-start" }));
-    expect(cli.callsOf("run")).toEqual([]);
-
-    cli.failing = () => null;
-    await sandboxes.launch(agentIn(workspace));
-    expect(cli.callsOf("run")).toHaveLength(1);
-    await sandboxes.stopAll();
-  });
 });

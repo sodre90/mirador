@@ -2,10 +2,9 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { gunzipSync } from "node:zlib";
-import { behindGuard, guardMounts, guardSource, manifestOf, type GuardedFolder } from "../host/sandbox/guard.ts";
+import { behindGuard, guardMounts, manifestOf, type GuardedFolder } from "../host/sandbox/guard.ts";
 import type { ProtectedParts } from "../host/sandbox/guarded-workspace.ts";
-import { buildArguments } from "../host/sandbox/image.ts";
+import { GUARD_IN_VM, guardSource } from "../host/sandbox/tools-folder.ts";
 import { RUNS_SANDBOXES } from "./sandbox-computer.ts";
 
 const scratch = mkdtempSync(join(tmpdir(), "guard-"));
@@ -26,16 +25,16 @@ test("the guard is told of each folder where it is mounted, where agents see it 
   ]);
   const told = readFileSync(join(folder, "folders"), "utf8");
   expect(told).toBe(["R/mirador/raw/0", "T/home/me/app", "FCLAUDE.md", "D.claude", "Wconfig", "G.git", "R/mirador/raw/1", "T/home/me/lib", "G.git", "G.git/modules/sub", ""].join("\0"));
-  expect(behindGuard(["sh", "script.sh"])).toEqual(["mirador-guard", "/mirador/guard/folders", "1000:1000", "--", "sh", "script.sh"]);
+  expect(behindGuard("/run/mirador", ["/opt/mirador/bun-1.4.4/bin/bun", "relays.mjs"])).toEqual({
+    entrypoint: GUARD_IN_VM,
+    args: ["/mirador/guard/folders", "1000:1000", "/run/mirador", "--", "/opt/mirador/bun-1.4.4/bin/bun", "relays.mjs"],
+  });
   if (RUNS_SANDBOXES) expect([statSync(folder).mode & 0o777, statSync(join(folder, "folders")).mode & 0o777]).toEqual([0o700, 0o600]);
 });
 
-test("the image is built with the guard's source, which the recipe unpacks file by file", async () => {
-  const given = (await buildArguments({ harness: "claude", version: "2.1.330" })).find((argument) => argument.startsWith("GUARD_SOURCE="))!;
-  const source = gunzipSync(Buffer.from(given.slice("GUARD_SOURCE=".length), "base64")).toString();
-  expect(JSON.parse(source)).toEqual(await guardSource());
-  expect(Object.keys(await guardSource())).toEqual(["guard.cpp", "manifest.hpp", "rules.hpp"]);
-  expect(given.length).toBeLessThan(100_000);
+test("the guard runs from a folder of the tools named by its source and how it is built, so a change to either is a guard of its own", () => {
+  expect(Object.keys(guardSource())).toEqual(["build.sh", "guard.cpp", "manifest.hpp", "rules.hpp"]);
+  expect(GUARD_IN_VM).toMatch(/^\/opt\/mirador\/guard-[0-9a-f]{10}\/mirador-guard$/);
 });
 
 const CXX = process.platform === "win32" ? null : Bun.which("c++");

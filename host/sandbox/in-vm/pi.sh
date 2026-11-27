@@ -12,4 +12,4 @@ given() {
 given models.json "$MIRADOR_PI_MODELS"
 given settings.json "$MIRADOR_PI_SETTINGS"
 unset MIRADOR_PI_MODELS MIRADOR_PI_SETTINGS
-exec /usr/local/bin/pi "$@"
+exec pi "$@"

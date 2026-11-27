@@ -519,7 +519,6 @@ export const problems = {
   sandboxNotReadyInTime: (seconds: number) => `It did not get ready within ${seconds} s.`,
   sandboxNoAgentVersion: (program: string) => `Mirador could not tell which version of ${program} to put in it.`,
   sandboxNotReadyFixed: {
-    "versions-differ": "Its agents need different images, of another kind of agent or another version, and a sandbox runs one at a time. This conversation can start once the sandbox's other agents have sat idle for 10 minutes.",
     "shared-kernel-not-allowed": "On this computer it would be a Podman container sharing this computer's kernel, which isn't allowed for it: allow it where its sandbox is turned on.",
   },
   workspaceSandboxNotReady: (why: string) => `This workspace's sandbox is not ready, so its agent did not start. ${why}`,

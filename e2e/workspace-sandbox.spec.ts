@@ -16,6 +16,7 @@ const host = new TestHost({ fakePrograms: true, environment: () => ({ ANTHROPIC_
 const fakeContainer = () => bunProgramPath(join(host.root, "fake-container"), "container");
 const containerState = () => join(host.root, "fake-container-state");
 const buildHeldBy = () => join(host.root, "build-may-go-on");
+const installHeldBy = () => join(host.root, "install-may-go-on");
 const worktree = () => join(host.root, "worktree");
 const promptsFile = () => join(host.root, "prompts");
 const promptsSoFar = () => (existsSync(promptsFile()) ? readFileSync(promptsFile(), "utf8") : "");
@@ -29,6 +30,7 @@ function writeFakeContainer() {
   writeBunProgram(dirname(fakeContainer()), "container", join(import.meta.dirname, "fake-container.ts"), {
     FAKE_CONTAINER_STATE: containerState(),
     FAKE_CONTAINER_BUILD_HELD_BY: buildHeldBy(),
+    FAKE_CONTAINER_INSTALL_HELD_BY: installHeldBy(),
     FAKE_ACP_PROMPTS: promptsFile(),
   });
   const claude = join(host.fakeProgramsDir, "claude");
@@ -102,11 +104,14 @@ const openConversation = (page: Page, conversationId: string) => page.locator(`l
 
 let builderConversation = "";
 
-/** Each call the fake `container` got, by its arguments. */
-const containerCalls = (): string[][] => {
-  const log = join(containerState(), "calls.log");
+const loggedCalls = (name: string): string[][] => {
+  const log = join(containerState(), name);
   return existsSync(log) ? readFileSync(log, "utf8").trim().split("\n").map((line) => JSON.parse(line)) : [];
 };
+/** Each call the fake `container` got, by its arguments, but the tools' installs. */
+const containerCalls = () => loggedCalls("calls.log");
+/** Each throwaway run that installed a tool of the sandbox's. */
+const toolInstalls = () => loggedCalls("installs.log");
 
 test("the workspace's sandbox switch stays off, with the reason under it, where the workspace can't have one", async ({ page }) => {
   await signIn(page, host);
@@ -205,7 +210,7 @@ test("turned on, the workspace's sandbox is set up with its progress shown, in a
   await expect(dialog.getByRole("radio", { name: "Agents work freely inside" })).toBeChecked();
   await expect(dialog.getByRole("radio", { name: "Their profile's permission mode still applies" })).not.toBeChecked();
   const setup = dialog.locator(".room-sandbox-setup");
-  await expect(setup).toHaveText("Building the agents' image on this Mac: step 2 of 3…");
+  await expect(setup).toHaveText("Building the sandbox's base image on this Mac: step 2 of 3…");
   await keepScreenshot(dialog, "setup-progress");
   await expect(networkChoice(dialog, "Only the model and Mirador")).toBeChecked();
   await dialog.getByRole("button", { name: "Done" }).click();
@@ -220,11 +225,17 @@ test("turned on, the workspace's sandbox is set up with its progress shown, in a
   const headerMark = chatHeader(page).locator(".conversation-sandboxed");
   await expect(headerMark).toHaveText("Sandboxed");
 
-  await test.step("while the image builds, the conversation says how far it got, until its agent has started", async () => {
+  await test.step("while the sandbox is set up, the conversation says how far it got, until its agent has started", async () => {
     const waitingFor = chatHeader(page).locator(".status-detail");
-    await expect(waitingFor).toHaveText("Setting up the sandbox: building the agents' image, step 2 of 3…");
+    await expect(waitingFor).toHaveText("Setting up the sandbox: building its base image, step 2 of 3…");
     await keepScreenshot(chatHeader(page), "header-setting-up");
     writeFileSync(buildHeldBy(), "");
+    await expect(waitingFor).toHaveText("Setting up the sandbox: installing Claude Code 2.1.330…");
+    const installing = await openSandboxOf(page, card, "project");
+    await expect(installing.locator(".room-sandbox-setup")).toHaveText("Installing Claude Code 2.1.330 for the sandbox…");
+    await installing.getByRole("button", { name: "Done" }).click();
+    await expect(installing).toBeHidden();
+    writeFileSync(installHeldBy(), "");
     await expect(waitingFor).toHaveCount(0);
     await keepScreenshot(chatHeader(page), "header-mark");
     const settings = await openSandboxOf(page, card, "project");
@@ -591,7 +602,7 @@ async function askedThroughModelSocket(socketPath: string, path: string, headers
   });
 }
 
-test("a pi profile's agent runs in the sandbox on a pi image, reaching its model through Mirador, which adds its key and headers; one on a model pi knows by itself is refused saying why", async ({ page }) => {
+test("a pi profile's agent runs in the sandbox on the pi of this computer, reaching its model through Mirador, which adds its key and headers; one on a model pi knows by itself is refused saying why", async ({ page }) => {
   test.skip(!sandboxesRunHere, "Sandboxes run on macOS 26 on Apple silicon only.");
   const provider = await modelProviderHere();
   try {
@@ -664,15 +675,14 @@ test("a pi profile's agent runs in the sandbox on a pi image, reaching its model
     const calls = containerCalls();
     const run = calls.findLast(([command, ...rest]) => command === "run" && rest.some((argument) => argument.startsWith("mirador.owner=workspace:")) && JSON.stringify(rest).includes(realpathSync(piWorkspace())))!;
 
-    await test.step("the sandbox runs a pi image of the pi on this computer, with Mirador's scripts read-only and nothing of the profile's own pi folder", () => {
-      const builds = calls.filter(([command]) => command === "build");
-      const piBuild = builds.find((build) => build.includes("AGENT_PACKAGE=@earendil-works/pi-coding-agent@1.6.0"));
-      const tag = piBuild?.[piBuild.indexOf("-t") + 1];
-      expect(tag).toMatch(/^mirador-room-agent:pi-1\.6\.0-bun-/);
-      expect(run).toContain(tag);
+    await test.step("the sandbox runs the pi on this computer, installed in Mirador's tools folder on the base image, with that folder and Mirador's scripts read-only and nothing of the profile's own pi folder", () => {
+      expect(toolInstalls().some((install) => install.some((argument) => argument.includes("@earendil-works/pi-coding-agent@1.6.0")))).toBe(true);
+      expect(run).toContainEqual(expect.stringMatching(/^mirador-sandbox-base:[0-9a-f]{10}$/));
+      expect(run.some((argument) => argument.endsWith(":/opt/mirador:ro"))).toBe(true);
       expect(run.some((argument) => argument.endsWith(":/mirador/sandbox:ro"))).toBe(true);
+      expect(calls.some(([command, ...rest]) => command === "exec" && rest.some((argument) => argument.startsWith("PATH=/opt/mirador/pi-1.6.0/bin:")))).toBe(true);
       expect(JSON.stringify(calls)).not.toContain(piAgent);
-      expect(JSON.stringify(calls)).not.toContain(PI_KEY);
+      expect(JSON.stringify([calls, toolInstalls()])).not.toContain(PI_KEY);
       expect(JSON.stringify(calls)).not.toContain(PI_TEAM);
     });
 

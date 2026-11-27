@@ -84,7 +84,8 @@ export const chat: Messages["chat"] = {
     "preparing-sandbox": "正在准备沙箱；第一次需要几分钟…",
     "starting-sandbox": "正在启动沙箱…",
   },
-  sandboxImageStep: (at, of) => `正在准备沙箱：构建 Agent 的镜像，第 ${at} 步，共 ${of} 步…`,
+  sandboxImageStep: (at: number, of: number) => `正在准备沙箱：构建它的基础镜像，第 ${at} 步，共 ${of} 步…`,
+  sandboxInstalling: (tool: string) => `正在准备沙箱：安装 ${tool}…`,
   notice: {
     lines: (count) => `${count} 行`,
     error: "错误",

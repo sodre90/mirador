@@ -90,7 +90,8 @@ export const chat = {
     "preparing-sandbox": "Setting up the sandbox; the first time, this takes a few minutes…",
     "starting-sandbox": "Starting the sandbox…",
   } satisfies Record<BusyWith, string>,
-  sandboxImageStep: (at: number, of: number) => `Setting up the sandbox: building the agents' image, step ${at} of ${of}…`,
+  sandboxImageStep: (at: number, of: number) => `Setting up the sandbox: building its base image, step ${at} of ${of}…`,
+  sandboxInstalling: (tool: string) => `Setting up the sandbox: installing ${tool}…`,
   notice: {
     lines: (count: number) => `${count} lines`,
     error: "Error",

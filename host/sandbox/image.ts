@@ -2,48 +2,28 @@ import { createHash } from "node:crypto";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
-import { gzipSync } from "node:zlib";
-import type { SandboxedHarness, SandboxSetup } from "../../shared/sandbox.ts";
+import type { SandboxSetup } from "../../shared/sandbox.ts";
 import { lastLineOf, type ContainerCli } from "./container-cli.ts";
-import { guardSource } from "./guard.ts";
 
-export const RECIPE = join(import.meta.dir, "room-agent.Containerfile");
+export const BASE_RECIPE = join(import.meta.dir, "base.Containerfile");
 
-export const IMAGE_NAME = "mirador-room-agent";
+export const BASE_IMAGE_NAME = "mirador-sandbox-base";
+
+/** The PATH of Debian's images, which Mirador's base keeps. */
+export const DEFAULT_BASE_PATH = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin";
 
 /** The kernel download on the service's first start takes about a minute; the image build a few. */
 const SERVICE_START_TIMEOUT_MS = 10 * 60_000;
-const BUILD_TIMEOUT_MS = 30 * 60_000;
+export const BUILD_TIMEOUT_MS = 30 * 60_000;
 
-/** The agent an image is of: its kind and its version. */
-export interface AgentImage {
-  harness: SandboxedHarness;
-  version: string;
+/** Mirador's base image, by its recipe: another recipe is another image. */
+export async function defaultBaseTag() {
+  const hash = createHash("sha256").update(await readFile(BASE_RECIPE, "utf8")).digest("hex").slice(0, 10);
+  return `${BASE_IMAGE_NAME}:${hash}`;
 }
 
-/** Each kind's npm package, and the program it installs, which says its version once installed. */
-const AGENT_PACKAGES: Record<SandboxedHarness, { npmPackage: string; program: string }> = {
-  claude: { npmPackage: "@anthropic-ai/claude-code", program: "claude" },
-  pi: { npmPackage: "@earendil-works/pi-coding-agent", program: "pi" },
-};
-
-/** The images of an agent kind, whatever their version, as their tags begin. */
-export const imagesOfKind = (harness: SandboxedHarness) => `${IMAGE_NAME}:${harness}-`;
-
-/** The image of one agent kind and version, Bun version, recipe and guard: another of any of them is another image. */
-export async function imageTag({ harness, version }: AgentImage, bunVersion = Bun.version) {
-  const madeOf = [await readFile(RECIPE, "utf8"), JSON.stringify(await guardSource())];
-  const hash = createHash("sha256").update(madeOf.join("\0")).digest("hex").slice(0, 10);
-  return `${imagesOfKind(harness)}${version}-bun-${bunVersion}-${hash}`;
-}
-
-/** What the recipe builds the image of this agent with, the guard's source as the recipe unpacks it. */
-export async function buildArguments({ harness, version }: AgentImage) {
-  const { npmPackage, program } = AGENT_PACKAGES[harness];
-  const source = gzipSync(JSON.stringify(await guardSource())).toString("base64");
-  const given = [`BUN_VERSION=${Bun.version}`, `AGENT_PACKAGE=${npmPackage}@${version}`, `AGENT_PROGRAM=${program}`, `GUARD_SOURCE=${source}`];
-  return given.flatMap((argument) => ["--build-arg", argument]);
-}
+/** Whether an image of this name, as a runtime lists it, `localhost/…` on Podman, is a base Mirador built, of any recipe. */
+export const isMiradorsBase = (name: string) => name.split("/").at(-1)!.startsWith(`${BASE_IMAGE_NAME}:`);
 
 /** The step a build is on, as `container build --progress plain` says it, `#7 [stage 3/6] RUN …`, or `podman build`, `[1/2] STEP 3/6: RUN …`. */
 export function buildStepIn(line: string): SandboxSetup["step"] | null {
@@ -64,7 +44,7 @@ export function imageReferencesIn(listed: string): Set<string> {
   }
 }
 
-const listImages = async (cli: ContainerCli) => imageReferencesIn((await cli.run(["image", "list", "--format", "json"])).output);
+export const listImages = async (cli: ContainerCli) => imageReferencesIn((await cli.run(["image", "list", "--format", "json"])).output);
 
 export class SetupFailed extends Error {}
 
@@ -94,37 +74,38 @@ export async function builderRuns(cli: ContainerCli) {
   }
 }
 
+/** Each line of a build that says its step, told as progress. */
+export const buildProgress = (progress: (setup: SandboxSetup) => void) => (line: string) => {
+  const step = buildStepIn(line);
+  if (step) progress({ stage: "building-image", step });
+};
+
 /**
- * Builds the image on this Mac from the recipe, with an empty folder as the build's context, then removes the builder
- * it started, the images the build pulled for its stages, and the images of the agent's other versions built before.
- * A builder that ran before is left as it was, and so is every image that was there before, other agent kinds' too.
- * The builder's own image stays: `container` keeps it out of its image list, as its own.
+ * Builds Mirador's base image on this Mac from its recipe, with an empty folder as the build's context, then removes the
+ * builder it started, the images the build pulled, and the bases of other recipes built before. A builder that ran
+ * before is left as it was, and so is every other image that was there before. The builder's own image stays:
+ * `container` keeps it out of its image list, as its own.
  */
-export async function buildImage(cli: ContainerCli, tag: string, agent: AgentImage, progress: (setup: SandboxSetup) => void) {
+export async function buildImage(cli: ContainerCli, tag: string, progress: (setup: SandboxSetup) => void) {
   progress({ stage: "building-image" });
   const builderRanBefore = await builderRuns(cli);
   const imagesBefore = await listImages(cli);
   const emptyContext = await mkdtemp(join(tmpdir(), "mirador-image-"));
   try {
     if (!builderRanBefore) await mustRun(cli, ["builder", "start"], { timeoutMs: SERVICE_START_TIMEOUT_MS });
-    const build = ["build", "--platform", "linux/arm64", "--progress", "plain", "-f", RECIPE, ...(await buildArguments(agent)), "-t", tag, emptyContext];
-    await mustRun(cli, build, {
-      timeoutMs: BUILD_TIMEOUT_MS,
-      onLine: (line) => {
-        const step = buildStepIn(line);
-        if (step) progress({ stage: "building-image", step });
-      },
-    });
+    const build = ["build", "--platform", "linux/arm64", "--progress", "plain", "-f", BASE_RECIPE, "-t", tag, emptyContext];
+    await mustRun(cli, build, { timeoutMs: BUILD_TIMEOUT_MS, onLine: buildProgress(progress) });
   } finally {
     await rm(emptyContext, { recursive: true, force: true });
     if (!builderRanBefore) await removeBuilder(cli);
     await removeImagesPulledFor(cli, tag, imagesBefore);
   }
-  await removeOtherVersions(cli, tag, agent);
+  await removeOtherBases(cli, tag);
 }
 
-async function removeImagesPulledFor(cli: ContainerCli, built: string, imagesBefore: Set<string>) {
-  const pulled = [...(await listImages(cli))].filter((name) => !imagesBefore.has(name) && name !== built);
+/** Removes the images there now that were not before, but the one kept. */
+export async function removeImagesPulledFor(cli: ContainerCli, kept: string, imagesBefore: Set<string>) {
+  const pulled = [...(await listImages(cli))].filter((name) => !imagesBefore.has(name) && name !== kept);
   if (pulled.length > 0) await cli.run(["image", "delete", ...pulled]);
 }
 
@@ -133,8 +114,8 @@ async function removeBuilder(cli: ContainerCli) {
   await cli.run(["builder", "delete"]);
 }
 
-async function removeOtherVersions(cli: ContainerCli, kept: string, { harness }: AgentImage) {
-  const others = [...(await listImages(cli))].filter((name) => name.split("/").at(-1)!.startsWith(imagesOfKind(harness)) && !name.endsWith(kept));
+async function removeOtherBases(cli: ContainerCli, kept: string) {
+  const others = [...(await listImages(cli))].filter((name) => isMiradorsBase(name) && !name.endsWith(kept));
   if (others.length > 0) await cli.run(["image", "delete", ...others]);
 }
 

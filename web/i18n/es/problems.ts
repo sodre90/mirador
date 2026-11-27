@@ -525,7 +525,6 @@ export const problems: Messages["problems"] = {
   sandboxNotReadyInTime: (seconds: number) => `No estuvo listo en ${seconds} s.`,
   sandboxNoAgentVersion: (program: string) => `Mirador no pudo saber qué versión de ${program} poner en él.`,
   sandboxNotReadyFixed: {
-    "versions-differ": "Sus agentes necesitan imágenes distintas, de otro tipo de agente o de otra versión, y un sandbox ejecuta una a la vez. Esta conversación podrá empezar cuando los demás agentes del sandbox lleven 10 minutos inactivos.",
     "shared-kernel-not-allowed": "En este equipo sería un contenedor de Podman que comparte el kernel del equipo, y no se le ha permitido: permítelo donde se activa su sandbox.",
   },
   workspaceSandboxNotReady: (why: string) => `El sandbox de este espacio de trabajo no está listo, así que su agente no se inició. ${why}`,
