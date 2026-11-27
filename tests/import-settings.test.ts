@@ -38,7 +38,7 @@ describe("importing settings", () => {
     from.setWorktreeSettings(grouped.id, "worktree", "bun install");
     from.setWorkspaceColor(grouped.id, "teal");
     from.setWorkspaceSideChatAccess(grouped.id, "can-change-files");
-    from.setWorkspaceSandbox(grouped.id, { on: true, workFreely: false, allowsSharedKernel: false, network: "closed" });
+    from.setWorkspaceSandbox(grouped.id, { on: true, workFreely: false, allowsSharedKernel: false, network: "closed", baseImage: null });
     from.setSidebarOrder([group.id, grouped.id, apart.id]);
     from.setOlderAfter("1-week");
     from.setConversationsShown("12");
@@ -258,11 +258,11 @@ describe("importing settings", () => {
   test("a workspace's sandbox comes in but for a shared kernel and what it reaches, which are allowed on each computer", async () => {
     const store = aStore();
     const folder = folderIn(aFolder(), "app");
-    const text = textOf({ workspaces: [{ path: folder, sandbox: { on: true, workFreely: false, allowsSharedKernel: true, network: "everything" } }] } as never);
+    const text = textOf({ workspaces: [{ path: folder, sandbox: { on: true, workFreely: false, allowsSharedKernel: true, network: "everything", baseImage: null } }] } as never);
 
     await bringInAll(importInto(store), text);
 
-    expect(store.listWorkspaces()[0]!.sandbox).toEqual({ on: true, workFreely: false, allowsSharedKernel: false, network: "closed" });
+    expect(store.listWorkspaces()[0]!.sandbox).toEqual({ on: true, workFreely: false, allowsSharedKernel: false, network: "closed", baseImage: null });
     expect((await importInto(store).plan(text)).items.map(({ state }) => state)).toEqual(["same"]);
   });
 
@@ -271,15 +271,30 @@ describe("importing settings", () => {
     const folder = folderIn(aFolder(), "app");
     store.setWorkspaceSandbox(addWorkspace(store, folder).id, { ...NO_SANDBOX, on: true, network: "internet" });
 
-    await bringInAll(importInto(store), textOf({ workspaces: [{ path: folder, sandbox: { on: true, workFreely: false } }] }));
+    await bringInAll(importInto(store), textOf({ workspaces: [{ path: folder, sandbox: { on: true, workFreely: false, baseImage: null } }] }));
 
     expect(store.listWorkspaces()[0]!.sandbox).toMatchObject({ on: true, workFreely: false, network: "internet" });
+  });
+
+  test("a workspace's base image comes in, one that names no image as Mirador's own", async () => {
+    const store = aStore();
+    const folder = folderIn(aFolder(), "app");
+    store.setWorkspaceSandbox(addWorkspace(store, folder).id, { ...NO_SANDBOX, on: true });
+    const withBase = (baseImage: unknown) => textOf({ workspaces: [{ path: folder, sandbox: { on: true, workFreely: true, baseImage } }] } as never);
+
+    expect((await importInto(store).plan(withBase("ghcr.io/team/dev:1"))).items).toMatchObject([{ kind: "workspace", state: "different", differs: ["sandbox"] }]);
+    await bringInAll(importInto(store), withBase("ghcr.io/team/dev:1"));
+    expect(store.listWorkspaces()[0]!.sandbox.baseImage).toBe("ghcr.io/team/dev:1");
+
+    await bringInAll(importInto(store), withBase("--privileged"));
+    expect(store.listWorkspaces()[0]!.sandbox.baseImage).toBeNull();
+    expect((await importInto(store).plan(withBase("--privileged"))).items.map(({ state }) => state)).toEqual(["same"]);
   });
 
   test("a workspace whose sandbox can't run here comes in without it, and says so", async () => {
     const store = aStore();
     const folder = folderIn(aFolder(), "app");
-    const text = textOf({ workspaces: [{ path: folder, sandbox: { on: true, workFreely: true } }] });
+    const text = textOf({ workspaces: [{ path: folder, sandbox: { on: true, workFreely: true, baseImage: null } }] });
 
     const { problems } = await bringInAll(importInto(store, [], { sandboxes: false }), text);
 

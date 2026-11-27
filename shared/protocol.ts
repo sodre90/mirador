@@ -1,7 +1,7 @@
 import type { EditorSetting, EditorState } from "./editors.ts";
 import type { Reminder } from "./reminders.ts";
 import type { ClaudeSetup } from "./room-agent-setup.ts";
-import type { HeldChange, HeldChangeAnswer, HeldChangeText, SandboxCheck, SandboxFolderRefusal, SandboxFolders, SandboxNetwork, SandboxOwner, SandboxSetting, SandboxSetup, WorkspaceSandboxCheck } from "./sandbox.ts";
+import type { HeldChange, HeldChangeAnswer, HeldChangeText, OwnedSetup, SandboxCheck, SandboxFolderRefusal, SandboxFolders, SandboxNetwork, SandboxOwner, SandboxSetting, SandboxSetup, WorkspaceSandboxCheck } from "./sandbox.ts";
 import type { PermissionPreset, RoomApprovalAnswer } from "./room-permissions.ts";
 import type { RoomUsage } from "./room-usage.ts";
 import type {
@@ -584,8 +584,8 @@ export type ServerMessage =
       roomTasksWaiting: RoomTaskApproval[];
       /** What agents people brought wait on for an approver, to work in the rooms' workspaces. */
       roomWorkspaceWaiting: RoomWorkspaceApproval[];
-      /** Where setting up sandboxes stands on this computer. */
-      sandboxSetup: SandboxSetup;
+      /** Where setting up each room's and workspace's sandbox stands on this computer, of those set up since the host started. */
+      sandboxSetups?: OwnedSetup[];
       /** The agent config files sandboxed agents changed, put back and held for the owner's OK, oldest first. */
       heldChanges: HeldChange[];
       /** The rooms and workspaces whose sandbox stopped as they hold as many changes as one may. */
@@ -768,8 +768,8 @@ export type ServerMessage =
   | ({ type: "room.sandbox-checked"; requestId: string; roomId: string } & SandboxCheck)
   /** What stands in the way of the workspace's sandbox, if anything, to the page that asked. */
   | ({ type: "workspace.sandbox-checked"; requestId: string; workspaceId: string } & WorkspaceSandboxCheck)
-  /** Where setting up sandboxes stands, each time it moves on. */
-  | { type: "sandbox.setup"; setup: SandboxSetup }
+  /** Where setting up a room's or workspace's sandbox stands, each time it moves on. */
+  | { type: "sandbox.setup"; owner: SandboxOwner; setup: SandboxSetup }
   /** The held agent config files of a room's or workspace's sandbox, each time one comes or is answered. */
   | { type: "sandbox.held-changes"; owner: SandboxOwner; changes: HeldChange[]; full: boolean }
   /** A held change's text, to the page that asked; null once it is no longer held. */

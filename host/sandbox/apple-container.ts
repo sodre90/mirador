@@ -2,8 +2,8 @@ import type { SandboxAvailability, SandboxSetup } from "../../shared/sandbox.ts"
 import { appleContainerRuntime } from "./availability.ts";
 import { containerCli, lastLineOf, type ContainerCli } from "./container-cli.ts";
 import { droppedTo, environmentFlags, execProcessEnvironment, readByTool } from "./exec-environment.ts";
-import { buildImage, DEFAULT_BASE_PATH, defaultBaseTag, imageExists, serviceRuns, startService } from "./image.ts";
-import { HOST_LABEL, isAnotherMiradors, SandboxNotReady, VM_READY_LINE, withoutTrailingSlash, type AgentInVm, type Mount, type ThrowawayRun, type VmPlan, type VmLauncher } from "./vm-launcher.ts";
+import { buildImage, DEFAULT_BASE_PATH, defaultBaseTag, imageExists, pulledOrHere, PULL_TIMEOUT_MS, serviceRuns, startService } from "./image.ts";
+import { HOST_LABEL, isAnotherMiradors, SandboxNotReady, VM_READY_LINE, withoutTrailingSlash, type AgentInVm, type Mount, type OwnBase, type ThrowawayRun, type VmPlan, type VmLauncher } from "./vm-launcher.ts";
 
 const READY_WITHIN_S = 30;
 
@@ -40,6 +40,22 @@ export const runArguments = ({ name, labels, image, memory, mounts, entrypoint, 
   image,
   ...args,
 ];
+
+/** `container image pull` of the owner's base image, for this Mac's processor. */
+export const pullArguments = (name: string) => ["image", "pull", "--progress", "none", "--platform", "linux/arm64", name];
+
+/**
+ * The owner's base image as `container image inspect` gives it, `[{ name, index: { digest } }]`: run by its name, as
+ * `container` runs a name with a digest only where it pulled that very name, and its content the index's digest.
+ */
+export function ownBaseIn(inspected: string, name: string): OwnBase | null {
+  try {
+    const digest = (JSON.parse(inspected) as { index?: { digest?: unknown } }[])[0]?.index?.digest;
+    return typeof digest === "string" ? { image: name, content: digest } : null;
+  } catch {
+    return null;
+  }
+}
 
 /** `container run` of a throwaway container, removed once it ends. */
 export const runOnceArguments = ({ image, mounts, entrypoint, args, user, network }: ThrowawayRun) => [
@@ -131,6 +147,15 @@ export class AppleContainer implements VmLauncher {
     const tag = await defaultBaseTag();
     if (!(await imageExists(cli, tag))) await buildImage(cli, tag, progress);
     return { image: tag, path: DEFAULT_BASE_PATH };
+  }
+
+  async ownBase(name: string) {
+    const cli = this.usable();
+    const here = async () => {
+      const inspected = await cli.run(["image", "inspect", name]);
+      return inspected.exitCode === 0 ? ownBaseIn(inspected.stdout, name) : null;
+    };
+    return pulledOrHere(name, () => cli.run(pullArguments(name), { timeoutMs: PULL_TIMEOUT_MS }), here);
   }
 
   async runOnce(run: ThrowawayRun, timeoutMs: number) {

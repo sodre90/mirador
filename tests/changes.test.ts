@@ -1123,7 +1123,7 @@ test("a commit in a repository nested in a sandboxed workspace's folder, whose h
   await agentWorks();
   await writeFile(join(projectDir, ".git", "hooks", "pre-commit"), "#!/bin/sh\necho the hook says no >&2\nexit 1\n", { mode: 0o755 });
   store.insertWorkspace({ id: "w0", name: "everything", path: root, defaultLaunch: { harness: "claude", profileId: null }, createdAt: 2 });
-  store.setWorkspaceSandbox("w0", { on: true, workFreely: true, allowsSharedKernel: false, network: "closed" });
+  store.setWorkspaceSandbox("w0", { on: true, workFreely: true, allowsSharedKernel: false, network: "closed", baseImage: null });
   const changesInW1 = new Changes(store, checkpoints, () => store.findWorkspace("w1")!, () => {}, async () => true, async () => true);
 
   expect((await changesInW1.committable("c1")).hooksOff).toBe(true);

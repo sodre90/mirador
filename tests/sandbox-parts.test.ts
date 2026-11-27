@@ -3,15 +3,16 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, realpathSync, rmSync, 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { environmentInVm, KEY_PLACEHOLDER } from "../host/sandbox/agent-environment.ts";
-import { CONTAINER_READS, execArguments, vmIdsLabelled, writtenByOthersIn } from "../host/sandbox/apple-container.ts";
+import { CONTAINER_READS, execArguments, ownBaseIn, pullArguments, vmIdsLabelled, writtenByOthersIn } from "../host/sandbox/apple-container.ts";
+import { baseCheck, verdictIn } from "../host/sandbox/base-check.ts";
 import { appleContainerAvailability, appleContainerRuntime, podmanAvailability, podmanStorageIn, selinuxEnforcingAt } from "../host/sandbox/availability.ts";
 import { execProcessEnvironment } from "../host/sandbox/exec-environment.ts";
 import { versionSaidIn } from "../host/sandbox/agent-version.ts";
-import { BASE_RECIPE, baseImageOf, buildStepIn, defaultBaseTag, imageReferencesIn } from "../host/sandbox/image.ts";
+import { BASE_RECIPE, baseImageOf, BaseNotPulled, buildStepIn, defaultBaseTag, imageReferencesIn, pulledOrHere } from "../host/sandbox/image.ts";
 import { GUARD_IN_VM } from "../host/sandbox/tools-folder.ts";
-import { PODMAN_READS } from "../host/sandbox/podman.ts";
+import { ownBaseIn as podmansOwnBaseIn, PODMAN_READS } from "../host/sandbox/podman.ts";
 import { guardPlanOf, sandboxRefusalOf, type MiradorPlaces, type ProtectedParts } from "../host/sandbox/guarded-workspace.ts";
-import { keepingNetworkOf, narrowsSandbox, NO_SANDBOX, reachesMoreThan, SANDBOX_NETWORKS, sandboxSettingIn, sameSandbox, sharesKernel, signInElsewhere, type SandboxNetwork, type SandboxSetting } from "../shared/sandbox.ts";
+import { fullImageName, isImageName, keepingNetworkOf, narrowsSandbox, NO_SANDBOX, reachesMoreThan, SANDBOX_NETWORKS, sandboxSettingIn, sameSandbox, sharesKernel, signInElsewhere, type SandboxNetwork, type SandboxSetting } from "../shared/sandbox.ts";
 import { RUNS_SANDBOXES } from "./sandbox-computer.ts";
 
 const scratch = realpathSync(mkdtempSync(join(tmpdir(), "sandbox-parts-")));
@@ -91,6 +92,71 @@ test("a room's sandbox setting reads as off unless it is on, allows a shared ker
   expect(narrowsSandbox(sandbox(true, true, true), sandbox(true, true))).toBe(true);
   expect(narrowsSandbox(sandbox(true, true), sandbox(true, true, true))).toBe(false);
   expect(sameSandbox(sandbox(true, true), sandbox(true, true, true))).toBe(false);
+});
+
+test("a sandbox's base image is kept only where it names an image, whether the sandbox is on or not, and changing it is another sandbox that narrows nothing", () => {
+  const digest = `sha256:${"0123456789abcdef".repeat(4)}`;
+  const names = ["debian", "debian:bookworm-slim", "team/dev", "ghcr.io/team/dev:1.2", "localhost:5000/dev", "registry.example.com:443/a/b/c_d.e-f:v1_2.3", `team/dev@${digest}`, `ghcr.io/team/dev:1@${digest}`];
+  names.forEach((name) => expect([name, sandboxSettingIn({ on: true, baseImage: name }).baseImage]).toEqual([name, name]));
+  expect(sandboxSettingIn({ on: false, baseImage: "team/dev" }).baseImage).toBe("team/dev");
+  const notNames = ["", " debian", "debian ", "Debian", "-debian", "--entrypoint=/bin/sh", "team//dev", "team/dev:", "team/dev:-x", "team/dev@sha256:abc", `team/dev@sha512:${"0".repeat(64)}`, "a b", "team/dev;rm -rf /", "https://ghcr.io/team/dev", `${"a".repeat(250)}/dev:1`, 7, null, ["debian"]];
+  notNames.forEach((name) => expect([name, sandboxSettingIn({ on: true, baseImage: name }).baseImage]).toEqual([name, null]));
+  expect(notNames.some(isImageName)).toBe(false);
+  const on: SandboxSetting = { ...NO_SANDBOX, on: true };
+  expect(sameSandbox(on, { ...on, baseImage: "team/dev" })).toBe(false);
+  expect(narrowsSandbox(on, { ...on, baseImage: "team/dev" })).toBe(false);
+});
+
+test("an image's name is written out as Docker reads it, alike for every runtime", () => {
+  expect(fullImageName("debian")).toBe("docker.io/library/debian:latest");
+  expect(fullImageName("debian:bookworm-slim")).toBe("docker.io/library/debian:bookworm-slim");
+  expect(fullImageName("team/dev")).toBe("docker.io/team/dev:latest");
+  expect(fullImageName("docker.io/debian")).toBe("docker.io/library/debian:latest");
+  expect(fullImageName("ghcr.io/team/dev")).toBe("ghcr.io/team/dev:latest");
+  expect(fullImageName("localhost/dev:1")).toBe("localhost/dev:1");
+  expect(fullImageName("localhost:5000/dev")).toBe("localhost:5000/dev:latest");
+  expect(fullImageName(`team/dev@sha256:${"0".repeat(64)}`)).toBe(`docker.io/team/dev@sha256:${"0".repeat(64)}`);
+});
+
+test("a check of a base image runs it as nobody with no network, and is a finding only where it ran to its end", () => {
+  const run = baseCheck("ghcr.io/team/dev:1", "/data/sandbox-tools");
+  expect(run).toMatchObject({ image: "ghcr.io/team/dev:1", entrypoint: "/bin/sh", user: "65534:65534", network: false, mounts: [{ source: "/data/sandbox-tools", target: "/opt/mirador", readOnly: true }] });
+  expect(run.args.join("\n")).toContain("[ -x /bin/bash ] || echo lacks bash");
+  expect(verdictIn("mirador-base-check\nPATH=/usr/local/bin:/usr/bin\n")).toEqual({ path: "/usr/local/bin:/usr/bin" });
+  expect(verdictIn("mirador-base-check\nPATH=\n")).toEqual({ path: null });
+  expect(verdictIn("mirador-base-check\nlacks git\nlacks glibc\nPATH=/usr/bin")).toEqual({ lacks: ["git", "glibc"] });
+  expect(verdictIn("lacks git\nmirador-base-check\nlacks sudo\nPATH=/usr/bin")).toEqual({ path: "/usr/bin" });
+  expect(verdictIn("mirador-base-check\nlacks bash\n")).toBeNull();
+  expect(verdictIn("Error: failed to find target executable /bin/sh")).toBeNull();
+  expect(verdictIn("")).toBeNull();
+});
+
+test("an owner's base image is pulled afresh unless it names its digest and is here, and else the one here is run where the pull fails", async () => {
+  const here = { image: "team/dev", content: "sha256:1" };
+  const pulls: string[] = [];
+  const pull = (exitCode: number, output = "") => async () => {
+    pulls.push("pulled");
+    return { exitCode, output };
+  };
+  expect(await pulledOrHere("team/dev:latest", pull(0), async () => here)).toBe(here);
+  expect(await pulledOrHere("team/dev:latest", pull(1, "Error: offline"), async () => here)).toBe(here);
+  expect(pulls).toHaveLength(2);
+  expect(await pulledOrHere(`team/dev@sha256:${"0".repeat(64)}`, pull(0), async () => here)).toBe(here);
+  expect(pulls).toHaveLength(2);
+  await expect(pulledOrHere("team/dev:latest", pull(1, "progress\nError: 404 Not Found\n"), async () => null)).rejects.toEqual(new BaseNotPulled("Error: 404 Not Found"));
+  await expect(pulledOrHere("team/dev:latest", pull(7), async () => null)).rejects.toEqual(new BaseNotPulled("exit 7"));
+});
+
+test("the owner's base image runs by its name in Apple's container, as pulled for this Mac, and by its ID in Podman", () => {
+  expect(pullArguments("docker.io/team/dev:latest")).toEqual(["image", "pull", "--progress", "none", "--platform", "linux/arm64", "docker.io/team/dev:latest"]);
+  const digest = `sha256:${"a".repeat(64)}`;
+  expect(ownBaseIn(JSON.stringify([{ name: "docker.io/team/dev:latest", index: { digest } }]), "docker.io/team/dev:latest")).toEqual({ image: "docker.io/team/dev:latest", content: digest });
+  expect(ownBaseIn("[]", "docker.io/team/dev:latest")).toBeNull();
+  expect(ownBaseIn("not json", "docker.io/team/dev:latest")).toBeNull();
+  const id = "b".repeat(64);
+  expect(podmansOwnBaseIn(JSON.stringify([{ Id: id, Digest: digest }]))).toEqual({ image: id, content: id });
+  expect(podmansOwnBaseIn(JSON.stringify([{ Id: "--privileged" }]))).toBeNull();
+  expect(podmansOwnBaseIn("[]")).toBeNull();
 });
 
 test("a sandbox's network reads as closed unless it is on and reaches one known, and stays as it is however else the sandbox is set, until it is turned off", () => {

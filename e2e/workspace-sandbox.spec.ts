@@ -342,6 +342,72 @@ test("a change to an agent config file is put back and held in the conversation 
   });
 });
 
+test("a base image of the owner's own is pulled and checked for what the agents need before a VM runs on it, what it lacks said in the sandbox's settings and its conversation, and Mirador's comes back once it is cleared", async ({ page }) => {
+  test.skip(!sandboxesRunHere, "Sandboxes run on macOS 26 on Apple silicon only.");
+  await signIn(page, host);
+  const card = projectCard(page);
+  await openConversation(page, builderConversation);
+  const runs = () => containerCalls().filter(([command]) => command === "run");
+  const imageRun = (run: string[]) => run[run.indexOf("--entrypoint") + 2];
+  const useBaseImage = async (name: string) => {
+    const dialog = await openSandboxOf(page, card, "project");
+    await dialog.getByRole("textbox", { name: "Base image" }).fill(name);
+    await dialog.getByRole("button", { name: "Use" }).click();
+    await expect(dialog.getByRole("alert").locator("span")).toHaveText("1 conversation here starts afresh as it goes on: its agent won't remember what was said before.");
+    await dialog.getByRole("button", { name: "Change" }).click();
+    await expect(dialog.getByRole("textbox", { name: "Base image" })).toHaveValue(name);
+    return dialog;
+  };
+
+  await test.step("the field names Mirador's own until another is used, and won't take what isn't an image's name", async () => {
+    const dialog = await openSandboxOf(page, card, "project");
+    const baseImage = dialog.getByRole("textbox", { name: "Base image" });
+    await expect(baseImage).toHaveValue("");
+    await expect(baseImage).toHaveAttribute("placeholder", "Mirador's own: Debian with git");
+    await expect(dialog.locator(".room-sandbox-base-image .hint")).toHaveText(
+      "Any image with a Linux build for Arm (arm64) that has glibc, /bin/sh, /bin/bash and git; Mirador's own programs come in beside it. It is pulled again each time Mirador starts, unless you name its digest.",
+    );
+    await baseImage.fill("--privileged");
+    await expect(dialog.locator(".room-sandbox-base-image-invalid")).toHaveText("That isn't an image name, such as ghcr.io/you/image:tag.");
+    await expect(dialog.getByRole("button", { name: "Use" })).toBeDisabled();
+    await dialog.getByRole("button", { name: "Done" }).click();
+    await expect(dialog).toBeHidden();
+  });
+
+  await test.step("one without git is set up as far as its check, which says so, and the conversation's next turn fails saying it too", async () => {
+    const dialog = await useBaseImage("team/lacks-git:1");
+    const lacks = "The sandbox's base image team/lacks-git:1 lacks what the agents need: git.";
+    await expect(dialog.locator(".room-sandbox-setup")).toHaveText(`Setting it up failed: ${lacks}`);
+    await keepScreenshot(dialog, "base-image-lacks");
+    await dialog.getByRole("button", { name: "Done" }).click();
+    const runsBefore = runs().length;
+    await sendMessage(page, "SAY On a base without git.");
+    await expect(page.locator(".error-line:visible")).toContainText(lacks);
+    expect(runs()).toHaveLength(runsBefore);
+  });
+
+  await test.step("one with all they need runs the VM, by its name as Docker reads it, checked once", async () => {
+    const dialog = await useBaseImage("team/dev:1");
+    await expect(dialog.locator(".room-sandbox-setup")).toHaveText("Set up on this Mac.");
+    await dialog.getByRole("button", { name: "Done" }).click();
+    await sendMessage(page, "SAY On the team's base.");
+    await waitForTurnToEnd(page);
+    await expect(lastAgentMessage(page)).toHaveText("On the team's base.");
+    expect(imageRun(runs().at(-1)!)).toBe("docker.io/team/dev:1");
+    expect(containerCalls().flatMap(([command, sub, ...rest]) => (command === "image" && sub === "pull" ? [rest.at(-1)] : []))).toEqual(["docker.io/team/lacks-git:1", "docker.io/team/dev:1"]);
+    expect(loggedCalls("checks.log").map(imageRun)).toEqual(["docker.io/team/lacks-git:1", "docker.io/team/dev:1"]);
+  });
+
+  await test.step("cleared, the sandbox runs on Mirador's base again", async () => {
+    const dialog = await useBaseImage("");
+    await dialog.getByRole("button", { name: "Done" }).click();
+    await sendMessage(page, "SAY On Mirador's base.");
+    await waitForTurnToEnd(page);
+    await expect(lastAgentMessage(page)).toHaveText("On Mirador's base.");
+    expect(imageRun(runs().at(-1)!)).toMatch(/^mirador-sandbox-base:[0-9a-f]{10}$/);
+  });
+});
+
 test("while the workspace is sandboxed, a Codex profile is refused with what to do instead, and new conversations can't start in worktrees", async ({ page }) => {
   test.skip(!sandboxesRunHere, "Sandboxes run on macOS 26 on Apple silicon only.");
   await signIn(page, host);

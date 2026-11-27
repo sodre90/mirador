@@ -522,6 +522,12 @@ export const problems: Messages["problems"] = {
   sandboxTooManyHeldChanges: (most: number) => `Sus agentes cambiaron más de ${most} archivos retenidos, que esperan tu respuesta: permite o descarta algunos primero.`,
   sandboxSetupFailed: (cause: string) => `No se pudieron preparar los sandboxes: ${cause}`,
   sandboxCouldNotStart: (cause: string) => `No pudo iniciarse: ${cause}`,
+  sandboxBaseImageUnusable: {
+    "pull-failed": (image: string, cause: string) => `No se pudo descargar la imagen base del sandbox, ${image}: ${cause}`,
+    "could-not-check": (image: string, cause: string) => `No se pudo comprobar la imagen base del sandbox, ${image}: ${cause}`,
+    lacks: (image: string, needs: string[]) => `A la imagen base del sandbox, ${image}, le falta lo que necesitan los agentes: ${needs.join(", ")}.`,
+  },
+  baseImageNeeds: { bash: "bash", git: "git", glibc: "una glibc para el procesador de este equipo, sobre la que funcionan Bun y Node.js" },
   sandboxNotReadyInTime: (seconds: number) => `No estuvo listo en ${seconds} s.`,
   sandboxNoAgentVersion: (program: string) => `Mirador no pudo saber qué versión de ${program} poner en él.`,
   sandboxNotReadyFixed: {

@@ -488,7 +488,7 @@ export class RoomService implements RoomRules, TurnListener {
     this.waitingChanged(roomId);
     const ownAgents = now.agents.filter(({ brought }) => !brought);
     ownAgents.forEach((agent) => this.startAfresh(agent, stopsTurn));
-    if (sandbox.on) this.sandboxes.prepare(ownAgents.flatMap(({ profileId }) => this.store.findProfile(profileId) ?? []));
+    if (sandbox.on) this.sandboxes.prepare(roomSandbox(roomId), ownAgents.flatMap(({ profileId }) => this.store.findProfile(profileId) ?? []));
   }
 
   /** What the room's sandbox reaches besides the model and Mirador, while it is on: from now on, in sessions under way too. */

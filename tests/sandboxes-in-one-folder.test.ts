@@ -53,6 +53,7 @@ function computer({ planLookedAtMs = 60_000 } = {}) {
     canvasOf: () => ({ belongs: () => true, tokenOf: () => "token", handle: () => new Response("canvas") }),
     atWork: (owner) => ({ agents: of(atWork, owner, []), conversationIds: of(atWork, owner, []).map((agent) => `conversation of ${agent}`) }),
     setupChanged: () => {},
+    baseImageOf: () => null,
     heldChanged: (owner, changes, full) => void told.set(ownerKey(owner), { changes, full }),
     foldersOf: (owner) => of(folders, owner, []),
     networkOf: () => "closed",

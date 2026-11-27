@@ -11786,6 +11786,32 @@ select.room-agent-choice-select:focus-visible {
   padding-left: 18px;
 }
 
+.room-sandbox-base-image {
+  display: grid;
+  gap: 4px;
+  padding-left: 26px;
+}
+
+.room-sandbox-base-image > :is(label, p) {
+  margin: 0;
+  font-size: calc(12px * var(--font-scale));
+}
+
+.room-sandbox-base-image-row {
+  display: flex;
+  gap: 6px;
+}
+
+.room-sandbox-base-image-row input {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--mono);
+}
+
+.room-sandbox-base-image-invalid {
+  color: var(--danger);
+}
+
 .room-sandbox-setup {
   display: flex;
   flex-direction: column;

@@ -7,6 +7,8 @@ import { problemText } from "./problem-text.ts";
 function sandboxSetupStep(setup?: SandboxSetup) {
   if (setup?.stage === "building-image" && setup.step) return t.chat.sandboxImageStep(setup.step.at, setup.step.of);
   if (setup?.stage === "installing-tool" && setup.tool) return t.chat.sandboxInstalling(toolNameOf(setup.tool));
+  if (setup?.stage === "pulling-image" && setup.image) return t.chat.sandboxPulling(setup.image);
+  if (setup?.stage === "checking-image" && setup.image) return t.chat.sandboxChecking(setup.image);
   return null;
 }
 

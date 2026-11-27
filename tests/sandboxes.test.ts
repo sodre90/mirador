@@ -2,14 +2,15 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, realpathSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { HELD_CHANGES_MOST, roomSandbox, workspaceSandbox, type HeldChange, type SandboxAvailability, type SandboxNetwork, type SandboxNotReadyWhy, type SandboxSetup } from "../shared/sandbox.ts";
+import { HELD_CHANGES_MOST, roomSandbox, sameOwner, workspaceSandbox, type HeldChange, type OwnedSetup, type SandboxAvailability, type SandboxNetwork, type SandboxNotReadyWhy, type SandboxOwner, type SandboxSetup } from "../shared/sandbox.ts";
 import { KEY_PLACEHOLDER } from "../host/sandbox/agent-environment.ts";
 import { BASE_IMAGE_NAME } from "../host/sandbox/image.ts";
 import { BUN_IN_VM, GUARD_IN_VM, NODE_FOLDER_IN_VM, toolsFolderOf } from "../host/sandbox/tools-folder.ts";
 import { ANTHROPIC_API } from "../host/sandbox/model-proxy.ts";
 import { AppleContainer } from "../host/sandbox/apple-container.ts";
 import { Sandboxes, type AgentInSandbox, type SandboxHost } from "../host/sandbox/sandboxes.ts";
-import { FakeContainerCli } from "./fake-container-cli.ts";
+import { checkFinding, FakeContainerCli, imageOfRun, isBaseCheck } from "./fake-container-cli.ts";
+import { FakeVmLauncher } from "./fake-vm-launcher.ts";
 import { guardedIn, mountsOfRun } from "./guard-told.ts";
 import { RUNS_SANDBOXES } from "./sandbox-computer.ts";
 
@@ -28,8 +29,9 @@ function repository() {
   return realpathSync(folder);
 }
 
-function hostFor(workspace: string) {
+function hostFor(workspace: string, baseImageOf: (owner: SandboxOwner) => string | null = () => null) {
   const setups: SandboxSetup[] = [];
+  const owned: OwnedSetup[] = [];
   const held: HeldChange[][] = [];
   let network: SandboxNetwork = "closed";
   const host: SandboxHost = {
@@ -37,7 +39,11 @@ function hostFor(workspace: string) {
     workspaceOf: () => workspace,
     canvasOf: () => ({ belongs: () => true, tokenOf: () => "token", handle: () => new Response("canvas") }),
     atWork: () => ({ agents: ["builder"], conversationIds: [] }),
-    setupChanged: (setup) => setups.push(setup),
+    setupChanged: (owner, setup) => {
+      setups.push(setup);
+      owned.push({ owner, setup });
+    },
+    baseImageOf,
     heldChanged: (_, changes) => held.push(changes),
     foldersOf: () => [],
     networkOf: () => network,
@@ -45,7 +51,7 @@ function hostFor(workspace: string) {
     foldersStarted: () => {},
     places: { home: "/nonexistent-home", dataDir: join(scratch, "mirador-data"), checkout: "/nonexistent-checkout", computersOwn: [] },
   };
-  return { host, setups, held, reaches: (now: SandboxNetwork) => (network = now) };
+  return { host, setups, owned, held, reaches: (now: SandboxNetwork) => (network = now) };
 }
 
 const agentIn = (workspace: string, changes: Partial<AgentInSandbox> = {}): AgentInSandbox => ({
@@ -238,6 +244,32 @@ describe("a room's sandbox", () => {
     expect(again.told).toEqual(["starting-sandbox"]);
     again.launched.gone!();
     await sandboxes.stopAll();
+  });
+
+  test("says it is set up only once each agent kind it is set up for is, not as the first of them is", async () => {
+    const { host, owned } = hostFor(repository());
+    const launcher = new FakeVmLauncher();
+    const sandboxes = new Sandboxes(launcher, host, IDLE_STOP_MS);
+    const claude = { harness: "claude", version: "2.1.330" } as const;
+    const lastStage = () => owned.filter(({ owner }) => sameOwner(owner, ROOM)).at(-1)?.setup.stage;
+    const comesTo = async (stage: string) => {
+      for (const started = Date.now(); Date.now() - started < 5_000 && lastStage() !== stage; ) await Bun.sleep(5);
+      return lastStage();
+    };
+    sandboxes.prepareInBackground(ROOM, claude);
+    expect(await comesTo("ready")).toBe("ready");
+
+    const piInstalls = Promise.withResolvers<void>();
+    launcher.runningOnce = piInstalls.promise;
+    sandboxes.prepareInBackground(ROOM, { harness: "pi", version: "1.6.0" });
+    expect(await comesTo("installing-tool")).toBe("installing-tool");
+    sandboxes.prepareInBackground(ROOM, claude);
+    await Bun.sleep(50);
+    expect(lastStage()).toBe("installing-tool");
+
+    piInstalls.resolve();
+    expect(await comesTo("ready")).toBe("ready");
+    expect(launcher.installed().at(-1)).toBe("@earendil-works/pi-coding-agent@1.6.0");
   });
 
   test("starts one VM for a room whose agents launch at once", async () => {
@@ -441,6 +473,126 @@ describe("a room's sandbox that is not ready fails the agent's start, and starts
     await failingStart({ kind: "blocked", blocker: { kind: "workspace-is-home" } }, (_, workspace, host) => void (host.places = { ...host.places, home: workspace }));
     await failingStart({ kind: "blocked", blocker: { kind: "workspace-holds-mirador-data" } }, (_, workspace, host) => void (host.places = { ...host.places, dataDir: join(workspace, ".mirador") }));
     await failingStart({ kind: "blocked", blocker: { kind: "workspace-is-mirador" } }, (_, workspace, host) => void (host.places = { ...host.places, checkout: workspace }));
+  });
+});
+
+describe("a sandbox on its owner's own base image", () => {
+  const TEAM_IMAGE = "docker.io/team/dev:latest";
+  const TEAM_DIGEST = `sha256:${"a".repeat(64)}`;
+  const WORKSPACE = workspaceSandbox("w1");
+  const teamImageForTheRoom = (owner: SandboxOwner) => (sameOwner(owner, ROOM) ? "team/dev" : null);
+  const checksOf = (cli: FakeContainerCli) => cli.ranOnce.filter(isBaseCheck);
+  const pullsOf = (cli: FakeContainerCli) => cli.callsOf("image").filter(([, sub]) => sub === "pull");
+  const stagesOf = (owned: OwnedSetup[], owner: SandboxOwner) => owned.filter((each) => sameOwner(each.owner, owner)).map(({ setup }) => setup.stage);
+
+  test.skipIf(!RUNS_SANDBOXES)("pulls it once, checks it once as nobody with no network, and runs the VM on it with its PATH, without building Mirador's", async () => {
+    const workspace = repository();
+    const { host, setups } = hostFor(workspace, teamImageForTheRoom);
+    const cli = new FakeContainerCli();
+    cli.registry.set(TEAM_IMAGE, TEAM_DIGEST);
+    cli.checkSays = () => checkFinding("/team/bin:/usr/bin:/bin");
+    const sandboxes = new Sandboxes(new AppleContainer(cli, AVAILABLE), host, IDLE_STOP_MS);
+
+    const launched = await sandboxes.launch(agentIn(workspace));
+
+    const [run] = cli.callsOf("run");
+    expect(run![run!.indexOf("--entrypoint") + 2]).toBe(TEAM_IMAGE);
+    expect(pullsOf(cli)).toEqual([["image", "pull", "--progress", "none", "--platform", "linux/arm64", TEAM_IMAGE]]);
+    expect(cli.callsOf("build")).toEqual([]);
+    const [check] = checksOf(cli);
+    expect(imageOfRun(check!)).toBe(TEAM_IMAGE);
+    expect(check![check!.indexOf("--user") + 1]).toBe("65534:65534");
+    expect(check![check!.indexOf("--network") + 1]).toBe("none");
+    expect(check![check!.indexOf("--entrypoint") + 1]).toBe("/bin/sh");
+    expect(mountsOfRun(check!)).toEqual([{ source: toolsFolderOf(host.dataDir), target: "/opt/mirador", readOnly: true }]);
+    expect(launched.command).toContain(`PATH=/opt/mirador/claude-2.1.330/bin:${dirname(BUN_IN_VM)}:${NODE_FOLDER_IN_VM}:/team/bin:/usr/bin:/bin`);
+    expect(setups.map(({ stage }) => stage)).toEqual(["starting-service", "pulling-image", "installing-tool", "installing-tool", "installing-tool", "checking-image", "installing-tool", "ready"]);
+    expect(setups.flatMap(({ image }) => image ?? [])).toEqual(["team/dev", "team/dev"]);
+
+    const brought = await sandboxes.launchForBrought({ owner: ROOM, agentId: "visitor", allowsSharedKernel: false, workingDirectory: workspace, command: ["git", "status"] });
+    const broughtRun = cli.callsOf("run").at(-1)!;
+    expect(broughtRun[broughtRun.indexOf("--entrypoint") + 2]).toBe(TEAM_IMAGE);
+    expect(brought.command).toContain(`PATH=${dirname(BUN_IN_VM)}:${NODE_FOLDER_IN_VM}:/team/bin:/usr/bin:/bin`);
+
+    launched.gone!();
+    brought.gone!();
+    await sandboxes.stopAll();
+    (await sandboxes.launch(agentIn(workspace))).gone!();
+    expect(pullsOf(cli)).toHaveLength(1);
+    expect(checksOf(cli)).toHaveLength(1);
+    await sandboxes.stopAll();
+  });
+
+  test("that lacks what the agents need fails its own agents alone, saying what it lacks, and is checked once", async () => {
+    const workspace = repository();
+    const { host, owned } = hostFor(workspace, teamImageForTheRoom);
+    const cli = new FakeContainerCli();
+    cli.registry.set(TEAM_IMAGE, TEAM_DIGEST);
+    cli.checkSays = () => ({ exitCode: 0, output: "mirador-base-check\nlacks bash\nlacks glibc\nPATH=/usr/bin:/bin", stdout: "" });
+    const sandboxes = new Sandboxes(new AppleContainer(cli, AVAILABLE), host, IDLE_STOP_MS);
+    const unusable: SandboxNotReadyWhy = { kind: "base-image-unusable", image: "team/dev", problem: { kind: "lacks", needs: ["bash", "glibc"] } };
+
+    await expect(sandboxes.launch(agentIn(workspace))).rejects.toMatchObject(notReady(unusable));
+    expect(owned.at(-1)).toEqual({ owner: ROOM, setup: { stage: "failed", unusableBase: { image: "team/dev", problem: { kind: "lacks", needs: ["bash", "glibc"] } } } });
+    (await sandboxes.launch(agentIn(workspace, { owner: WORKSPACE }))).gone!();
+    expect(stagesOf(owned, WORKSPACE)).not.toContain("failed");
+    expect(stagesOf(owned, WORKSPACE).at(-1)).toBe("ready");
+    expect(sandboxes.setupStates()).toEqual(expect.arrayContaining([{ owner: ROOM, setup: expect.objectContaining({ stage: "failed" }) }, { owner: WORKSPACE, setup: { stage: "ready" } }]));
+
+    await expect(sandboxes.launch(agentIn(workspace))).rejects.toMatchObject(notReady(unusable));
+    expect(checksOf(cli)).toHaveLength(1);
+    expect(cli.callsOf("run").map((run) => run[run.indexOf("--entrypoint") + 2])).toEqual([expect.stringMatching(new RegExp(`^${BASE_IMAGE_NAME}:`))]);
+    await sandboxes.stopAll();
+  });
+
+  test("that can't be pulled runs the one here, and says why where there is none, pulling again on the next start", async () => {
+    const workspace = repository();
+    const { host, setups } = hostFor(workspace, teamImageForTheRoom);
+    const cli = new FakeContainerCli();
+    const sandboxes = new Sandboxes(new AppleContainer(cli, AVAILABLE), host, IDLE_STOP_MS);
+    const cause = `Error: HTTP request to ${TEAM_IMAGE} failed with response: 404 Not Found`;
+
+    await expect(sandboxes.launch(agentIn(workspace))).rejects.toMatchObject(notReady({ kind: "base-image-unusable", image: "team/dev", problem: { kind: "pull-failed", cause } }));
+    expect(setups.at(-1)).toEqual({ stage: "failed", unusableBase: { image: "team/dev", problem: { kind: "pull-failed", cause } } });
+
+    cli.images.add(TEAM_IMAGE);
+    (await sandboxes.launch(agentIn(workspace))).gone!();
+    expect(pullsOf(cli)).toHaveLength(2);
+    expect(cli.callsOf("run").at(-1)!.at(cli.callsOf("run").at(-1)!.indexOf("--entrypoint") + 2)).toBe(TEAM_IMAGE);
+    await sandboxes.stopAll();
+  });
+
+  test("whose check doesn't get to its end is checked again on the next start", async () => {
+    const workspace = repository();
+    const { host } = hostFor(workspace, teamImageForTheRoom);
+    const cli = new FakeContainerCli();
+    cli.registry.set(TEAM_IMAGE, TEAM_DIGEST);
+    cli.checkSays = () => ({ exitCode: 1, output: "Error: failed to find target executable /bin/sh", stdout: "" });
+    const sandboxes = new Sandboxes(new AppleContainer(cli, AVAILABLE), host, IDLE_STOP_MS);
+
+    const problem = { kind: "could-not-check", cause: "Error: failed to find target executable /bin/sh" } as const;
+    await expect(sandboxes.launch(agentIn(workspace))).rejects.toMatchObject(notReady({ kind: "base-image-unusable", image: "team/dev", problem }));
+
+    cli.checkSays = () => checkFinding("/usr/bin:/bin");
+    (await sandboxes.launch(agentIn(workspace))).gone!();
+    expect(checksOf(cli)).toHaveLength(2);
+    expect(pullsOf(cli)).toHaveLength(1);
+    await sandboxes.stopAll();
+  });
+
+  test("named by its digest isn't pulled again where it is here", async () => {
+    const workspace = repository();
+    const pinned = `team/dev@${TEAM_DIGEST}`;
+    const { host } = hostFor(workspace, () => pinned);
+    const cli = new FakeContainerCli();
+    cli.images.add(`docker.io/${pinned}`);
+    const sandboxes = new Sandboxes(new AppleContainer(cli, AVAILABLE), host, IDLE_STOP_MS);
+
+    (await sandboxes.launch(agentIn(workspace))).gone!();
+    expect(pullsOf(cli)).toEqual([]);
+    const [run] = cli.callsOf("run");
+    expect(run![run!.indexOf("--entrypoint") + 2]).toBe(`docker.io/${pinned}`);
+    await sandboxes.stopAll();
   });
 });
 

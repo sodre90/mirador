@@ -522,6 +522,12 @@ export const problems: Messages["problems"] = {
   sandboxTooManyHeldChanges: (most: number) => `Az ágensei több mint ${most} visszatartott fájlt módosítottak, amelyek a válaszodra várnak: előbb engedélyezz vagy vess el néhányat.`,
   sandboxSetupFailed: (cause: string) => `A sandboxok beállítása nem sikerült: ${cause}`,
   sandboxCouldNotStart: (cause: string) => `Nem tudott elindulni: ${cause}`,
+  sandboxBaseImageUnusable: {
+    "pull-failed": (image: string, cause: string) => `A sandbox alap-image-e (${image}) nem tölthető le: ${cause}`,
+    "could-not-check": (image: string, cause: string) => `A sandbox alap-image-e (${image}) nem ellenőrizhető: ${cause}`,
+    lacks: (image: string, needs: string[]) => `A sandbox alap-image-éből (${image}) hiányzik, ami az ágenseknek kell: ${needs.join(", ")}.`,
+  },
+  baseImageNeeds: { bash: "bash", git: "git", glibc: "a gép processzorához való glibc, amelyen a Bun és a Node.js fut" },
   sandboxNotReadyInTime: (seconds: number) => `Nem állt készen ${seconds} mp alatt.`,
   sandboxNoAgentVersion: (program: string) => `A Mirador nem tudta megállapítani, a ${program} melyik verzióját tegye bele.`,
   sandboxNotReadyFixed: {

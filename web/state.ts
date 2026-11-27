@@ -24,7 +24,7 @@ import { shownOnRoomCanvas, type Room, type RoomApproval, type RoomInvite, type 
 import type { RoomReading } from "../shared/room-reading.ts";
 import type { BroughtAgentHere, BroughtTaskWaiting } from "../shared/brought-agents.ts";
 import type { RoomQuestionVotes } from "../shared/room-votes.ts";
-import { roomSandbox, sameOwner, SETUP_NOT_STARTED, workspaceSandbox, type HeldChange, type SandboxFolders, type SandboxOwner, type SandboxSetup } from "../shared/sandbox.ts";
+import { roomSandbox, sameOwner, workspaceSandbox, type HeldChange, type OwnedSetup, type SandboxFolders, type SandboxOwner } from "../shared/sandbox.ts";
 
 export interface OpenConversation {
   conversationId: string;
@@ -138,8 +138,8 @@ export interface AppState {
   roomJoiners: RoomJoiner[];
   /** On a page of a person other than the owner: the rooms here they wait to be let into. */
   waitingToJoin: string[];
-  /** Where first use of sandboxes stands on this computer. */
-  sandboxSetup: SandboxSetup;
+  /** Where setting up each room's and workspace's sandbox stands on this computer. */
+  sandboxSetups: OwnedSetup[];
   /** The agent config file changes sandboxed agents made, held for the owner's answer. */
   heldChanges: HeldChange[];
   /** The rooms and workspaces whose sandbox stopped as they hold as many changes as one may. */
@@ -315,7 +315,7 @@ export const initialState: AppState = {
   roomInvites: [],
   roomJoiners: [],
   waitingToJoin: [],
-  sandboxSetup: SETUP_NOT_STARTED,
+  sandboxSetups: [],
   heldChanges: [],
   sandboxesHoldingTooMany: [],
   sandboxFolders: [],
@@ -578,7 +578,7 @@ function applyServerMessage(state: AppState, message: ServerMessage): AppState {
         roomWorkspaceWaiting: message.roomWorkspaceWaiting,
         roomInvites: message.roomInvites,
         roomJoiners: message.roomJoiners,
-        sandboxSetup: message.sandboxSetup,
+        sandboxSetups: message.sandboxSetups ?? [],
         heldChanges: message.heldChanges,
         sandboxesHoldingTooMany: message.sandboxesHoldingTooMany,
         sandboxFolders: message.sandboxFolders,
@@ -928,7 +928,9 @@ function applyServerMessage(state: AppState, message: ServerMessage): AppState {
     case "room.workspace-answered":
       return state;
     case "sandbox.setup":
-      return { ...state, sandboxSetup: message.setup };
+      // A host that hasn't restarted since the page was rebuilt says no owner.
+      if (message.owner === undefined) return state;
+      return { ...state, sandboxSetups: [...state.sandboxSetups.filter(({ owner }) => !sameOwner(owner, message.owner)), { owner: message.owner, setup: message.setup }] };
     case "sandbox.held-changes":
       return { ...state, ...withHeldChangesOf(state, message.owner, message.changes, message.full) };
     case "sandbox.folders":

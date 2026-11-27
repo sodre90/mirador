@@ -1,4 +1,5 @@
 import type { ContainerCli, ContainerRun, ContainerRunOptions } from "../host/sandbox/container-cli.ts";
+import { checkFinding, imageOfRun, isBaseCheck } from "./fake-container-cli.ts";
 import { runHere } from "./in-vm-here.ts";
 
 const done = (output = ""): ContainerRun => ({ exitCode: 0, output, stdout: output });
@@ -30,6 +31,12 @@ export class FakePodmanCli implements ContainerCli {
   /** Containers that `rm` leaves where they are. */
   readonly staying = new Set<string>();
   buildSteps = 8;
+  /** What the registry has, by full name: each image's ID once pulled. */
+  readonly registry = new Map<string, string>();
+  /** The ID of each image pulled here, by its name. */
+  private readonly ids = new Map<string, string>();
+  /** What a check of an owner's base image says, by the image it runs. */
+  checkSays: (image: string) => ContainerRun = () => checkFinding("/own/bin:/usr/bin:/bin");
 
   /** The calls of this subcommand. */
   callsOf(command: string) {
@@ -46,6 +53,8 @@ export class FakePodmanCli implements ContainerCli {
     if (failure !== null) return failed(failure);
     const [command, sub] = args;
     if (command === "build") return this.build(args, options);
+    if (command === "pull") return this.pull(args.at(-1)!);
+    if (command === "image" && sub === "inspect") return this.ids.has(args.at(-1)!) ? done(JSON.stringify([{ Id: this.ids.get(args.at(-1)!) }])) : failed(`Error: ${args.at(-1)}: image not known`);
     if (command === "image" && sub === "exists") return this.images.has(localName(args[2]!)) || this.images.has(args[2]!) ? done() : failed("", 1);
     if (command === "image" && sub === "rm") {
       args.slice(2).forEach((name) => this.images.delete(name));
@@ -77,10 +86,19 @@ export class FakePodmanCli implements ContainerCli {
     return done(JSON.stringify(listed));
   }
 
+  private pull(name: string) {
+    const id = this.registry.get(name);
+    if (!id) return failed(`Error: initializing source docker://${name}: reading manifest: manifest unknown`);
+    this.images.add(name);
+    this.ids.set(name, id);
+    return done(id);
+  }
+
   private runOnce(args: string[]) {
     this.ranOnce.push(args);
     const failure = this.failing(args);
-    return failure === null ? done() : failed(failure);
+    if (failure !== null) return failed(failure);
+    return isBaseCheck(args) ? this.checkSays(imageOfRun(args)) : done();
   }
 
   private readonly ending = new Map<string, string>();

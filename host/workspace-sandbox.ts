@@ -68,7 +68,7 @@ export class WorkspaceSandboxes {
     this.conversations.startAfreshInWorkspace(workspaceId, { stopsTurn: narrowsSandbox(workspace.sandbox, sandbox) });
     if (turnsOn) this.ownConversationsOf(workspaceId).forEach(({ id }) => this.terminals.closeAgentPrograms(id));
     const startsOn = this.startsOnProfile(workspaceId);
-    if (sandbox.on) this.sandboxes.prepare(startsOn && workspaceProfileBlocker(startsOn) === null ? [startsOn] : []);
+    if (sandbox.on) this.sandboxes.prepare(workspaceSandbox(workspaceId), startsOn && workspaceProfileBlocker(startsOn) === null ? [startsOn] : []);
   }
 
   /** What the workspace's sandbox reaches besides the model and Mirador, while it is on: from now on, in sessions under way too. */

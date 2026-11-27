@@ -70,6 +70,7 @@ function sandboxHere() {
     canvasOf: () => ({ belongs: () => true, tokenOf: () => "token", handle: () => new Response("canvas") }),
     atWork: () => ({ agents: [], conversationIds: [] }),
     setupChanged: () => {},
+    baseImageOf: () => null,
     heldChanged: () => {},
     foldersOf: () => folders,
     networkOf: () => "closed",

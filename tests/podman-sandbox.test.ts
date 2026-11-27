@@ -9,6 +9,7 @@ import { ANTHROPIC_API } from "../host/sandbox/model-proxy.ts";
 import { computersOwnOnLinux, containersLabelled, imageNamesIn, othersContainersIn, Podman, writableSourcesIn } from "../host/sandbox/podman.ts";
 import { Sandboxes, type AgentInSandbox, type SandboxHost } from "../host/sandbox/sandboxes.ts";
 import { BUN_IN_VM, GUARD_IN_VM, toolsFolderOf } from "../host/sandbox/tools-folder.ts";
+import { imageOfRun, isBaseCheck } from "./fake-container-cli.ts";
 import { DEBIAN_IMAGE, FakePodmanCli } from "./fake-podman-cli.ts";
 import { guardedIn, mountsOfRun } from "./guard-told.ts";
 import { RUNS_SANDBOXES } from "./sandbox-computer.ts";
@@ -28,14 +29,15 @@ function repository() {
   return realpathSync(folder);
 }
 
-function hostFor(workspace: string) {
+function hostFor(workspace: string, baseImage: string | null = null) {
   const setups: SandboxSetup[] = [];
   const host: SandboxHost = {
     dataDir: join(scratch, `data-${crypto.randomUUID()}`),
     workspaceOf: () => workspace,
     canvasOf: () => ({ belongs: () => true, tokenOf: () => "token", handle: () => new Response("canvas") }),
     atWork: () => ({ agents: ["builder"], conversationIds: [] }),
-    setupChanged: (setup) => setups.push(setup),
+    setupChanged: (_, setup) => setups.push(setup),
+    baseImageOf: () => baseImage,
     heldChanged: () => {},
     foldersOf: () => [],
     networkOf: () => "closed" as const,
@@ -189,6 +191,26 @@ describe("a room's sandbox on rootless Podman", () => {
       ["image", "rm", DEBIAN_IMAGE],
       ["image", "rm", `localhost/${BASE_IMAGE_NAME}:0123456789`],
     ]);
+    await sandboxes.stopAll();
+  });
+
+  test.skipIf(!RUNS_SANDBOXES)("runs on the owner's own base image by its ID, pulled for this computer and checked as nobody with no network, and builds none", async () => {
+    const workspace = repository();
+    const { host, setups } = hostFor(workspace, "ghcr.io/team/dev:1");
+    const cli = new FakePodmanCli();
+    const id = "c".repeat(64);
+    cli.registry.set("ghcr.io/team/dev:1", id);
+    const sandboxes = new Sandboxes(new Podman(cli, PLAIN), host, IDLE_STOP_MS);
+
+    (await sandboxes.launch(agentIn(workspace))).gone!();
+
+    expect(cli.callsOf("pull")).toEqual([["pull", "--quiet", "ghcr.io/team/dev:1"]]);
+    expect(cli.callsOf("build")).toEqual([]);
+    const [run] = cli.callsOf("run");
+    expect(run![run!.indexOf("--entrypoint") + 2]).toBe(id);
+    const [check] = cli.ranOnce.filter(isBaseCheck);
+    expect([imageOfRun(check!), valueAfter(check!, "--user"), valueAfter(check!, "--network")]).toEqual([id, "65534:65534", "none"]);
+    expect(setups.flatMap(({ stage, image }) => (image ? [`${stage} ${image}`] : []))).toEqual(["pulling-image ghcr.io/team/dev:1", "checking-image ghcr.io/team/dev:1"]);
     await sandboxes.stopAll();
   });
 

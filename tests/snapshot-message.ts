@@ -1,5 +1,4 @@
 import type { ServerMessage } from "../shared/protocol.ts";
-import { SETUP_NOT_STARTED } from "../shared/sandbox.ts";
 
 export type Snapshot = Extract<ServerMessage, { type: "snapshot" }>;
 
@@ -13,7 +12,7 @@ export const snapshotMessage = (fields: Partial<Snapshot> = {}): Snapshot => ({
   roomApprovals: [],
   roomTasksWaiting: [],
   roomWorkspaceWaiting: [],
-  sandboxSetup: SETUP_NOT_STARTED,
+  sandboxSetups: [],
   heldChanges: [],
   sandboxesHoldingTooMany: [],
   sandboxFolders: [],

@@ -53,6 +53,7 @@ import { DesktopAppCheck } from "./desktop-app-check.ts";
 import { switchOf, type PluginUpdate } from "../shared/apps.ts";
 import { englishProblem } from "../shared/host-problems.ts";
 import type { ConfigFileStatus } from "../shared/settings-file.ts";
+import type { SandboxOwner } from "../shared/sandbox.ts";
 import { Lookout } from "./lookout.ts";
 import { NewerVersionWatcher, newerVersionLookup, pullCheckout } from "./newer-version.ts";
 import { desktopAppCode } from "../shared/desktop-app-code.ts";
@@ -213,6 +214,7 @@ const mcp = new CanvasMcpEndpoints({
   roomsWorkspaces: { callInWorkspace: (conversationId, call, signal) => broughtAgents.callInWorkspace(conversationId, call, signal) },
   antigravityAskWaitMs: config.antigravityAskWaitMs,
 });
+const sandboxSettingOf = (owner: SandboxOwner) => (owner.kind === "room" ? store.findRoom(owner.id) : store.findWorkspace(owner.id))?.sandbox;
 const podman = process.platform === "linux" ? Podman.here(config.sandboxContainer, currentPath() ?? "", config.selinuxEnforceFile) : null;
 const sandboxes = new Sandboxes(podman ?? AppleContainer.here(config.sandboxContainer, currentPath() ?? ""), {
   dataDir: config.dataDir,
@@ -236,10 +238,11 @@ const sandboxes = new Sandboxes(podman ?? AppleContainer.here(config.sandboxCont
       conversationIds: working.flatMap(({ id }) => id ?? []),
     };
   },
-  setupChanged: (setup) => hub.broadcast({ type: "sandbox.setup", setup }),
+  setupChanged: (owner, setup) => hub.broadcast({ type: "sandbox.setup", owner, setup }),
+  baseImageOf: (owner) => sandboxSettingOf(owner)?.baseImage ?? null,
   heldChanged: (owner, changes, full) => hub.broadcast({ type: "sandbox.held-changes", owner, changes, full }),
   foldersOf: (owner) => store.sandboxFoldersOf(owner),
-  networkOf: (owner) => (owner.kind === "room" ? store.findRoom(owner.id) : store.findWorkspace(owner.id))?.sandbox.network ?? "closed",
+  networkOf: (owner) => sandboxSettingOf(owner)?.network ?? "closed",
   otherSandboxes: (owner) => otherSandboxesOf(store, owner),
   foldersStarted: (owner) => sandboxFolders.vmStarted(owner),
 });
@@ -247,7 +250,8 @@ const sandboxFolders = new SandboxFolderService(store, hub, conversations, sandb
 conversations.startsSandboxedAgentsIn(sandboxes);
 const sandboxControl: SandboxControl = {
   availability: () => sandboxes.availability(),
-  prepare: (profiles) => void agentToolsOf(profiles, store.claudeProgramSetting()).then((agents) => agents.forEach((agent) => sandboxes.prepareInBackground(agent))),
+  prepare: (owner, profiles) =>
+    void agentToolsOf(profiles, store.claudeProgramSetting()).then((agents) => (agents.length > 0 ? agents : [null]).forEach((agent) => sandboxes.prepareInBackground(owner, agent))),
   answerHeldChange: (owner, changeId, answer) => sandboxes.answerHeldChange(owner, changeId, answer),
   workspaceRefusal: (workspace, turningOn) => sandboxes.workspaceRefusal(workspace, turningOn),
   launchForBrought: (call) => sandboxes.launchForBrought(call),

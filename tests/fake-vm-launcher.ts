@@ -1,4 +1,5 @@
 import type { SandboxAvailability, SandboxSetup } from "../shared/sandbox.ts";
+import { pulledOrHere } from "../host/sandbox/image.ts";
 import { SandboxNotReady, type AgentInVm, type ThrowawayRun, type VmPlan, type VmLauncher } from "../host/sandbox/vm-launcher.ts";
 import { runHere } from "./in-vm-here.ts";
 
@@ -40,16 +41,46 @@ export class FakeVmLauncher implements VmLauncher {
     return { image, path: null };
   }
 
+  /** What a registry has, by full name: each image's content. */
+  readonly registry = new Map<string, string>();
+  /** The images here, by full name: each one's content. */
+  readonly imagesHere = new Map<string, string>();
+  /** The owner's base images pulled, by full name, each time one was. */
+  readonly pulled: string[] = [];
+
+  async ownBase(name: string) {
+    const pull = async () => {
+      this.pulled.push(name);
+      const content = this.registry.get(name);
+      if (content) this.imagesHere.set(name, content);
+      return content ? { exitCode: 0, output: "" } : { exitCode: 1, output: `Error: ${name} is not in the registry` };
+    };
+    const here = async () => {
+      const content = this.imagesHere.get(name);
+      return content ? { image: `runs-${name}`, content } : null;
+    };
+    return pulledOrHere(name, pull, here);
+  }
+
+  /** What a check of a base image says, by the image it runs: usable, with a PATH, where it isn't given. */
+  checkSays = (_image: string) => ({ exitCode: 0, output: "mirador-base-check\nPATH=/own/bin:/usr/bin:/bin" });
+
+  /** The checks of owners' base images run, by the image each ran. */
+  checked() {
+    return this.ranOnce.filter(isCheck).map(({ image }) => image);
+  }
+
   async runOnce(run: ThrowawayRun) {
     this.ranOnce.push(run);
     await this.runningOnce;
+    if (isCheck(run)) return this.checkSays(run.image);
     const fails = this.runOnceFailsFor !== null && run.args.join(" ").includes(this.runOnceFailsFor);
     return fails ? { exitCode: 1, output: `npm error 404 ${this.runOnceFailsFor} is not in this registry` } : { exitCode: 0, output: "" };
   }
 
   /** What the throwaway containers installed: each npm package at its version, `@anthropic-ai/claude-code@2.1.330`, the guard or Node.js. */
   installed() {
-    return this.ranOnce.map(({ args }) => {
+    return this.ranOnce.filter((run) => !isCheck(run)).map(({ args }) => {
       const script = args.join(" ");
       return /--loglevel=error ([^\s;]+)/.exec(script)?.[1] ?? (script.includes("/src/build.sh") ? "guard" : "node");
     });
@@ -100,3 +131,5 @@ export class FakeVmLauncher implements VmLauncher {
 
   async removeLeftovers() {}
 }
+
+const isCheck = ({ args }: ThrowawayRun) => args.join(" ").includes("mirador-base-check");

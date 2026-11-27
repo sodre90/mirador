@@ -527,6 +527,12 @@ export const problems: Messages["problems"] = {
   sandboxTooManyHeldChanges: (most: number) => `Seine Agenten haben mehr als ${most} zurückgehaltene Dateien geändert, die auf deine Antwort warten: Erlaube oder verwirf zuerst einige.`,
   sandboxSetupFailed: (cause: string) => `Das Einrichten der Sandboxes ist fehlgeschlagen: ${cause}`,
   sandboxCouldNotStart: (cause: string) => `Sie konnte nicht starten: ${cause}`,
+  sandboxBaseImageUnusable: {
+    "pull-failed": (image: string, cause: string) => `Das Basis-Image der Sandbox, ${image}, konnte nicht geladen werden: ${cause}`,
+    "could-not-check": (image: string, cause: string) => `Das Basis-Image der Sandbox, ${image}, konnte nicht geprüft werden: ${cause}`,
+    lacks: (image: string, needs: string[]) => `Dem Basis-Image der Sandbox, ${image}, fehlt, was die Agenten brauchen: ${needs.join(", ")}.`,
+  },
+  baseImageNeeds: { bash: "bash", git: "git", glibc: "eine glibc für den Prozessor dieses Rechners, auf der Bun und Node.js laufen" },
   sandboxNotReadyInTime: (seconds: number) => `Sie war nicht innerhalb von ${seconds} s bereit.`,
   sandboxNoAgentVersion: (program: string) => `Mirador konnte nicht feststellen, welche Version von ${program} hinein soll.`,
   sandboxNotReadyFixed: {

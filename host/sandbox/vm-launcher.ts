@@ -63,6 +63,12 @@ export interface BaseImage {
   path: string | null;
 }
 
+/** The owner's own base image here: how the runtime is to run it, and its content, which a check of it holds for. */
+export interface OwnBase {
+  image: string;
+  content: string;
+}
+
 /** An agent run in a sandbox's VM as an unprivileged user that can't regain root, in its folder, with only the environment it is given. */
 export interface AgentInVm {
   vm: string;
@@ -83,6 +89,11 @@ export interface VmLauncher {
   prepare(progress: (setup: SandboxSetup) => void): Promise<void>;
   /** Mirador's own base image, built from its recipe where it is not here yet, its progress told. */
   defaultBase(progress: (setup: SandboxSetup) => void): Promise<BaseImage>;
+  /**
+   * The owner's own base image, by its full name: pulled afresh, unless it names its digest and is here already, else the
+   * one here where the pull fails. Throws BaseNotPulled where there is none here.
+   */
+  ownBase(name: string): Promise<OwnBase>;
   /** Runs a throwaway container to its end: its exit code and what it said. */
   runOnce(run: ThrowawayRun, timeoutMs: number): Promise<{ exitCode: number; output: string }>;
   /** Starts the VM, once its first process says it is ready; throws SandboxNotReady where it does not get there. */

@@ -204,8 +204,8 @@ describe("letting a brought agent into the room's workspace", () => {
 });
 
 describe("a brought agent in a sandboxed room", () => {
-  const freely: SandboxSetting = { on: true, workFreely: true, allowsSharedKernel: false, network: "closed" };
-  const asking: SandboxSetting = { on: true, workFreely: false, allowsSharedKernel: false, network: "closed" };
+  const freely: SandboxSetting = { on: true, workFreely: true, allowsSharedKernel: false, network: "closed", baseImage: null };
+  const asking: SandboxSetting = { on: true, workFreely: false, allowsSharedKernel: false, network: "closed", baseImage: null };
 
   /** The room's sandbox does its calls on this computer; what it was asked to start and stop. */
   async function sandboxedRoom(sandbox: SandboxSetting, vmStarts = Promise.resolve()) {

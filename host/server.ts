@@ -135,7 +135,7 @@ export interface HostServices {
   store: Store;
   hub: Hub;
   conversations: ConversationService;
-  sandboxes: Pick<Sandboxes, "setup" | "heldChanges" | "holdingTooMany" | "heldChangeText">;
+  sandboxes: Pick<Sandboxes, "setupStates" | "heldChanges" | "holdingTooMany" | "heldChangeText">;
   canvas: CanvasService;
   mcp: CanvasMcpEndpoints;
   apps: AppDocuments;
@@ -2505,7 +2505,7 @@ export function startServer(services: HostServices) {
       roomApprovals: rooms.allApprovals(),
       roomTasksWaiting: rooms.allTasksWaiting(),
       roomWorkspaceWaiting: rooms.allWorkspaceWaiting(),
-      sandboxSetup: sandboxes.setup(),
+      sandboxSetups: sandboxes.setupStates(),
       heldChanges: sandboxes.heldChanges(),
       sandboxesHoldingTooMany: sandboxes.holdingTooMany(),
       sandboxFolders: sandboxFolders.all(),

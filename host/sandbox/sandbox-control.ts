@@ -26,8 +26,8 @@ export type BroughtCallInSandbox = BroughtAgentInSandbox;
 /** What a room's or workspace's settings need of the sandboxes. */
 export interface SandboxControl {
   availability(): SandboxAvailability;
-  /** Sets up what every sandbox needs, and the tools of these profiles' agents, so the first turn need not wait for it. */
-  prepare(profiles: Profile[]): void;
+  /** Sets up what the owner's sandbox needs, and the tools of these profiles' agents, so the first turn need not wait for it. */
+  prepare(owner: SandboxOwner, profiles: Profile[]): void;
   answerHeldChange(owner: SandboxOwner, changeId: string, answer: HeldChangeAnswer): Promise<void>;
   /** The room or workspace is deleted: its VM stops, and what it held goes unanswered. */
   ownerGone(owner: SandboxOwner): Promise<void>;

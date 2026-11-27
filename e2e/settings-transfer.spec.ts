@@ -111,7 +111,7 @@ test.describe("a running Mirador", () => {
         { name: "Claude Code", harness: "claude" },
       ],
       promptTemplates: [{ name: "Standup", text: "What did we do on {{day}}?" }],
-      workspaces: [{ group: "Work", workspaces: [{ group: "Clients", workspaces: [{ path: folder, profile: "brought in", sandbox: { on: false, workFreely: true } }] }] }, { path: join(host.root, "not-there") }],
+      workspaces: [{ group: "Work", workspaces: [{ group: "Clients", workspaces: [{ path: folder, profile: "brought in", sandbox: { on: false, workFreely: true, baseImage: null } }] }] }, { path: join(host.root, "not-there") }],
       preferences: { olderAfter: "2-weeks", conversationsShown: "12" },
     });
 

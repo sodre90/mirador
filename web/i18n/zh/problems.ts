@@ -489,6 +489,12 @@ export const problems: Messages["problems"] = {
   sandboxTooManyHeldChanges: (most: number) => `它的 Agent 改动了超过 ${most} 个暂扣的文件，正等待你的答复：请先允许或丢弃其中一些。`,
   sandboxSetupFailed: (cause: string) => `设置沙箱失败：${cause}`,
   sandboxCouldNotStart: (cause: string) => `它无法启动：${cause}`,
+  sandboxBaseImageUnusable: {
+    "pull-failed": (image: string, cause: string) => `无法拉取沙箱的基础镜像 ${image}：${cause}`,
+    "could-not-check": (image: string, cause: string) => `无法检查沙箱的基础镜像 ${image}：${cause}`,
+    lacks: (image: string, needs: string[]) => `沙箱的基础镜像 ${image} 缺少 Agent 所需的：${needs.join("、")}。`,
+  },
+  baseImageNeeds: { bash: "bash", git: "git", glibc: "适用于这台电脑处理器的 glibc（Bun 和 Node.js 靠它运行）" },
   sandboxNotReadyInTime: (seconds: number) => `它没有在 ${seconds} 秒内就绪。`,
   sandboxNoAgentVersion: (program: string) => `Mirador 无法确定要放入哪个版本的 ${program}。`,
   sandboxNotReadyFixed: {

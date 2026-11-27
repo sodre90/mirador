@@ -19,31 +19,66 @@ export const reachesMoreThan = (network: SandboxNetwork, other: SandboxNetwork) 
 
 /**
  * Whether a room's or a workspace's agents run in a sandbox of their own rather than on this computer, whether they work
- * there without asking or under the room's permission preset, or their profile's permission mode, still, and what it
- * reaches. Where this computer's sandbox shares its kernel, the owner allowed that for the room or workspace: it is never
- * chosen for them.
+ * there without asking or under the room's permission preset, or their profile's permission mode, still, what it
+ * reaches, and the image its VM runs on. Where this computer's sandbox shares its kernel, the owner allowed that for the
+ * room or workspace: it is never chosen for them.
  */
 export interface SandboxSetting {
   on: boolean;
   workFreely: boolean;
   allowsSharedKernel: boolean;
   network: SandboxNetwork;
+  /** The owner's own image, as they named it, for the VM to run on; null for Mirador's base. */
+  baseImage: string | null;
 }
 
-export const NO_SANDBOX: SandboxSetting = { on: false, workFreely: true, allowsSharedKernel: false, network: "closed" };
+export const NO_SANDBOX: SandboxSetting = { on: false, workFreely: true, allowsSharedKernel: false, network: "closed", baseImage: null };
 
-/** A sandbox setting as stored or sent; a shared kernel is allowed, and a network open, only while the sandbox is on, so turning it on again starts from neither. */
+/**
+ * A sandbox setting as stored or sent; a shared kernel is allowed, and a network open, only while the sandbox is on, so
+ * turning it on again starts from neither. A base image is kept only where it is an image's name.
+ */
 export function sandboxSettingIn(value: unknown): SandboxSetting {
   const named = typeof value === "object" && value !== null ? (value as Record<string, unknown>) : {};
   const on = named.on === true;
-  return { on, workFreely: named.workFreely !== false, allowsSharedKernel: on && named.allowsSharedKernel === true, network: on && isSandboxNetwork(named.network) ? named.network : "closed" };
+  return {
+    on,
+    workFreely: named.workFreely !== false,
+    allowsSharedKernel: on && named.allowsSharedKernel === true,
+    network: on && isSandboxNetwork(named.network) ? named.network : "closed",
+    baseImage: isImageName(named.baseImage) ? named.baseImage : null,
+  };
+}
+
+const IMAGE_NAME_MOST = 255;
+const REGISTRY = String.raw`[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?)*(?::[0-9]+)?`;
+const PATH_PART = String.raw`[a-z0-9]+(?:(?:[._]|__|-+)[a-z0-9]+)*`;
+const TAG = String.raw`[\w][\w.-]{0,127}`;
+const IMAGE_NAME = new RegExp(`^(?:${REGISTRY}/)?${PATH_PART}(?:/${PATH_PART})*(?::${TAG})?(?:@sha256:[a-f0-9]{64})?$`);
+
+/** Whether this names an image as Docker reads a name, `[registry[:port]/]path[:tag][@sha256:digest]`, and nothing else. */
+export const isImageName = (value: unknown): value is string => typeof value === "string" && value.length <= IMAGE_NAME_MOST && IMAGE_NAME.test(value);
+
+const DOCKER_HUB = "docker.io";
+
+/**
+ * An image's name with what Docker takes for granted written out, as each runtime is given it alike: Docker Hub where no
+ * registry is named, its `library/` for one of a single part, and `:latest` where neither a tag nor a digest is.
+ */
+export function fullImageName(name: string) {
+  const parts = name.split("/");
+  const namesRegistry = parts.length > 1 && (/[.:]/.test(parts[0]!) || parts[0] === "localhost");
+  const registry = namesRegistry ? parts[0]! : DOCKER_HUB;
+  const path = namesRegistry ? parts.slice(1) : parts;
+  const full = [registry, ...(registry === DOCKER_HUB && path.length === 1 ? ["library"] : []), ...path].join("/");
+  return /[:@]/.test(path.at(-1)!) ? full : `${full}:latest`;
 }
 
 /** The sandbox as it is to be, its network left as it is: that one is set by itself, as a change of it starts nothing afresh. */
 export const keepingNetworkOf = (before: SandboxSetting, after: SandboxSetting): SandboxSetting => ({ ...after, network: before.on && after.on ? before.network : "closed" });
 
 export const sameSandbox = (a: SandboxSetting, b: SandboxSetting) =>
-  a.on === b.on && a.workFreely === b.workFreely && a.allowsSharedKernel === b.allowsSharedKernel && a.network === b.network;
+  a.on === b.on && a.workFreely === b.workFreely && a.allowsSharedKernel === b.allowsSharedKernel && a.network === b.network && a.baseImage === b.baseImage;
 
 /** Turning the sandbox on, "work freely" off in it, or a shared kernel no longer allowed leaves an agent with less: its turn under way stops at once. */
 export const narrowsSandbox = (before: SandboxSetting, after: SandboxSetting) =>
@@ -197,11 +232,24 @@ export interface WorkspaceSandboxCheck extends SandboxCheck {
   profilesThatRun: string[];
 }
 
+/** What a sandbox's agents need of a base image that one may lack: bash, git, and a glibc of this computer's processor, which Bun and Node.js run on. */
+export type BaseImageNeed = "bash" | "git" | "glibc";
+
+/** Why the owner's base image is no use: it couldn't be pulled, nor found here; it couldn't be checked; or it lacks what the agents need. */
+export type BaseImageProblem = { kind: "pull-failed"; cause: string } | { kind: "could-not-check"; cause: string } | { kind: "lacks"; needs: BaseImageNeed[] };
+
+/** The owner's base image, as they named it, and why it is no use. */
+export interface UnusableBase {
+  image: string;
+  problem: BaseImageProblem;
+}
+
 /** Why a sandboxed room's or workspace's agent did not start: it never starts on this computer instead. */
 export type SandboxNotReadyWhy =
   | { kind: "unavailable"; why: SandboxUnavailable }
   | { kind: "blocked"; blocker: SandboxBlocker }
   | { kind: "setup-failed"; cause: string }
+  | ({ kind: "base-image-unusable" } & UnusableBase)
   | { kind: "could-not-start"; cause: string }
   | { kind: "no-agent-version"; harness: SandboxedHarness }
   | { kind: "shared-kernel-not-allowed" }
@@ -253,10 +301,11 @@ const TOOL_PROGRAMS: Record<SandboxTool["kind"], string> = { guard: "mirador-gua
 export const toolNameOf = (tool: SandboxTool) => ("version" in tool ? `${TOOL_PROGRAMS[tool.kind]} ${tool.version}` : TOOL_PROGRAMS[tool.kind]);
 
 /**
- * Where setting up the sandbox stands: the service, where its kind has one, then the base image, built on this computer,
- * then the tools its agents need, each installed on first use.
+ * Where setting up a sandbox stands: the service, where its kind has one; then Mirador's base image, built on this
+ * computer, or the owner's own, pulled; the tools its agents need, each installed on first use; and the owner's image
+ * checked for what they need.
  */
-export type SandboxSetupStage = "not-started" | "starting-service" | "building-image" | "installing-tool" | "ready" | "failed";
+export type SandboxSetupStage = "not-started" | "starting-service" | "building-image" | "pulling-image" | "installing-tool" | "checking-image" | "ready" | "failed";
 
 export interface SandboxSetup {
   stage: SandboxSetupStage;
@@ -264,11 +313,24 @@ export interface SandboxSetup {
   step?: { at: number; of: number };
   /** While a tool is installed: which. */
   tool?: SandboxTool;
-  /** Only when it failed: what went wrong, in a line. */
+  /** While the owner's base image is pulled or checked: which, as they named it. */
+  image?: string;
+  /** Only when it failed for another reason than the owner's base image: what went wrong, in a line. */
   problem?: string;
+  /** Only when it failed as the owner's base image is no use. */
+  unusableBase?: UnusableBase;
 }
 
 export const SETUP_NOT_STARTED: SandboxSetup = { stage: "not-started" };
+
+/** Where setting up a room's or workspace's sandbox stands. */
+export interface OwnedSetup {
+  owner: SandboxOwner;
+  setup: SandboxSetup;
+}
+
+/** Where setting up this sandbox stands, among all of them; not started where it isn't among them. */
+export const setupOf = (setups: OwnedSetup[], owner: SandboxOwner) => setups.find((owned) => sameOwner(owned.owner, owner))?.setup ?? SETUP_NOT_STARTED;
 
 /**
  * An agent's config file in the workspace, or in a folder added read and write, that the sandbox changed, put back as

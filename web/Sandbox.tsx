@@ -4,6 +4,7 @@ import type { Room } from "../shared/rooms.ts";
 import {
   toolNameOf,
   HELD_CHANGES_MOST,
+  isImageName,
   narrowsSandbox,
   roomSandbox,
   SANDBOX_NETWORKS,
@@ -21,10 +22,15 @@ import {
 import { DiffView } from "./Chat.tsx";
 import { connection } from "./connection.ts";
 import { t } from "./i18n/index.ts";
-import { sandboxBlockerText, sandboxUnavailableText } from "./problem-text.ts";
+import {
+  sandboxBlockerText,
+  sandboxUnavailableText,
+  unusableBaseText,
+} from "./problem-text.ts";
 import { SandboxFolderList } from "./SandboxFolders.tsx";
 import { withHomeAsTilde } from "./workspace-folder.ts";
 import { useSentChoice } from "./sent-choice.ts";
+import { useTypingAidAttributes } from "./typing-aids.ts";
 import {
   nameOf,
   roomStartsAfreshText,
@@ -101,14 +107,18 @@ const outsideSelinux = (check: SandboxCheck | null) =>
   check.availability.selinuxEnforcing;
 
 function setupText(
-  { stage, step, tool, problem }: SandboxSetup,
+  { stage, step, tool, image, problem, unusableBase }: SandboxSetup,
   kind: SandboxKind,
 ) {
+  if (stage === "failed" && unusableBase)
+    return words.setupFailed(unusableBaseText(unusableBase, t.problems));
   if (stage === "failed" && problem) return words.setupFailed(problem);
   if (stage === "building-image" && step)
     return words.buildingStep[kind](step.at, step.of);
   if (stage === "installing-tool" && tool)
     return words.installingTool(toolNameOf(tool));
+  if (stage === "pulling-image" && image) return words.pullingImage(image);
+  if (stage === "checking-image" && image) return words.checkingImage(image);
   return words.setup[kind][stage];
 }
 
@@ -130,6 +140,78 @@ function SetupProgress({
           max={step?.of}
           aria-label={stages["building-image"]}
         />
+      )}
+    </div>
+  );
+}
+
+/**
+ * The image the sandbox's VM runs on: the owner's own, by its name, or Mirador's base where none is named. A name typed
+ * is used once the owner says so, and only where it is an image's name.
+ */
+function BaseImageField({
+  id,
+  baseImage,
+  kind,
+  disabled,
+  onUse,
+}: {
+  id: string;
+  baseImage: string | null;
+  kind: SandboxKind | null;
+  disabled: boolean;
+  onUse: (baseImage: string | null) => void;
+}) {
+  const [typed, setTyped] = useState(baseImage ?? "");
+  const typingAidAttributes = useTypingAidAttributes();
+  useEffect(() => {
+    setTyped(baseImage ?? "");
+  }, [baseImage]);
+  const name = typed.trim();
+  const isName = name === "" || isImageName(name);
+  const changed = name !== (baseImage ?? "");
+  const inputId = `${id}-sandbox-base-image`;
+  const needsId = `${inputId}-needs`;
+  const use = () => {
+    if (isName && changed) onUse(name === "" ? null : name);
+  };
+  return (
+    <div className="room-sandbox-base-image">
+      <label htmlFor={inputId}>{words.baseImage.label}</label>
+      <div className="room-sandbox-base-image-row">
+        <input
+          {...typingAidAttributes}
+          id={inputId}
+          value={typed}
+          placeholder={words.baseImage.placeholder}
+          spellCheck={false}
+          aria-invalid={!isName}
+          aria-describedby={kind === null ? undefined : needsId}
+          disabled={disabled}
+          onChange={(event) => setTyped(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key !== "Enter") return;
+            event.preventDefault();
+            use();
+          }}
+        />
+        <button
+          type="button"
+          disabled={disabled || !isName || !changed}
+          onClick={use}
+        >
+          {words.baseImage.use}
+        </button>
+      </div>
+      {!isName && (
+        <p className="room-sandbox-base-image-invalid" role="alert">
+          {words.baseImage.notAName}
+        </p>
+      )}
+      {kind !== null && (
+        <p className="hint" id={needsId}>
+          {words.baseImage.needs[kind]}
+        </p>
       )}
     </div>
   );
@@ -361,6 +443,13 @@ export function SandboxSwitch({
               {switchWords.stillAsks}
             </label>
           </div>
+          <BaseImageField
+            id={id}
+            baseImage={shown.baseImage}
+            kind={kind}
+            disabled={pending !== null}
+            onUse={(baseImage) => choose({ ...shown, baseImage })}
+          />
           {kind !== null && <SetupProgress setup={setup} kind={kind} />}
           {folders}
         </>

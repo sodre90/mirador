@@ -8,6 +8,15 @@ const valueAfter = (args: string[], flag: string) => args[args.indexOf(flag) + 1
 
 const isThrowaway = ([command, ...args]: string[]) => command === "run" && !args.includes("--detach");
 
+/** Whether a throwaway run is the check of an owner's base image. */
+export const isBaseCheck = (args: string[]) => args.join(" ").includes("mirador-base-check");
+
+/** What a check of a base image that has all the agents need says: that it started, and the image's PATH. */
+export const checkFinding = (path: string) => done(`mirador-base-check\nPATH=${path}`);
+
+/** The image a throwaway run runs: the one after its program. */
+export const imageOfRun = (args: string[]) => args[args.indexOf("--entrypoint") + 2]!;
+
 /** Each `-v source:target[:ro]` of a run, as `container list` shows a folder's: its source with a slash at its end. */
 const mountsOf = (args: string[]) =>
   args.flatMap((arg, index) => {
@@ -32,6 +41,12 @@ export class FakeContainerCli implements ContainerCli {
   /** A run whose arguments this matches fails with what it gives. */
   failing: (args: string[]) => string | null = () => null;
   buildSteps = 3;
+  /** What the registry has, by full name: each image's index digest. */
+  readonly registry = new Map<string, string>();
+  /** The index digest of each image pulled here. */
+  private readonly digests = new Map<string, string>();
+  /** What a check of an owner's base image says, by the image it runs. */
+  checkSays: (image: string) => ContainerRun = () => checkFinding("/own/bin:/usr/bin:/bin");
 
   callsOf(command: string) {
     return this.calls.filter(([first]) => first === command);
@@ -91,7 +106,8 @@ export class FakeContainerCli implements ContainerCli {
 
   private image(sub: string, names: string[]) {
     if (sub === "list") return done(JSON.stringify([...this.images].map((reference) => ({ reference }))));
-    if (sub === "inspect") return names.every((name) => this.images.has(name)) ? done("[]") : failed("image not found");
+    if (sub === "pull") return this.pull(names.at(-1)!);
+    if (sub === "inspect") return names.every((name) => this.images.has(name)) ? done(JSON.stringify(names.map((name) => ({ name, index: { digest: this.digests.get(name) ?? `sha256:${"0".repeat(64)}` } })))) : failed("image not found");
     if (sub === "delete") names.forEach((name) => this.images.delete(name));
     return done();
   }
@@ -99,10 +115,19 @@ export class FakeContainerCli implements ContainerCli {
   /** The throwaway containers run, installers of tools among them, by their arguments: kept apart from the calls, as VMs' runs are what those tell. */
   readonly ranOnce: string[][] = [];
 
+  private pull(name: string) {
+    const digest = this.registry.get(name);
+    if (!digest) return failed(`Error: HTTP request to ${name} failed with response: 404 Not Found`);
+    this.images.add(name);
+    this.digests.set(name, digest);
+    return done();
+  }
+
   private runOnce(args: string[]) {
     this.ranOnce.push(args);
     const failure = this.failing(args);
-    return failure === null ? done() : failed(failure);
+    if (failure !== null) return failed(failure);
+    return isBaseCheck(args) ? this.checkSays(imageOfRun(args)) : done();
   }
 
   private start(args: string[]) {

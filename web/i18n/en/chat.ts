@@ -92,6 +92,8 @@ export const chat = {
   } satisfies Record<BusyWith, string>,
   sandboxImageStep: (at: number, of: number) => `Setting up the sandbox: building its base image, step ${at} of ${of}…`,
   sandboxInstalling: (tool: string) => `Setting up the sandbox: installing ${tool}…`,
+  sandboxPulling: (image: string) => `Setting up the sandbox: pulling ${image}…`,
+  sandboxChecking: (image: string) => `Setting up the sandbox: checking ${image}…`,
   notice: {
     lines: (count: number) => `${count} lines`,
     error: "Error",

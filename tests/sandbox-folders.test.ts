@@ -239,6 +239,7 @@ describe("the sandbox's VM", () => {
       canvasOf: () => ({ belongs: () => true, tokenOf: () => "token", handle: () => new Response("canvas") }),
       atWork: () => ({ agents: ["builder"], conversationIds: [] }),
       setupChanged: () => {},
+    baseImageOf: () => null,
       heldChanged: (_, changes) => void held.push(changes),
       foldersOf: () => folders,
       networkOf: () => "closed" as const,
@@ -429,7 +430,7 @@ describe("the sandbox's VM", () => {
   });
 });
 
-const SANDBOX_ON: SandboxSetting = { on: true, workFreely: true, allowsSharedKernel: false, network: "closed" };
+const SANDBOX_ON: SandboxSetting = { on: true, workFreely: true, allowsSharedKernel: false, network: "closed", baseImage: null };
 const BUILDER = { harness: "claude" as const, profileId: "builder" };
 
 const builder: Profile = {

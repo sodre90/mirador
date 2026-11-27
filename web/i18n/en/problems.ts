@@ -1,4 +1,4 @@
-import type { PiModelElsewhere, SandboxUnavailable } from "../../../shared/sandbox.ts";
+import type { BaseImageNeed, PiModelElsewhere, SandboxUnavailable } from "../../../shared/sandbox.ts";
 
 export const problems = {
   fixed: {
@@ -516,6 +516,12 @@ export const problems = {
   sandboxTooManyHeldChanges: (most: number) => `Its agents changed more than ${most} held files, which wait for your answer: allow or discard some first.`,
   sandboxSetupFailed: (cause: string) => `Setting up sandboxes failed: ${cause}`,
   sandboxCouldNotStart: (cause: string) => `It could not start: ${cause}`,
+  sandboxBaseImageUnusable: {
+    "pull-failed": (image: string, cause: string) => `The sandbox's base image ${image} could not be pulled: ${cause}`,
+    "could-not-check": (image: string, cause: string) => `The sandbox's base image ${image} could not be checked: ${cause}`,
+    lacks: (image: string, needs: string[]) => `The sandbox's base image ${image} lacks what the agents need: ${needs.join(", ")}.`,
+  },
+  baseImageNeeds: { bash: "bash", git: "git", glibc: "a glibc for this computer's processor, which Bun and Node.js run on" } satisfies Record<BaseImageNeed, string>,
   sandboxNotReadyInTime: (seconds: number) => `It did not get ready within ${seconds} s.`,
   sandboxNoAgentVersion: (program: string) => `Mirador could not tell which version of ${program} to put in it.`,
   sandboxNotReadyFixed: {

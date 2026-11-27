@@ -165,7 +165,7 @@ export const shell = {
       "The repository's config and hooks are read-only in the sandbox, and so are those of repositories inside the project folder, and the files of the project folder their own config includes, such as a shared .gitconfig. A checkout in the sandbox that would change one of them fails, and no new repository, nor a file called HEAD, can be made in the project folder there. Mirador runs git on the workspace without hooks and fsmonitor, and while the workspace is sandboxed, and for 7 days after, its commits, lands and new worktrees in the project folder, or in any folder inside it, skip the repositories' hooks too.",
       "A folder you add read and write has the same guards as the project folder. It must be a git repository's own top folder, so you can see and undo what the agents change, and no other sandbox may work in it. Its repository's config and hooks, and the files of the folder that config includes, are read-only in the sandbox, its agent config files are held for you as the project folder's are, and Mirador's commits, lands and new worktrees there skip the repositories' hooks while the sandbox works in it and for 7 days after.",
       "New conversations start in the project folder rather than a worktree, as the sandbox sees no worktree. ! commands, sessions from your terminal and Claude Code's own panels don't run here either: they would run on this computer.",
-      "Turning it on or off, or changing how the agents work in it, starts the conversations here afresh.",
+      "Turning it on or off, changing how the agents work in it, or changing its base image starts the conversations here afresh.",
     ],
   },
   workspaceDelete: {

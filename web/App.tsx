@@ -75,7 +75,7 @@ import { joinedRoomShown, joinedRoomsOf, KnockView, knocksOf, useOpenedWhenLetIn
 import { RoomSettingsDialog } from "./RoomSettings.tsx";
 import { useConversationsStartedFromTabs, useWorkspaceTabsSubscribed } from "./workspace-tabs.ts";
 import { landingBefore, landingBelowGroup, type SidebarLanding } from "../shared/workspace-drop.ts";
-import { holdsTooMany, ofSandbox, roomSandbox, workspaceSandbox } from "../shared/sandbox.ts";
+import { holdsTooMany, ofSandbox, roomSandbox, setupOf, workspaceSandbox } from "../shared/sandbox.ts";
 import { conversationSandboxOf, openWorkspaceSandbox, WorkspaceSandboxDialog } from "./WorkspaceSandbox.tsx";
 import { foldersOfSandbox } from "./SandboxFolders.tsx";
 
@@ -1162,7 +1162,7 @@ export function App() {
           workspace={sandboxWorkspace}
           profiles={state.profiles}
           conversations={state.conversations}
-          setup={state.sandboxSetup}
+          setup={setupOf(state.sandboxSetups, workspaceSandbox(sandboxWorkspace.id))}
           heldChanges={state.heldChanges.filter(ofSandbox(workspaceSandbox(sandboxWorkspace.id)))}
           holdsTooMany={holdsTooMany(state.sandboxesHoldingTooMany, workspaceSandbox(sandboxWorkspace.id))}
           sandboxFolders={foldersOfSandbox(state.sandboxFolders, workspaceSandbox(sandboxWorkspace.id))}
@@ -1191,7 +1191,7 @@ export function App() {
           invites={state.roomInvites}
           joiners={state.roomJoiners.filter(({ roomId }) => roomId === settingsRoom.id)}
           roomConversations={state.roomConversations}
-          sandboxSetup={state.sandboxSetup}
+          sandboxSetup={setupOf(state.sandboxSetups, roomSandbox(settingsRoom.id))}
           sandboxFolders={foldersOfSandbox(state.sandboxFolders, roomSandbox(settingsRoom.id))}
           homeDir={state.homeDir}
           onInvite={() => dispatch({ type: "open-overlay", overlay: { kind: "room-invite", roomId: settingsRoom.id } })}

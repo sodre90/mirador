@@ -1,5 +1,5 @@
 import type { ConversationPlace, Launch, SideChatAccess, Workspace } from "../../shared/model.ts";
-import type { SandboxSetting } from "../../shared/sandbox.ts";
+import { sandboxSettingIn, type SandboxSetting } from "../../shared/sandbox.ts";
 import { isFileGroup, type FileProfileReference, type FileSandbox, type FileSidebarEntry, type FileWorkspace, type FileWorkspaceGroup } from "../../shared/settings-file.ts";
 import { itemsIn, shownGroupOf, sidebarIds, sidebarItems } from "../../shared/sidebar-order.ts";
 import { insertWorkspaceOf } from "../new-workspace.ts";
@@ -196,4 +196,5 @@ class FileSidebar {
   }
 }
 
-const matchesSandbox = (inFile: FileSandbox, here: SandboxSetting) => inFile.on === here.on && inFile.workFreely === here.workFreely;
+const matchesSandbox = (inFile: FileSandbox, here: SandboxSetting) =>
+  inFile.on === here.on && inFile.workFreely === here.workFreely && sandboxSettingIn(inFile).baseImage === here.baseImage;

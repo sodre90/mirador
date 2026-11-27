@@ -1,6 +1,6 @@
 import type { AgentGone, HostProblem, PrelaunchFailure } from "../shared/host-problems.ts";
 import { harnessLabels } from "../shared/model.ts";
-import type { SandboxBlocker, SandboxNotReadyWhy, SandboxUnavailable } from "../shared/sandbox.ts";
+import type { SandboxBlocker, SandboxNotReadyWhy, SandboxUnavailable, UnusableBase } from "../shared/sandbox.ts";
 import type { problems } from "./i18n/en/problems.ts";
 
 export type ProblemWords = typeof problems;
@@ -73,6 +73,12 @@ export function sandboxBlockerText(blocker: SandboxBlocker, words: ProblemWords)
   }
 }
 
+/** Why the sandbox's base image is no use, in plain words. */
+export function unusableBaseText({ image, problem }: UnusableBase, words: ProblemWords) {
+  const said = words.sandboxBaseImageUnusable;
+  return problem.kind === "lacks" ? said.lacks(image, problem.needs.map((need) => words.baseImageNeeds[need])) : said[problem.kind](image, problem.cause);
+}
+
 function sandboxNotReadyText(why: SandboxNotReadyWhy, words: ProblemWords) {
   switch (why.kind) {
     case "unavailable":
@@ -83,6 +89,8 @@ function sandboxNotReadyText(why: SandboxNotReadyWhy, words: ProblemWords) {
       return words.sandboxSetupFailed(why.cause);
     case "could-not-start":
       return words.sandboxCouldNotStart(why.cause);
+    case "base-image-unusable":
+      return unusableBaseText(why, words);
     case "not-ready-in-time":
       return words.sandboxNotReadyInTime(why.seconds);
     case "too-many-held-changes":

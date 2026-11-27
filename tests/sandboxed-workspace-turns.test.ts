@@ -34,7 +34,7 @@ afterAll(async () => {
   rmSync(scratch, { recursive: true, force: true });
 });
 
-const SANDBOX_ON: SandboxSetting = { on: true, workFreely: true, allowsSharedKernel: false, network: "closed" };
+const SANDBOX_ON: SandboxSetting = { on: true, workFreely: true, allowsSharedKernel: false, network: "closed", baseImage: null };
 const BUILDER = { harness: "claude" as const, profileId: "builder" };
 
 /** Claude Code as this computer runs it. */
@@ -89,6 +89,7 @@ function sandboxedWorkspace(sandbox: SandboxSetting = SANDBOX_ON) {
     canvasOf: () => ({ belongs: () => false, tokenOf: () => "", handle: () => new Response() }),
     atWork: () => ({ agents: [], conversationIds: [] }),
     setupChanged: () => {},
+    baseImageOf: () => null,
     heldChanged: () => {},
     foldersOf: () => [],
     networkOf: () => "closed" as const,
@@ -105,7 +106,7 @@ function sandboxedWorkspace(sandbox: SandboxSetting = SANDBOX_ON) {
   const control: SandboxControl = {
     ...NO_SANDBOX_CONTROL,
     availability: () => sandboxes.availability(),
-    prepare: (profiles) => void preparedFor.push(profiles.map(({ id }) => id)),
+    prepare: (_, profiles) => void preparedFor.push(profiles.map(({ id }) => id)),
     answerHeldChange: (owner, changeId, answer) => sandboxes.answerHeldChange(owner, changeId, answer),
     workspaceRefusal: (workspace, turningOn) => sandboxes.workspaceRefusal(workspace, turningOn),
     ownerGone: (owner) => sandboxes.ownerGone(owner),

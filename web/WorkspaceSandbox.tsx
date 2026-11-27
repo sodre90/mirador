@@ -1,6 +1,6 @@
 import { useEffect, useState, type Dispatch } from "react";
 import type { Conversation, Profile, Workspace } from "../shared/model.ts";
-import { holdsTooMany, ofSandbox, workspaceSandbox, type HeldChange, type SandboxBlocker, type SandboxFolders, type SandboxSetup, type WorkspaceSandboxCheck } from "../shared/sandbox.ts";
+import { holdsTooMany, ofSandbox, roomSandbox, setupOf, workspaceSandbox, type HeldChange, type SandboxBlocker, type SandboxFolders, type SandboxSetup, type WorkspaceSandboxCheck } from "../shared/sandbox.ts";
 import { connection } from "./connection.ts";
 import { t } from "./i18n/index.ts";
 import { launchLabel } from "./launch-label.ts";
@@ -174,12 +174,12 @@ export interface ConversationSandbox {
   setup: SandboxSetup;
 }
 
-export function conversationSandboxOf(state: Pick<AppState, "workspaces" | "heldChanges" | "sandboxesHoldingTooMany" | "sandboxSetup">, { id, workspaceId, roomId }: Conversation): ConversationSandbox {
+export function conversationSandboxOf(state: Pick<AppState, "workspaces" | "heldChanges" | "sandboxesHoldingTooMany" | "sandboxSetups">, { id, workspaceId, roomId }: Conversation): ConversationSandbox {
   const owner = workspaceSandbox(workspaceId);
   return {
     sandboxed: roomId === undefined && state.workspaces.some((workspace) => workspace.id === workspaceId && workspace.sandbox.on),
     heldChanges: roomId === undefined ? state.heldChanges.filter((change) => ofSandbox(owner)(change) && change.conversationIds.includes(id)) : [],
     holdsTooMany: holdsTooMany(state.sandboxesHoldingTooMany, owner),
-    setup: state.sandboxSetup,
+    setup: setupOf(state.sandboxSetups, roomId === undefined ? owner : roomSandbox(roomId)),
   };
 }

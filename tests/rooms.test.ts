@@ -2102,7 +2102,7 @@ describe("what a room's agents are given of the owner's setup", () => {
 });
 
 describe("what a room's sandbox reaches", () => {
-  const SANDBOX_ON: SandboxSetting = { on: true, workFreely: true, allowsSharedKernel: false, network: "closed" };
+  const SANDBOX_ON: SandboxSetting = { on: true, workFreely: true, allowsSharedKernel: false, network: "closed", baseImage: null };
   const networkOf = (store: Store, roomId: string) => store.findRoom(roomId)!.sandbox.network;
 
   test("changes by itself, with nothing started afresh, and is told once stored", async () => {
@@ -2148,7 +2148,7 @@ describe("what a room's sandbox reaches", () => {
 });
 
 describe("a room's sandbox leaving its workspace", () => {
-  const SANDBOX_ON: SandboxSetting = { on: true, workFreely: true, allowsSharedKernel: false, network: "closed" };
+  const SANDBOX_ON: SandboxSetting = { on: true, workFreely: true, allowsSharedKernel: false, network: "closed", baseImage: null };
 
   test("turned off, or gone with its room, it leaves the repositories' hooks off in the workspace's folder and its folders read and write for 7 days", async () => {
     const { store, rooms, room } = machineWithRooms();

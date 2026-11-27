@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import type { SandboxSetup } from "../../shared/sandbox.ts";
 import { lastLineOf, type ContainerCli } from "./container-cli.ts";
+import type { OwnBase } from "./vm-launcher.ts";
 
 export const BASE_RECIPE = join(import.meta.dir, "base.Containerfile");
 
@@ -47,6 +48,25 @@ export function imageReferencesIn(listed: string): Set<string> {
 export const listImages = async (cli: ContainerCli) => imageReferencesIn((await cli.run(["image", "list", "--format", "json"])).output);
 
 export class SetupFailed extends Error {}
+
+/** The owner's base image could be neither pulled nor found here: what the pull said last. */
+export class BaseNotPulled extends Error {}
+
+export const PULL_TIMEOUT_MS = 30 * 60_000;
+
+/**
+ * The owner's base image, pulled afresh, unless it names its digest and is here already, and else the one here, where the
+ * pull fails, as it does offline or for an image built here. Throws BaseNotPulled where there is none here.
+ */
+export async function pulledOrHere(name: string, pull: () => Promise<{ exitCode: number; output: string }>, here: () => Promise<OwnBase | null>): Promise<OwnBase> {
+  const pinned = name.includes("@");
+  const pinnedHere = pinned ? await here() : null;
+  if (pinnedHere) return pinnedHere;
+  const pulled = await pull();
+  const found = await here();
+  if (!found) throw new BaseNotPulled(lastLineOf(pulled.output) || `exit ${pulled.exitCode}`);
+  return found;
+}
 
 export const mustRun = async (cli: ContainerCli, args: string[], options?: Parameters<ContainerCli["run"]>[1]) => {
   const result = await cli.run(args, options);

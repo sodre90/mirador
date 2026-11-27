@@ -81,7 +81,7 @@ describe("an export of the settings", () => {
     store.setWorkspaceGroup(grouped.id, group.id);
     store.setWorkspaceColor(grouped.id, "teal");
     store.setWorkspaceSideChatAccess(grouped.id, "read-only");
-    store.setWorkspaceSandbox(grouped.id, { on: true, workFreely: false, allowsSharedKernel: true, network: "everything" });
+    store.setWorkspaceSandbox(grouped.id, { on: true, workFreely: false, allowsSharedKernel: true, network: "everything", baseImage: "ghcr.io/team/dev:1" });
     const inside = addGroup(store, "Old", group.id);
     store.setSidebarOrder([group.id, grouped.id, inside.id, apart.id]);
 
@@ -89,11 +89,11 @@ describe("an export of the settings", () => {
       {
         group: "Clients",
         workspaces: [
-          { path: "~/code/grouped", profile: "work", color: "teal", newConversationsIn: "folder", worktreeSetup: "", sideChatAccess: "read-only", sandbox: { on: true, workFreely: false } },
+          { path: "~/code/grouped", profile: "work", color: "teal", newConversationsIn: "folder", worktreeSetup: "", sideChatAccess: "read-only", sandbox: { on: true, workFreely: false, baseImage: "ghcr.io/team/dev:1" } },
           { group: "Old", workspaces: [] },
         ],
       },
-      { path: "/srv/apart", color: null, newConversationsIn: "folder", worktreeSetup: "", sideChatAccess: null, sandbox: { on: false, workFreely: true } },
+      { path: "/srv/apart", color: null, newConversationsIn: "folder", worktreeSetup: "", sideChatAccess: null, sandbox: { on: false, workFreely: true, baseImage: null } },
     ]);
   });
 

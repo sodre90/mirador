@@ -6,6 +6,8 @@
  * script that puts held files back in a VM here, from host/sandbox/in-vm; what it runs ends with the VM. A throwaway
  * `run`, which installs a tool, installs nothing and succeeds. With FAKE_CONTAINER_BUILD_HELD_BY, the base image's build
  * stops after its second step until that file exists; with FAKE_CONTAINER_INSTALL_HELD_BY, so does Claude Code's install.
+ * A pull gets any image but one whose name has /missing in it; the check of an owner's base image, noted in checks.log,
+ * finds all the agents need but in one whose name has lacks-git in it.
  */
 import { appendFileSync, existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -26,8 +28,9 @@ const HELD_PLACES_HERE = join(import.meta.dirname, "../host/sandbox/in-vm/held-p
 const stateFolder = process.env.FAKE_CONTAINER_STATE!;
 const statePath = join(stateFolder, "state.json");
 const args = process.argv.slice(2);
-const isInstall = args[0] === "run" && !args.includes("--detach");
-appendFileSync(join(stateFolder, isInstall ? "installs.log" : "calls.log"), `${JSON.stringify(args)}\n`);
+const isThrowaway = args[0] === "run" && !args.includes("--detach");
+const isCheck = isThrowaway && args.join(" ").includes("mirador-base-check");
+appendFileSync(join(stateFolder, isCheck ? "checks.log" : isThrowaway ? "installs.log" : "calls.log"), `${JSON.stringify(args)}\n`);
 
 const read = (): State => (existsSync(statePath) ? JSON.parse(readFileSync(statePath, "utf8")) : { serviceRunning: false, builderRunning: false, images: [], vms: {} });
 const write = (state: State) => {
@@ -59,6 +62,26 @@ async function build() {
   await waitForFile(process.env.FAKE_CONTAINER_BUILD_HELD_BY);
   console.log("#7 [3/3] RUN find / -xdev -perm /6000 -type f -exec chmod a-s {} +");
   change((state) => state.images.push(tag));
+}
+
+function pull(name: string) {
+  if (name.includes("/missing")) {
+    console.error(`Error: HTTP request to ${name} failed with response: 404 Not Found`);
+    process.exit(1);
+  }
+  change((state) => void (state.images.includes(name) || state.images.push(name)));
+}
+
+function inspect(name: string) {
+  if (!read().images.includes(name)) process.exit(1);
+  console.log(JSON.stringify([{ name, index: { digest: `sha256:${new Bun.CryptoHasher("sha256").update(name).digest("hex")}` } }]));
+}
+
+function checkImage() {
+  const image = args[args.indexOf("--entrypoint") + 2]!;
+  console.log("mirador-base-check");
+  if (image.includes("lacks-git")) console.log("lacks git");
+  console.log("PATH=/team/bin:/usr/local/bin:/usr/bin:/bin");
 }
 
 async function installTool() {
@@ -111,11 +134,16 @@ switch (command) {
     break;
   case "image":
     if (sub === "list") console.log(JSON.stringify(read().images.map((reference) => ({ reference }))));
-    if (sub === "inspect") process.exit(read().images.includes(args[2]!) ? 0 : 1);
+    if (sub === "pull") pull(args.at(-1)!);
+    if (sub === "inspect") inspect(args[2]!);
     if (sub === "delete") change((state) => (state.images = state.images.filter((name) => !args.slice(2).includes(name))));
     break;
   case "run":
-    if (isInstall) {
+    if (isCheck) {
+      checkImage();
+      break;
+    }
+    if (isThrowaway) {
       await installTool();
       break;
     }

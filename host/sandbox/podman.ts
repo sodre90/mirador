@@ -6,8 +6,8 @@ import { AGENT_USER } from "./agent-environment.ts";
 import { askPodman, podmanAvailability, podmanProgram, podmanStorageIn, SELINUX_ENFORCE } from "./availability.ts";
 import { containerCli, lastLineOf, type ContainerCli } from "./container-cli.ts";
 import { droppedTo, environmentFlags, execProcessEnvironment, readByTool } from "./exec-environment.ts";
-import { BASE_RECIPE, baseImageOf, BUILD_TIMEOUT_MS, buildProgress, DEFAULT_BASE_PATH, defaultBaseTag, isMiradorsBase, mustRun } from "./image.ts";
-import { HOST_LABEL, isAnotherMiradors, SandboxNotReady, VM_READY_LINE, withoutTrailingSlash, type AgentInVm, type Mount, type ThrowawayRun, type VmPlan, type VmLauncher } from "./vm-launcher.ts";
+import { BASE_RECIPE, baseImageOf, BUILD_TIMEOUT_MS, buildProgress, DEFAULT_BASE_PATH, defaultBaseTag, isMiradorsBase, mustRun, pulledOrHere, PULL_TIMEOUT_MS } from "./image.ts";
+import { HOST_LABEL, isAnotherMiradors, SandboxNotReady, VM_READY_LINE, withoutTrailingSlash, type AgentInVm, type Mount, type OwnBase, type ThrowawayRun, type VmPlan, type VmLauncher } from "./vm-launcher.ts";
 
 const READY_WITHIN_S = 30;
 /** The first start of an image as the agent user's own may copy its files for that user, which takes a while. */
@@ -168,6 +168,12 @@ export function imageNamesIn(listed: string): string[] {
 
 const imageExists = async (cli: ContainerCli, image: string) => (await cli.run(["image", "exists", image])).exitCode === 0;
 
+/** The owner's base image as `podman image inspect --format json` gives it, `[{ Id }]`: run by its ID, which is its content. */
+export function ownBaseIn(inspected: string): OwnBase | null {
+  const id = arrayIn<{ Id?: unknown }>(inspected)?.[0]?.Id;
+  return typeof id === "string" && /^[a-f0-9]{64}$/.test(id) ? { image: id, content: id } : null;
+}
+
 /**
  * Builds Mirador's base image on this computer from its recipe, with an empty folder as the build's context and no layers
  * kept besides the image's own, then removes the image it builds on where the build pulled it, and the bases of other
@@ -228,6 +234,15 @@ export class Podman implements VmLauncher {
     const tag = await defaultBaseTag();
     if (!(await imageExists(cli, tag))) await buildImage(cli, tag, progress);
     return { image: tag, path: DEFAULT_BASE_PATH };
+  }
+
+  async ownBase(name: string) {
+    const cli = this.usable();
+    const here = async () => {
+      const inspected = await cli.run(["image", "inspect", "--format", "json", name]);
+      return inspected.exitCode === 0 ? ownBaseIn(inspected.stdout) : null;
+    };
+    return pulledOrHere(name, () => cli.run(["pull", "--quiet", name], { timeoutMs: PULL_TIMEOUT_MS }), here);
   }
 
   async runOnce(run: ThrowawayRun, timeoutMs: number) {

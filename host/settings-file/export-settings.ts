@@ -129,7 +129,7 @@ class SettingsExport {
     return items.map((item) => (item.kind === "workspace" ? this.workspace(item.workspace) : { group: item.group.name, workspaces: this.sidebar(item.items) }));
   }
 
-  private workspace({ path, defaultLaunch, color, newConversationsIn, worktreeSetup, sideChatAccess, sandbox: { on, workFreely } }: Workspace): FileWorkspace {
+  private workspace({ path, defaultLaunch, color, newConversationsIn, worktreeSetup, sideChatAccess, sandbox: { on, workFreely, baseImage } }: Workspace): FileWorkspace {
     return {
       path: homePath(path),
       ...(defaultLaunch.profileId && this.reference(defaultLaunch.profileId)),
@@ -137,7 +137,7 @@ class SettingsExport {
       newConversationsIn,
       worktreeSetup,
       sideChatAccess,
-      sandbox: { on, workFreely },
+      sandbox: { on, workFreely, baseImage },
     };
   }
 

@@ -42,6 +42,7 @@ function hostFor(workspaces: { current: string }) {
     canvasOf: () => ({ belongs: () => true, tokenOf: () => "token", handle: () => new Response("canvas") }),
     atWork: () => ({ agents: ["builder"], conversationIds: [] }),
     setupChanged: () => {},
+    baseImageOf: () => null,
     heldChanged: (_, changes) => held.push(changes),
     foldersOf: () => folders,
     networkOf: () => reached.now,

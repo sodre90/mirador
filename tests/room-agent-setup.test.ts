@@ -296,10 +296,10 @@ describe("a room's agent's process environment", () => {
     expect(fingerprint("claude", "ANTHROPIC_API_KEY=k\nDEPLOY_TOKEN=x", NOTHING_CHOSEN, CLEAN)).not.toBe(base);
     expect(fingerprint("codex", "X=1", NOTHING_CHOSEN, CLEAN)).toBe(fingerprint("codex", "X=1"));
     expect(fingerprint("codex", "not an environment line")).toBe(fingerprint("codex", ""));
-    expect(fingerprint("claude", "ANTHROPIC_API_KEY=k", NOTHING_CHOSEN, ALL_OF_CLAUDE_SETUP, { on: false, workFreely: false, allowsSharedKernel: false, network: "closed" })).toBe(fingerprint("claude", "ANTHROPIC_API_KEY=k"));
-    const sandboxed = fingerprint("claude", "ANTHROPIC_API_KEY=k", NOTHING_CHOSEN, ALL_OF_CLAUDE_SETUP, { on: true, workFreely: true, allowsSharedKernel: false, network: "closed" });
+    expect(fingerprint("claude", "ANTHROPIC_API_KEY=k", NOTHING_CHOSEN, ALL_OF_CLAUDE_SETUP, { on: false, workFreely: false, allowsSharedKernel: false, network: "closed", baseImage: null })).toBe(fingerprint("claude", "ANTHROPIC_API_KEY=k"));
+    const sandboxed = fingerprint("claude", "ANTHROPIC_API_KEY=k", NOTHING_CHOSEN, ALL_OF_CLAUDE_SETUP, { on: true, workFreely: true, allowsSharedKernel: false, network: "closed", baseImage: null });
     expect(sandboxed).not.toBe(fingerprint("claude", "ANTHROPIC_API_KEY=k"));
-    expect(fingerprint("claude", "ANTHROPIC_API_KEY=k", NOTHING_CHOSEN, ALL_OF_CLAUDE_SETUP, { on: true, workFreely: false, allowsSharedKernel: false, network: "closed" })).not.toBe(sandboxed);
+    expect(fingerprint("claude", "ANTHROPIC_API_KEY=k", NOTHING_CHOSEN, ALL_OF_CLAUDE_SETUP, { on: true, workFreely: false, allowsSharedKernel: false, network: "closed", baseImage: null })).not.toBe(sandboxed);
   });
 });
 
