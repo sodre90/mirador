@@ -11468,7 +11468,7 @@ button.link.more-rows {
   color: color-mix(in srgb, var(--warn) 55%, var(--text));
 }
 
-.room-entry.by-agent {
+.room-entry.written-by-agent {
   background: color-mix(in srgb, var(--agent-colour) 7%, transparent);
 }
 

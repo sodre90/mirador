@@ -263,6 +263,11 @@ test("an agent's answer has a faint colour of its own, and stands out for whom i
   await letIn(page, "Beds", "Mia", "Member");
   const mia = await openAs(browser, people.mia);
   const backgroundOf = (entry: Locator) => entry.evaluate((element) => getComputedStyle(element).backgroundColor);
+  const textLookOf = (entry: Locator) =>
+    entry.locator(".message").evaluate((element) => {
+      const { fontSize, color } = getComputedStyle(element);
+      return { fontSize, color };
+    });
 
   await test.step("answering the owner's own task, the agent's tag of her is marked, but the answer does not stand out for her", async () => {
     await writeTagging(memberComposer(page, "Beds"), tagMenu(page), "Bu", "Builder", "SAY @Olivia the beds are dug");
@@ -271,6 +276,8 @@ test("an agent's answer has a faint colour of its own, and stands out for whom i
     await expect(answer).not.toHaveClass(/\btags-you\b/);
     await expect(answer).toHaveClass(/\bagent-opencode\b/);
     expect(await backgroundOf(answer)).not.toBe("rgba(0, 0, 0, 0)");
+    const task = roomEntries(page).filter({ has: page.locator(".message.user", { hasText: "the beds are dug" }) });
+    expect(await textLookOf(answer)).toEqual(await textLookOf(task));
     await screenshot(roomEntries(page).last(), "answer-to-own-task");
   });
 

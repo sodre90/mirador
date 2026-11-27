@@ -140,7 +140,7 @@ const callsOnYou = (message: RoomMessage, answered: RoomMessage | undefined, you
 
 const entryClasses = (message: RoomMessage, answered: RoomMessage | undefined, agentsById: Map<string, RoomAgentShown>, you: string | null) => {
   const harness = writtenByAgent(message.author) ? (agentsById.get(message.author.profileId)?.harness ?? "gone") : null;
-  return ["timeline-entry", "group-start", "room-entry", ...(harness ? ["by-agent", `agent-${harness}`] : []), ...(callsOnYou(message, answered, you) ? ["tags-you"] : [])].join(" ");
+  return ["timeline-entry", "group-start", "room-entry", ...(harness ? ["written-by-agent", `agent-${harness}`] : []), ...(callsOnYou(message, answered, you) ? ["tags-you"] : [])].join(" ");
 };
 
 function RoomEntry({
