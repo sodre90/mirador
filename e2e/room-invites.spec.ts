@@ -489,3 +489,50 @@ test("an invite leaves the owner's list of waiting invites as it expires", async
   await page.clock.fastForward("02:00");
   await expect(waiting).toHaveCount(0);
 });
+
+test("switching between rooms on different machines keeps each room filling the whole pane while the other stays loaded", async ({ page, browser }) => {
+  const secondOwners = new TestHost({ environment: reachedAtOwnPort });
+  await secondOwners.start();
+  const secondOwner = await browser.newPage();
+  const visitor = await browser.newPage();
+  try {
+    await signIn(page, owners);
+    const gardenInvite = await inviteIntoRoom(page, "Garden");
+
+    await signIn(secondOwner, secondOwners);
+    await nameOwnProfile(secondOwner, "Ben");
+    await nameMachine(secondOwner, "Ben's machine");
+    await addWorkspace(secondOwner, secondOwners.projectDir);
+    await createRoom(secondOwner, "Porch", []);
+    const porchInvite = await inviteIntoRoom(secondOwner, "Porch");
+
+    await signIn(visitor, visitors);
+    await expect(await joinRoom(visitor, gardenInvite)).toHaveCount(0);
+    await expect(visitor.frameLocator('iframe[title="Ann\'s machine"]').getByRole("heading", { name: "# Garden" })).toBeVisible();
+
+    await expect(await joinRoom(visitor, porchInvite)).toHaveCount(0);
+    await expect(visitor.frameLocator('iframe[title="Ben\'s machine"]').getByRole("heading", { name: "# Porch" })).toBeVisible();
+
+    const body = visitor.locator(".invited-room-body");
+    await expect(body.locator("iframe.machine-frame")).toHaveCount(2);
+
+    const expectFillsBody = async (title: string) => {
+      const [bodyBox, frameBox] = await Promise.all([body.boundingBox(), body.locator(`iframe.machine-frame.shown[title="${title}"]`).boundingBox()]);
+      expect(frameBox!.x).toBeCloseTo(bodyBox!.x, 0);
+      expect(frameBox!.y).toBeCloseTo(bodyBox!.y, 0);
+      expect(frameBox!.width).toBeCloseTo(bodyBox!.width, 0);
+      expect(frameBox!.height).toBeCloseTo(bodyBox!.height, 0);
+    };
+
+    await expectFillsBody("Ben's machine");
+
+    await roomCard(visitor, "Garden").click();
+    await expect(visitor.frameLocator('iframe[title="Ann\'s machine"]').getByRole("heading", { name: "# Garden" })).toBeVisible();
+    await expect(body.locator("iframe.machine-frame")).toHaveCount(2);
+    await expectFillsBody("Ann's machine");
+  } finally {
+    await Promise.all([visitor.close(), secondOwner.close()]);
+    await secondOwners.stop();
+    await secondOwners.cleanUp();
+  }
+});

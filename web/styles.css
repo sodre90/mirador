@@ -332,19 +332,26 @@ button.icon.layout-toggle svg {
   grid-column: 1;
 }
 
+/* Every visited invited-room machine's frame shares this cell so hidden ones stay loaded without taking width beside the shown one. */
 .invited-room-body {
   position: relative;
   grid-row: 2;
   grid-column: 1;
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   min-width: 0;
   min-height: 0;
 }
 
 .invited-room-body > .machine-frame,
 .invited-room-body > .machine-join {
-  flex: 1 1 auto;
+  grid-row: 1;
+  grid-column: 1;
   min-width: 0;
+}
+
+.invited-room-body > .machine-frame {
   height: 100%;
 }
 
