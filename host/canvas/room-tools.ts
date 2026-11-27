@@ -37,13 +37,13 @@ export function registerRoomTools(
       description:
         "Read messages of your room older than those you were sent with your task: the latest before a message's number or a time, or those whose text holds what you look for. They come numbered, with their author and time, oldest first, as the room's messages reach you. Only messages you were sent count.",
       inputSchema: z.object({
-        before: z.number().int().positive().optional().describe("A message's number, 12 for #12: only messages before it."),
+        before: z.number().int().min(1).optional().describe("A message's number, 12 for #12: only messages before it."),
         beforeTime: z.string().optional().describe("A time in UTC as the room's messages show it, such as 2026-11-20 09:00: only messages written before it."),
         search: z.string().optional().describe("Only messages whose text holds this, in any case."),
         limit: z
           .number()
           .int()
-          .positive()
+          .min(1)
           .optional()
           .describe(`How many of the latest messages that match, at most: ${ROOM_HISTORY_COUNT} when left out, ${ROOM_HISTORY_MOST} at the most.`),
       }),

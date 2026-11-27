@@ -34,7 +34,7 @@ export function registerRoomWorkspaceTools(
       description: "Read a text file of the room's workspace, on the room's machine, from a line on; or, for a folder, the names in it.",
       inputSchema: z.object({
         path,
-        from_line: z.number().int().positive().optional().describe("The line to start at, 1 when left out. A long file comes in parts; go on from where one ends."),
+        from_line: z.number().int().min(1).optional().describe("The line to start at, 1 when left out. A long file comes in parts; go on from where one ends."),
       }),
       ...extras,
     },

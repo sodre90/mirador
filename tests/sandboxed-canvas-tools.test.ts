@@ -70,3 +70,13 @@ test("a call from a sandbox's VM that names another conversation's session is re
 
   expect(JSON.stringify(answer)).toContain("This canvas server serves only its own conversation");
 });
+
+test("canvas and room tool schemas avoid exclusiveMinimum/exclusiveMaximum so Gemini/Antigravity keeps every tool enabled", async () => {
+  const { mcpRequest } = canvasOfASandboxedWorkspace();
+  for (const [from, conversationId] of [["this-computer", "c1"], ["sandbox", "c2"]] as const) {
+    const { result } = await mcpRequest(from, conversationId, "tools/list", {});
+    const serialized = JSON.stringify(result.tools);
+    expect(serialized).not.toContain('"exclusiveMinimum"');
+    expect(serialized).not.toContain('"exclusiveMaximum"');
+  }
+});

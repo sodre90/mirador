@@ -45,7 +45,8 @@ const askQuestionShape = {
   html: z.string().optional(),
   allowOther: z.boolean().optional(),
   multiple: z.boolean().optional(),
-  optionWidth: z.number().int().positive().optional(),
+  // Use min(1) rather than positive(): Zod v4 emits Draft 2020-12 numeric exclusiveMinimum for positive(), which drops the tool on Gemini/Antigravity.
+  optionWidth: z.number().int().min(1).optional(),
 };
 
 /** Ask's fields are described once, where the single question takes them, so the agent doesn't read each text twice. */
