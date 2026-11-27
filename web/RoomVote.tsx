@@ -5,6 +5,7 @@ import { MOST_OWN_ANSWER_CHARACTERS, pickOf, picksOf, type RoomConfirmedAnswer, 
 import { PersonAvatar, usePersonName, usePersonNames } from "./Chat.tsx";
 import { connection } from "./connection.ts";
 import { formatNumber, t } from "./i18n/index.ts";
+import { useTypingAidAttributes } from "./typing-aids.ts";
 
 const words = t.rooms.vote;
 
@@ -64,6 +65,7 @@ function VoteQuestion({
   onOwnWords: (words: string) => void;
   onEnter: () => void;
 }) {
+  const typingAidAttributes = useTypingAidAttributes();
   const confirmOnEnter = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key !== "Enter" || event.nativeEvent.isComposing) return;
     event.preventDefault();
@@ -87,6 +89,7 @@ function VoteQuestion({
       </ul>
       {ownWords !== null && (
         <input
+          {...typingAidAttributes}
           className="room-vote-own"
           value={ownWords}
           maxLength={MOST_OWN_ANSWER_CHARACTERS}

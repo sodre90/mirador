@@ -108,7 +108,10 @@ test("an agent's question in a room is everyone's vote, which the person whose t
     await expect(vote(gus, question).getByRole("button", { name: /^Confirm/ })).toHaveCount(0);
     await expect(vote(gus, question).locator(".room-vote-status")).toHaveText("Mia or Olivia confirms the answer.");
     await expect(vote(page, question).getByRole("button", { name: "Confirm: Blue" })).toBeVisible();
-    await expect(vote(page, question).getByRole("textbox", { name: "Or write another answer…" })).toBeVisible();
+    const otherAnswer = vote(page, question).getByRole("textbox", { name: "Or write another answer…" });
+    await expect(otherAnswer).toBeVisible();
+    await expect(otherAnswer).toHaveAttribute("autocorrect", "off");
+    await expect(otherAnswer).toHaveAttribute("writingsuggestions", "false");
     await expect(vote(mia, question).getByRole("button", { name: "Confirm: Green" })).toBeVisible();
     await expect(vote(mia, question).getByRole("textbox")).toHaveCount(0);
     await option(mia, question, "Blue").getByRole("button").click();
