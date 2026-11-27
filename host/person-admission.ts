@@ -18,6 +18,8 @@ export interface PersonInRooms {
   conversationBehind(standIn: string): string | null;
   /** The room a plugin canvas item belongs to; null for items outside rooms or unknown items. */
   roomOfCanvasItem?(itemId: string): string | null;
+  /** Whether an app document is currently open under `app` in `roomId`. */
+  isAppDocumentInRoom?(documentId: string, roomId: string, app: string): boolean;
 }
 
 const OWNER_ONLY = null;
@@ -202,14 +204,40 @@ const admissions: { [K in ClientMessage["type"]]: K extends PersonMessageType ? 
   "permission.respond": OWNER_ONLY,
   "ask.answer": OWNER_ONLY,
   "canvas.report": OWNER_ONLY,
-  "app.subscribe": OWNER_ONLY,
-  "app.unsubscribe": OWNER_ONLY,
-  "app.apply": OWNER_ONLY,
+  "app.subscribe": ({ workspaceId, app, documentId }, person) => {
+    if (typeof workspaceId !== "string" || typeof app !== "string" || typeof documentId !== "string") throw unreadable();
+    roleOf(person, workspaceId);
+    if (!person.isAppDocumentInRoom?.(documentId, workspaceId, app)) return IGNORED;
+  },
+  "app.unsubscribe": ({ workspaceId, app, documentId }, person) => {
+    if (typeof workspaceId !== "string" || typeof app !== "string" || (documentId !== undefined && typeof documentId !== "string")) throw unreadable();
+    if (!person.roleIn(workspaceId)) return IGNORED;
+  },
+  "app.apply": ({ workspaceId, app, documentId }, person) => {
+    if (typeof workspaceId !== "string" || typeof app !== "string" || typeof documentId !== "string") throw unreadable();
+    const role = roleOf(person, workspaceId);
+    if (!person.isAppDocumentInRoom?.(documentId, workspaceId, app)) throw new HostProblemError({ code: "only-the-owner" });
+    if (!asksAgentsAs(role)) throw new HostProblemError({ code: "room-guests-only-write" });
+  },
   "app.use-in": OWNER_ONLY,
-  "app.storage-set": OWNER_ONLY,
-  "app.run": OWNER_ONLY,
+  "app.storage-set": ({ workspaceId, app, key, value }, person) => {
+    if (typeof workspaceId !== "string" || typeof app !== "string" || typeof key !== "string" || !(typeof value === "string" || value === null)) throw unreadable();
+    const role = roleOf(person, workspaceId);
+    if (!asksAgentsAs(role)) return IGNORED;
+  },
+  "app.run": ({ workspaceId, app, documentId, task }, person) => {
+    if (typeof workspaceId !== "string" || typeof app !== "string" || typeof documentId !== "string" || typeof task !== "string") throw unreadable();
+    const role = roleOf(person, workspaceId);
+    if (!person.isAppDocumentInRoom?.(documentId, workspaceId, app)) throw new HostProblemError({ code: "only-the-owner" });
+    if (!approvesAs(role)) throw new HostProblemError({ code: "room-approval-not-yours" });
+  },
   "app.open-file": OWNER_ONLY,
-  "app.stop-task": OWNER_ONLY,
+  "app.stop-task": ({ workspaceId, app, documentId }, person) => {
+    if (typeof workspaceId !== "string" || typeof app !== "string" || typeof documentId !== "string") throw unreadable();
+    const role = roleOf(person, workspaceId);
+    if (!person.isAppDocumentInRoom?.(documentId, workspaceId, app)) throw new HostProblemError({ code: "only-the-owner" });
+    if (!approvesAs(role)) throw new HostProblemError({ code: "room-approval-not-yours" });
+  },
   "canvas.item-action": ({ requestId, itemId }, person) => {
     if (!isRequestId(requestId) || typeof itemId !== "string") throw unreadable();
     const roomId = person.roomOfCanvasItem?.(itemId) ?? null;

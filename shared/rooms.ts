@@ -1,3 +1,4 @@
+import type { OpenApp } from "./apps.ts";
 import { ROOM_EDIT_TOOL, ROOM_READ_TOOL, ROOM_RUN_TOOL, type RoomWorkspaceAccess } from "./room-workspace.ts";
 import type { CanvasItem, HarnessId, PendingPermissionRequest, StoredEvent } from "./model.ts";
 import type { PermissionPreset } from "./room-permissions.ts";
@@ -715,4 +716,16 @@ export function roomTimeOf(written: string): number | null {
   const local = /^\d{4}-\d{2}-\d{2}$/.test(trimmed) ? `${trimmed}T00:00` : trimmed.replace(" ", "T");
   const at = Date.parse(/(?:Z|[+-]\d{2}:?\d{2})$/i.test(local) ? local : `${local}Z`);
   return Number.isNaN(at) ? null : at;
+}
+
+/** The open app tabs belonging to a room's agents, deduplicated per app by keeping the most recently shown document. */
+export function roomOpenApps(room: Pick<Room, "agents">, openApps: OpenApp[]): OpenApp[] {
+  const conversationIds = new Set(room.agents.flatMap(({ conversationId }) => (conversationId === null ? [] : [conversationId])));
+  const byApp = new Map<string, OpenApp>();
+  for (const open of openApps) {
+    if (!conversationIds.has(open.conversationId)) continue;
+    const existing = byApp.get(open.app);
+    if (!existing || (open.shownAt ?? 0) >= (existing.shownAt ?? 0)) byApp.set(open.app, open);
+  }
+  return [...byApp.values()];
 }

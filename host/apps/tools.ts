@@ -11,7 +11,12 @@ const toolText = (text: string) => ({ content: [{ type: "text" as const, text }]
 
 const appNameSchema = z.string().optional().describe("The app, when more than one is open in this conversation.");
 
-const installedNames = (apps: AppDocuments) => apps.installed().map(({ name, title }) => `${name} (${title})`).join(", ");
+const installedAppsOf = (apps: AppDocuments, onlyNames?: readonly string[]) => (onlyNames ? apps.installedFor(onlyNames) : apps.installed());
+
+const installedNames = (apps: AppDocuments, onlyNames?: readonly string[]) =>
+  installedAppsOf(apps, onlyNames)
+    .map(({ name, title }) => `${name} (${title})`)
+    .join(", ");
 
 /** What an app does, in a line, as the official catalog says it; null for an app the catalog doesn't list. */
 export type AppTagline = (app: string) => string | null;
@@ -20,9 +25,9 @@ export type AppTagline = (app: string) => string | null;
  * The canvas instructions' line on the app tools. Few conversations open an app, so with tool search on, Claude Code
  * leaves the tools out until the agent searches for them, and this line is how the agent knows they are there.
  */
-export const appToolsGuidance = (apps: AppDocuments, taglineOf: AppTagline = () => null) => {
-  const installed = apps.installed();
-  const opens = `- app_open: open an app the user installed (${installedNames(apps)}) on a file of this workspace, where the user sees it live; then app_state reads its document, apply changes it and app_run runs its tasks.`;
+export const appToolsGuidance = (apps: AppDocuments, taglineOf: AppTagline = () => null, onlyNames?: readonly string[]) => {
+  const installed = installedAppsOf(apps, onlyNames);
+  const opens = `- app_open: open an app the user installed (${installedNames(apps, onlyNames)}) on a file of this workspace, where the user sees it live; then app_state reads its document, apply changes it and app_run runs its tasks.`;
   const described = installed.flatMap(({ name }) => {
     const tagline = taglineOf(name);
     return tagline ? [`  - ${name}: ${tagline}`] : [];
@@ -32,15 +37,16 @@ export const appToolsGuidance = (apps: AppDocuments, taglineOf: AppTagline = () 
 
 /**
  * The same four tools in every conversation, whichever apps are open there: the tool list never changes, so agents
- * that cache it stay right. Registered only when the owner installed an app plugin.
+ * that cache it stay right. Registered only when the owner installed an app plugin (or enabled one for a room).
  */
 export function registerAppTools(
   server: McpServer,
   apps: AppDocuments,
   conversations: ConversationService,
   callingConversation: (ctx: ServerContext) => Promise<string>,
+  onlyNames?: readonly string[],
 ) {
-  const names = installedNames(apps);
+  const names = installedNames(apps, onlyNames);
   const answered = async (ctx: ServerContext, answer: (conversationId: string) => Promise<string> | string) => {
     try {
       return toolText(await answer(await callingConversation(ctx)));

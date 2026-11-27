@@ -31,6 +31,8 @@ export interface SocketData {
   isOwner: boolean;
   /** For a person other than the owner: the rooms their page was told of, so it hears when one is gone for them. */
   roomsShown: Set<string>;
+  /** For a person other than the owner: whether their page currently holds any room's open apps, so closing the last one clears them without leaking private apps. */
+  sawOpenApps: boolean;
   /** For a person other than the owner: the conversations of room agents whose work their page was told of, each by its real id, with the stand-in it went by and its room. */
   agentConversationsShown: Map<string, { standIn: string; roomId: string }>;
   /** For a person other than the owner: their own Mirador said it takes the tasks of the agents they brought on this socket. */
@@ -88,6 +90,7 @@ export const socketData = (
   personId,
   isOwner,
   roomsShown: new Set<string>(),
+  sawOpenApps: false,
   agentConversationsShown: new Map(),
   carriesAgents: false,
   canvasAssetsOrigin,

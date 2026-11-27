@@ -148,8 +148,10 @@ const hasApps = (apps: AppDocuments | null): apps is AppDocuments => apps !== nu
 
 const taglineIn = (catalog: PluginCatalog | null) => (app: string) => catalog?.all.find(({ name }) => name === app)?.tagline ?? null;
 
-const withAppTools = (guidance: CanvasPluginGuidance, apps: AppDocuments | null, catalog: PluginCatalog | null): CanvasPluginGuidance =>
-  hasApps(apps) ? { ...guidance, instructions: [...guidance.instructions, appToolsGuidance(apps, taglineIn(catalog))] } : guidance;
+const withAppTools = (guidance: CanvasPluginGuidance, apps: AppDocuments | null, catalog: PluginCatalog | null, onlyNames?: readonly string[]): CanvasPluginGuidance =>
+  hasApps(apps) && (!onlyNames || apps.installedFor(onlyNames).length > 0)
+    ? { ...guidance, instructions: [...guidance.instructions, appToolsGuidance(apps, taglineIn(catalog), onlyNames)] }
+    : guidance;
 
 const CLAUDE_CODE_KEEPS_OF_INSTRUCTIONS = 4096;
 
@@ -221,11 +223,13 @@ function buildCanvasServer(conversationId: string, parts: CanvasServerParts, cut
   const reviewFree = reviewFreeFor(harness);
   const { roomId, worksInRoomsWorkspace } = store?.findConversation(conversationId) ?? {};
   const inHostRoom = typeof roomId === "string";
+  const roomPlugins = inHostRoom ? (store?.findRoom(roomId)?.plugins ?? []) : [];
+  const roomHasApps = inHostRoom && hasApps(apps) && apps.installedFor(roomPlugins).length > 0;
   const showAndAskAlone = worksForARoomHere(store, conversationId) || from === "sandbox" || runsInASandboxHere(store, conversationId);
   const plugins = canvasPlugins?.guidanceFor(conversationId) ?? NO_CANVAS_PLUGINS;
   const pluginsHere = getsPluginLinesInSystemPrompt(harness) ? withoutPluginLines(plugins) : plugins;
   const instructions = inHostRoom
-    ? canvasInstructions(assetsOrigin, pluginsHere)
+    ? canvasInstructions(assetsOrigin, roomHasApps ? withAppTools(pluginsHere, apps, catalog, roomPlugins) : pluginsHere)
     : showAndAskAlone
       ? canvasInstructions(assetsOrigin)
       : canvasServerInstructions(harness, store?.canvasUse() ?? "often", assetsOrigin, withAppTools(pluginsHere, apps, catalog));
@@ -308,6 +312,7 @@ function buildCanvasServer(conversationId: string, parts: CanvasServerParts, cut
 
   if (showAndAskAlone) {
     if (inHostRoom && rooms) registerRoomTools(server, rooms, callingConversation, { _meta: loadedUpFront, ...reviewFree });
+    if (inHostRoom && roomHasApps && apps) registerAppTools(server, apps, conversations, callingConversation, roomPlugins);
     if (inHostRoom) canvasPlugins?.registerTools(server, conversationId, callingConversation, reviewFree);
     if (worksInRoomsWorkspace && roomsWorkspaces && from === "this-computer") registerRoomWorkspaceTools(server, roomsWorkspaces, callingConversation, { _meta: loadedUpFront });
     return server;

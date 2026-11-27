@@ -1,5 +1,6 @@
 import { flushSync } from "react-dom";
 import { useContext, useEffect, useId, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type Dispatch, type KeyboardEvent, type ReactNode, type Ref } from "react";
+import { appPromptText, type AppDocumentState, type InstalledApp, type OpenApp } from "../shared/apps.ts";
 import type { AskItem, CanvasItem, Conversation, HarnessId, Person, PluginCanvasItem, Profile } from "../shared/model.ts";
 import { personGoesBy } from "../shared/people.ts";
 import { categoryChoices, chosenModel } from "../shared/config-options.ts";
@@ -22,6 +23,7 @@ import {
   reachedAmong,
   ROOM_MESSAGE_MOST_CHARACTERS,
   roomMessageLength,
+  roomOpenApps,
   shownInRoom,
   taskWaits,
   workPending,
@@ -1376,7 +1378,7 @@ export function RoomView({
   );
 }
 
-/** The room's canvas: its agents' pages, plugin items and questions, newest in front, which everyone in the room reads there and votes on in the room. */
+/** The room's canvas: its agents' pages, plugin items, open apps and questions, newest in front, which everyone in the room reads there and votes on in the room. */
 export function RoomCanvas({
   room,
   profiles,
@@ -1386,9 +1388,13 @@ export function RoomCanvas({
   assetsOrigin,
   homeDir,
   canvasViews,
+  openApps,
+  installedApps,
+  appDocuments,
   itemToShow,
   readOnly,
   canActOnPlugins = true,
+  canRunAppTasks = true,
   onHide,
 }: {
   room: Room;
@@ -1399,18 +1405,36 @@ export function RoomCanvas({
   assetsOrigin: string;
   homeDir: string;
   canvasViews: Record<string, string>;
+  openApps: OpenApp[];
+  installedApps: InstalledApp[];
+  appDocuments: Record<string, AppDocumentState>;
   itemToShow: { itemId: string } | null;
   readOnly: boolean;
   canActOnPlugins?: boolean;
+  canRunAppTasks?: boolean;
   onHide: () => void;
 }) {
   const authorOf = useMemo(() => roomCanvasAuthorOf(room, profiles, people, words.nameless), [room, profiles, people]);
+  const apps = useMemo<WorkspaceApps>(
+    () => ({ open: roomOpenApps(room, openApps), elsewhere: [], installed: installedApps, documents: appDocuments }),
+    [room, openApps, installedApps, appDocuments],
+  );
   const promptForPluginItem = (item: PluginCanvasItem, text: string) => {
     const trimmed = text.trim();
     if (!trimmed) throw new Error("The message is empty.");
     const agent = room.agents.find(({ profileId, conversationId }) => conversationId === item.conversationId || agentStandIn(room.id, profileId) === item.conversationId);
     if (!agent) throw new Error("That agent is no longer in the room.");
     if (!connection.send({ type: "room.write", roomId: room.id, text: trimmed, tags: [agent.profileId], threadId: null })) {
+      throw new Error("Mirador is not connected.");
+    }
+  };
+  const promptForApp = (openApp: OpenApp, text: string, images: unknown) => {
+    if (Array.isArray(images) && images.length > 0) throw new Error("Sending images from an app isn't supported in a room.");
+    const trimmed = text.trim();
+    if (!trimmed) throw new Error("The message is empty.");
+    const agent = room.agents.find(({ profileId, conversationId }) => conversationId === openApp.conversationId || agentStandIn(room.id, profileId) === openApp.conversationId);
+    if (!agent) throw new Error("That agent is no longer in the room.");
+    if (!connection.send({ type: "room.write", roomId: room.id, text: appPromptText(openApp, trimmed), tags: [agent.profileId], threadId: null })) {
       throw new Error("Mirador is not connected.");
     }
   };
@@ -1425,7 +1449,7 @@ export function RoomCanvas({
           assetsOrigin={assetsOrigin}
           homeDir={homeDir}
           changesRefreshPoint={0}
-          apps={NO_APPS}
+          apps={apps}
           workspaceTabs={NO_WORKSPACE_TABS}
           workspaceId={undefined}
           canvasViews={canvasViews}
@@ -1433,7 +1457,9 @@ export function RoomCanvas({
           inRoom
           readOnly={readOnly}
           canActOnPlugins={canActOnPlugins}
+          canRunAppTasks={canRunAppTasks}
           onPluginPrompt={promptForPluginItem}
+          onAppPrompt={promptForApp}
           itemToShow={itemToShow}
           authorOf={authorOf}
         />
@@ -1443,5 +1469,4 @@ export function RoomCanvas({
 }
 
 const NO_EDITS: EditRequest[] = [];
-const NO_APPS: WorkspaceApps = { open: [], elsewhere: [], installed: [], documents: {} };
 const NO_WORKSPACE_TABS: WorkspacePluginTab[] = [];

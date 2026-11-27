@@ -1,3 +1,4 @@
+import type { InstalledApp, OpenApp } from "../shared/apps.ts";
 import { englishProblem, type HostProblem } from "../shared/host-problems.ts";
 import type { CanvasItem, Conversation, ConversationEvent, Profile, StoredEvent } from "../shared/model.ts";
 import { DEFAULT_CONVERSATIONS_SHOWN, DEFAULT_OLDER_AFTER, DEFAULT_SIDE_CHAT_ACCESS } from "../shared/model.ts";
@@ -208,21 +209,45 @@ export function namesShownIn(store: PeopleSeen & Pick<Store, "listProfiles" | "w
   ];
 }
 
+export interface PersonViewApps {
+  installed(): InstalledApp[];
+  roomsHoldingDocument(documentId: string): string[];
+}
+
+const NO_APPS_VIEW: PersonViewApps = { installed: () => [], roomsHoldingDocument: () => [] };
+
 /**
  * What a signed-in person other than the machine's owner sees of each message the host sends: their rooms, the people
- * and agents in them, those rooms' messages and canvases, and in a room they approve in, what waits for an approver
- * there, as made for them; nothing else. A message type missing here
- * does not compile.
+ * and agents in them, those rooms' messages, canvases, and open apps, and in a room they approve in, what waits for an
+ * approver there, as made for them; nothing else. A message type missing here does not compile.
  */
 export function personView(
   store: PeopleSeen & Pick<Store, "findRoom" | "listProfiles" | "findConversation" | "findRoomThread" | "findRoomBroughtCanvasItem">,
   canvasViewsOf: () => Record<string, string> = () => ({}),
+  apps: PersonViewApps = NO_APPS_VIEW,
 ): ShownToPerson {
   const isIn = (socket: SocketData, roomId: string) => store.findRoom(roomId)?.people.some(({ personId }) => personId === socket.personId) === true;
   const shownIf = (shown: boolean, message: ServerMessage) => (shown ? [message] : []);
   const canvasViewsFor = (rooms: Room[], all: Record<string, string>, extra: Iterable<string> = []): Record<string, string> => {
     const allowed = new Set([...rooms.flatMap(({ plugins }) => plugins), ...extra]);
     return Object.fromEntries(Object.entries(all).filter(([plugin]) => allowed.has(plugin)));
+  };
+  const openAppsFor = (rooms: Room[], all: OpenApp[]): OpenApp[] => {
+    const byConversation = new Map<string, { room: Room; profileId: string }>();
+    for (const room of rooms) {
+      for (const { conversationId, profileId } of room.agents) {
+        if (conversationId !== null) byConversation.set(conversationId, { room, profileId });
+      }
+    }
+    return all.flatMap((openApp) => {
+      const match = byConversation.get(openApp.conversationId);
+      if (!match || !match.room.plugins.includes(openApp.app)) return [];
+      return [{ ...openApp, workspaceId: match.room.id, conversationId: conversationStandIn(match.room.id, match.profileId, openApp.conversationId) }];
+    });
+  };
+  const installedAppsFor = (rooms: Room[], all: InstalledApp[], open: OpenApp[] = []): InstalledApp[] => {
+    const allowed = new Set([...rooms.flatMap(({ plugins }) => plugins), ...open.map(({ app }) => app)]);
+    return all.filter(({ name }) => allowed.has(name));
   };
   const readsAgentsWorkIn = (socket: SocketData, roomId: string) => {
     const room = store.findRoom(roomId);
@@ -283,8 +308,11 @@ export function personView(
     if (room.people.some(({ personId }) => personId === socket.personId)) {
       socket.roomsShown.add(room.id);
       const agents = agentsOf([room]).map((profile): ServerMessage => ({ type: "profile.upserted", profile: agentSeen(profile) }));
-      const views = canvasViewsFor(store.roomsOf(socket.personId), canvasViewsOf());
-      const viewsMessage: ServerMessage[] = Object.keys(views).length > 0 ? [{ type: "plugins.views", installedApps: [], canvasViews: views }] : [];
+      const rooms = store.roomsOf(socket.personId);
+      const views = canvasViewsFor(rooms, canvasViewsOf());
+      const installedApps = installedAppsFor(rooms, apps.installed());
+      const viewsMessage: ServerMessage[] =
+        installedApps.length > 0 || Object.keys(views).length > 0 ? [{ type: "plugins.views", installedApps, canvasViews: views }] : [];
       return [...agents, ...conversations, ...viewsMessage, { type: "room.upserted", room: roomSeenBy(room) }];
     }
     socket.roomSubscriptions.delete(room.id);
@@ -320,11 +348,13 @@ export function personView(
     return { here: here.filter((personId) => seen.has(personId)), writing: writing.filter(({ personId, threadId }) => seen.has(personId) && inTheRoom(threadId)) };
   };
 
-  const snapshotFor = ({ hostRunId, roomApprovals, roomTasksWaiting, roomWorkspaceWaiting, conversations, canvasViews }: Snapshot, socket: SocketData): Snapshot => {
+  const snapshotFor = ({ hostRunId, roomApprovals, roomTasksWaiting, roomWorkspaceWaiting, conversations, installedApps, openApps, canvasViews }: Snapshot, socket: SocketData): Snapshot => {
     const rooms = store.roomsOf(socket.personId);
     rooms.forEach(({ id }) => socket.roomsShown.add(id));
     socket.agentConversationsShown.clear();
     const conversationsNews = rooms.flatMap((room) => watchedConversationsNews(room, socket, conversations));
+    const visibleOpenApps = openAppsFor(rooms, openApps);
+    socket.sawOpenApps = visibleOpenApps.length > 0;
     return {
       type: "snapshot",
       workspaces: [],
@@ -368,8 +398,8 @@ export function personView(
       version: "",
       answersPings: true,
       newerVersion: null,
-      installedApps: [],
-      openApps: [],
+      installedApps: installedAppsFor(rooms, installedApps, visibleOpenApps),
+      openApps: visibleOpenApps,
       canvasViews: canvasViewsFor(rooms, canvasViews),
       conversationPlugins: [],
       pluginLooks: {},
@@ -381,9 +411,18 @@ export function personView(
 
   const views: { [K in ServerMessage["type"]]: View<K> | typeof HIDDEN } = {
     "snapshot": (message, socket) => [snapshotFor(message, socket)],
-    "apps.open": HIDDEN,
-    "app.state": HIDDEN,
-    "app.storage": HIDDEN,
+    "apps.open": ({ openApps }, socket) => {
+      const visible = openAppsFor(store.roomsOf(socket.personId), openApps);
+      if (visible.length === 0 && !socket.sawOpenApps) return [];
+      socket.sawOpenApps = visible.length > 0;
+      return [{ type: "apps.open", openApps: visible }];
+    },
+    "app.state": ({ state }, socket) =>
+      apps
+        .roomsHoldingDocument(state.documentId)
+        .filter((roomId) => isIn(socket, roomId))
+        .map((roomId): ServerMessage => ({ type: "app.state", state: { ...state, workspaceId: roomId } })),
+    "app.storage": (message, socket) => shownIf(isIn(socket, message.workspaceId), message),
     "profile.upserted": ({ profile }, socket) => shownIf(isAgentOfTheirRooms(profile.id, socket), { type: "profile.upserted", profile: agentSeen(profile) }),
     "profile.deleted": HIDDEN,
     "profile.saved": HIDDEN,
@@ -551,9 +590,13 @@ export function personView(
     "workspace.delete-asks": HIDDEN,
     "devices.listed": HIDDEN,
     "plugins.listed": HIDDEN,
-    "plugins.views": ({ canvasViews }, socket) => {
-      const filtered = canvasViewsFor(store.roomsOf(socket.personId), canvasViews);
-      return Object.keys(filtered).length > 0 ? [{ type: "plugins.views", installedApps: [], canvasViews: filtered }] : [];
+    "plugins.views": ({ installedApps, canvasViews }, socket) => {
+      const rooms = store.roomsOf(socket.personId);
+      const filteredViews = canvasViewsFor(rooms, canvasViews);
+      const filteredApps = installedAppsFor(rooms, installedApps);
+      return filteredApps.length > 0 || Object.keys(filteredViews).length > 0
+        ? [{ type: "plugins.views", installedApps: filteredApps, canvasViews: filteredViews }]
+        : [];
     },
     "plugins.settings": HIDDEN,
     "plugins.changed": HIDDEN,

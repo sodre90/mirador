@@ -285,7 +285,7 @@ const EVERY_CLIENT_MESSAGE: Record<ClientMessage["type"], true> = {
 };
 
 /** All a person other than the owner may get from the host. */
-const SHOWN_TO_PEOPLE = new Set<ServerMessage["type"]>(["conversation.upserted", "conversation.deleted", "conversation.history", "conversation.earlier", "conversation.event", "tool-raw-output.got", "snapshot", "people.listed", "profile.upserted", "room.upserted", "room.deleted", "room.timeline", "room.message", "room.presence", "canvas.upserted", "canvas.item-acted", "plugins.views", "settings.saved", "error", "pong", "room.votes", "rooms.reading", "room.alert", "room.agent-brought", "room.brought-task", "rooms.waiting-to-join", "room.approvals"]);
+const SHOWN_TO_PEOPLE = new Set<ServerMessage["type"]>(["conversation.upserted", "conversation.deleted", "conversation.history", "conversation.earlier", "conversation.event", "tool-raw-output.got", "snapshot", "people.listed", "profile.upserted", "room.upserted", "room.deleted", "room.timeline", "room.message", "room.presence", "canvas.upserted", "canvas.item-acted", "apps.open", "app.state", "app.storage", "plugins.views", "settings.saved", "error", "pong", "room.votes", "rooms.reading", "room.alert", "room.agent-brought", "room.brought-task", "rooms.waiting-to-join", "room.approvals"]);
 
 type Snapshot = Extract<ServerMessage, { type: "snapshot" }>;
 type SettingsSaved = Extract<ServerMessage, { type: "settings.saved" }>;
@@ -942,10 +942,30 @@ describe("a person other than the owner", () => {
     expect(problemOf(await settingOwnProfile(owner, "Ann"))).toBeNull();
   });
 
-  test("reaches no route of the host's over HTTP but the page itself and joining", async () => {
+  test("reaches no route of the host's over HTTP but the page itself, joining, and room-checked read-only app routes", async () => {
     const refused = await routesRefusedTo(tokens[mia.id]!);
-    expect([...OPEN_TO_PEOPLE].toSorted()).toEqual(["/", "/auth", "/join", "/join-challenges", "/join-requests", "/join-requests/:id/poll", "/join-requests/:id/reveal", "/mirador-ca.pem", "/mirador-here"]);
-    expect(refused).toEqual(expect.arrayContaining(["POST /conversations/:conversationId/images", "GET /conversations/:conversationId/images/:imageId", "GET /workspaces/:workspaceId/apps/:app/file", "POST /tunnel", "GET /devices"]));
+    expect([...OPEN_TO_PEOPLE].toSorted()).toEqual([
+      "/",
+      "/auth",
+      "/join",
+      "/join-challenges",
+      "/join-requests",
+      "/join-requests/:id/poll",
+      "/join-requests/:id/reveal",
+      "/mirador-ca.pem",
+      "/mirador-here",
+      "/workspaces/:workspaceId/apps/:app/file",
+      "/workspaces/:workspaceId/apps/:app/files",
+      "/workspaces/:workspaceId/apps/:app/git/changed",
+      "/workspaces/:workspaceId/apps/:app/git/file",
+      "/workspaces/:workspaceId/apps/:app/git/refs",
+      "/workspaces/:workspaceId/apps/:app/media",
+    ]);
+    expect(refused).toEqual(expect.arrayContaining(["POST /conversations/:conversationId/images", "GET /conversations/:conversationId/images/:imageId", "POST /workspaces/:workspaceId/apps/:app/open", "POST /tunnel", "GET /devices"]));
+    const foreignAppFile = await fetch(`http://127.0.0.1:${port}/workspaces/ws/apps/counter/file?document=missing&path=note.txt`, {
+      headers: { Cookie: `${TOKEN_COOKIE}=${tokens[mia.id]}` },
+    });
+    expect(foreignAppFile.status).toBe(404);
     const page = await fetch(`http://127.0.0.1:${port}/`, { headers: { Cookie: `${TOKEN_COOKIE}=${tokens[mia.id]}` } });
     expect(page.status).toBe(200);
   }, 60_000);

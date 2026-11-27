@@ -1,19 +1,23 @@
 import { describe, expect, test } from "bun:test";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { claudeRoomSessionMeta, sessionMeta } from "../host/acp/harnesses.ts";
+import { AppDocuments } from "../host/apps/documents.ts";
 import { loadPlugins } from "../host/apps/plugins.ts";
 import { CanvasMcpEndpoints, type CanvasRequestFrom } from "../host/canvas/mcp.ts";
 import { CanvasPlugins } from "../host/canvas/plugins.ts";
 import type { RoomTools } from "../host/canvas/room-tools.ts";
 import type { CanvasService } from "../host/canvas/service.ts";
-import { ROOM_CANVAS_TOOLS } from "../host/canvas/tool-names.ts";
+import { APP_TOOLS, ROOM_CANVAS_TOOLS } from "../host/canvas/tool-names.ts";
 import type { ConversationService } from "../host/conversations.ts";
 import type { Hub, SocketData } from "../host/hub.ts";
 import { admittedFromPerson, type PersonInRooms } from "../host/person-admission.ts";
-import { personView } from "../host/person-view.ts";
+import { conversationStandIn, personView } from "../host/person-view.ts";
 import type { PluginCatalog } from "../host/plugin-catalog.ts";
 import { RoomService, type RoomSessions } from "../host/rooms.ts";
 import type { SystemNotifications } from "../host/system-notifications.ts";
+import type { AppDocumentState, OpenApp } from "../shared/apps.ts";
 import { ALL_OF_CLAUDE_SETUP, roomSetupFingerprint } from "../shared/room-agent-setup.ts";
 import { DEFAULT_PERMISSION_PRESET } from "../shared/room-permissions.ts";
 import { NO_SANDBOX, type SandboxSetting } from "../shared/sandbox.ts";
@@ -22,6 +26,7 @@ import type { ServerMessage } from "../shared/protocol.ts";
 import { storeWithConversation } from "./canvas-plugin-host.ts";
 
 const BOARD_FIXTURES = join(import.meta.dir, "fixtures", "canvas-plugins");
+const APP_FIXTURES = join(import.meta.dir, "fixtures", "apps");
 const SANDBOX_ON: SandboxSetting = { on: true, workFreely: true, allowsSharedKernel: false, network: "closed", baseImage: null };
 
 const profile: Profile = {
@@ -301,5 +306,136 @@ describe("room plugins (slice 1)", () => {
 
     const acted = filter({ type: "canvas.item-acted", requestId: "req1", reply: { presses: 1 }, problem: null }, socket);
     expect(acted).toEqual([{ type: "canvas.item-acted", requestId: "req1", reply: { presses: 1 }, problem: null }]);
+  });
+});
+
+describe("room app plugins (slice 2)", () => {
+  test("app tools appear on room agents only when enabled, isolate room take-up from private workspace docs, and drop when disabled", async () => {
+    const workspaceDir = mkdtempSync(join(tmpdir(), "mirador-room-apps-"));
+    try {
+      const { store, plugins } = await roomPluginHarness(SANDBOX_ON);
+      store.insertWorkspace({ id: "w-real", name: "Proj", path: workspaceDir, defaultLaunch: { harness: "claude", profileId: null }, createdAt: 1 });
+      const roomConv = store.findConversation("c-room")!;
+      store.deleteConversation("c-room");
+      store.insertConversation({ ...roomConv, workspaceId: "w-real" });
+      store.insertConversation({ ...roomConv, id: "c-room-2", workspaceId: "w-real", profileId: "p2", roomId: "r1" });
+      store.insertConversation({ ...roomConv, id: "c-private", workspaceId: "w-real", profileId: "p1", roomId: undefined });
+      store.setRoomAgentConversation("r1", "p1", "c-room");
+
+      const loadedApps = await loadPlugins(APP_FIXTURES);
+      expect(loadedApps.problems).toEqual([]);
+      const openEvents: OpenApp[][] = [];
+      const stateEvents: AppDocumentState[] = [];
+      const apps = new AppDocuments(store, loadedApps.apps, {
+        openAppsChanged: (open) => openEvents.push(open),
+        stateChanged: (state) => stateEvents.push(state),
+      });
+
+      const endpoints = new CanvasMcpEndpoints({
+        canvas: {} as CanvasService,
+        conversations: { conversationOfSession: async () => "c-room", latestTurnSeq: () => 1 } as unknown as ConversationService,
+        assetsOrigin: "http://127.0.0.1:4601",
+        apps,
+        canvasPlugins: plugins,
+        store,
+        rooms: {} as RoomTools,
+      });
+
+      const mcp = async (from: CanvasRequestFrom, method: string, params: Record<string, unknown> = {}) => {
+        const request = new Request("http://127.0.0.1/mcp/c-room", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Accept: "application/json, text/event-stream", "MCP-Protocol-Version": "2025-11-25" },
+          body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
+        });
+        const response = await (from === "sandbox" ? endpoints.handleFromSandbox("c-room", request) : endpoints.handle("c-room", request));
+        const body = await response.text();
+        const payload = body.split("\n").find((line) => line.startsWith("data: "))?.slice("data: ".length) ?? body;
+        return JSON.parse(payload);
+      };
+      const toolNames = async (from: CanvasRequestFrom = "this-computer") =>
+        ((await mcp(from, "tools/list")).result.tools as { name: string }[]).map(({ name }) => name).sort();
+
+      expect(await toolNames("this-computer")).toEqual([...ROOM_CANVAS_TOOLS].sort());
+      expect(await toolNames("sandbox")).toEqual([...ROOM_CANVAS_TOOLS].sort());
+      await expect(apps.open("c-room", "counter", "room.counter.json")).rejects.toThrow(/isn't enabled in this room/);
+
+      const privateOpen = await apps.open("c-private", "counter", "private.counter.json");
+      store.setRoomPlugins("r1", ["counter"]);
+      expect(await toolNames("this-computer")).toEqual([...ROOM_CANVAS_TOOLS, ...APP_TOOLS].sort());
+      expect(await toolNames("sandbox")).toEqual([...ROOM_CANVAS_TOOLS, ...APP_TOOLS].sort());
+      expect(() => apps.describe("c-room", "counter")).toThrow(/No app is open/);
+
+      const roomOpen = await apps.open("c-room", "counter", "room.counter.json");
+      expect(apps.isOpenInRoom(roomOpen.documentId, "r1", "counter")).toBe(true);
+      expect(apps.isOpenInRoom(privateOpen.documentId, "r1", "counter")).toBe(false);
+      expect(apps.describe("c-room-2", "counter")).toContain("Counter on room.counter.json");
+
+      const filter = personView(store, () => ({}), apps);
+      const socket = {
+        personId: "mia",
+        isOwner: false,
+        canvasAssetsOrigin: "http://127.0.0.1:4601",
+        roomsShown: new Set<string>(["r1"]),
+        sawOpenApps: false,
+        roomSubscriptions: new Set<string>(),
+        agentConversationsShown: new Map(),
+        subscriptions: new Set<string>(),
+        lowDataSubscriptions: new Set<string>(),
+        appSubscriptions: new Set<string>(),
+        carriesAgents: false,
+      } as unknown as SocketData;
+
+      const shownOpen = filter({ type: "apps.open", openApps: apps.openApps() }, socket);
+      expect(shownOpen).toEqual([
+        {
+          type: "apps.open",
+          openApps: [
+            expect.objectContaining({
+              documentId: roomOpen.documentId,
+              workspaceId: "r1",
+              conversationId: conversationStandIn("r1", "p1", "c-room"),
+              app: "counter",
+              file: "room.counter.json",
+            }),
+          ],
+        },
+      ]);
+
+      expect(filter({ type: "app.state", state: apps.state(privateOpen.documentId)! }, socket)).toEqual([]);
+      expect(filter({ type: "app.state", state: apps.state(roomOpen.documentId)! }, socket)).toEqual([
+        { type: "app.state", state: expect.objectContaining({ documentId: roomOpen.documentId, workspaceId: "r1", app: "counter" }) },
+      ]);
+
+      apps.forgetRoomApps("r1", ["counter"]);
+      store.setRoomPlugins("r1", []);
+      expect(apps.isOpenInRoom(roomOpen.documentId, "r1", "counter")).toBe(false);
+      expect(apps.state(privateOpen.documentId)).not.toBeNull();
+      expect(filter({ type: "apps.open", openApps: apps.openApps() }, socket)).toEqual([{ type: "apps.open", openApps: [] }]);
+
+      apps.stop();
+    } finally {
+      rmSync(workspaceDir, { recursive: true, force: true });
+    }
+  });
+
+  test("person admission enforces room app roles: members apply, only approvers run/stop tasks, guests view only", () => {
+    const personFor = (role: "approver" | "member" | "guest"): PersonInRooms => ({
+      roleIn: (roomId) => (roomId === "r1" ? role : null),
+      conversationBehind: () => null,
+      isAppDocumentInRoom: (documentId, roomId, app) => documentId === "doc-room" && roomId === "r1" && app === "counter",
+    });
+
+    expect(admittedFromPerson({ type: "app.subscribe", workspaceId: "r1", app: "counter", documentId: "doc-room" }, personFor("guest"))).toBeDefined();
+    expect(admittedFromPerson({ type: "app.subscribe", workspaceId: "r1", app: "counter", documentId: "doc-private" }, personFor("member"))).toBeNull();
+
+    expect(admittedFromPerson({ type: "app.apply", workspaceId: "r1", app: "counter", documentId: "doc-room", op: { op: "add", by: 1 } }, personFor("member"))).toBeDefined();
+    expect(() => admittedFromPerson({ type: "app.apply", workspaceId: "r1", app: "counter", documentId: "doc-room", op: { op: "add", by: 1 } }, personFor("guest"))).toThrow();
+    expect(() => admittedFromPerson({ type: "app.apply", workspaceId: "r1", app: "counter", documentId: "doc-private", op: { op: "add", by: 1 } }, personFor("approver"))).toThrow();
+
+    expect(admittedFromPerson({ type: "app.run", workspaceId: "r1", app: "counter", documentId: "doc-room", task: "count-up" }, personFor("approver"))).toBeDefined();
+    expect(admittedFromPerson({ type: "app.stop-task", workspaceId: "r1", app: "counter", documentId: "doc-room" }, personFor("approver"))).toBeDefined();
+    expect(() => admittedFromPerson({ type: "app.run", workspaceId: "r1", app: "counter", documentId: "doc-room", task: "count-up" }, personFor("member"))).toThrow();
+    expect(() => admittedFromPerson({ type: "app.stop-task", workspaceId: "r1", app: "counter", documentId: "doc-room" }, personFor("member"))).toThrow();
+    expect(() => admittedFromPerson({ type: "app.open-file", requestId: "r", conversationId: "c", app: "counter", file: "a.json" }, personFor("approver"))).toThrow();
   });
 });

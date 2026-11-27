@@ -85,8 +85,8 @@ function picturesFrom(images: unknown): Blob[] {
   return pictures;
 }
 
-/** Sends what the user wrote in the view, with its pictures, to the conversation's agent, and says for a while that it went. */
-function useAppPrompt(openApp: OpenApp, conversationId: string) {
+/** Sends what the user wrote in the view, with its pictures, to the conversation's agent (or the room when `onPrompt` is given), and says for a while that it went. */
+function useAppPrompt(openApp: OpenApp, conversationId: string, onPrompt?: (text: string, images: unknown) => void) {
   const enterWhileBusy = useEnterWhileBusy();
   const [sentAt, setSentAt] = useState<number | null>(null);
   useEffect(() => {
@@ -96,6 +96,11 @@ function useAppPrompt(openApp: OpenApp, conversationId: string) {
   }, [sentAt]);
   const prompt = async (text: unknown, images: unknown) => {
     if (typeof text !== "string" || !text.trim()) throw new Error("There is nothing to send.");
+    if (onPrompt) {
+      onPrompt(text, images);
+      setSentAt(Date.now());
+      return;
+    }
     const imageIds = await Promise.all(picturesFrom(images).map((picture) => uploadImage(conversationId, picture)));
     const message = { type: "conversation.prompt", conversationId, text: appPromptText(openApp, text), imageIds, afterTurn: enterWhileBusy === "after-turn" } as const;
     if (!connection.send(message)) throw new Error("Mirador is not connected.");
@@ -148,16 +153,28 @@ export function AppView({
   documentState,
   assetsOrigin,
   conversationId,
+  canAct = true,
+  canRunTasks = true,
+  canOpenFile = true,
+  onPrompt,
 }: {
   openApp: OpenApp;
   installed: InstalledApp;
   documentState: AppDocumentState | undefined;
   assetsOrigin: string;
   conversationId: string;
+  /** Whether the viewer may apply edits, save UI storage, or send prompts from the app; false for room guests. */
+  canAct?: boolean;
+  /** Whether the viewer may start or stop host app tasks; true for the owner and room approvers. */
+  canRunTasks?: boolean;
+  /** Whether the viewer may switch which workspace file the app is open on; owner-only in rooms. */
+  canOpenFile?: boolean;
+  /** In a room, routes prompts from the app view through the room timeline. */
+  onPrompt?: (text: string, images: unknown) => void;
 }) {
   const storageAtLoad = useStorageAtLoad(openApp);
   useAppSubscribed(openApp);
-  const { prompt, sent } = useAppPrompt(openApp, conversationId);
+  const { prompt, sent } = useAppPrompt(openApp, conversationId, onPrompt);
   const fullscreen = usePaneFullscreen("canvas");
   const frame = useRef<HTMLIFrameElement>(null);
   const latest = useRef(documentState);
@@ -202,8 +219,13 @@ export function AppView({
   const { workspaceId, app, documentId } = openApp;
   const received = (message: CanvasFrameMessage) => {
     if (message.kind === "app-ready") postState();
-    if (message.kind === "app-apply") connection.send({ type: "app.apply", workspaceId, app, documentId, op: message.op });
-    if (message.kind === "app-prompt" && typeof message.requestId === "string") void answer(message.requestId, () => prompt(message.text, message.images));
+    if (message.kind === "app-apply" && canAct) connection.send({ type: "app.apply", workspaceId, app, documentId, op: message.op });
+    if (message.kind === "app-prompt" && typeof message.requestId === "string") {
+      void answer(message.requestId, async () => {
+        if (!canAct) throw new Error("Only room members can act on this app.");
+        await prompt(message.text, message.images);
+      });
+    }
     if (message.kind === "app-read-file" && typeof message.path === "string" && typeof message.requestId === "string") void sendFile(message.requestId, message.path);
     if (message.kind === "app-media-url" && typeof message.path === "string" && typeof message.requestId === "string") {
       const { path } = message;
@@ -217,10 +239,15 @@ export function AppView({
       const ref = String(message.ref ?? "");
       void answer(message.requestId, () => changedSinceForView(openApp, ref));
     }
-    if (message.kind === "app-open" && typeof message.requestId === "string") void answer(message.requestId, () => openFromView(openApp, message.file));
-    if (message.kind === "app-run" && typeof message.task === "string") connection.send({ type: "app.run", workspaceId, app, documentId, task: message.task });
-    if (message.kind === "app-stop-task") connection.send({ type: "app.stop-task", workspaceId, app, documentId });
-    if (message.kind === "app-storage-set" && typeof message.key === "string" && (typeof message.value === "string" || message.value === null)) {
+    if (message.kind === "app-open" && typeof message.requestId === "string") {
+      void answer(message.requestId, async () => {
+        if (!canOpenFile) throw new Error("Only the room owner can open another file.");
+        await openFromView(openApp, message.file);
+      });
+    }
+    if (message.kind === "app-run" && typeof message.task === "string" && canRunTasks) connection.send({ type: "app.run", workspaceId, app, documentId, task: message.task });
+    if (message.kind === "app-stop-task" && canRunTasks) connection.send({ type: "app.stop-task", workspaceId, app, documentId });
+    if (message.kind === "app-storage-set" && typeof message.key === "string" && (typeof message.value === "string" || message.value === null) && canAct) {
       connection.send({ type: "app.storage-set", workspaceId, app, key: message.key, value: message.value });
     }
   };

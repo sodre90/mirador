@@ -1,3 +1,4 @@
+import type { InstalledApp } from "../shared/apps.ts";
 import type { Conversation, Profile } from "../shared/model.ts";
 import type { Room } from "../shared/rooms.ts";
 import { connection } from "./connection.ts";
@@ -9,12 +10,31 @@ import { RoomSection } from "./RoomSection.tsx";
 
 const words = t.rooms;
 
+const APP_TOOL_NAMES = ["app_open", "apply", "app_state", "app_run"];
+
 /**
- * The installed canvas plugins a room's owner can opt in to for this room. Changing them restarts host agents already
- * working in the room so their tools and instructions stay in sync, stopping turns under way when a plugin turns off.
+ * The installed canvas and app plugins a room's owner can opt in to for this room. Changing them restarts host agents
+ * already working in the room so their tools and instructions stay in sync, stopping turns under way when a plugin turns off.
  */
-export function RoomPluginsTab({ room, profiles, roomConversations }: { room: Room; profiles: Profile[]; roomConversations: Conversation[] }) {
-  const installed = conversationPlugins();
+export function RoomPluginsTab({
+  room,
+  profiles,
+  roomConversations,
+  installedApps,
+}: {
+  room: Room;
+  profiles: Profile[];
+  roomConversations: Conversation[];
+  installedApps: InstalledApp[];
+}) {
+  const byName = new Map<string, { plugin: string; title: string; tools: string[] }>();
+  for (const entry of conversationPlugins()) byName.set(entry.plugin, entry);
+  for (const app of installedApps) {
+    const existing = byName.get(app.name);
+    if (existing) byName.set(app.name, { ...existing, tools: [...existing.tools, ...APP_TOOL_NAMES] });
+    else byName.set(app.name, { plugin: app.name, title: app.title, tools: APP_TOOL_NAMES });
+  }
+  const installed = [...byName.values()].toSorted((a, b) => a.title.localeCompare(b.title));
   const looks = looksOfPlugins();
   const { shown, change, pending, confirm, keep } = useChangeStartingAfresh(room.plugins, (plugins) =>
     connection.send({ type: "room.set-plugins", roomId: room.id, plugins }),

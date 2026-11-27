@@ -1,4 +1,5 @@
 import { useEffect, useId, useState, type ReactNode } from "react";
+import type { InstalledApp } from "../shared/apps.ts";
 import type { Conversation, Person, Profile, Workspace } from "../shared/model.ts";
 import { personGoesBy } from "../shared/people.ts";
 import { PERMISSION_PRESETS } from "../shared/room-permissions.ts";
@@ -447,6 +448,7 @@ export function RoomSettingsDialog({
   invites,
   joiners,
   roomConversations,
+  installedApps,
   sandboxSetup,
   sandboxFolders,
   homeDir,
@@ -463,6 +465,7 @@ export function RoomSettingsDialog({
   /** Who waits at the room's door. */
   joiners: RoomJoiner[];
   roomConversations: Conversation[];
+  installedApps: InstalledApp[];
   sandboxSetup: SandboxSetup;
   /** The folders of this computer the room gave its sandbox. */
   sandboxFolders: SandboxFolders;
@@ -485,7 +488,7 @@ export function RoomSettingsDialog({
     general: () => <GeneralTab room={room} workspaces={workspaces} onDeleted={onClose} />,
     people: () => <PeopleTab room={room} people={people} ownerId={ownerId} invites={invites} joiners={joiners} onInvite={onInvite} />,
     agents: () => <AgentsTab room={room} profiles={profiles} people={people} roomConversations={roomConversations} openedId={openedAgentId} onOpen={setOpenedAgentId} />,
-    plugins: () => <RoomPluginsTab room={room} profiles={profiles} roomConversations={roomConversations} />,
+    plugins: () => <RoomPluginsTab room={room} profiles={profiles} roomConversations={roomConversations} installedApps={installedApps} />,
     permissions: () => <PermissionsTab room={room} profiles={profiles} roomConversations={roomConversations} sandboxSetup={sandboxSetup} sandboxFolders={sandboxFolders} homeDir={homeDir} />,
     usage: () => <UsageTab room={room} profiles={profiles} people={people} ownerId={ownerId} />,
   };

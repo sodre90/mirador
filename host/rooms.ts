@@ -265,7 +265,7 @@ export class RoomService implements RoomRules, TurnListener {
   private postListener: PostListener = () => {};
   private waitingListener: WaitingListener = () => {};
   private broughtQuestionListener: RoomQuestionListener = () => {};
-  private pluginsChangedListener: (roomId: string) => void = () => {};
+  private pluginsChangedListener: (roomId: string, removedPlugins: string[]) => void = () => {};
   private readonly pendingBroughtAskAnswers = new Map<string, { personId: string; roomId: string; agentId: string; itemId: string; answer: BroughtAskAnswer }>();
   private sandboxes = NO_SANDBOX_CONTROL;
   private readonly workspaceCalls: RoomWorkspaceCalls;
@@ -332,7 +332,7 @@ export class RoomService implements RoomRules, TurnListener {
   }
 
   /** Told each time a room's enabled Mirador plugins change. */
-  hearPluginsChangedWith(listener: (roomId: string) => void) {
+  hearPluginsChangedWith(listener: (roomId: string, removedPlugins: string[]) => void) {
     this.pluginsChangedListener = listener;
   }
 
@@ -456,10 +456,11 @@ export class RoomService implements RoomRules, TurnListener {
     const room = this.existingRoom(roomId);
     const chosen = roomPluginsIn(plugins);
     if (chosen.length === room.plugins.length && chosen.every((name, index) => name === room.plugins[index])) return;
-    const stopsTurn = room.plugins.some((name) => !chosen.includes(name));
+    const removed = room.plugins.filter((name) => !chosen.includes(name));
+    const stopsTurn = removed.length > 0;
     this.store.setRoomPlugins(roomId, chosen);
     this.publish(roomId);
-    this.pluginsChangedListener(roomId);
+    this.pluginsChangedListener(roomId, removed);
     room.agents.filter(({ brought }) => !brought).forEach((agent) => this.startAfresh(agent, stopsTurn));
   }
 

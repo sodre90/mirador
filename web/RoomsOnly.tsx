@@ -1,6 +1,7 @@
 import { useState, type CSSProperties, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import { namelessPerson } from "../shared/people.ts";
 import { isMuted } from "../shared/room-reading.ts";
+import { approvesIn } from "../shared/rooms.ts";
 import { t } from "./i18n/index.ts";
 import { inView, toggledInView, type PaneLayout } from "./layout.ts";
 import { LayoutToggles, LayoutToggleState } from "./LayoutToggles.tsx";
@@ -86,9 +87,13 @@ export function RoomsOnlyApp({
       assetsOrigin={state.canvasAssetsOrigin}
       homeDir=""
       canvasViews={state.canvasViews}
+      openApps={state.openApps}
+      installedApps={state.installedApps}
+      appDocuments={state.appDocuments}
       itemToShow={itemToShow?.roomId === room.id ? itemToShow : null}
       readOnly
       canActOnPlugins={!room.people.some(({ personId, role }) => personId === state.you && role === "guest")}
+      canRunAppTasks={approvesIn(room, state.you)}
       onHide={toggleCanvas}
     />
   );

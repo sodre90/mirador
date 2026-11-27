@@ -9,6 +9,7 @@ import { turnTitle, turnsFrom, undoableTurns, type Turn } from "../shared/revert
 import { groupHolds, groupsWithPaths, shownGroupOf, sidebarItems } from "../shared/sidebar-order.ts";
 import { countWaiting, roomsWaitingFor } from "../shared/waiting.ts";
 import { isMuted } from "../shared/room-reading.ts";
+import { roomOpenApps } from "../shared/rooms.ts";
 import { canFork, canvasPageHasFocus, findInCanvasPage, findInOpenConversation, focusPane, forkConversation, startConversationIn, startRenamingOpenConversation } from "./actions.ts";
 import { bringsHiddenCanvasBack, latestCanvasNews, newerNews, type CanvasNews } from "./canvas-news.ts";
 import { ChatPanel } from "./Chat.tsx";
@@ -509,11 +510,13 @@ export function App() {
   const sideChatCanvas = useSideChatCanvas(open, openSideChat, state.openApps);
   const canvasInFrontId = sideChatCanvas?.inFront ? sideChatIdBesideSelected : state.selectedConversationId;
   const newsOn = ({ canvas, conversationId }: OpenConversation) => latestCanvasNews(canvas, state.openApps, conversationId);
+  const roomForTimeline = state.roomTimeline ? state.rooms.find(({ id }) => id === state.roomTimeline!.roomId) : undefined;
+  const roomAppsForNews = roomForTimeline ? roomOpenApps(roomForTimeline, state.openApps).map((each) => ({ ...each, conversationId: roomForTimeline.id })) : [];
   const canvasNews =
     open && state.selectedConversationId
       ? newerNews(newsOn(open), openSideChat ? newsOn(openSideChat) : undefined)
       : state.roomTimeline
-        ? latestCanvasNews(state.roomTimeline.canvas, [], state.roomTimeline.roomId)
+        ? latestCanvasNews(state.roomTimeline.canvas, roomAppsForNews, state.roomTimeline.roomId)
         : undefined;
   const [roomItemToShow, setRoomItemToShow] = useState<{ roomId: string; itemId: string } | null>(null);
   const openOnRoomCanvas = (roomId: string, itemId: string) => {
@@ -796,6 +799,9 @@ export function App() {
             assetsOrigin={state.canvasAssetsOrigin}
             homeDir={state.homeDir}
             canvasViews={state.canvasViews}
+            openApps={state.openApps}
+            installedApps={state.installedApps}
+            appDocuments={state.appDocuments}
             itemToShow={roomItemToShow?.roomId === shownRoom.id ? roomItemToShow : null}
             readOnly={false}
             onHide={hideCanvas}
@@ -1193,6 +1199,7 @@ export function App() {
           invites={state.roomInvites}
           joiners={state.roomJoiners.filter(({ roomId }) => roomId === settingsRoom.id)}
           roomConversations={state.roomConversations}
+          installedApps={state.installedApps}
           sandboxSetup={setupOf(state.sandboxSetups, roomSandbox(settingsRoom.id))}
           sandboxFolders={foldersOfSandbox(state.sandboxFolders, roomSandbox(settingsRoom.id))}
           homeDir={state.homeDir}

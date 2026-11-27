@@ -894,7 +894,9 @@ export function CanvasPanel({
   inRoom = false,
   readOnly = false,
   canActOnPlugins = true,
+  canRunAppTasks = true,
   onPluginPrompt,
+  onAppPrompt,
   itemToShow = null,
   authorOf,
 }: {
@@ -918,10 +920,14 @@ export function CanvasPanel({
   inRoom?: boolean;
   /** Seen by a person other than the machine's owner, who neither saves, opens local files, pops out windows nor reports on pages. */
   readOnly?: boolean;
-  /** Whether the viewer may interact with or dismiss plugin items; false for guests in a room. */
+  /** Whether the viewer may interact with or dismiss plugin items and edit open apps; false for guests in a room. */
   canActOnPlugins?: boolean;
+  /** Whether the viewer may run or stop host tasks of an open app; true for the owner and room approvers. */
+  canRunAppTasks?: boolean;
   /** In a room, routes prompts from a plugin view through the room timeline. */
   onPluginPrompt?: (item: PluginCanvasItem, text: string) => void;
+  /** In a room, routes prompts from an open app view through the room timeline. */
+  onAppPrompt?: (openApp: OpenApp, text: string, images: unknown) => void;
   /** The item the user asked to see, brought in front once for each time they ask. */
   itemToShow?: { itemId: string } | null;
   /** Who made each item on a room's canvas, for attribution in the bar, history and waiting-question switcher. */
@@ -1311,7 +1317,18 @@ export function CanvasPanel({
           </ChecklistView>
         )}
         {shownApp && shownAppInstalled && (
-          <AppView key={`${shownApp.app} ${shownAppInstalled.viewPath}`} openApp={shownApp} installed={shownAppInstalled} documentState={apps.documents[shownApp.documentId]} assetsOrigin={assetsOrigin} conversationId={conversationId} />
+          <AppView
+            key={`${shownApp.app} ${shownAppInstalled.viewPath}`}
+            openApp={shownApp}
+            installed={shownAppInstalled}
+            documentState={apps.documents[shownApp.documentId]}
+            assetsOrigin={assetsOrigin}
+            conversationId={conversationId}
+            canAct={canActOnPlugins}
+            canRunTasks={canRunAppTasks}
+            canOpenFile={!readOnly}
+            onPrompt={onAppPrompt ? (text, images) => onAppPrompt(shownApp, text, images) : undefined}
+          />
         )}
         {shownPluginTab && workspaceId && <ShownWorkspaceTab tab={shownPluginTab} viewPath={canvasViews[shownPluginTab.plugin]} assetsOrigin={assetsOrigin} workspaceId={workspaceId} conversationId={conversationId} />}
         {!tab && edit.shown && (

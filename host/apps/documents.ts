@@ -280,6 +280,53 @@ export class AppDocuments {
     return this.plugins.map(installedApp);
   }
 
+  /** Only the installed apps named in `names`, for rooms that opt in to specific plugins. */
+  installedFor(names: readonly string[]) {
+    const allowed = new Set(names);
+    return this.plugins.filter(({ manifest }) => allowed.has(manifest.name)).map(installedApp);
+  }
+
+  /** The rooms whose agents currently hold `documentId` open (and still have that app enabled). */
+  roomsHoldingDocument(documentId: string): string[] {
+    const opened = this.documents.get(documentId);
+    if (!opened) return [];
+    const rooms = new Set<string>();
+    for (const pointer of this.openedIn.values()) {
+      if (pointer.documentId !== documentId) continue;
+      const roomId = this.store.findConversation(pointer.conversationId)?.roomId;
+      if (typeof roomId === "string" && this.store.findRoom(roomId)?.plugins.includes(pointer.app)) rooms.add(roomId);
+    }
+    return [...rooms];
+  }
+
+  /** Whether `documentId` is open under `appName` by an agent of `roomId` (and that app is still enabled in the room). */
+  isOpenInRoom(documentId: string, roomId: string, appName: string): boolean {
+    const opened = this.documents.get(documentId);
+    if (!opened || opened.plugin.manifest.name !== appName) return false;
+    const room = this.store.findRoom(roomId);
+    if (!room || !room.plugins.includes(appName)) return false;
+    return [...this.openedIn.values()].some(
+      (pointer) => pointer.documentId === documentId && pointer.app === appName && this.store.findConversation(pointer.conversationId)?.roomId === roomId,
+    );
+  }
+
+  /** Drops open pointers for apps that were turned off in a room, closing documents nobody else holds. */
+  forgetRoomApps(roomId: string, removedApps: readonly string[]) {
+    if (removedApps.length === 0) return;
+    const removed = new Set(removedApps);
+    let changed = false;
+    for (const [key, pointer] of [...this.openedIn]) {
+      if (!removed.has(pointer.app)) continue;
+      if (this.store.findConversation(pointer.conversationId)?.roomId !== roomId) continue;
+      this.openedIn.delete(key);
+      this.store.forgetOpenApp(pointer.conversationId, pointer.app);
+      changed = true;
+    }
+    if (!changed) return;
+    for (const opened of [...this.documents.values()]) if (!this.isHeld(opened)) this.close(opened.id);
+    this.publishOpenApps();
+  }
+
   /** The view's code for a path the canvas assets serve, or null when no plugin's view is there. */
   viewCode(pathname: string): Uint8Array<ArrayBuffer> | null {
     return this.plugins.find((plugin) => appViewPath(plugin) === pathname)?.view.code ?? null;
@@ -551,23 +598,35 @@ export class AppDocuments {
   }
 
   /**
-   * What the agent's tools work on: the document this conversation has open in the app, or the one its workspace has,
+   * What the agent's tools work on: the document this conversation has open in the app, or the one its workspace (or room) has,
    * which this conversation takes up quietly and is told it did. Where the workspace holds several, they are named.
    */
   private openFor(conversationId: string, appName: string | undefined): { opened: AppDocument; takenUp: TakenUp } {
-    const here = this.pointersOf(conversationId, appName);
+    const conversation = this.conversationOf(conversationId);
+    const roomId = typeof conversation.roomId === "string" ? conversation.roomId : null;
+    const room = roomId ? this.store.findRoom(roomId) : undefined;
+    if (roomId && appName !== undefined && !room?.plugins.includes(appName)) {
+      throw new AppProblem(`${appName} isn't enabled in this room.`);
+    }
+    const allowedInRoom = room ? new Set(room.plugins) : null;
+    const here = this.pointersOf(conversationId, appName).filter((pointer) => allowedInRoom === null || allowedInRoom.has(pointer.app));
     if (here.length > 1) throw new AppProblem(`Several apps are open in this conversation (${this.wordsOf(here.map((pointer) => this.documentOf(pointer.documentId)))}); say which with app.`);
     if (here.length === 1) return { opened: this.documentOf(here[0]!.documentId), takenUp: null };
-    const elsewhere = this.documentsOpenIn(workingCopyIdOf(this.conversationOf(conversationId)), appName);
+    const elsewhere = roomId
+      ? this.documentsOpenInRoom(roomId, appName, allowedInRoom)
+      : this.documentsOpenIn(workingCopyIdOf(conversation), appName);
     if (elsewhere.length === 1) {
       const opened = elsewhere[0]!;
       this.noteOpenedIn(conversationId, opened, { kind: "quiet" });
       return { opened, takenUp: documentWords(opened) };
     }
-    if (elsewhere.length > 1) throw new AppProblem(`${this.wordsOf(elsewhere)} are open in other conversations of this workspace; open the one you want with app_open.`);
-    const others = this.pointersOf(conversationId).map((pointer) => this.documentOf(pointer.documentId));
+    if (elsewhere.length > 1) throw new AppProblem(`${this.wordsOf(elsewhere)} are open in other conversations of this ${roomId ? "room" : "workspace"}; open the one you want with app_open.`);
+    const others = this.pointersOf(conversationId)
+      .filter((pointer) => allowedInRoom === null || allowedInRoom.has(pointer.app))
+      .map((pointer) => this.documentOf(pointer.documentId));
     if (others.length > 0) throw new AppProblem(`${appName} isn't open in this conversation; open here: ${this.wordsOf(others)}.`);
-    throw new AppProblem(`No app is open in this conversation${appName === undefined ? "" : ` called ${appName}`}. Open one with app_open; installed: ${this.plugins.map(({ manifest }) => manifest.name).join(", ")}.`);
+    const available = allowedInRoom ? this.plugins.filter(({ manifest }) => allowedInRoom.has(manifest.name)) : this.plugins;
+    throw new AppProblem(`No app is open in this conversation${appName === undefined ? "" : ` called ${appName}`}. Open one with app_open; installed: ${available.map(({ manifest }) => manifest.name).join(", ") || "none"}.`);
   }
 
   /**
@@ -584,6 +643,9 @@ export class AppDocuments {
   ): Promise<OpenApp> {
     const plugin = this.plugin(appName);
     const conversation = this.conversationOf(conversationId);
+    if (typeof conversation.roomId === "string" && !this.store.findRoom(conversation.roomId)?.plugins.includes(appName)) {
+      throw new AppProblem(`${plugin.manifest.title} isn't enabled in this room.`);
+    }
     const { workspace, ownerId } = this.folderOf(conversation);
     const documentFile = this.guarded(() => plugin.host.documentFor?.(file)) ?? file;
     const target = fileInWorkspace(workspace.path, documentFile);
@@ -777,6 +839,18 @@ export class AppDocuments {
     const held = this.openedInForFolder(folderId);
     const ofApp = appName === undefined ? held : held.filter((pointer) => pointer.app === appName);
     const distinct = [...new Set(ofApp.map((pointer) => pointer.documentId))];
+    return distinct.map((documentId) => this.documentOf(documentId));
+  }
+
+  /** The open documents of one app, or of every enabled app, held by another agent of the same room. */
+  private documentsOpenInRoom(roomId: string, appName: string | undefined, allowedInRoom: ReadonlySet<string> | null): AppDocument[] {
+    const held = [...this.openedIn.values()].filter(
+      (pointer) =>
+        this.store.findConversation(pointer.conversationId)?.roomId === roomId &&
+        (appName === undefined || pointer.app === appName) &&
+        (allowedInRoom === null || allowedInRoom.has(pointer.app)),
+    );
+    const distinct = [...new Set(held.map((pointer) => pointer.documentId))];
     return distinct.map((documentId) => this.documentOf(documentId));
   }
 

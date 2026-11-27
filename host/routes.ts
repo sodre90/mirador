@@ -55,8 +55,24 @@ export const THIS_MACHINE_ROUTES = {
 
 type Route = keyof typeof DEVICE_ROUTES | keyof typeof THIS_MACHINE_ROUTES;
 
-/** A person other than the owner reaches the page itself over HTTP, and what anyone reaches before signing in; every other route is the owner's. */
-export const OPEN_TO_PEOPLE: ReadonlySet<string> = new Set<Route>(["/", "/join", "/join-challenges", "/join-requests", "/join-requests/:id/reveal", "/join-requests/:id/poll", "/mirador-ca.pem", "/mirador-here", "/auth"]);
+/** A person other than the owner reaches the page itself over HTTP, what anyone reaches before signing in, and read-only app routes checked per room; every other route is the owner's. */
+export const OPEN_TO_PEOPLE: ReadonlySet<string> = new Set<Route>([
+  "/",
+  "/join",
+  "/join-challenges",
+  "/join-requests",
+  "/join-requests/:id/reveal",
+  "/join-requests/:id/poll",
+  "/mirador-ca.pem",
+  "/mirador-here",
+  "/auth",
+  "/workspaces/:workspaceId/apps/:app/file",
+  "/workspaces/:workspaceId/apps/:app/media",
+  "/workspaces/:workspaceId/apps/:app/files",
+  "/workspaces/:workspaceId/apps/:app/git/refs",
+  "/workspaces/:workspaceId/apps/:app/git/file",
+  "/workspaces/:workspaceId/apps/:app/git/changed",
+]);
 
 /** A person other than the owner opens the page's own socket; every other socket is the owner's. */
 export const SOCKETS_OPEN_TO_PEOPLE = new Set<SocketData["role"]>(["page"]);

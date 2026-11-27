@@ -293,7 +293,7 @@ export function startServer(services: HostServices) {
   } = services;
   const appStorage = new AppStorage(store, (name) => apps.installed().some((app) => app.name === name));
   conversations.deletesWithAllItHoldsBy(deleteConversation);
-  hub.showsPeople(personView(store, () => canvasPlugins.viewPaths()));
+  hub.showsPeople(personView(store, () => canvasPlugins.viewPaths(), apps));
   const roomInvites = new RoomInvites(store, devices, ownerKey.publicKey);
   const roomPresence = new RoomPresenceService(store, hub);
   rooms.hearPeopleOutOfEveryRoomWith(signOutPeopleInNoRoom);
@@ -392,6 +392,7 @@ export function startServer(services: HostServices) {
       const roomId = store.findConversation(item.conversationId)?.roomId;
       return typeof roomId === "string" ? roomId : null;
     },
+    isAppDocumentInRoom: (documentId, roomId, app) => apps.isOpenInRoom(documentId, roomId, app),
   });
 
   function authenticate(request: Request) {
@@ -915,15 +916,20 @@ export function startServer(services: HostServices) {
    * or read an app's files. WebView2 on Windows can send a page's same-origin POST without an Origin; Sec-Fetch-Site, which
    * page scripts cannot set, then says it is same-origin instead.
    */
-  function refusedPageRequest(request: Request) {
+  function pageRequestCaller(request: Request, { openToPeople }: { openToPeople: boolean }): SignedIn | Response {
     if (!hasAllowedHost(request)) return new Response("forbidden host", { status: 403 });
-    const caller = signedInCaller(request, { openToPeople: false });
+    const caller = signedInCaller(request, { openToPeople });
     if (caller instanceof Response) return caller;
     const site = request.headers.get("sec-fetch-site");
     if (site && site !== "same-origin") return new Response("forbidden", { status: 403 });
     const sameOriginWithoutOrigin = site === "same-origin" && !request.headers.has("origin");
     if (request.method !== "GET" && !sameOriginWithoutOrigin && !isPageOrigin(request)) return new Response("forbidden origin", { status: 403 });
-    return null;
+    return caller;
+  }
+
+  function refusedPageRequest(request: Request) {
+    const caller = pageRequestCaller(request, { openToPeople: false });
+    return caller instanceof Response ? caller : null;
   }
 
   function refusedAttachmentRequest(request: Request, conversationId: string) {
@@ -1046,13 +1052,20 @@ export function startServer(services: HostServices) {
     new Response(errorMessage(error), { status: error instanceof AppFileRefused || error instanceof WorkspaceGitRefused ? error.status : error instanceof AppProblem ? 400 : 500 });
 
   /**
-   * The document an app's view shows, named in its request: the workspace and app of the address it asks over are what
-   * that document belongs to, so a view reaches no file of another workspace's or another app's document.
+   * The document an app's view shows, named in its request: for the owner, the workspace and app of the address match the
+   * document; for a person in a room, `:workspaceId` is the room id and the document must be open under that app in that room.
    */
-  const documentAskedFor = (request: { url: string; params: { workspaceId: string; app: string } }) => {
+  const documentAskedFor = (request: { url: string; params: { workspaceId: string; app: string } }, caller: SignedIn) => {
     const documentId = new URL(request.url).searchParams.get("document");
     if (documentId === null) throw new AppFileRefused(400, "Say which document of the app the view shows.");
-    apps.shownOver(documentId, request.params.workspaceId, request.params.app);
+    if (caller.isOwner) {
+      apps.shownOver(documentId, request.params.workspaceId, request.params.app);
+    } else {
+      const room = store.findRoom(request.params.workspaceId);
+      if (!room?.people.some(({ personId }) => personId === caller.personId) || !apps.isOpenInRoom(documentId, room.id, request.params.app)) {
+        throw new AppFileRefused(404, `No ${request.params.app} document of this room is open as ${documentId}.`);
+      }
+    }
     return documentId;
   };
 
@@ -1068,10 +1081,10 @@ export function startServer(services: HostServices) {
 
   /** A file of the workspace an open document is in, for its view in the signed-in page. */
   function serveAppFile(request: Bun.BunRequest<"/workspaces/:workspaceId/apps/:app/file">) {
-    const refused = refusedPageRequest(request);
-    if (refused) return refused;
+    const caller = pageRequestCaller(request, { openToPeople: true });
+    if (caller instanceof Response) return caller;
     try {
-      const file = Bun.file(apps.fileForView(documentAskedFor(request), new URL(request.url).searchParams.get("path")));
+      const file = Bun.file(apps.fileForView(documentAskedFor(request, caller), new URL(request.url).searchParams.get("path")));
       return new Response(file, { headers: { "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" } });
     } catch (error) {
       return appRefusal(error);
@@ -1080,10 +1093,10 @@ export function startServer(services: HostServices) {
 
   /** An address the app's view streams a file of its workspace from, on the canvas assets, where its sandboxed page may load media. */
   function grantAppMedia(request: Bun.BunRequest<"/workspaces/:workspaceId/apps/:app/media">) {
-    const refused = refusedPageRequest(request);
-    if (refused) return refused;
+    const caller = pageRequestCaller(request, { openToPeople: true });
+    if (caller instanceof Response) return caller;
     try {
-      return Response.json(apps.mediaGrant(documentAskedFor(request), new URL(request.url).searchParams.get("path")));
+      return Response.json(apps.mediaGrant(documentAskedFor(request, caller), new URL(request.url).searchParams.get("path")));
     } catch (error) {
       return appRefusal(error);
     }
@@ -1091,10 +1104,10 @@ export function startServer(services: HostServices) {
 
   /** The files of the workspace an open document is in, for its view to list. */
   async function listAppFiles(request: Bun.BunRequest<"/workspaces/:workspaceId/apps/:app/files">) {
-    const refused = refusedPageRequest(request);
-    if (refused) return refused;
+    const caller = pageRequestCaller(request, { openToPeople: true });
+    if (caller instanceof Response) return caller;
     try {
-      return Response.json(await apps.workspaceFiles(documentAskedFor(request)), { headers: { "Cache-Control": "no-store" } });
+      return Response.json(await apps.workspaceFiles(documentAskedFor(request, caller)), { headers: { "Cache-Control": "no-store" } });
     } catch (error) {
       return appRefusal(error);
     }
@@ -1102,10 +1115,10 @@ export function startServer(services: HostServices) {
 
   /** The git refs of the workspace an open document is in, for its view; null outside a repository. */
   async function serveAppGitRefs(request: Bun.BunRequest<"/workspaces/:workspaceId/apps/:app/git/refs">) {
-    const refused = refusedPageRequest(request);
-    if (refused) return refused;
+    const caller = pageRequestCaller(request, { openToPeople: true });
+    if (caller instanceof Response) return caller;
     try {
-      return Response.json(await apps.gitRefs(documentAskedFor(request)), { headers: { "Cache-Control": "no-store" } });
+      return Response.json(await apps.gitRefs(documentAskedFor(request, caller)), { headers: { "Cache-Control": "no-store" } });
     } catch (error) {
       return appRefusal(error);
     }
@@ -1113,11 +1126,11 @@ export function startServer(services: HostServices) {
 
   /** A file of the workspace an open document is in, as it is at a git ref, for its view; 404 when it isn't there at that ref. */
   async function serveAppGitFile(request: Bun.BunRequest<"/workspaces/:workspaceId/apps/:app/git/file">) {
-    const refused = refusedPageRequest(request);
-    if (refused) return refused;
+    const caller = pageRequestCaller(request, { openToPeople: true });
+    if (caller instanceof Response) return caller;
     try {
       const search = new URL(request.url).searchParams;
-      const bytes = await apps.gitFileAt(documentAskedFor(request), search.get("ref"), search.get("path"));
+      const bytes = await apps.gitFileAt(documentAskedFor(request, caller), search.get("ref"), search.get("path"));
       if (bytes === null) return new Response(`${search.get("path")} isn't there at ${search.get("ref")}.`, { status: 404, headers: { "X-Mirador-Absent": "1" } });
       return new Response(bytes, { headers: { "Cache-Control": "no-store", "Content-Type": "application/octet-stream", "X-Content-Type-Options": "nosniff" } });
     } catch (error) {
@@ -1127,10 +1140,10 @@ export function startServer(services: HostServices) {
 
   /** The files of the workspace an open document is in that differ from a git ref, for its view. */
   async function listAppGitChanged(request: Bun.BunRequest<"/workspaces/:workspaceId/apps/:app/git/changed">) {
-    const refused = refusedPageRequest(request);
-    if (refused) return refused;
+    const caller = pageRequestCaller(request, { openToPeople: true });
+    if (caller instanceof Response) return caller;
     try {
-      return Response.json(await apps.gitChangedSince(documentAskedFor(request), new URL(request.url).searchParams.get("ref")), { headers: { "Cache-Control": "no-store" } });
+      return Response.json(await apps.gitChangedSince(documentAskedFor(request, caller), new URL(request.url).searchParams.get("ref")), { headers: { "Cache-Control": "no-store" } });
     } catch (error) {
       return appRefusal(error);
     }

@@ -236,7 +236,10 @@ const mcp = new CanvasMcpEndpoints({
   },
   antigravityAskWaitMs: config.antigravityAskWaitMs,
 });
-rooms.hearPluginsChangedWith((roomId) => mcp.toolsChangedForRoom(roomId));
+rooms.hearPluginsChangedWith((roomId, removed) => {
+  if (removed.length > 0) apps.forgetRoomApps(roomId, removed);
+  mcp.toolsChangedForRoom(roomId);
+});
 const sandboxSettingOf = (owner: SandboxOwner) => (owner.kind === "room" ? store.findRoom(owner.id) : store.findWorkspace(owner.id))?.sandbox;
 const podman = process.platform === "linux" ? Podman.here(config.sandboxContainer, currentPath() ?? "", config.selinuxEnforceFile) : null;
 const sandboxes = new Sandboxes(podman ?? AppleContainer.here(config.sandboxContainer, currentPath() ?? ""), {

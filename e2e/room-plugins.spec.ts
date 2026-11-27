@@ -5,15 +5,20 @@ import { expect, test, type Page } from "@playwright/test";
 import { addWorkspace, callCanvasTool, createProfile, createRoom, openRoomSettings, roomCard, signIn } from "./helpers.ts";
 import { TestHost, writeBunProgram } from "./test-host.ts";
 
+test.describe.configure({ mode: "serial" });
+
 const host = new TestHost({ fakePrograms: true });
 const promptsFile = () => join(host.root, "builder-prompts");
 const boardFolder = () => join(host.dataDir, "plugins", "board");
+const counterFolder = () => join(host.dataDir, "plugins", "counter");
 
 test.beforeAll(async () => {
   cpSync(join(import.meta.dirname, "..", "tests", "fixtures", "canvas-plugins", "board"), boardFolder(), { recursive: true });
+  cpSync(join(import.meta.dirname, "..", "tests", "fixtures", "apps", "counter"), counterFolder(), { recursive: true });
   writeBunProgram(host.fakeProgramsDir, "opencode", join(import.meta.dirname, "fake-acp-agent.ts"), { FAKE_ACP_PROMPTS: promptsFile() });
   writeFileSync(promptsFile(), "");
   await host.start();
+  writeFileSync(join(host.projectDir, "note.txt"), "shared room note");
 });
 test.afterAll(async () => {
   await host.stop();
@@ -23,6 +28,7 @@ test.afterAll(async () => {
 const roomComposer = (page: Page) => page.getByRole("textbox", { name: "Write in Launch, @ tags an agent…" });
 const pageView = (page: Page) => page.frameLocator(".canvas-panel:visible .canvas-body > .canvas-frame.plugin iframe");
 const tabView = (page: Page) => page.frameLocator(".checklist:visible .canvas-frame.plugin iframe");
+const appView = (page: Page) => page.frameLocator(".canvas-panel:visible .app-view .canvas-frame.app iframe");
 const roomMessages = (page: Page) => page.locator(".room-timeline .room-entry .message");
 
 async function tagBuilder(page: Page, rest: string) {
@@ -144,4 +150,100 @@ test("owner opts a canvas plugin into a room, host agent publishes shared items,
 
   await miaContext.close();
   await gusContext.close();
+});
+
+test("owner opts an app plugin into a room, members edit and read workspace files live, only approvers run host tasks, and guests stay view-only", async ({ page, browser }) => {
+  const nora = host.admitPerson("Nora");
+  const ava = host.admitPerson("Ava");
+  const otto = host.admitPerson("Otto");
+  await signIn(page, host);
+  await createRoom(page, "AppRoom", ["Builder"]);
+
+  const appRoomComposer = page.getByRole("textbox", { name: "Write in AppRoom, @ tags an agent…" });
+  await appRoomComposer.fill("@Bu");
+  await page.getByRole("listbox", { name: "Agents and people of the room" }).getByRole("option", { name: "@Builder" }).click();
+  await appRoomComposer.pressSequentially(" SAY Ready for apps");
+  await appRoomComposer.press("Enter");
+  await expect(roomMessages(page)).toContainText(["Ready for apps"]);
+
+  await test.step("owner adds Nora (Member), Ava (Approver), Otto (Guest) and enables Counter in Room Settings → Plugins", async () => {
+    const dialog = await openRoomSettings(page, "AppRoom");
+    await dialog.getByRole("combobox", { name: "Add someone you let in before" }).selectOption({ label: "Nora" });
+    await dialog.getByLabel("Role of Nora").selectOption({ label: "Member" });
+    await dialog.getByRole("combobox", { name: "Add someone you let in before" }).selectOption({ label: "Ava" });
+    await dialog.getByLabel("Role of Ava").selectOption({ label: "Approver" });
+    await dialog.getByRole("combobox", { name: "Add someone you let in before" }).selectOption({ label: "Otto" });
+    await dialog.getByLabel("Role of Otto").selectOption({ label: "Guest" });
+    await dialog.getByRole("switch", { name: "People's tasks start without asking me" }).click();
+    await dialog.getByRole("tab", { name: "Plugins" }).click();
+    await dialog.getByRole("switch", { name: "Use Counter in this room" }).click();
+    await dialog.getByRole("button", { name: "Change" }).click();
+    await expect(dialog.getByRole("switch", { name: "Use Counter in this room" })).toBeChecked();
+    await dialog.getByRole("button", { name: "Close" }).click();
+  });
+
+  const convId = roomConversationId("AppRoom");
+  const openAs = async (person: ReturnType<typeof host.admitPerson>) => {
+    const context = await browser.newContext();
+    await context.addCookies([person.cookie]);
+    const p = await context.newPage();
+    await p.goto(host.origin);
+    await roomCard(p, "AppRoom").click();
+    return { context, page: p };
+  };
+  const noraSession = await openAs(nora);
+  const avaSession = await openAs(ava);
+  const ottoSession = await openAs(otto);
+
+  await test.step("agent opens Counter on count.counter.json and every participant sees the live app", async () => {
+    expect(await listTools(convId)).toContain("app_open");
+    expect(await callCanvasTool(host, convId, "app_open", { app: "counter", file: "count.counter.json" })).toContain("Counter is open on count.counter.json");
+
+    for (const viewer of [page, noraSession.page, avaSession.page, ottoSession.page]) {
+      await expect(viewer.locator(".canvas-panel:visible .app-toggle", { hasText: "Counter" })).toBeVisible();
+      await expect(appView(viewer).locator("#count")).toHaveText("0");
+    }
+  });
+
+  await test.step("member Nora edits the count, reads a workspace file, prompts through the room, and cannot run host tasks", async () => {
+    await appView(noraSession.page).getByRole("button", { name: "Add one" }).click();
+    await expect(appView(noraSession.page).locator("#count")).toHaveText("1");
+    await expect(appView(page).locator("#count")).toHaveText("1");
+    await expect(appView(ottoSession.page).locator("#count")).toHaveText("1");
+
+    await appView(noraSession.page).getByRole("button", { name: "Read the note" }).click();
+    await expect(appView(noraSession.page).locator("#file-text")).toHaveText("shared room note");
+
+    await appView(noraSession.page).getByRole("button", { name: "Ask about the count" }).click();
+    await expect(roomMessages(page)).toContainText(["Is 1 a good count?"]);
+
+    // Member cannot run host tasks (count-up adds 3).
+    await appView(noraSession.page).getByRole("button", { name: "Count up" }).click();
+    await expect(appView(page).locator("#count")).toHaveText("1");
+  });
+
+  await test.step("approver Ava runs Count up and everyone sees the task finish", async () => {
+    await appView(avaSession.page).getByRole("button", { name: "Count up" }).click();
+    await expect(appView(avaSession.page).locator("#task")).toContainText("count-up done");
+    await expect(appView(page).locator("#count")).toHaveText("4");
+    await expect(appView(noraSession.page).locator("#count")).toHaveText("4");
+  });
+
+  await test.step("guest Otto cannot edit the count, and disabling Counter closes the shared tab", async () => {
+    await appView(ottoSession.page).getByRole("button", { name: "Add one" }).click();
+    await expect(appView(page).locator("#count")).toHaveText("4");
+
+    const dialog = await openRoomSettings(page, "AppRoom");
+    await dialog.getByRole("tab", { name: "Plugins" }).click();
+    await dialog.getByRole("switch", { name: "Use Counter in this room" }).click();
+    await dialog.getByRole("button", { name: "Change" }).click();
+    await dialog.getByRole("button", { name: "Close" }).click();
+
+    await expect(page.locator(".canvas-panel:visible .app-toggle", { hasText: "Counter" })).toHaveCount(0);
+    await expect(noraSession.page.locator(".canvas-panel:visible .app-toggle", { hasText: "Counter" })).toHaveCount(0);
+  });
+
+  await noraSession.context.close();
+  await avaSession.context.close();
+  await ottoSession.context.close();
 });
