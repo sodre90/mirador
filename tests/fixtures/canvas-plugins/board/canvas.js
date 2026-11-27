@@ -19,6 +19,7 @@ const page = document.createElement("main");
 page.innerHTML = `<h1 id="title"></h1><p id="text"></p><p id="type"></p><p id="unseen"></p>
 <button id="press">Press</button><p id="reply"></p><button id="refused">Do what cards don't</button>
 <span id="hinted" data-hint="What the board says about itself.">Hover me</span>
+<button id="hinted-button" data-hint="Counts how often it is pressed.">Hinted button</button><p id="hinted-presses">Hinted button pressed 0 times</p>
 <a id="link" href="https://example.invalid/board">The board's site</a>
 <p id="theme" style="color: var(--mirador-text); font-size: calc(10px * var(--mirador-font-scale))">Themed</p>
 <p id="fullscreen"></p><button id="toggle-fullscreen">Toggle full screen</button>
@@ -64,6 +65,8 @@ document.getElementById("ask").addEventListener("click", () =>
 document.getElementById("press").addEventListener("click", () =>
   window.mirador.send({ kind: "press" }).then(({ presses }) => show("reply", `Pressed ${presses} times`), (error) => show("reply", error.message)),
 );
+let hintedPresses = 0;
+document.getElementById("hinted-button").addEventListener("click", () => show("hinted-presses", `Hinted button pressed ${++hintedPresses} times`));
 document.getElementById("refused").addEventListener("click", () => window.mirador.send({ kind: "fold" }).catch((error) => show("reply", error.message)));
 }
 
