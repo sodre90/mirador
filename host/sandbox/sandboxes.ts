@@ -32,7 +32,7 @@ import { addedFolderRefusal, foldersMounted, repositoryRefusal, type FolderSurro
 import { AGENT_USER, BUN_IN_VM, environmentInVm, IN_VM, NETWORK_RELAY_PORT, SCRIPTS_IN_VM, type SandboxedKind } from "./agent-environment.ts";
 import { startCanvasSocket, type SandboxCanvas } from "./canvas-socket.ts";
 import { behindGuard, guardMounts, MANIFEST_FOLDER_IN_VM, RAW_FOLDERS_IN_VM, type GuardedFolder } from "./guard.ts";
-import { guardPlanOf, sandboxRefusalOf, type GuardPlan, type MiradorPlaces } from "./guarded-workspace.ts";
+import { guardPlanOf, partsNamedFrom, sandboxRefusalOf, withMoreParts, type GuardPlan, type MiradorPlaces, type NamedByGit } from "./guarded-workspace.ts";
 import { HeldFiles, HeldFilesRefused, type HeldSandbox } from "./held-files.ts";
 import type { PlacesPutBack, PlacesRequest } from "./in-vm/held-places.ts";
 import type { AgentImage } from "./image.ts";
@@ -191,8 +191,13 @@ interface SandboxVm {
 
 /** How the guard of each VM that works in a workspace guards it while any of them does, and the folder of the disk it was when that was planned. */
 interface WorkspacePlan {
-  guarded: GuardedFolder;
+  guarded: PlannedFolder;
   entry: string | null;
+}
+
+/** A folder the VM's agents write, as its guard keeps it, with what git there names by whole path, wherever it is. */
+interface PlannedFolder extends GuardedFolder {
+  named: NamedByGit;
 }
 
 /** A port of the VM's own, and the socket of this computer it leads to. */
@@ -216,6 +221,28 @@ interface FolderStart extends FoldersMounted {
 }
 
 const sameFolder = (a: MountedFolder) => (b: MountedFolder) => a.path === b.path && a.writable === b.writable;
+
+/** What git names by whole path in one of a sandbox's folders, its workspace or one added read and write. */
+interface NamedIn {
+  folder: string;
+  named: NamedByGit;
+}
+
+/**
+ * The folders a VM's agents write, each guarded also for what git in the sandbox's other folders reads or runs in it,
+ * as a config of one includes a file of another or names a hooks folder there, whether that other folder is in this VM
+ * or not, as for a brought agent's; the VM does not start where its guard couldn't keep that.
+ */
+async function guardedTogether(folders: GuardedFolder[], namedInSandbox: NamedIn[]): Promise<GuardedFolder[]> {
+  return Promise.all(
+    folders.map(async ({ folder, parts }) => {
+      const others = namedInSandbox.filter((other) => other.folder !== folder).map(({ named }) => named);
+      const named = await partsNamedFrom(folder, others, parts.gitFolders);
+      if ("refused" in named) throw new SandboxNotReady({ kind: "blocked", blocker: named.refused });
+      return { folder, parts: withMoreParts(parts, named) };
+    }),
+  );
+}
 
 const leftOutAs = (refusal: SandboxFolderRefusal) => ({ leftOut: { kind: "refused", refusal } as LeftOutFolder });
 
@@ -840,7 +867,8 @@ export class Sandboxes {
     const folders = vm.broughtAgent === null ? await this.addedFoldersIn(vm) : null;
     // Unix socket paths hold about a hundred bytes on macOS, so each VM's sockets live in a short private folder.
     vm.socketsFolder = await mkdtemp(join(this.socketsParent, SOCKETS_FOLDER_PREFIX));
-    const guarded = await guardMounts([guardedWorkspace, ...(folders?.guarded ?? [])], manifestFolder(this.host.dataDir, vm));
+    const mounted = [guardedWorkspace, ...(folders?.guarded ?? [])];
+    const guarded = await guardMounts(await guardedTogether(mounted, await this.namedInSandbox(vm.owner, mounted)), manifestFolder(this.host.dataDir, vm));
     const wayOut = await this.wayOut(vm, vm.socketsFolder);
     const seen = vm.broughtAgent === null ? await this.agentsOwn(vm, vm.socketsFolder) : NOTHING_OF_THE_AGENTS;
     const relays = [...seen.relays, wayOut];
@@ -866,6 +894,23 @@ export class Sandboxes {
     if (!folders) return;
     this.folderStarts.set(ownerKey(vm.owner), { ...folders.started, startedWith: vm.folders.map(({ path, writable }) => ({ path, writable })) });
     this.host.foldersStarted(vm.owner);
+  }
+
+  /**
+   * What git names by whole path in the sandbox's folders: those the VM mounts, as planned, and each other folder the
+   * owner added read and write, left out of it or for another VM of the sandbox, planned now; one that can't be planned
+   * is a repository no sandbox knows, as any other of this computer.
+   */
+  private async namedInSandbox(owner: SandboxOwner, mounted: PlannedFolder[]): Promise<NamedIn[]> {
+    const known = new Set(mounted.map(({ folder }) => folder));
+    const notMounted = this.host.foldersOf(owner).filter(({ writable, path }) => writable && !known.has(path));
+    const planned = await Promise.all(
+      notMounted.map(async ({ path }) => {
+        const plan = await guardPlanOf(path, this.host.places).catch(() => null);
+        return plan && "named" in plan ? [{ folder: path, named: plan.named }] : [];
+      }),
+    );
+    return [...mounted.map(({ folder, named }) => ({ folder, named })), ...planned.flat()];
   }
 
   /** What the sandbox's own agents have in their VM: their kinds' folders, the packages they run, and the canvas and model sockets. */
@@ -896,7 +941,7 @@ export class Sandboxes {
    * The workspace as the VM's guard is to guard it, planned while no VM writes on the way to it that could swap a folder
    * for a link to elsewhere, and just as the guards of the VMs that work there do.
    */
-  private async guardedIn(workspace: string, way: WayTo, vm: SandboxVm): Promise<GuardedFolder> {
+  private async guardedIn(workspace: string, way: WayTo, vm: SandboxVm): Promise<PlannedFolder> {
     vm.writableRoots.push(workspace);
     await this.untilNoneStopsOnTheWay(way, vm);
     await this.keepOthersOffTheWay(workspace, way, vm);
@@ -972,7 +1017,7 @@ export class Sandboxes {
       await held.stop().catch(() => {});
       throw new SandboxNotReady({ kind: "blocked", blocker: planned.refused });
     }
-    const plan = { guarded: { folder: workspace, parts: planned.parts }, entry: await entryOf(workspace) };
+    const plan = { guarded: { folder: workspace, parts: planned.parts, named: planned.named }, entry: await entryOf(workspace) };
     this.plans.set(held, plan);
     this.takeOverStoppedHeld(held);
     this.worksAmong(held, vm);
@@ -991,9 +1036,9 @@ export class Sandboxes {
    * The sandbox's added folders as its VM shows them, each looked at as it stands now: a read-only one mounted at its own
    * path, and one read and write guarded as the workspace is, with held files of its own. One that fails is left out.
    */
-  private async addedFoldersIn(vm: SandboxVm): Promise<{ readOnly: Mount[]; guarded: GuardedFolder[]; started: FoldersMounted }> {
+  private async addedFoldersIn(vm: SandboxVm): Promise<{ readOnly: Mount[]; guarded: PlannedFolder[]; started: FoldersMounted }> {
     const checked = await foldersMounted(vm.folders, await this.surroundingsBesideRunning(vm));
-    const guarded: GuardedFolder[] = [];
+    const guarded: PlannedFolder[] = [];
     for (const { path } of checked.mounted.filter(({ writable }) => writable)) {
       const planned = await this.writableFolderIn(vm, path);
       if ("leftOut" in planned) checked.leftOut.set(path, planned.leftOut);
@@ -1012,7 +1057,7 @@ export class Sandboxes {
   }
 
   /** A folder read and write, guarded as the workspace is, its held files watched from now on; or why it is left out. */
-  private async writableFolderIn(vm: SandboxVm, folder: string): Promise<GuardedFolder | { leftOut: LeftOutFolder }> {
+  private async writableFolderIn(vm: SandboxVm, folder: string): Promise<PlannedFolder | { leftOut: LeftOutFolder }> {
     const held = await this.newHeldFiles(folder, vm);
     const heldThere = await held.start().catch(leftOutFor);
     if (!Array.isArray(heldThere)) return heldThere;
@@ -1025,7 +1070,7 @@ export class Sandboxes {
     this.takeOverStoppedHeld(held);
     this.worksAmong(held, vm, true);
     this.watchPlan(held, planned);
-    return { folder, parts: planned.parts };
+    return { folder, parts: planned.parts, named: planned.named };
   }
 
   /**

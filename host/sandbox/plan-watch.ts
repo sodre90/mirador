@@ -2,8 +2,11 @@ import type { SandboxBlocker } from "../../shared/sandbox.ts";
 import { protects, type GuardPlan } from "./guarded-workspace.ts";
 import type { LookedAt } from "./looked-at.ts";
 
+/** What of a plan its watch goes by: what the guard protects, and what that was made from. */
+type WatchedPlan = Pick<GuardPlan, "parts" | "lookedAt">;
+
 /** The plan as it would be made now, or why none would be. */
-type PlanNow = GuardPlan | { refused: SandboxBlocker };
+type PlanNow = WatchedPlan | { refused: SandboxBlocker };
 
 /**
  * Looks every so often, until stopped, whether git reads or runs more of a folder than the plan its guards go by protects,
@@ -17,7 +20,7 @@ export class PlanWatch {
   private failing = false;
 
   constructor(
-    private readonly plan: GuardPlan,
+    private readonly plan: WatchedPlan,
     private readonly planNow: () => Promise<PlanNow>,
     private readonly outgrown: () => Promise<void>,
     private readonly everyMs: number,

@@ -144,6 +144,20 @@ describe("the VM of an agent someone brought into a sandboxed room", () => {
     expect(readdirSync(join(host.dataDir, "sandbox", "room-1", "guard"))).toEqual([]);
   });
 
+  test.skipIf(!RUNS_SANDBOXES)("keeps read-only what the git config of a folder the room has read and write names in the workspace, which its VM doesn't mount", async () => {
+    const { workspace, cli, folders, sandboxes } = sandboxedRoom();
+    const library = repository();
+    writeFileSync(join(workspace, "team.gitconfig"), "[user]\n\tname = Team\n");
+    Bun.spawnSync(["git", "-C", library, "config", "include.path", join(workspace, "team.gitconfig")]);
+    folders.push({ path: library, writable: true, addedAt: 1 });
+
+    await sandboxes.launchForBrought(brought(workspace));
+
+    const guarded = guardedIn(mountsOfRun(cli.callsOf("run")[0]!));
+    expect(guarded).toEqual([{ folder: workspace, parts: { files: ["team.gitconfig"], folders: [], onTheWay: [], gitFolders: [".git"] } }]);
+    await sandboxes.stopAll();
+  });
+
   test.skipIf(!RUNS_SANDBOXES)("has the sandbox's way out alone, which reaches what the owner has the sandbox reach, and is gone with it", async () => {
     const { workspace, cli, sandboxes } = sandboxedRoom();
     await sandboxes.launchForBrought(brought(workspace));

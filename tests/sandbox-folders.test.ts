@@ -344,6 +344,30 @@ describe("the sandbox's VM", () => {
     await sandboxes.stopAll();
   });
 
+  test.skipIf(!RUNS_SANDBOXES)("guards in each folder read and write what the git config of another one names there by whole path, and doesn't start where it couldn't keep that", async () => {
+    const { home, workspace, cli, sandboxes, launch, setFolders } = sandboxWithFolders();
+    const library = repositoryIn(home, "library");
+    mkdirSync(join(library, "shared", "hooks"), { recursive: true });
+    writeFileSync(join(library, "shared", "team.gitconfig"), "[user]\n\tname = Team\n");
+    Bun.spawnSync(["git", "-C", workspace, "config", "include.path", join(library, "shared", "team.gitconfig")]);
+    Bun.spawnSync(["git", "-C", workspace, "config", "core.hooksPath", join(library, "shared", "hooks")]);
+    setFolders(readAndWrite(library));
+
+    await launch();
+
+    const guarded = guardedIn(mountsOfRun(cli.callsOf("run")[0]!));
+    expect(guarded.map(({ folder }) => folder)).toEqual([workspace, library]);
+    expect(guarded[1]!.parts).toMatchObject({ files: ["shared/team.gitconfig"], folders: ["shared/hooks"], onTheWay: expect.arrayContaining(["shared"]) });
+    await sandboxes.stopAll();
+
+    Bun.spawnSync(["git", "-C", workspace, "config", "--unset", "core.hooksPath"]);
+    Bun.spawnSync(["git", "-C", workspace, "config", "include.path", join(library, "shared", "missing.gitconfig")]);
+    await expect(launch()).rejects.toMatchObject({
+      problem: { code: "sandbox-not-ready", why: { kind: "blocked", blocker: { kind: "config-includes-missing-file", file: join(library, "shared", "missing.gitconfig") } } },
+    });
+    await sandboxes.stopAll();
+  });
+
   test.skipIf(!RUNS_SANDBOXES)("holds an agent config file planted in a folder read and write, says which folder it is in, and lets the owner allow it, or discard it once the VM stopped", async () => {
     const { home, sandboxes, launch, setFolders, held } = sandboxWithFolders();
     const library = repositoryIn(home, "library");

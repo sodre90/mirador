@@ -19,9 +19,16 @@ export interface ProtectedParts {
   gitFolders: string[];
 }
 
-/** A plan of what the guard protects, and what it was made from. */
+/** What git working in a folder reads or runs by whole path, wherever it is: the config files it reads, and the hooks folders its config names. */
+export interface NamedByGit {
+  configFiles: string[];
+  hooksFolders: string[];
+}
+
+/** A plan of what the guard protects, what git there names by whole path, and what it was made from. */
 export interface GuardPlan {
   parts: ProtectedParts;
+  named: NamedByGit;
   lookedAt: LookedAt;
 }
 
@@ -140,10 +147,11 @@ async function hooksFolderInside(workspace: string, named: string, repositories:
   return holdsRepository ? { refused: { kind: "hooks-folder-holds-repository", folder: shownFrom(workspace, folder) } } : folder;
 }
 
-/** What of the workspace git reads or runs, by whole path: the files its config includes, the hooks folders it names, the folders on the way, and the git folders git works in. */
+/** What of the workspace git reads or runs, by whole path: the files its config includes, the hooks folders it names, the folders on the way, and the git folders git works in; and all git names, there or not. */
 interface GitsParts extends IncludedParts {
   hooks: string[];
   gitFolders: string[];
+  named: NamedByGit;
 }
 
 /** All config files git may read in a repository, its own, this computer's, and those they include at any depth and by any condition; and the top of its working tree, null where that isn't in the workspace. */
@@ -194,10 +202,11 @@ async function gitsPartsOf(workspace: string, lookedAt: LookedAt): Promise<GitsP
   if ("refused" in included) return included;
 
   const hooksNamedBy = async ({ top, configFiles }: Configured) => (await config.hooksFoldersNamedIn(configFiles)).flatMap((value) => hooksFolderNamed(top, value) ?? []);
-  const named = (await Promise.all(all.map(hooksNamedBy))).flat();
-  const hooks = await hooksFoldersInside(workspace, named, [...gitFolders, ...nested.map(({ top }) => top)], lookedAt);
+  const hooksNamed = (await Promise.all(all.map(hooksNamedBy))).flat();
+  const hooks = await hooksFoldersInside(workspace, hooksNamed, [...gitFolders, ...nested.map(({ top }) => top)], lookedAt);
   if (!Array.isArray(hooks)) return hooks;
-  return { ...included, hooks, gitFolders: [own.gitFolder, ...nested.filter(isBare).map(({ gitFolder }) => gitFolder), ...submodules] };
+  const named = { configFiles: [...readElsewhere].toSorted(), hooksFolders: [...new Set(hooksNamed)].toSorted() };
+  return { ...included, hooks, gitFolders: [own.gitFolder, ...nested.filter(isBare).map(({ gitFolder }) => gitFolder), ...submodules], named };
 }
 
 /** The workspace, without links, with what of it git reads or runs; or why it can't be shown to a sandbox. Looked at without changing anything. */
@@ -239,9 +248,53 @@ export async function guardPlanOf(givenWorkspace: string, places: MiradorPlaces,
       onTheWay: fromWorkspace(gits.folders),
       gitFolders: fromWorkspace(gits.gitFolders),
     },
+    named: gits.named,
     lookedAt,
   };
 }
+
+/**
+ * What of `folder` the git of a sandbox's other folders read and write reads or runs, as their config names it by whole
+ * path, for the guard of `folder` to keep as it is too; or why the VM could change it, as it could a file that isn't
+ * there or that a link leads to. `gitFolders` are the folder's own, by path from it, which no hooks folder may hold.
+ */
+export async function partsNamedFrom(folder: string, others: NamedByGit[], gitFolders: string[]): Promise<ProtectedParts | { refused: SandboxBlocker }> {
+  const configFiles = [...new Set(others.flatMap(({ configFiles }) => configFiles))];
+  const included = together(await Promise.all(configFiles.map((file) => partsOnTheWayTo(folder, file))));
+  if ("refused" in included) return { refused: withWholePaths(included.refused, folder) };
+  const hooksFolders = [...new Set(others.flatMap(({ hooksFolders }) => hooksFolders))];
+  const hooks = await hooksFoldersInside(folder, hooksFolders, gitFolders.map((path) => join(folder, path)), new LookedAt());
+  if (!Array.isArray(hooks)) return { refused: withWholePaths(hooks.refused, folder) };
+  const fromFolder = (paths: string[]) => paths.map((path) => shownFrom(folder, path));
+  return { files: fromFolder(included.files), folders: fromFolder(hooks), onTheWay: fromFolder(included.folders), gitFolders: [] };
+}
+
+const wholeFrom = (folder: string, path: string) => (isAbsolute(path) ? path : path === "." ? folder : join(folder, path));
+
+/** The blocker with the paths it names from the folder named by whole path, as another folder's config is what names them. */
+function withWholePaths(blocker: SandboxBlocker, folder: string): SandboxBlocker {
+  switch (blocker.kind) {
+    case "config-read-through-link":
+      return { ...blocker, file: wholeFrom(folder, blocker.file), link: wholeFrom(folder, blocker.link) };
+    case "config-includes-missing-file":
+    case "config-includes-not-a-file":
+      return { ...blocker, file: wholeFrom(folder, blocker.file) };
+    case "hooks-folder-holds-repository":
+      return { ...blocker, folder: wholeFrom(folder, blocker.folder) };
+    case "part-is-link":
+      return { ...blocker, part: wholeFrom(folder, blocker.part) };
+    default:
+      return blocker;
+  }
+}
+
+/** What a guard keeps as it is that keeps both `parts` and `more`. */
+export const withMoreParts = (parts: ProtectedParts, more: ProtectedParts): ProtectedParts => ({
+  files: [...new Set([...parts.files, ...more.files])],
+  folders: [...new Set([...parts.folders, ...more.folders])],
+  onTheWay: [...new Set([...parts.onTheWay, ...more.onTheWay])],
+  gitFolders: [...new Set([...parts.gitFolders, ...more.gitFolders])],
+});
 
 const isUnder = (path: string, folder: string) => path === folder || path.startsWith(`${folder}/`);
 
