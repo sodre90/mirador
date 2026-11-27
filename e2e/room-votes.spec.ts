@@ -171,6 +171,14 @@ test("a member whose tasks wait for approval can't answer in words of their own,
 
   for (const each of [page, mia]) await expect(vote(each, question).locator(".room-vote-status")).toHaveText("Mia confirmed: None of these");
   await expect.poll(() => readFileSync(builderPrompts(), "utf8")).toContain('[member] Mia answered your question "Which size?": none of the options');
+
+  await test.step("on the agent's canvas the answer reads None of these too, never as words of anyone's own", async () => {
+    await answerSaying(page, "The question is now showing").last().getByRole("button", { name: "Open on canvas" }).click();
+    const asked = page.locator(".canvas-panel:visible .ask");
+    await expect(asked.locator(".ask-answer")).toHaveText("Answered: None of these");
+    await expect(asked.locator(".ask-own-answer")).toHaveCount(0);
+    await expect(asked.getByRole("radio", { checked: true })).toHaveCount(0);
+  });
 });
 
 test("an agent's several questions are each voted on and confirmed together, only as the confirmer picked them or in words of their own, and a person taken out of the room takes their picks along", async ({ page, browser }) => {

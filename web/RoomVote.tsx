@@ -1,10 +1,11 @@
 import { useState, type KeyboardEvent } from "react";
-import { answersSummary, answerTo, NONE_OF_THE_OPTIONS, questionsOf } from "../shared/ask.ts";
+import { answerTo, questionsOf } from "../shared/ask.ts";
 import type { AskItem, AskQuestion } from "../shared/model.ts";
 import { MOST_OWN_ANSWER_CHARACTERS, pickOf, picksOf, type RoomConfirmedAnswer, type RoomQuestionVotes } from "../shared/room-votes.ts";
 import { PersonAvatar, usePersonName, usePersonNames } from "./Chat.tsx";
 import { connection } from "./connection.ts";
 import { formatNumber, t } from "./i18n/index.ts";
+import { answerShown } from "./shown-answer.ts";
 import { useTypingAidAttributes } from "./typing-aids.ts";
 
 const words = t.rooms.vote;
@@ -24,9 +25,6 @@ function labelOf(question: AskQuestion, answer: RoomConfirmedAnswer) {
   if ("none" in answer) return words.noneOfThese;
   return question.options[answer.option]!.label;
 }
-
-/** None of the options is said in the room's language, not as the agent heard it. */
-const shownLabel = (label: string) => (label === NONE_OF_THE_OPTIONS ? words.noneOfThese : label);
 
 const replacedAt = <T,>(values: T[], index: number, value: T) => values.map((each, at) => (at === index ? value : each));
 
@@ -128,7 +126,7 @@ function VoteQuestion({
 function ConfirmedLine({ item }: { item: AskItem }) {
   const answer = item.answer!;
   const confirmer = usePersonName(answer.answeredBy ?? null);
-  const label = answer.answers ? answersSummary(answer.answers.map((entry) => ({ ...entry, label: shownLabel(entry.label) }))) : shownLabel(answer.label);
+  const label = answerShown(answer);
   return <div className="room-vote-status">{answer.answeredBy ? words.confirmed(confirmer, label) : words.answered(label)}</div>;
 }
 

@@ -2,7 +2,7 @@ import type { PlanEntry } from "@agentclientprotocol/sdk/unstable";
 import { Fragment, createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type KeyboardEvent, type RefObject } from "react";
 import { buildCanvasDocument, canvasHiddenMessage, canvasPageMessage, canvasRoomMessage, canvasShellUrl, canvasTextScaleMessage, canvasThemeMessage, isCanvasFrameMessage, type CanvasFrameMessage, type CanvasPagePolicy } from "../shared/canvas-document.ts";
 import { appKey, type AppDocumentState, type InstalledApp, type OpenApp } from "../shared/apps.ts";
-import { answerPicking, answersSummary, answerTo, pickedIn, questionsOf, type AskPage } from "../shared/ask.ts";
+import { answerPicking, answersSummary, answerTo, isNoneOfTheOptions, pickedIn, questionsOf, type AskPage } from "../shared/ask.ts";
 import type { AskAnswerEntry, AskItem, AskQuestion, CanvasItem, ShowItem } from "../shared/model.ts";
 import { AppView } from "./AppView.tsx";
 import { BarMenu, type BarMenuEntry } from "./BarMenu.tsx";
@@ -21,6 +21,7 @@ import { usePageMarks } from "./PageMarks.tsx";
 import { canOpenItemWindows, openItemWindow } from "./item-window.ts";
 import { PluginItemView } from "./PluginItemView.tsx";
 import { SettledNoteLine, type SettledNote } from "./SettledNote.tsx";
+import { answerShown } from "./shown-answer.ts";
 import { shortcutKeys } from "./shortcuts.ts";
 import { onShownThemeChange, shownTheme } from "./theme.ts";
 import { formatClockTime, formatFullTime } from "./timestamps.ts";
@@ -374,7 +375,7 @@ function AskQuestionFields({
     if (multiple) return { other, otherTicked: typed };
     return typed ? { other, choice: SOMETHING_ELSE } : { other };
   };
-  const ownAnswerGiven = waiting ? undefined : given?.own;
+  const ownAnswerGiven = waiting || (answer && isNoneOfTheOptions(question, answer)) ? undefined : given?.own;
 
   return (
     <>
@@ -533,13 +534,13 @@ function AskView({
       <h3>{several ? (waiting ? (onReviewPage ? words.ask.isThisRight : shownQuestion.question) : item.title) : item.question}</h3>
       {item.status === "answered" && item.answer && !several && !inRoom && (
         <div className="ask-answer">
-          {words.ask.youChose} <strong>{item.answer.label}</strong>
+          {words.ask.youChose} <strong>{answerShown(item.answer)}</strong>
           {item.answer.note && <> — “{item.answer.note}”</>}
           <span className="delivered">{deliveredNote(item.answer)}</span>
         </div>
       )}
       {item.status === "answered" && item.answer && several && !inRoom && <AnsweredSeveral answer={item.answer} count={questions.length} />}
-      {item.status === "answered" && item.answer && inRoom && <div className="ask-answer">{t.rooms.vote.answered(item.answer.label)}</div>}
+      {item.status === "answered" && item.answer && inRoom && <div className="ask-answer">{t.rooms.vote.answered(answerShown(item.answer))}</div>}
       {item.status === "cancelled" && <div className="ask-answer">{words.ask.withdrawn}</div>}
       {item.status === "waiting" && inRoom && <div className="ask-answer">{t.rooms.vote.voteInRoom}</div>}
       {pagesBeforeShown.map((before) => (
@@ -651,7 +652,7 @@ function outcomeOf(item: CanvasItem) {
   if (item.kind === "plugin" && item.outcome) return item.outcome;
   if (item.status === "waiting") return words.outcome.needsYourAnswer;
   if (item.status === "cancelled") return words.outcome.withdrawn;
-  if (item.kind === "ask" && item.status === "answered" && item.answer) return `→ ${item.answer.label}`;
+  if (item.kind === "ask" && item.status === "answered" && item.answer) return `→ ${answerShown(item.answer)}`;
   return "";
 }
 
@@ -664,7 +665,7 @@ const outcomeIsFreeText = (item: CanvasItem) => isVerdict(item) || item.status =
 const isSettledQuestion = (item: CanvasItem): item is AskItem => item.kind === "ask" && item.status !== "waiting";
 
 function settledMessage(item: AskItem): SettledNote {
-  return item.status === "answered" ? { text: words.ask.answerSent(item.answer?.label ?? ""), tone: "done" } : { text: words.ask.agentWithdrew, tone: "neutral" };
+  return item.status === "answered" ? { text: words.ask.answerSent(item.answer ? answerShown(item.answer) : ""), tone: "done" } : { text: words.ask.agentWithdrew, tone: "neutral" };
 }
 
 /** A note that goes away by itself a few seconds after it is set. */

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { answerPicking, answerTo, isOwnAnswer, pickedIn } from "../shared/ask.ts";
+import { answerPicking, answerTo, isNoneOfTheOptions, isOwnAnswer, NONE_OF_THE_OPTIONS, pickedIn, shownAnswer } from "../shared/ask.ts";
 import type { AskItem, AskQuestion } from "../shared/model.ts";
 
 const color: AskQuestion = { question: "Which color?", options: [{ label: "Red" }, { label: "Blue" }] };
@@ -45,6 +45,23 @@ describe("the answer to each question of an ask", () => {
   test("an answer that is none of the options is the user's own", () => {
     expect(isOwnAnswer(size, "Large")).toBe(false);
     expect(isOwnAnswer(size, "Huge")).toBe(true);
+  });
+
+  test("a room's confirmer saying none of the options fits names no option and holds no words of their own, unless an option bears that name", () => {
+    expect(isNoneOfTheOptions(size, { label: NONE_OF_THE_OPTIONS })).toBe(true);
+    expect(isNoneOfTheOptions(size, { label: "Huge" })).toBe(false);
+    expect(isNoneOfTheOptions({ ...size, options: [{ label: NONE_OF_THE_OPTIONS }] }, { label: NONE_OF_THE_OPTIONS })).toBe(false);
+    expect(isNoneOfTheOptions({ ...size, multiple: true }, { label: "", picked: { options: [] } })).toBe(false);
+  });
+
+  test("is shown with none of the options in the reader's words, each of several in turn", () => {
+    expect(shownAnswer({ label: NONE_OF_THE_OPTIONS }, "Egyik sem")).toBe("Egyik sem");
+    expect(shownAnswer({ label: "Large" }, "Egyik sem")).toBe("Large");
+    const answers = [
+      { question: "Which bed?", label: "North" },
+      { question: "Which seeds?", label: NONE_OF_THE_OPTIONS },
+    ];
+    expect(shownAnswer({ label: `North · ${NONE_OF_THE_OPTIONS}`, answers }, "Egyik sem")).toBe("North · Egyik sem");
   });
 });
 

@@ -1,4 +1,4 @@
-import type { AskAnswerEntry, AskItem, AskQuestion, CanvasItem, PickedSeveral } from "./model.ts";
+import type { AskAnswerEntry, AskItem, AskQuestion, CanvasAnswer, CanvasItem, PickedSeveral } from "./model.ts";
 
 /** The questions an ask holds: the several the agent sent, or the one an older or simpler ask has in the item's own fields. */
 export function questionsOf(item: AskItem): AskQuestion[] {
@@ -19,6 +19,15 @@ export const NONE_OF_THE_OPTIONS = "none of the options";
 
 /** An answer the user wrote themselves rather than picked from the question's options. */
 export const isOwnAnswer = (question: AskQuestion, answer: string) => !question.options.some(({ label }) => label === answer);
+
+/** An answer that names none of the question's options and holds no words of its own, as a room's confirmer may give it. */
+export const isNoneOfTheOptions = (question: AskQuestion, { label, picked }: AskAnswerEntry) => !picked && label === NONE_OF_THE_OPTIONS && isOwnAnswer(question, label);
+
+/** An answer as a page shows it, each of several in turn, with none of the options in the reader's words. */
+export function shownAnswer({ label, answers }: Pick<CanvasAnswer, "label" | "answers">, noneOfThese: string) {
+  const shown = (each: string) => (each === NONE_OF_THE_OPTIONS ? noneOfThese : each);
+  return answers ? answersSummary(answers.map((entry) => ({ ...entry, label: shown(entry.label) }))) : shown(label);
+}
 
 /** A page a question holds: the one above its options, or an option's own. */
 export interface AskPage {
