@@ -20,9 +20,13 @@ export const INVITE_ALPHABET = "ABCDEFGHJKMNPQRSTVWXYZ23456789";
 
 const inviteCodeGroup = `[${INVITE_ALPHABET}]{4}`;
 const inviteCodeAlone = new RegExp(`^${inviteCodeGroup}(?:-${inviteCodeGroup}){2}$`, "i");
+const roomInviteCodeAlone = new RegExp(`^ROOM-${inviteCodeGroup}(?:-${inviteCodeGroup}){2}$`, "i");
 
 /** An invite code as Mirador shows it, e.g. 7K4M-2PQX-9WZB, which names no machine on its own. */
 export const isInviteCodeAlone = (text: string) => inviteCodeAlone.test(text.trim());
+
+/** A room invite code as Mirador shows it, e.g. ROOM-7K4M-2PQX-9WZB, which names no machine on its own. */
+export const isRoomInviteCodeAlone = (text: string) => roomInviteCodeAlone.test(text.trim());
 
 /** The port a Mirador on its network answers at, unless its owner set another. */
 export const USUAL_NETWORK_PORT = 4602;
@@ -152,7 +156,7 @@ function addressInTunnel(hash: string): MachineAddress | null {
 /** What someone types or pastes for a machine: its name on the network, its address, or an invite link from it; an invite link whose tunnel isn't one is none. */
 export function machineAddress(text: string): MachineAddress | null {
   const trimmed = text.trim();
-  if (!trimmed || isInviteCodeAlone(trimmed)) return null;
+  if (!trimmed || isInviteCodeAlone(trimmed) || isRoomInviteCodeAlone(trimmed)) return null;
   const miradorLinkHash = hashOfMiradorLink(trimmed);
   if (miradorLinkHash) return addressInTunnel(miradorLinkHash);
   try {

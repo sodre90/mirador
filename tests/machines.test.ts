@@ -10,6 +10,7 @@ import {
   inviteLink,
   isHidden,
   isInviteCodeAlone,
+  isRoomInviteCodeAlone,
   isRoomInviteLink,
   joinCodeIn,
   joinedRoomsIn,
@@ -395,6 +396,11 @@ test("an invite code alone names no machine, whatever its case, and still joins 
   expect(machineAddress("https://7k4m-2pqx-9wzb"), "typed with a scheme, it is an address").toMatchObject({ origin: "https://7k4m-2pqx-9wzb" });
   expect(isInviteCodeAlone("mac1-mini-home"), "a host name with letters no code has").toBe(false);
   expect(isInviteCodeAlone("7K4M-2PQX")).toBe(false);
+  expect(isRoomInviteCodeAlone(" ROOM-7K4M-2PQX-9WZB ")).toBe(true);
+  expect(isRoomInviteCodeAlone("room-7k4m-2pqx-9wzb")).toBe(true);
+  expect(machineAddress("ROOM-7K4M-2PQX-9WZB")).toBeNull();
+  expect(isRoomInviteCodeAlone("7K4M-2PQX-9WZB")).toBe(false);
+  expect(isRoomInviteCodeAlone("room-box-home-main")).toBe(false);
 });
 
 test("an address on the local network given without a port points at Mirador's network port", () => {

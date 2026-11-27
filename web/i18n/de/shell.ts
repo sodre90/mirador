@@ -356,6 +356,8 @@ export const shell: Messages["shell"] = {
     alreadyListed: "Dieser Rechner ist schon in der Liste.",
     inviteCodeAlone:
       "Das ist nur ein Einladungscode. Füge den ganzen Einladungslink ein (wähle in der Einladung „Anderer Computer“), oder gib hier die Adresse des Rechners ein und den Code, wenn du ihn öffnest.",
+    roomInviteCodeAlone:
+      "Das ist nur ein Einladungscode für einen Raum. Füge stattdessen den ganzen Einladungslink unter Räume → Einem Raum beitreten ein.",
     noPortGiven: (port, address) => `Kein Port angegeben. Im Netzwerk antwortet Mirador auf Port ${port}, sofern nicht anders eingestellt, etwa unter ${address}.`,
     colour: "Farbe des Rechners",
     colourOf: (machine) => `Farbe von ${machine}`,

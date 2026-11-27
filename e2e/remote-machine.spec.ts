@@ -320,6 +320,9 @@ test("an invite code typed as a machine's address is refused with what to paste 
     await address.fill("7K4M-2PQX-9WZB");
     await expect(machines.getByRole("alert")).toHaveText(/^That's only an invite code\. Paste the whole invite link/);
     await expect(add).toBeDisabled();
+    await address.fill("ROOM-7K4M-2PQX-9WZB");
+    await expect(machines.getByRole("alert")).toHaveText(/^That's only a room invite code\. Paste the whole room invite link/);
+    await expect(add).toBeDisabled();
   });
 
   await test.step("an IP address without a port is shown at Mirador's network port, and can still be added as typed", async () => {

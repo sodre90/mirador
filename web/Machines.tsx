@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { isInviteCodeAlone, LONGEST_MACHINE_NAME, machineAddress, networkAddressFor, USUAL_NETWORK_PORT, type MachineToJoin } from "../shared/machines.ts";
+import { isInviteCodeAlone, isRoomInviteCodeAlone, LONGEST_MACHINE_NAME, machineAddress, networkAddressFor, USUAL_NETWORK_PORT, type MachineToJoin } from "../shared/machines.ts";
 import { markInitials } from "../shared/marks.ts";
 import type { Machine, Pastel } from "../shared/model.ts";
 import { tunnelOrigin } from "../shared/tunnel.ts";
@@ -101,6 +101,11 @@ function AddMachine({ machines, person, onJoined }: { machines: Machine[]; perso
       {isInviteCodeAlone(address) && (
         <p className="join-problem" role="alert">
           {words.inviteCodeAlone}
+        </p>
+      )}
+      {isRoomInviteCodeAlone(address) && (
+        <p className="join-problem" role="alert">
+          {words.roomInviteCodeAlone}
         </p>
       )}
       {likelyNetworkAddress && <p className="hint">{words.noPortGiven(USUAL_NETWORK_PORT, likelyNetworkAddress)}</p>}
