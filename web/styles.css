@@ -10918,6 +10918,53 @@ button.link.more-rows {
   font-size: calc(12px * var(--font-scale));
 }
 
+.conversation-outside-sandbox .sandboxed-mark {
+  border-color: var(--border);
+  background: none;
+  color: var(--muted);
+}
+
+.conversation-sandbox .sandboxed-mark.on {
+  border-color: var(--accent);
+}
+
+.conversation-sandbox .conversation-sandbox-fixed {
+  max-width: 260px;
+  padding: 0 8px 4px 24px;
+  font-size: calc(12px * var(--font-scale));
+}
+
+.conversation-sandbox-ask {
+  position: fixed;
+  z-index: 40;
+  width: min(320px, calc(100vw - 32px));
+  padding: 10px 12px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 12px 32px rgb(0 0 0 / 0.18);
+  color: var(--text);
+}
+
+.conversation-sandbox-ask p {
+  margin: 0 0 10px;
+}
+
+.conversation-sandboxed-row {
+  flex: none;
+  display: inline-flex;
+  color: var(--accent);
+}
+
+.conversation-sandboxed-row .line-icon {
+  width: calc(12px * var(--font-scale));
+  height: calc(12px * var(--font-scale));
+}
+
+.workspace-sandbox-bring-in .hint {
+  margin: 2px 0 0 24px;
+}
+
 .room-sandboxed .line-icon,
 .sandboxed-mark .line-icon,
 .room-settings-button .line-icon {

@@ -148,10 +148,11 @@ export type ClientMessage =
   /** What the workspace's new side chats may do; null for what Settings say. */
   | { type: "workspace.set-side-chat-access"; workspaceId: string; sideChatAccess: SideChatAccess | null }
   /**
-   * Whether the workspace's own conversations run their agents in a sandbox, and work freely there; those already at work
-   * start afresh. Turning it on where something stands in its way fails with why.
+   * Whether the workspace's own conversations run their agents in a sandbox, and work freely there; those in it start
+   * afresh. Turned on, the conversations it has come in only when `bringConversationsIn` says so; new ones always do.
+   * Turning it on where something stands in its way fails with why.
    */
-  | { type: "workspace.set-sandbox"; workspaceId: string; sandbox: SandboxSetting }
+  | { type: "workspace.set-sandbox"; workspaceId: string; sandbox: SandboxSetting; bringConversationsIn: boolean }
   /** Whether this computer and the workspace can have a sandbox; the host answers `workspace.sandbox-checked`. */
   | { type: "workspace.check-sandbox"; requestId: string; workspaceId: string }
   /** Writes an agent config file as a sandboxed agent of a room or workspace proposed it, or drops what it proposed. */
@@ -337,6 +338,8 @@ export type ClientMessage =
   /** Null follows the profile again. */
   | { type: "conversation.set-plugin-setting"; conversationId: string; plugin: string; setting: string; value: string | null }
   | { type: "conversation.set-bypass-permissions"; conversationId: string; bypassPermissions: boolean }
+  /** Whether a conversation of a sandboxed workspace runs its agent, and its side chats', in the sandbox or on this computer; it starts afresh. */
+  | { type: "conversation.set-sandboxed"; conversationId: string; sandboxed: boolean }
   | { type: "conversation.set-config"; conversationId: string; configId: string; value: string | boolean }
   | { type: "permission.respond"; conversationId: string; permissionId: string; optionId: string | null }
   | { type: "ask.answer"; itemId: string; label: string; picked?: PickedSeveral; note?: string; answers?: AskAnswerEntry[] }

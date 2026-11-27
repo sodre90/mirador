@@ -136,8 +136,8 @@ export const shell = {
     inWorktrees: (count: number) =>
       plural(
         count,
-        "1 conversation here works in a worktree, which the sandbox doesn't see: it can't go on while the sandbox is on.",
-        `${count} conversations here work in worktrees, which the sandbox doesn't see: they can't go on while the sandbox is on.`,
+        "1 conversation here works in a worktree, which the sandbox doesn't see: it stays on this computer.",
+        `${count} conversations here work in worktrees, which the sandbox doesn't see: they stay on this computer.`,
       ),
     startsAfresh: (count: number) =>
       plural(count, "1 conversation here starts afresh as it goes on: its agent won't remember what was said before.", `${count} conversations here start afresh as they go on: their agents won't remember what was said before.`),
@@ -151,7 +151,30 @@ export const shell = {
     on: "On",
     off: "Off",
     workspaceSandboxed: "This workspace's agents run in a sandbox. Click for its settings.",
-    conversationSandboxed: "This conversation's agent runs in its workspace's sandbox. Click for its settings.",
+    conversationSandboxed: "This conversation's agent runs in its workspace's sandbox. Click to move it out, or for the sandbox's settings.",
+    conversationOutside: "This conversation's agent runs on this computer, outside its workspace's sandbox. Click to move it in, or for the sandbox's settings.",
+    onThisComputer: "On this computer",
+    conversationMenu: "Where this conversation's agent runs",
+    runInSandbox: "Run in the sandbox",
+    sandboxSettings: "Sandbox settings…",
+    sideChatFollows: "A side chat runs where its conversation does.",
+    worktreeStaysHere: "It works in a worktree, which the sandbox doesn't see.",
+    movesInAfresh: "Its agent moves into the sandbox and starts afresh: it won't remember what was said before.",
+    movesOutAfresh: "Its agent moves to this computer and starts afresh: it won't remember what was said before.",
+    moveIn: "Move it in",
+    moveOut: "Move it out",
+    keepAsIs: "Keep it as it is",
+    rowSandboxed: "Runs in the sandbox",
+    bringIn: (count: number) => plural(count, "Bring the conversation here into the sandbox too", `Bring the ${count} conversations here into the sandbox too`),
+    leaveOutNote:
+      "Left out, they go on on this computer as they are, and only new conversations start in the sandbox. An agent on this computer can still run what a sandboxed agent writes in the project folder.",
+    bringInNote: "Each one brought in starts afresh in the sandbox. One in a worktree stays on this computer.",
+    outsideCount: (count: number) =>
+      plural(
+        count,
+        "1 conversation here runs on this computer, outside the sandbox. Move it in from the mark at its top.",
+        `${count} conversations here run on this computer, outside the sandbox. Move one in from the mark at its top.`,
+      ),
     heldWaits: "Needs you: the sandbox holds an agent config change for your OK. Click to see it.",
     anAgentHere: "An agent of this workspace",
     meaning: [
@@ -164,8 +187,8 @@ export const shell = {
       "Any other file the agents change in the project folder may run when you run it yourself: tests, scripts, package.json, or a commit from your terminal, which runs the repository's hooks. Review what they changed before you run anything there.",
       "The repository's config and hooks are read-only in the sandbox, and so are those of repositories inside the project folder, and the files of the project folder their own config includes, such as a shared .gitconfig. A checkout in the sandbox that would change one of them fails, and no new repository, nor a file called HEAD, can be made in the project folder there. Mirador runs git on the workspace without hooks and fsmonitor, and while the workspace is sandboxed, and for 7 days after, its commits, lands and new worktrees in the project folder, or in any folder inside it, skip the repositories' hooks too.",
       "A folder you add read and write has the same guards as the project folder. It must be a git repository's own top folder, so you can see and undo what the agents change, and no other sandbox may work in it. Its repository's config and hooks, and the files of the folder that config includes, are read-only in the sandbox, its agent config files are held for you as the project folder's are, and Mirador's commits, lands and new worktrees there skip the repositories' hooks while the sandbox works in it and for 7 days after.",
-      "New conversations start in the project folder rather than a worktree, as the sandbox sees no worktree. ! commands, sessions from your terminal and Claude Code's own panels don't run here either: they would run on this computer.",
-      "Turning it on or off, changing how the agents work in it, or changing its base image starts the conversations here afresh.",
+      "New conversations start in the sandbox, in the project folder rather than a worktree, as the sandbox sees no worktree. Sessions from your terminal don't run here either, nor do ! commands and Claude Code's own panels in a sandboxed conversation: they would run on this computer.",
+      "Turning it on leaves the conversations here on this computer, as they are, unless you bring them in. Move a conversation in or out from the mark at its top: its agent starts afresh. Turning the sandbox off, changing how the agents work in it, or changing its base image starts the conversations in it afresh. An agent on this computer can run what a sandboxed agent wrote in the project folder.",
     ],
   },
   workspaceDelete: {

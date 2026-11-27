@@ -24,7 +24,7 @@ import { DesktopMenu } from "./DesktopMenu.tsx";
 import { FavouriteStar, favouriteLabel, setFavourite } from "./FavouriteStar.tsx";
 import { useDragToReorder, usePointerDrag } from "./drag-to-reorder.ts";
 import { forkConversation, startConversationIn } from "./actions.ts";
-import { openWorkspaceSandbox, SandboxedMark } from "./WorkspaceSandbox.tsx";
+import { openWorkspaceSandbox, SandboxedMark, SandboxedRowMark } from "./WorkspaceSandbox.tsx";
 import { ofSandbox, workspaceSandbox } from "../shared/sandbox.ts";
 import { hints, statusHints, waitingHints } from "./hints.ts";
 import { t } from "./i18n/index.ts";
@@ -582,6 +582,7 @@ function WorkspaceSection({
       {statusDot(conversation, delegatedTo(conversation))}
       <ConversationTitle conversation={conversation} startEditingOn="double-click" className="conversation-title" />
       {conversation.worktree && <WorktreeMark branch={conversation.worktree.branch} />}
+      {workspace.sandbox.on && !conversation.outsideSandbox && <SandboxedRowMark />}
       <DelegatedToggle callerId={conversation.id} under={listedUnder(conversation)} open={openedDelegations.has(conversation.id)} />
       {conversation.waitingFor && <WaitingPill waitingFor={conversation.waitingFor} />}
       <ReminderChip conversation={conversation} dispatch={dispatch} />

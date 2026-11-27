@@ -334,6 +334,7 @@ export function SandboxSwitch({
   startsAfreshText,
   send,
   folders,
+  whileOff = null,
 }: {
   id: string;
   owner: SandboxOwner;
@@ -346,6 +347,8 @@ export function SandboxSwitch({
   startsAfreshText: (startsAfresh: string[], stopsTurn: boolean) => string;
   send: (sandbox: SandboxSetting) => void;
   folders: ReactNode;
+  /** What to choose before turning it on, shown under the switch while it is off. */
+  whileOff?: ReactNode;
 }) {
   const { shown, change, pending, confirm, keep } = useChangeStartingAfresh(
     setting,
@@ -385,6 +388,7 @@ export function SandboxSwitch({
         />
         {switchWords.turnOn}
       </label>
+      {!shown.on && whileOff}
       {check === null && <p className="hint">{switchWords.checking}</p>}
       {kind !== null && (
         <p

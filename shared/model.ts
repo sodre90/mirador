@@ -762,6 +762,11 @@ export interface Conversation {
   broughtIntoRoom?: true;
   /** Only on that of an agent you brought to work in the room's workspace, on the room's machine, and on what is forked or asked beside it: its agent has nothing of this computer but its canvas. */
   worksInRoomsWorkspace?: true;
+  /**
+   * Only on a workspace's own conversation whose agent runs on this computer while the workspace's sandbox is on. Any
+   * other runs in the sandbox, so a conversation nobody chose for gets the sandbox. A side chat goes with its conversation.
+   */
+  outsideSandbox?: true;
   /** What the user chose in its top bar for plugins' profile settings, by plugin and setting id; a setting not here follows the profile. */
   pluginSettings?: Record<string, Record<string, string>>;
   /** When the user wants to come back to it, put away or kept in the list until then. */

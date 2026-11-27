@@ -133,8 +133,8 @@ export const shell: Messages["shell"] = {
     inWorktrees: (count) =>
       plural(
         count,
-        "1 Unterhaltung hier arbeitet in einem Worktree, den die Sandbox nicht sieht: Sie kann nicht weitergehen, solange die Sandbox an ist.",
-        `${count} Unterhaltungen hier arbeiten in Worktrees, die die Sandbox nicht sieht: Sie können nicht weitergehen, solange die Sandbox an ist.`,
+        "1 Unterhaltung hier arbeitet in einem Worktree, den die Sandbox nicht sieht: Sie bleibt auf diesem Rechner.",
+        `${count} Unterhaltungen hier arbeiten in Worktrees, die die Sandbox nicht sieht: Sie bleiben auf diesem Rechner.`,
       ),
     startsAfresh: (count) =>
       plural(
@@ -152,7 +152,30 @@ export const shell: Messages["shell"] = {
     on: "An",
     off: "Aus",
     workspaceSandboxed: "Die Agenten dieses Arbeitsbereichs laufen in einer Sandbox. Klicke für ihre Einstellungen.",
-    conversationSandboxed: "Der Agent dieser Unterhaltung läuft in der Sandbox seines Arbeitsbereichs. Klicke für ihre Einstellungen.",
+    conversationSandboxed: "Der Agent dieser Unterhaltung läuft in der Sandbox seines Arbeitsbereichs. Klicke, um ihn herauszunehmen, oder für die Einstellungen der Sandbox.",
+    conversationOutside: "Der Agent dieser Unterhaltung läuft auf diesem Rechner, außerhalb der Sandbox seines Arbeitsbereichs. Klicke, um ihn hineinzuholen, oder für die Einstellungen der Sandbox.",
+    onThisComputer: "Auf diesem Rechner",
+    conversationMenu: "Wo der Agent dieser Unterhaltung läuft",
+    runInSandbox: "In der Sandbox ausführen",
+    sandboxSettings: "Einstellungen der Sandbox…",
+    sideChatFollows: "Ein Nebenchat läuft dort, wo seine Unterhaltung läuft.",
+    worktreeStaysHere: "Sie arbeitet in einem Worktree, den die Sandbox nicht sieht.",
+    movesInAfresh: "Ihr Agent kommt in die Sandbox und fängt neu an: Er erinnert sich nicht an das, was vorher gesagt wurde.",
+    movesOutAfresh: "Ihr Agent kommt auf diesen Rechner und fängt neu an: Er erinnert sich nicht an das, was vorher gesagt wurde.",
+    moveIn: "Hineinholen",
+    moveOut: "Herausnehmen",
+    keepAsIs: "So lassen",
+    rowSandboxed: "Läuft in der Sandbox",
+    bringIn: (count) => plural(count, "Auch die Unterhaltung hier in die Sandbox holen", `Auch die ${count} Unterhaltungen hier in die Sandbox holen`),
+    leaveOutNote:
+      "Bleiben sie draußen, laufen sie auf diesem Rechner weiter wie bisher, und nur neue Unterhaltungen beginnen in der Sandbox. Ein Agent auf diesem Rechner kann trotzdem ausführen, was ein Agent in der Sandbox in den Projektordner schreibt.",
+    bringInNote: "Jede hereingeholte Unterhaltung fängt in der Sandbox neu an. Eine in einem Worktree bleibt auf diesem Rechner.",
+    outsideCount: (count) =>
+      plural(
+        count,
+        "1 Unterhaltung hier läuft auf diesem Rechner, außerhalb der Sandbox. Hol sie über die Markierung oben in der Unterhaltung herein.",
+        `${count} Unterhaltungen hier laufen auf diesem Rechner, außerhalb der Sandbox. Hol eine über die Markierung oben in der Unterhaltung herein.`,
+      ),
     heldWaits: "Wartet auf dich: Die Sandbox hält eine Änderung an Agent-Einstellungen bis zu deiner Genehmigung zurück. Klicke, um sie zu sehen.",
     anAgentHere: "Ein Agent dieses Arbeitsbereichs",
     meaning: [
@@ -165,8 +188,8 @@ export const shell: Messages["shell"] = {
       "Jede andere Datei, die die Agenten im Projektordner ändern, kann laufen, wenn du sie selbst ausführst: Tests, Skripte, package.json oder ein Commit aus deinem Terminal, der die Hooks des Repositorys ausführt. Sieh dir an, was sie geändert haben, bevor du dort etwas ausführst.",
       "Konfiguration und Hooks des Repositorys sind in der Sandbox schreibgeschützt, ebenso die der Repositorys im Projektordner und die Dateien des Projektordners, die deren eigene Konfiguration einbindet, etwa eine gemeinsame .gitconfig. Ein Checkout in der Sandbox, der eine davon ändern würde, schlägt fehl, und weder ein neues Repository noch eine Datei namens HEAD lässt sich dort im Projektordner anlegen. Mirador führt Git im Arbeitsbereich ohne Hooks und fsmonitor aus, und solange der Arbeitsbereich eine Sandbox hat und 7 Tage danach überspringen auch seine Commits, Merges und neuen Worktrees im Projektordner oder einem Ordner darin die Hooks der Repositorys.",
       "Ein Ordner, den du les- und schreibbar hinzufügst, hat denselben Schutz wie der Projektordner. Er muss der oberste Ordner eines Git-Repositorys sein, damit du siehst und rückgängig machen kannst, was die Agenten ändern, und keine andere Sandbox darf darin arbeiten. Konfiguration und Hooks seines Repositorys und die Dateien des Ordners, die diese Konfiguration einbindet, sind in der Sandbox schreibgeschützt, seine Agent-Einstellungsdateien werden für dich zurückgehalten wie die des Projektordners, und Miradors Commits, Merges und neue Worktrees dort überspringen die Hooks der Repositorys, solange die Sandbox darin arbeitet und 7 Tage danach.",
-      "Neue Unterhaltungen beginnen im Projektordner statt in einem Worktree, da die Sandbox keinen Worktree sieht. !-Befehle, Sitzungen aus deinem Terminal und die eigenen Panels von Claude Code laufen hier ebenfalls nicht: Sie würden auf diesem Rechner laufen.",
-      "Sie ein- oder auszuschalten, zu ändern, wie die Agenten darin arbeiten, oder ihr Basis-Image zu wechseln, lässt die Unterhaltungen hier neu anfangen.",
+      "Neue Unterhaltungen beginnen in der Sandbox, im Projektordner statt in einem Worktree, da die Sandbox keinen Worktree sieht. Sitzungen aus deinem Terminal laufen hier ebenfalls nicht, und in einer Unterhaltung in der Sandbox auch keine !-Befehle und nicht die eigenen Panels von Claude Code: Sie würden auf diesem Rechner laufen.",
+      "Beim Einschalten bleiben die Unterhaltungen hier auf diesem Rechner, wie sie sind, es sei denn, du holst sie herein. Über die Markierung oben in einer Unterhaltung holst du sie herein oder nimmst sie heraus: Ihr Agent fängt neu an. Die Sandbox auszuschalten, zu ändern, wie die Agenten darin arbeiten, oder ihr Basis-Image zu wechseln, lässt die Unterhaltungen in ihr neu anfangen. Ein Agent auf diesem Rechner kann ausführen, was ein Agent in der Sandbox in den Projektordner geschrieben hat.",
     ],
   },
   workspaceDelete: {

@@ -201,6 +201,7 @@ const admissions: { [K in ClientMessage["type"]]: K extends PersonMessageType ? 
   "conversation.set-ask-mode": OWNER_ONLY,
   "conversation.set-plugin-setting": OWNER_ONLY,
   "conversation.set-bypass-permissions": OWNER_ONLY,
+  "conversation.set-sandboxed": OWNER_ONLY,
   "conversation.set-config": OWNER_ONLY,
   "permission.respond": OWNER_ONLY,
   "ask.answer": OWNER_ONLY,

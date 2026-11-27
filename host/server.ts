@@ -1619,7 +1619,7 @@ export function startServer(services: HostServices) {
       case "workspace.set-side-chat-access":
         return conversations.setSideChatAccess(message.workspaceId, message.sideChatAccess);
       case "workspace.set-sandbox":
-        return workspaceSandboxes.setSandbox(message.workspaceId, message.sandbox);
+        return workspaceSandboxes.setSandbox(message.workspaceId, message.sandbox, message.bringConversationsIn === true);
       case "workspace.check-sandbox":
         return reply({ type: "workspace.sandbox-checked", requestId: message.requestId, workspaceId: message.workspaceId, ...(await workspaceSandboxes.sandboxCheck(message.workspaceId)) });
       case "workspace-group.create":
@@ -1907,6 +1907,8 @@ export function startServer(services: HostServices) {
         return;
       case "conversation.set-bypass-permissions":
         return conversations.setBypassPermissions(message.conversationId, message.bypassPermissions);
+      case "conversation.set-sandboxed":
+        return workspaceSandboxes.setConversationSandboxed(message.conversationId, message.sandboxed === true);
       case "conversation.set-config":
         return conversations.setConfigOption(message.conversationId, message.configId, message.value);
       case "permission.respond":

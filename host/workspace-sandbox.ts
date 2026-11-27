@@ -1,5 +1,5 @@
 import { HostProblemError } from "../shared/host-problems.ts";
-import type { Profile } from "../shared/model.ts";
+import { worksForARoom, type Conversation, type Profile } from "../shared/model.ts";
 import { NO_ENVIRONMENT_CHOICES } from "../shared/room-agent-setup.ts";
 import {
   isHeldChangeAnswer,
@@ -25,7 +25,9 @@ const workspaceProfileBlocker = (profile: Profile) => profileSandboxBlocker(prof
 /** What a workspace's sandbox setting needs of its conversations. */
 export interface WorkspaceConversations {
   /** They leave the processes they ran on, and start afresh as they next go on; a change that leaves them with less stops their turns. */
-  startAfreshInWorkspace(workspaceId: string, change: { stopsTurn: boolean }): void;
+  startAfreshUnderNewSetup(conversationIds: string[], change: { stopsTurn: boolean }): void;
+  /** Tells the pages what the conversations are now. */
+  republishAll(conversationIds: string[]): void;
 }
 
 /** The conversations' terminal tabs that run their agent on this computer, its sign-in and Claude Code's own panels. */
@@ -35,7 +37,8 @@ export interface AgentTerminals {
 
 /**
  * Whether a workspace's own conversations, outside its rooms, run their agents in a sandbox of the workspace's, one VM
- * they share, which sees the workspace's folder and nothing of a room's or another workspace's.
+ * they share, which sees the workspace's folder and nothing of a room's or another workspace's; each conversation may
+ * run on this computer instead.
  */
 export class WorkspaceSandboxes {
   private sandboxes: SandboxControl = NO_SANDBOX_CONTROL;
@@ -52,23 +55,57 @@ export class WorkspaceSandboxes {
   }
 
   /**
-   * The workspace's conversations run their agents in its sandbox from their next start on, or on this computer again:
-   * each starts afresh, at once where the change leaves it with less. Turned on, nothing of their agents goes on on this
-   * computer: neither their sessions there nor their sign-in and panel tabs. A sandbox is turned on only where nothing
-   * stands in its way, and one that shares this computer's kernel only where the owner allowed that.
+   * The workspace's conversations in its sandbox run their agents there from their next start on, or on this computer
+   * again: each starts afresh, at once where the change leaves it with less. Turned on, the conversations it has stay on
+   * this computer, untouched, unless the owner brings them in; one in a worktree, which the sandbox can't see, always
+   * stays. Those brought in go on with nothing of their agents on this computer: neither their sessions there nor their
+   * sign-in and panel tabs. New conversations start in the sandbox. A sandbox is turned on only where nothing stands in
+   * its way, and one that shares this computer's kernel only where the owner allowed that.
    */
-  async setSandbox(workspaceId: string, given: unknown) {
+  async setSandbox(workspaceId: string, given: unknown, bringConversationsIn: boolean) {
     const workspace = this.existingWorkspace(workspaceId);
     const sandbox = keepingNetworkOf(workspace.sandbox, sandboxSettingIn(given));
     if (sameSandbox(sandbox, workspace.sandbox)) return;
     const turnsOn = sandbox.on && !workspace.sandbox.on;
     if (turnsOn) assertSandboxCanRun(await this.sandboxCheck(workspaceId), sandbox);
     if (workspace.sandbox.on && !sandbox.on) this.sandboxLeaves(workspace.id, workspace.path);
+    const placed = turnsOn ? this.placeConversationsAsSandboxTurnsOn(workspaceId, bringConversationsIn) : [];
+    const changing = this.conversationsInSandboxOf(workspaceId);
     this.storeSandbox(workspaceId, sandbox);
-    this.conversations.startAfreshInWorkspace(workspaceId, { stopsTurn: narrowsSandbox(workspace.sandbox, sandbox) });
-    if (turnsOn) this.ownConversationsOf(workspaceId).forEach(({ id }) => this.terminals.closeAgentPrograms(id));
+    this.conversations.startAfreshUnderNewSetup(changing, { stopsTurn: narrowsSandbox(workspace.sandbox, sandbox) });
+    this.conversations.republishAll(placed.filter((id) => !changing.includes(id)));
+    if (turnsOn) changing.forEach((id) => this.terminals.closeAgentPrograms(id));
     const startsOn = this.startsOnProfile(workspaceId);
     if (sandbox.on) this.sandboxes.prepare(workspaceSandbox(workspaceId), startsOn && workspaceProfileBlocker(startsOn) === null ? [startsOn] : []);
+  }
+
+  /** Each of the workspace's own conversations comes in or stays out as the sandbox turns on; they all are, by their ids. */
+  private placeConversationsAsSandboxTurnsOn(workspaceId: string, bringConversationsIn: boolean) {
+    const own = this.ownConversationsOf(workspaceId);
+    const comesIn = ({ worktree }: Conversation) => bringConversationsIn && worktree === undefined;
+    this.store.setOutsideSandbox(own.filter((conversation) => !comesIn(conversation)).map(({ id }) => id), true);
+    this.store.setOutsideSandbox(own.filter(comesIn).map(({ id }) => id), false);
+    return own.map(({ id }) => id);
+  }
+
+  /**
+   * One of the workspace's own conversations, with its side chats, runs its agent in the workspace's sandbox from its next
+   * start on, or on this computer: it starts afresh then, and a turn under way stops at once. Going in, nothing of its
+   * agent goes on on this computer; going out, the sandbox no longer takes its turn's canvas calls. A side chat goes
+   * where its conversation does, a room's agent where its room has it, and a conversation in a worktree, which the
+   * sandbox can't see, stays on this computer.
+   */
+  setConversationSandboxed(conversationId: string, sandboxed: boolean) {
+    const conversation = this.store.findConversation(conversationId);
+    if (!conversation) throw new HostProblemError({ code: "no-such-conversation", id: conversationId });
+    if (conversation.sideChatOf !== undefined || worksForARoom(conversation)) throw new HostProblemError({ code: "sandbox-follows-elsewhere" });
+    if (!this.existingWorkspace(conversation.workspaceId).sandbox.on) throw new HostProblemError({ code: "workspace-sandbox-off" });
+    if (sandboxed && conversation.worktree) throw new HostProblemError({ code: "worktree-outside-sandbox" });
+    if (sandboxed === !conversation.outsideSandbox) return;
+    this.store.setOutsideSandbox([conversationId], !sandboxed);
+    const moving = [conversationId, ...this.store.sideChatsOf(conversationId)];
+    this.conversations.startAfreshUnderNewSetup(moving, { stopsTurn: true });
+    if (sandboxed) moving.forEach((id) => this.terminals.closeAgentPrograms(id));
   }
 
   /** What the workspace's sandbox reaches besides the model and Mirador, while it is on: from now on, in sessions under way too. */
@@ -83,8 +120,16 @@ export class WorkspaceSandboxes {
     this.hub.broadcast({ type: "workspace.upserted", workspace: this.existingWorkspace(workspaceId) });
   }
 
+  /** The workspace's own conversations, outside its rooms, in its sandbox or not. */
   private ownConversationsOf(workspaceId: string) {
-    return this.store.listConversations().filter((conversation) => belongsToSandbox(conversation, workspaceSandbox(workspaceId)));
+    return this.store.listConversations().filter((conversation) => conversation.workspaceId === workspaceId && conversation.roomId === undefined);
+  }
+
+  private conversationsInSandboxOf(workspaceId: string) {
+    return this.store
+      .listConversations()
+      .filter((conversation) => belongsToSandbox(conversation, workspaceSandbox(workspaceId)))
+      .map(({ id }) => id);
   }
 
   /**

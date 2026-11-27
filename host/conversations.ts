@@ -508,7 +508,7 @@ const SANDBOXED_KEY_SUFFIX = "sandboxed";
  * What picks the agent process a conversation runs on: its launch, and, for a conversation that exists, its id, its
  * workspace and the room it works for.
  */
-export type ProcessLaunch = Launch & { id?: string; workspaceId?: string } & Pick<Conversation, "roomId" | "broughtIntoRoom" | "worksInRoomsWorkspace">;
+export type ProcessLaunch = Launch & { id?: string; workspaceId?: string } & Pick<Conversation, "roomId" | "broughtIntoRoom" | "worksInRoomsWorkspace" | "outsideSandbox">;
 
 /** An agent you brought that works in the workspace of its room: of this computer it has nothing. */
 const HELD_TO_A_ROOMS_WORKSPACE = { broughtIntoRoom: true, worksInRoomsWorkspace: true } as const;
@@ -1255,7 +1255,7 @@ export class ConversationService {
     mode: AdoptMode,
     forkPoint: SessionForkPoint | null = null,
     worktree?: ConversationWorktree,
-    heldTo: Pick<Conversation, "broughtIntoRoom" | "worksInRoomsWorkspace"> = {},
+    heldTo: Pick<Conversation, "broughtIntoRoom" | "worksInRoomsWorkspace" | "outsideSandbox"> = {},
   ): Conversation {
     if (mode === "continue" && this.store.listConversations().some(({ acpSessionId }) => acpSessionId === session.sessionId)) {
       throw new HostProblemError({ code: "session-already-open" });
@@ -1274,12 +1274,13 @@ export class ConversationService {
    */
   fork(conversationId: string, throughTurnSeq?: number): Conversation {
     const source = this.get(conversationId);
-    const { workspaceId, harness, profileId, acpSessionId, title, titleSetByUser, worktree, roomId, broughtIntoRoom, worksInRoomsWorkspace } = source;
+    const { workspaceId, harness, profileId, acpSessionId, title, titleSetByUser, worktree, roomId, broughtIntoRoom, worksInRoomsWorkspace, outsideSandbox } = source;
     if (!acpSessionId || !this.canFork(conversationId)) throw new HostProblemError({ code: "nothing-to-fork-yet" });
     const forkPoint = throughTurnSeq === undefined ? null : this.forkPointThrough(conversationId, throughTurnSeq);
     const forked = this.adoptSession(workspaceId, { harness, profileId }, { sessionId: acpSessionId, title, titleSetByUser }, "fork", forkPoint, worktree, {
       broughtIntoRoom: broughtIntoRoom || roomId !== undefined ? true : undefined,
       worksInRoomsWorkspace,
+      outsideSandbox,
     });
     this.store.copyLoadedPlugins(conversationId, forked.id);
     return forked;
@@ -1323,6 +1324,7 @@ export class ConversationService {
     const sideChat = this.insertConversation(workspaceId, { harness, profileId }, title, true, worktree, { of: parent.id, mayChangeFiles }, {
       broughtIntoRoom: broughtIntoRoom || roomId !== undefined ? true : undefined,
       worksInRoomsWorkspace,
+      outsideSandbox: parent.outsideSandbox,
     });
     this.store.copyLoadedPlugins(parent.id, sideChat.id);
     this.ensureSession(sideChat.id, () => this.openSideChatSession(sideChat.id, parent.id)).catch(() => {});
@@ -1392,13 +1394,15 @@ export class ConversationService {
     return this.runsInSandbox(conversation) && this.sandboxes.confirmedRunning(sandbox.owner);
   }
 
-  private sandboxOf(conversation: { roomId?: string; workspaceId?: string }) {
-    return sandboxOfConversation(this.store, conversation);
+  /** The sandbox the conversation's agent runs in, as the store has the conversation now where it has one. */
+  private sandboxOf(conversation: { id?: string; roomId?: string; workspaceId?: string; outsideSandbox?: true }) {
+    const stored = conversation.id === undefined ? undefined : this.store.findConversation(conversation.id);
+    return sandboxOfConversation(this.store, stored ?? conversation);
   }
 
-  /** A launch of a conversation outside any room in a workspace whose sandbox is on, as the store has it now. */
-  private inSandboxedWorkspace({ id, roomId, workspaceId }: ProcessLaunch) {
-    return id !== undefined && roomId === undefined && workspaceId !== undefined && this.store.findWorkspace(workspaceId)?.sandbox.on === true;
+  /** A launch of a conversation outside any room whose agent runs in its workspace's sandbox, as the store has it now. */
+  private inSandboxedWorkspace(launch: ProcessLaunch) {
+    return launch.id !== undefined && launch.roomId === undefined && this.sandboxOf(launch) !== null;
   }
 
   private processKeyOf(profile: Profile, launch: ProcessLaunch) {
@@ -1467,19 +1471,22 @@ export class ConversationService {
   }
 
   /**
-   * The conversations of a workspace whose sandbox was turned on or off or changed, those of its rooms aside, leave the
+   * A workspace's own conversations that went into its sandbox or out of it, or whose sandbox changed, leave the
    * processes they ran on, in the sandbox or on this computer, at once, or, at work, once their turn ends; one at work
    * stops at once when the change leaves it with less. Each starts afresh as it next goes on, as its session was started
-   * under another setup than its workspace's, so the conversations nobody goes back to keep theirs on screen untouched.
+   * under another setup than it has now, so the conversations nobody goes back to keep theirs on screen untouched.
    */
-  startAfreshInWorkspace(workspaceId: string, { stopsTurn }: { stopsTurn: boolean }) {
-    this.store
-      .listConversations()
-      .filter((conversation) => conversation.workspaceId === workspaceId && conversation.roomId === undefined)
-      .forEach(({ id }) => {
-        if (!this.runtimes.get(id)?.running) this.leaveProcess(id);
-        else if (stopsTurn) this.stopTurnUnderOldSetup(id);
-      });
+  startAfreshUnderNewSetup(conversationIds: string[], { stopsTurn }: { stopsTurn: boolean }) {
+    conversationIds.forEach((id) => {
+      if (!this.runtimes.get(id)?.running) this.leaveProcess(id);
+      else if (stopsTurn) this.stopTurnUnderOldSetup(id);
+    });
+    this.republishAll(conversationIds);
+  }
+
+  /** Tells the pages what the conversations are now. */
+  republishAll(conversationIds: string[]) {
+    conversationIds.forEach((id) => this.republish(id));
   }
 
   private startAfresh(conversationId: string) {
@@ -1805,9 +1812,9 @@ export class ConversationService {
     titleSetByUser = false,
     worktree?: ConversationWorktree,
     sideChat?: { of: string; mayChangeFiles: boolean },
-    worksFor: Pick<Conversation, "roomId" | "broughtIntoRoom" | "worksInRoomsWorkspace"> = {},
+    worksFor: Pick<Conversation, "roomId" | "broughtIntoRoom" | "worksInRoomsWorkspace" | "outsideSandbox"> = {},
   ): Conversation {
-    const { roomId, broughtIntoRoom, worksInRoomsWorkspace } = this.existingWorkspace(workspaceId).forBroughtAgents ? { ...worksFor, ...HELD_TO_A_ROOMS_WORKSPACE } : worksFor;
+    const { roomId, broughtIntoRoom, worksInRoomsWorkspace, outsideSandbox } = this.existingWorkspace(workspaceId).forBroughtAgents ? { ...worksFor, ...HELD_TO_A_ROOMS_WORKSPACE } : worksFor;
     const profile = profileToLaunch(this.store, launch);
     const now = Date.now();
     const conversation = this.store.insertConversation({
@@ -1839,6 +1846,7 @@ export class ConversationService {
       ...(roomId && { roomId }),
       ...(broughtIntoRoom && { broughtIntoRoom }),
       ...(worksInRoomsWorkspace && { worksInRoomsWorkspace }),
+      ...(outsideSandbox && roomId === undefined && { outsideSandbox }),
       createdAt: now,
       updatedAt: now,
     });

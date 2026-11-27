@@ -277,8 +277,14 @@ test("turned on, the workspace's sandbox is set up with its progress shown, in a
     expect(project).toMatchObject({ folder: realpathSync(host.projectDir), parts: { files: expect.arrayContaining([".gitconfig"]), gitFolders: expect.arrayContaining([".git"]) } });
   });
 
-  await test.step("the conversation's mark opens the workspace's sandbox", async () => {
+  const openSandboxFromMark = async () => {
     await headerMark.click();
+    await page.getByRole("menu", { name: "Where this conversation's agent runs" }).getByRole("menuitem", { name: "Sandbox settings…" }).click();
+  };
+
+  await test.step("the conversation's mark opens the workspace's sandbox", async () => {
+    await expect(headerMark.getByRole("button")).toHaveAttribute("data-hint", "This conversation's agent runs in its workspace's sandbox. Click to move it out, or for the sandbox's settings.");
+    await openSandboxFromMark();
     await expect(sandboxSwitch(dialog)).toBeChecked();
   });
 
@@ -294,7 +300,7 @@ test("turned on, the workspace's sandbox is set up with its progress shown, in a
     await waitForTurnToEnd(page);
     expect(containerCalls().filter(([command]) => command === "run")).toHaveLength(1);
     await page.reload();
-    await headerMark.click();
+    await openSandboxFromMark();
     await expect(networkChoice(dialog, "The internet too, but not this computer or its networks")).toBeChecked();
     await networkChoice(dialog, "Only the model and Mirador").check();
     await expect(networkChoice(dialog, "Only the model and Mirador")).toBeChecked();
@@ -501,6 +507,113 @@ test("turned off, the workspace's conversations start afresh on this computer on
   const where = page.getByRole("dialog", { name: "Where conversations work in project" });
   await expect(where.getByRole("radio", { name: /A worktree of their own/ })).toBeChecked();
   await expect(where.getByRole("radio", { name: /A worktree of their own/ })).toBeEnabled();
+});
+
+test("turned on, the workspace's sandbox leaves its conversations on this computer unless brought in, new ones start in it marked in the sidebar, and one moves in and out from its mark", async ({ page }) => {
+  test.skip(!sandboxesRunHere, "Sandboxes run on macOS 26 on Apple silicon only.");
+  writeBunProgram(host.fakeProgramsDir, "opencode", join(import.meta.dirname, "fake-acp-agent.ts"), { FAKE_ACP_PROMPTS: join(host.root, "prompts-here") });
+  await signIn(page, host);
+  const card = projectCard(page);
+  const agentChip = card.getByLabel("Agent", { exact: true });
+  const timeline = page.locator(".timeline:visible");
+  const contextCleared = timeline.getByText("Context cleared: the agent starts afresh");
+  const sandboxRuns = () => containerCalls().filter(([command]) => command === "exec").length;
+  const rowMark = (conversationId: string) => page.locator(`li[data-reorder-id="${conversationId}"] .conversation-sandboxed-row`);
+  const headerMark = () => chatHeader(page).locator(".conversation-sandbox .sandboxed-mark");
+  const placeMenu = () => page.getByRole("menu", { name: "Where this conversation's agent runs" });
+  const askToMove = () => page.getByRole("alertdialog", { name: "Where this conversation's agent runs" });
+
+  await test.step("new conversations start in the project folder, on this computer while the sandbox is off", async () => {
+    await clickWorkspaceButton(card, "Where conversations work…");
+    const where = page.getByRole("dialog", { name: "Where conversations work in project" });
+    await where.getByRole("radio", { name: /The project folder/ }).check();
+    await where.getByRole("button", { name: "Save" }).click();
+    await expect(where).toHaveCount(0);
+    const profiles = await createProfile(page, "Here", "", "", "opencode");
+    await profiles.getByRole("button", { name: "Close" }).click();
+  });
+
+  await agentChip.selectOption({ label: "Here · opencode" });
+  const kept = await startConversation(page);
+  await sendMessage(page, "SAY Before the sandbox.");
+  await waitForTurnToEnd(page);
+  await agentChip.selectOption({ label: "Builder · Claude Code" });
+  const moving = await startConversation(page);
+
+  await test.step("the sandbox turns on without bringing them in, saying what that leaves open", async () => {
+    const dialog = await openSandboxOf(page, card, "project");
+    const bringIn = dialog.getByRole("checkbox", { name: /^Bring the \d+ conversations here into the sandbox too$/ });
+    await expect(bringIn).not.toBeChecked();
+    await expect(dialog.locator(".workspace-sandbox-bring-in .hint")).toHaveText(
+      "Left out, they go on on this computer as they are, and only new conversations start in the sandbox. An agent on this computer can still run what a sandboxed agent writes in the project folder.",
+    );
+    await keepScreenshot(dialog, "bring-in-left-out");
+    await sandboxSwitch(dialog).check();
+    await expect(dialog.getByRole("alert")).toHaveCount(0);
+    await expect(sandboxSwitch(dialog)).toBeChecked();
+    await expect(dialog.locator(".workspace-sandbox-outside")).toHaveText(/^\d+ conversations here run on this computer, outside the sandbox\. Move one in from the mark at its top\.$/);
+    await dialog.getByRole("button", { name: "Done" }).click();
+  });
+
+  await test.step("a conversation left out goes on in its session on this computer, marked so", async () => {
+    await openConversation(page, kept);
+    await expect(headerMark()).toHaveText("On this computer");
+    await expect(rowMark(kept)).toHaveCount(0);
+    const runsBefore = sandboxRuns();
+    await sendMessage(page, "SAY Still here.");
+    await waitForTurnToEnd(page);
+    await expect(lastAgentMessage(page)).toHaveText("Still here.");
+    await expect(contextCleared).toHaveCount(0);
+    expect(sandboxRuns()).toBe(runsBefore);
+  });
+
+  await test.step("a new conversation starts in the sandbox, marked in the sidebar too", async () => {
+    const started = await startConversation(page);
+    await expect(headerMark()).toHaveText("Sandboxed");
+    await expect(rowMark(started)).toHaveAttribute("data-hint", "Runs in the sandbox");
+    await keepScreenshot(card, "sidebar-row-marks");
+    await sendMessage(page, "SAY In the sandbox.");
+    await waitForTurnToEnd(page);
+    await expect(lastAgentMessage(page)).toHaveText("In the sandbox.");
+  });
+
+  await test.step("moved in from its mark, the conversation's agent works in the sandbox", async () => {
+    await openConversation(page, moving);
+    await expect(headerMark()).toHaveText("On this computer");
+    await headerMark().click();
+    await expect(placeMenu().getByRole("menuitemcheckbox", { name: "Run in the sandbox" })).toHaveAttribute("aria-checked", "false");
+    await keepScreenshot(chatHeader(page), "conversation-menu-outside");
+    await placeMenu().getByRole("menuitemcheckbox", { name: "Run in the sandbox" }).click();
+    await expect(headerMark()).toHaveText("Sandboxed");
+    await expect(rowMark(moving)).toHaveCount(1);
+    const runsBefore = sandboxRuns();
+    await sendMessage(page, "FOLDER");
+    await waitForTurnToEnd(page);
+    await expect(lastAgentMessage(page)).toHaveText(`Working in ${realpathSync(host.projectDir)}`);
+    expect(sandboxRuns()).toBeGreaterThan(runsBefore);
+  });
+
+  await test.step("moved out again once confirmed, as its agent would forget what was said, it runs on this computer", async () => {
+    await headerMark().click();
+    await expect(placeMenu().getByRole("menuitemcheckbox", { name: "Run in the sandbox" })).toHaveAttribute("aria-checked", "true");
+    await placeMenu().getByRole("menuitemcheckbox", { name: "Run in the sandbox" }).click();
+    await expect(askToMove()).toContainText("Its agent moves to this computer and starts afresh: it won't remember what was said before.");
+    await keepScreenshot(chatHeader(page), "conversation-move-out-asks");
+    await askToMove().getByRole("button", { name: "Move it out" }).click();
+    await expect(headerMark()).toHaveText("On this computer");
+    await expect(rowMark(moving)).toHaveCount(0);
+  });
+
+  await test.step("the mark's menu opens the sandbox's settings, where it is turned off again", async () => {
+    await headerMark().click();
+    await placeMenu().getByRole("menuitem", { name: "Sandbox settings…" }).click();
+    const dialog = sandboxDialog(page, "project");
+    await sandboxSwitch(dialog).uncheck();
+    await dialog.getByRole("button", { name: "Change" }).click();
+    await expect(sandboxSwitch(dialog)).not.toBeChecked();
+    await dialog.getByRole("button", { name: "Done" }).click();
+    await expect(headerMark()).toHaveCount(0);
+  });
 });
 
 test("the switch stays off where the way to the workspace follows a link inside a folder a sandbox worked in, saying so", async ({ page }) => {

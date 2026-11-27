@@ -17,6 +17,7 @@ import { SystemNotifications } from "../host/system-notifications.ts";
 import { WorkspaceSandboxes } from "../host/workspace-sandbox.ts";
 import { englishProblem, type HostProblem } from "../shared/host-problems.ts";
 import type { Conversation, HarnessId, Profile } from "../shared/model.ts";
+import type { ServerMessage } from "../shared/protocol.ts";
 import { ALL_OF_CLAUDE_SETUP } from "../shared/room-agent-setup.ts";
 import { DEFAULT_PERMISSION_PRESET } from "../shared/room-permissions.ts";
 import { NO_SANDBOX, ownerKey, roomSandbox, workspaceSandbox, type SandboxOwner, type SandboxSetting } from "../shared/sandbox.ts";
@@ -117,7 +118,7 @@ function sandboxedWorkspace(sandbox: SandboxSetting = SANDBOX_ON) {
   const workspaceSandboxes = new WorkspaceSandboxes(store, hub, conversations, { closeAgentPrograms: (conversationId) => void agentTabsClosed.push(conversationId) });
   workspaceSandboxes.keepsSandboxesWith(control);
   const turnFailure = (conversationId: string) => store.listEvents(conversationId).findLast(({ event }) => event.type === "error" && event.endsTurn)?.event as { problem?: HostProblem } | undefined;
-  return { store, config, conversations, conversationsOnThisHost, launcher, sandboxes, workspaceSandboxes, agentTabsClosed, claude, project, other, turnFailure, preparedFor, networkTold, leftBy };
+  return { store, hub, config, conversations, conversationsOnThisHost, launcher, sandboxes, workspaceSandboxes, agentTabsClosed, claude, project, other, turnFailure, preparedFor, networkTold, leftBy };
 }
 
 type Inside = {
@@ -384,20 +385,20 @@ test("a sandboxed workspace's side chats and forks start in its VM too", async (
 
 test("turned on, the workspace's sandbox prepares the image of the profile its new conversations start on, only where that one can run there", async () => {
   const { store, workspaceSandboxes, preparedFor } = sandboxedWorkspace(NO_SANDBOX);
-  await workspaceSandboxes.setSandbox("w1", SANDBOX_ON);
-  await workspaceSandboxes.setSandbox("w1", NO_SANDBOX);
+  await workspaceSandboxes.setSandbox("w1", SANDBOX_ON, true);
+  await workspaceSandboxes.setSandbox("w1", NO_SANDBOX, true);
   store.setWorkspaceDefaultLaunch("w1", { harness: "claude", profileId: "subscriber" });
-  await workspaceSandboxes.setSandbox("w1", SANDBOX_ON);
+  await workspaceSandboxes.setSandbox("w1", SANDBOX_ON, true);
   expect(preparedFor).toEqual([["builder"], []]);
 });
 
 test("turned off, or gone with its workspace, the workspace's sandbox tells the sandboxes it left, so it hears of no new held change there", async () => {
   const { workspaceSandboxes, leftBy } = sandboxedWorkspace(NO_SANDBOX);
-  await workspaceSandboxes.setSandbox("w1", SANDBOX_ON);
+  await workspaceSandboxes.setSandbox("w1", SANDBOX_ON, true);
   expect(leftBy).toEqual([]);
-  await workspaceSandboxes.setSandbox("w1", NO_SANDBOX);
+  await workspaceSandboxes.setSandbox("w1", NO_SANDBOX, true);
   expect(leftBy).toEqual([ownerKey(workspaceSandbox("w1"))]);
-  await workspaceSandboxes.setSandbox("w1", SANDBOX_ON);
+  await workspaceSandboxes.setSandbox("w1", SANDBOX_ON, true);
   workspaceSandboxes.workspaceGone("w1");
   expect(leftBy).toHaveLength(2);
 });
@@ -418,12 +419,12 @@ test("what a workspace's sandbox reaches changes by itself, its conversations go
   expect(store.listEventsOfTypes(conversation.id, ["context-cleared"])).toEqual([]);
   expect(shared.prompts()).toBe(2);
 
-  await workspaceSandboxes.setSandbox("w1", { ...SANDBOX_ON, workFreely: false, network: "everything" });
+  await workspaceSandboxes.setSandbox("w1", { ...SANDBOX_ON, workFreely: false, network: "everything" }, true);
   expect(store.findWorkspace("w1")!.sandbox).toEqual({ ...SANDBOX_ON, workFreely: false, network: "internet" });
-  await workspaceSandboxes.setSandbox("w1", NO_SANDBOX);
+  await workspaceSandboxes.setSandbox("w1", NO_SANDBOX, true);
   workspaceSandboxes.setNetwork("w1", "everything");
   expect(store.findWorkspace("w1")!.sandbox.network).toBe("closed");
-  await workspaceSandboxes.setSandbox("w1", { ...SANDBOX_ON, network: "everything" });
+  await workspaceSandboxes.setSandbox("w1", { ...SANDBOX_ON, network: "everything" }, true);
   expect(store.findWorkspace("w1")!.sandbox).toEqual(SANDBOX_ON);
   expect(networkTold).toEqual(["workspace:w1 internet", "workspace:w1 internet", "workspace:w1 closed", "workspace:w1 closed"]);
   await conversations.shutdown();
@@ -437,7 +438,7 @@ test("a session started on this computer before the workspace was sandboxed is n
   await conversations.send(conversation.id, "go");
   expect(conversations.canFork(conversation.id)).toBe(true);
 
-  await workspaceSandboxes.setSandbox("w1", SANDBOX_ON);
+  await workspaceSandboxes.setSandbox("w1", SANDBOX_ON, true);
   expect(conversations.canFork(conversation.id)).toBe(false);
   await conversations.send(conversation.id, "go on");
 
@@ -530,7 +531,7 @@ test("turning a workspace's sandbox off stops its agents in the VM, starts its c
   store.addSandboxFolder(workspaceSandbox("w1"), { path: library, writable: true, addedAt: 1 });
   const before = Date.now();
 
-  await workspaceSandboxes.setSandbox("w1", NO_SANDBOX);
+  await workspaceSandboxes.setSandbox("w1", NO_SANDBOX, true);
   expect(repositoryHooksOff(store, [library], before + HOOKS_OFF_AFTER_SANDBOX_MS - 1)).toBe(true);
   expect(repositoryHooksOff(store, [library], Date.now() + HOOKS_OFF_AFTER_SANDBOX_MS)).toBe(false);
 
@@ -573,7 +574,7 @@ test("turning a workspace's sandbox on lets its conversations go of the process 
   await until(() => store.findConversation(sandboxed.id)?.acpSessionId !== null && store.findConversation(elsewhere.id)?.acpSessionId !== null);
   const sandboxedSession = store.findConversation(sandboxed.id)!.acpSessionId!;
 
-  await workspaceSandboxes.setSandbox("w1", SANDBOX_ON);
+  await workspaceSandboxes.setSandbox("w1", SANDBOX_ON, true);
 
   expect(shared.stops()).toBe(0);
   expect(shared.closed).toEqual([sandboxedSession]);
@@ -635,9 +636,11 @@ test("one workspace's VM sees neither another workspace's nor a room's: its own 
   expect(new Set(socketFolders.flat()).size).toBe(9);
 
   const ownConversation = { workspaceId: "w1", roomId: undefined };
+  const ownOutside = { workspaceId: "w1", roomId: undefined, outsideSandbox: true as const };
   const roomsConversation = { workspaceId: "w1", roomId: "r1" };
   const otherWorkspaces = { workspaceId: "w2", roomId: undefined };
   expect(owners.map((owner) => belongsToSandbox(ownConversation, owner))).toEqual([true, false, false]);
+  expect(owners.map((owner) => belongsToSandbox(ownOutside, owner))).toEqual([false, false, false]);
   expect(owners.map((owner) => belongsToSandbox(roomsConversation, owner))).toEqual([false, false, true]);
   expect(owners.map((owner) => belongsToSandbox(otherWorkspaces, owner))).toEqual([false, true, false]);
 });
@@ -660,7 +663,7 @@ test("the mode a sandbox's work-freely set never follows its conversation to thi
   await conversations.send(conversation.id, "go");
   expect(log).toEqual(["vm:mode=bypassPermissions"]);
 
-  await workspaceSandboxes.setSandbox("w1", NO_SANDBOX);
+  await workspaceSandboxes.setSandbox("w1", NO_SANDBOX, true);
   inside(conversations).agentProcesses.set("builder", agentWithModes("computer", log));
   await conversations.send(conversation.id, "go on");
 
@@ -705,7 +708,7 @@ test("a sandboxed workspace's side chat that may change files starts in its VM t
 test("where the profile's permission mode still applies in the sandbox, each new session there is set to it, so a default mode the agents planted in the sandbox's settings never holds", async () => {
   const { store, conversations, workspaceSandboxes } = sandboxedWorkspace();
   conversations.startsSandboxedAgentsIn({ ...NO_SANDBOXES, confirmedRunning: () => true });
-  await workspaceSandboxes.setSandbox("w1", { ...SANDBOX_ON, workFreely: false });
+  await workspaceSandboxes.setSandbox("w1", { ...SANDBOX_ON, workFreely: false }, true);
   const log: string[] = [];
   const conversation = conversations.create("w1", BUILDER);
   await until(() => conversations.get(conversation.id).status === "error");
@@ -714,13 +717,13 @@ test("where the profile's permission mode still applies in the sandbox, each new
   await conversations.send(conversation.id, "go");
   expect(log).toEqual(["first:mode=default"]);
 
-  await workspaceSandboxes.setSandbox("w1", SANDBOX_ON);
+  await workspaceSandboxes.setSandbox("w1", SANDBOX_ON, true);
   await conversations.send(conversation.id, "go on");
   inItsVm(conversations, store, conversation.id, agentWithModes("freely", log));
   await conversations.send(conversation.id, "go on, freely");
   expect(modeOf(store, conversation.id)).toBe("bypassPermissions");
 
-  await workspaceSandboxes.setSandbox("w1", { ...SANDBOX_ON, workFreely: false });
+  await workspaceSandboxes.setSandbox("w1", { ...SANDBOX_ON, workFreely: false }, true);
   inItsVm(conversations, store, conversation.id, agentWithModes("replaced", log, "bypassPermissions"));
   await conversations.setConfigOption(conversation.id, "model", "opus");
 
@@ -754,7 +757,7 @@ test("a turn that goes on in the VM after the workspace's sandbox was turned off
   const turn = conversations.send(conversation.id, "go");
   await until(() => conversations.isAtWork(conversation.id) && conversations.get(conversation.id).status === "running");
 
-  await workspaceSandboxes.setSandbox("w1", NO_SANDBOX);
+  await workspaceSandboxes.setSandbox("w1", NO_SANDBOX, true);
   expect(fake.stops()).toBe(0);
   finishTurn();
   await turn;
@@ -779,7 +782,7 @@ test("turning a workspace's sandbox on stops a turn on the process its profile s
   const turn = conversations.send(sandboxed.id, "go");
   await until(() => conversations.get(sandboxed.id).status === "running");
 
-  await workspaceSandboxes.setSandbox("w1", SANDBOX_ON);
+  await workspaceSandboxes.setSandbox("w1", SANDBOX_ON, true);
   await turn;
 
   await until(() => shared.closed.includes(sandboxedSession));
@@ -789,7 +792,194 @@ test("turning a workspace's sandbox on stops a turn on the process its profile s
   expect(inside(conversations).runtime(elsewhere.id).harness).toBe(sharedAgent);
   expect(agentTabsClosed).toEqual([sandboxed.id]);
 
-  await workspaceSandboxes.setSandbox("w1", NO_SANDBOX);
+  await workspaceSandboxes.setSandbox("w1", NO_SANDBOX, true);
   expect(agentTabsClosed).toEqual([sandboxed.id]);
+  await conversations.shutdown();
+});
+
+/** A shared agent on this computer whose first turn runs until `finishTurn`, and whose later turns end at once. */
+function agentHoldingItsFirstTurn() {
+  const fake = fakeAgent();
+  let finishTurn = () => {};
+  const firstTurnHeld = new Promise<void>((resolve) => (finishTurn = resolve));
+  let turns = 0;
+  const agent = { ...fake.agent, prompt: async () => (++turns === 1 ? firstTurnHeld.then(() => ({ stopReason: "end_turn" })) : { stopReason: "end_turn" }) };
+  return { ...fake, agent, finishTurn, turns: () => turns };
+}
+
+test("turned on, a workspace's sandbox leaves the conversations it has on this computer as they are: each keeps its session, its process and its running turn, and goes on in that session", async () => {
+  const { store, conversations, workspaceSandboxes, launcher, agentTabsClosed } = sandboxedWorkspace(NO_SANDBOX);
+  const shared = agentHoldingItsFirstTurn();
+  inside(conversations).agentProcesses.set("builder", shared.agent);
+  const working = conversations.create("w1", BUILDER);
+  const idle = conversations.create("w1", BUILDER);
+  await until(() => store.findConversation(working.id)?.acpSessionId !== null && store.findConversation(idle.id)?.acpSessionId !== null);
+  const sessions = [working.id, idle.id].map((id) => store.findConversation(id)!.acpSessionId);
+  const turn = conversations.send(working.id, "go");
+  await until(() => conversations.get(working.id).status === "running");
+
+  await workspaceSandboxes.setSandbox("w1", SANDBOX_ON, false);
+
+  expect(conversations.get(working.id).status).toBe("running");
+  shared.finishTurn();
+  await turn;
+  await conversations.send(working.id, "go on");
+  await conversations.send(idle.id, "go on");
+  expect(shared.turns()).toBe(3);
+  expect([working.id, idle.id].map((id) => store.findConversation(id)!.acpSessionId)).toEqual(sessions);
+  expect([working.id, idle.id].flatMap((id) => store.listEventsOfTypes(id, ["context-cleared"]))).toEqual([]);
+  expect([working.id, idle.id].map((id) => store.findConversation(id)!.outsideSandbox)).toEqual([true, true]);
+  expect(shared.closed).toEqual([]);
+  expect(shared.stops()).toBe(0);
+  expect(agentTabsClosed).toEqual([]);
+  expect(launcher.agents).toEqual([]);
+
+  const started = conversations.create("w1", BUILDER);
+  await conversations.send(started.id, "go");
+  expect(store.findConversation(started.id)!.outsideSandbox).toBeUndefined();
+  expect(launcher.agents.length).toBeGreaterThan(0);
+  await conversations.shutdown();
+});
+
+test("turned on bringing its conversations in, a workspace's sandbox takes each but one in a worktree, which goes on on this computer", async () => {
+  const { store, conversations, workspaceSandboxes, launcher, agentTabsClosed, project } = sandboxedWorkspace(NO_SANDBOX);
+  Bun.spawnSync(["git", "-C", project, "-c", "user.name=Owner", "-c", "user.email=owner@example.com", "commit", "-q", "--allow-empty", "-m", "first"]);
+  const shared = fakeAgent();
+  inside(conversations).agentProcesses.set("builder", shared.agent);
+  const inFolder = conversations.create("w1", BUILDER);
+  const worktreeFolder = join(scratch, `worktree-${crypto.randomUUID()}`);
+  const inWorktree = store.insertConversation({
+    ...store.findConversation(inFolder.id)!,
+    id: "in-worktree",
+    acpSessionId: null,
+    worktree: { id: "elsewhere", root: worktreeFolder, folder: worktreeFolder, branch: "mirador/elsewhere" },
+  });
+
+  await workspaceSandboxes.setSandbox("w1", SANDBOX_ON, true);
+
+  expect(store.findConversation(inFolder.id)!.outsideSandbox).toBeUndefined();
+  expect(store.findConversation(inWorktree.id)!.outsideSandbox).toBe(true);
+  expect(agentTabsClosed).toEqual([inFolder.id]);
+  const turnsBefore = shared.prompts();
+  await conversations.send(inWorktree.id, "go on");
+  expect(shared.prompts()).toBe(turnsBefore + 1);
+  expect(launcher.agents).toEqual([]);
+  await conversations.shutdown();
+});
+
+test("one conversation moves into its workspace's sandbox and out again, starting afresh each time, while the others go on in their sessions", async () => {
+  const { store, conversations, workspaceSandboxes, launcher, agentTabsClosed } = sandboxedWorkspace(NO_SANDBOX);
+  const shared = fakeAgent();
+  inside(conversations).agentProcesses.set("builder", shared.agent);
+  const moving = conversations.create("w1", BUILDER);
+  const staying = conversations.create("w1", BUILDER);
+  await until(() => store.findConversation(moving.id)?.acpSessionId !== null && store.findConversation(staying.id)?.acpSessionId !== null);
+  const [movingSession, stayingSession] = [moving.id, staying.id].map((id) => store.findConversation(id)!.acpSessionId!);
+  await workspaceSandboxes.setSandbox("w1", SANDBOX_ON, false);
+
+  workspaceSandboxes.setConversationSandboxed(moving.id, true);
+
+  expect(shared.closed).toEqual([movingSession]);
+  expect(agentTabsClosed).toEqual([moving.id]);
+  await conversations.send(moving.id, "go on");
+  expect(store.listEventsOfTypes(moving.id, ["context-cleared"])).toHaveLength(1);
+  expect(launcher.agents.length).toBeGreaterThan(0);
+
+  workspaceSandboxes.setConversationSandboxed(moving.id, false);
+  const turnsBefore = shared.prompts();
+  await conversations.send(moving.id, "back here");
+  expect(shared.prompts()).toBe(turnsBefore + 1);
+
+  await conversations.send(staying.id, "go on");
+  expect(store.findConversation(staying.id)!.acpSessionId).toBe(stayingSession);
+  expect(store.listEventsOfTypes(staying.id, ["context-cleared"])).toEqual([]);
+  await conversations.shutdown();
+});
+
+test("a conversation moved out of its workspace's sandbox while its turn runs there stops that turn at once, as the sandbox no longer takes its canvas calls", async () => {
+  const { store, conversations, workspaceSandboxes } = sandboxedWorkspace();
+  const conversation = conversations.create("w1", BUILDER);
+  await until(() => conversations.get(conversation.id).status === "error");
+  const fake = fakeAgent();
+  let processGone = () => {};
+  const turnUntilItsProcessGoes = new Promise<{ stopReason: string }>((resolve) => (processGone = () => resolve({ stopReason: "cancelled" })));
+  const heldInTheVm = { ...fake.agent, prompt: () => turnUntilItsProcessGoes, stop: async () => (await fake.agent.stop(), processGone()) };
+  inItsVm(conversations, store, conversation.id, heldInTheVm);
+  const turn = conversations.send(conversation.id, "go");
+  await until(() => conversations.get(conversation.id).status === "running");
+
+  workspaceSandboxes.setConversationSandboxed(conversation.id, false);
+
+  await turn;
+  expect(fake.stops()).toBeGreaterThan(0);
+  expect(conversations.get(conversation.id).status).not.toBe("running");
+  expect(store.findConversation(conversation.id)!.outsideSandbox).toBe(true);
+  await conversations.shutdown();
+});
+
+test("a side chat goes into the sandbox and out with its conversation, and only a workspace's own conversation in its folder moves, while the sandbox is on", async () => {
+  const { store, conversations, workspaceSandboxes } = sandboxedWorkspace(NO_SANDBOX);
+  inside(conversations).agentProcesses.set("builder", fakeAgent().agent);
+  const conversation = conversations.create("w1", BUILDER);
+  await until(() => store.findConversation(conversation.id)?.acpSessionId !== null);
+  await expect(Promise.resolve().then(() => workspaceSandboxes.setConversationSandboxed(conversation.id, true))).rejects.toMatchObject({ problem: { code: "workspace-sandbox-off" } });
+  await workspaceSandboxes.setSandbox("w1", SANDBOX_ON, false);
+  const sideChat = conversations.startSideChat(conversation.id, "why?", store.ownerId());
+  expect(store.findConversation(sideChat.id)!.outsideSandbox).toBe(true);
+
+  workspaceSandboxes.setConversationSandboxed(conversation.id, true);
+  expect(store.findConversation(sideChat.id)!.outsideSandbox).toBeUndefined();
+  expect(englishProblemOf(() => workspaceSandboxes.setConversationSandboxed(sideChat.id, false))).toEqual({ code: "sandbox-follows-elsewhere" });
+
+  const inWorktree = store.insertConversation({
+    ...store.findConversation(conversation.id)!,
+    id: "in-worktree",
+    outsideSandbox: true,
+    worktree: { id: "elsewhere", root: join(scratch, "elsewhere"), folder: join(scratch, "elsewhere"), branch: "mirador/elsewhere" },
+  });
+  expect(englishProblemOf(() => workspaceSandboxes.setConversationSandboxed(inWorktree.id, true))).toEqual({ code: "worktree-outside-sandbox" });
+  await conversations.shutdown();
+});
+
+test("a fork of a conversation outside its workspace's sandbox stays outside with it", async () => {
+  const { store, conversations, workspaceSandboxes } = sandboxedWorkspace(NO_SANDBOX);
+  inside(conversations).agentProcesses.set("builder", fakeAgent().agent);
+  const conversation = conversations.create("w1", BUILDER);
+  await conversations.send(conversation.id, "go");
+  store.appendEvent(conversation.id, { type: "turn-end", stopReason: "end_turn" } as never);
+  await workspaceSandboxes.setSandbox("w1", SANDBOX_ON, false);
+
+  const forked = conversations.fork(conversation.id);
+
+  expect(store.findConversation(forked.id)!.outsideSandbox).toBe(true);
+  await conversations.shutdown();
+});
+
+/** The problem a call throws, as the host tells it. */
+function englishProblemOf(call: () => void): HostProblem | undefined {
+  try {
+    call();
+  } catch (error) {
+    return (error as { problem?: HostProblem }).problem;
+  }
+  return undefined;
+}
+
+test("turned on, a workspace's sandbox tells the pages of each conversation it left out, which they mark as on this computer", async () => {
+  const { store, hub, conversations, workspaceSandboxes } = sandboxedWorkspace(NO_SANDBOX);
+  inside(conversations).agentProcesses.set("builder", fakeAgent().agent);
+  const conversation = conversations.create("w1", BUILDER);
+  await until(() => store.findConversation(conversation.id)?.acpSessionId !== null);
+  const told: ServerMessage[] = [];
+  const broadcast = hub.broadcast.bind(hub);
+  hub.broadcast = (message) => {
+    told.push(message);
+    broadcast(message);
+  };
+
+  await workspaceSandboxes.setSandbox("w1", SANDBOX_ON, false);
+
+  const published = told.flatMap((message) => (message.type === "conversation.upserted" && message.conversation.id === conversation.id ? [message.conversation] : []));
+  expect(published.at(-1)?.outsideSandbox).toBe(true);
   await conversations.shutdown();
 });

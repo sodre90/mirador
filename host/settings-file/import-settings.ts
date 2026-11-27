@@ -83,7 +83,7 @@ export class SettingsImport {
         setDefaultLaunch: (workspaceId, launch) => profiles.setWorkspaceDefault(workspaceId, launch, FROM_A_FILE),
         setWorktreeSettings: (workspaceId, newConversationsIn, worktreeSetup) => conversations.setWorktreeSettings(workspaceId, newConversationsIn, worktreeSetup),
         setSideChatAccess: (workspaceId, sideChatAccess) => conversations.setSideChatAccess(workspaceId, sideChatAccess),
-        setSandbox: (workspaceId, sandbox) => workspaceSandboxes.setSandbox(workspaceId, sandbox),
+        setSandbox: (workspaceId, sandbox) => workspaceSandboxes.setSandbox(workspaceId, sandbox, false),
       })),
     ];
     if (!writers) return beforeTheServer;

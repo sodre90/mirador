@@ -133,8 +133,8 @@ export const shell: Messages["shell"] = {
     inWorktrees: (count) =>
       plural(
         count,
-        "1 conversación de aquí trabaja en un worktree, que el sandbox no ve: no puede seguir mientras el sandbox esté activado.",
-        `${count} conversaciones de aquí trabajan en worktrees, que el sandbox no ve: no pueden seguir mientras el sandbox esté activado.`,
+        "1 conversación de aquí trabaja en un worktree, que el sandbox no ve: se queda en este equipo.",
+        `${count} conversaciones de aquí trabajan en worktrees, que el sandbox no ve: se quedan en este equipo.`,
       ),
     startsAfresh: (count) =>
       plural(
@@ -152,7 +152,30 @@ export const shell: Messages["shell"] = {
     on: "Activado",
     off: "Desactivado",
     workspaceSandboxed: "Los agentes de este espacio de trabajo se ejecutan en un sandbox. Haz clic para ver su configuración.",
-    conversationSandboxed: "El agente de esta conversación se ejecuta en el sandbox de su espacio de trabajo. Haz clic para ver su configuración.",
+    conversationSandboxed: "El agente de esta conversación se ejecuta en el sandbox de su espacio de trabajo. Haz clic para sacarlo o para ver la configuración del sandbox.",
+    conversationOutside: "El agente de esta conversación se ejecuta en este equipo, fuera del sandbox de su espacio de trabajo. Haz clic para pasarlo al sandbox o para ver su configuración.",
+    onThisComputer: "En este equipo",
+    conversationMenu: "Dónde se ejecuta el agente de esta conversación",
+    runInSandbox: "Ejecutar en el sandbox",
+    sandboxSettings: "Configuración del sandbox…",
+    sideChatFollows: "Un chat lateral se ejecuta donde lo hace su conversación.",
+    worktreeStaysHere: "Trabaja en un worktree, que el sandbox no ve.",
+    movesInAfresh: "Su agente pasa al sandbox y empieza de nuevo: no recordará lo que se dijo antes.",
+    movesOutAfresh: "Su agente pasa a este equipo y empieza de nuevo: no recordará lo que se dijo antes.",
+    moveIn: "Pasarlo al sandbox",
+    moveOut: "Sacarlo del sandbox",
+    keepAsIs: "Dejarlo como está",
+    rowSandboxed: "Se ejecuta en el sandbox",
+    bringIn: (count) => plural(count, "Pasar también al sandbox la conversación de aquí", `Pasar también al sandbox las ${count} conversaciones de aquí`),
+    leaveOutNote:
+      "Si las dejas fuera, siguen en este equipo tal como están, y solo las conversaciones nuevas empiezan en el sandbox. Un agente de este equipo aún puede ejecutar lo que un agente en el sandbox escriba en la carpeta del proyecto.",
+    bringInNote: "Cada una que pasa al sandbox empieza de nuevo allí. Las que trabajan en un worktree se quedan en este equipo.",
+    outsideCount: (count) =>
+      plural(
+        count,
+        "1 conversación de aquí se ejecuta en este equipo, fuera del sandbox. Pásala al sandbox desde la marca de su parte superior.",
+        `${count} conversaciones de aquí se ejecutan en este equipo, fuera del sandbox. Pasa una al sandbox desde la marca de su parte superior.`,
+      ),
     heldWaits: "Esperándote: el sandbox retiene un cambio de configuración de agente hasta que lo apruebes. Haz clic para verlo.",
     anAgentHere: "Un agente de este espacio de trabajo",
     meaning: [
@@ -165,8 +188,8 @@ export const shell: Messages["shell"] = {
       "Cualquier otro archivo que los agentes cambien en la carpeta del proyecto puede ejecutarse cuando lo ejecutes tú: pruebas, scripts, package.json, o un commit desde tu terminal, que ejecuta los hooks del repositorio. Revisa lo que cambiaron antes de ejecutar nada allí.",
       "La configuración y los hooks del repositorio son de solo lectura en el sandbox, como también los de los repositorios dentro de la carpeta del proyecto y los archivos de la carpeta del proyecto que su propia configuración incluye, por ejemplo un .gitconfig compartido. Un checkout en el sandbox que cambiaría alguno de ellos falla, y desde él no se puede crear ningún repositorio nuevo, ni un archivo llamado HEAD, en la carpeta del proyecto. Mirador ejecuta git en el espacio de trabajo sin hooks ni fsmonitor, y mientras el espacio de trabajo tenga sandbox, y durante 7 días después, sus commits, fusiones y nuevos worktrees en la carpeta del proyecto, o en cualquier carpeta dentro de ella, también se saltan los hooks de los repositorios.",
       "Una carpeta que añadas en lectura y escritura tiene las mismas protecciones que la carpeta del proyecto. Debe ser la carpeta superior de un repositorio de git, para que veas y deshagas lo que cambian los agentes, y ningún otro sandbox puede trabajar en ella. La configuración y los hooks de su repositorio, y los archivos de la carpeta que esa configuración incluye, son de solo lectura en el sandbox, sus archivos de configuración de agentes quedan retenidos para ti como los de la carpeta del proyecto, y los commits, fusiones y nuevos worktrees de Mirador allí se saltan los hooks de los repositorios mientras el sandbox trabaja en ella y durante 7 días después.",
-      "Las conversaciones nuevas empiezan en la carpeta del proyecto en lugar de un worktree, porque el sandbox no ve ningún worktree. Los comandos !, las sesiones de tu terminal y los paneles propios de Claude Code tampoco se ejecutan aquí: se ejecutarían en este equipo.",
-      "Activarlo o desactivarlo, cambiar cómo trabajan los agentes en él o cambiar su imagen base hace que las conversaciones de aquí empiecen de nuevo.",
+      "Las conversaciones nuevas empiezan en el sandbox, en la carpeta del proyecto en lugar de un worktree, porque el sandbox no ve ningún worktree. Las sesiones de tu terminal tampoco se ejecutan aquí, ni los comandos ! ni los paneles propios de Claude Code en una conversación con sandbox: se ejecutarían en este equipo.",
+      "Al activarlo, las conversaciones de aquí siguen en este equipo tal como están, salvo que las pases al sandbox. Pasa una conversación al sandbox o sácala desde la marca de su parte superior: su agente empieza de nuevo. Desactivar el sandbox, cambiar cómo trabajan los agentes en él o cambiar su imagen base hace que las conversaciones que hay en él empiecen de nuevo. Un agente de este equipo puede ejecutar lo que un agente en el sandbox escribió en la carpeta del proyecto.",
     ],
   },
   workspaceDelete: {

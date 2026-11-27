@@ -147,6 +147,7 @@ const EVERY_CLIENT_MESSAGE: Record<ClientMessage["type"], true> = {
   "conversation.set-ask-mode": true,
   "conversation.set-plugin-setting": true,
   "conversation.set-bypass-permissions": true,
+  "conversation.set-sandboxed": true,
   "conversation.set-config": true,
   "permission.respond": true,
   "ask.answer": true,

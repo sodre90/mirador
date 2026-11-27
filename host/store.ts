@@ -371,6 +371,7 @@ const addedColumns = [
   { table: "rooms", column: "plugins", definition: "TEXT NOT NULL DEFAULT '[]'" },
   { table: "conversations", column: "side_chat_may_change_files", definition: "INTEGER NOT NULL DEFAULT 0" },
   { table: "conversations", column: "side_chat_access", definition: "TEXT" },
+  { table: "conversations", column: "outside_sandbox", definition: "INTEGER NOT NULL DEFAULT 0" },
 ];
 
 /** A turn that ended while nobody looked at its conversation, or the owner's Unread mark, until someone opens it. */
@@ -451,6 +452,7 @@ type ConversationRow = {
   room_id: string | null;
   brought_into_room: number;
   works_in_rooms_workspace: number;
+  outside_sandbox: number;
   plugin_settings: string | null;
   reminder: string | null;
   favourite: number;
@@ -589,6 +591,7 @@ const toConversation = (row: ConversationRow): Conversation => ({
   ...(row.room_id && { roomId: row.room_id }),
   ...(row.brought_into_room === 1 && { broughtIntoRoom: true as const }),
   ...(row.works_in_rooms_workspace === 1 && { worksInRoomsWorkspace: true as const }),
+  ...(row.outside_sandbox === 1 && { outsideSandbox: true as const }),
   ...(row.plugin_settings && { pluginSettings: JSON.parse(row.plugin_settings) as Record<string, Record<string, string>> }),
   ...(row.reminder && { reminder: JSON.parse(row.reminder) as Reminder }),
   ...(row.favourite === 1 && { favourite: true }),
@@ -1203,8 +1206,8 @@ export class Store {
       .get(conversation.workspaceId) as { first: number };
     this.db
       .query(
-        `INSERT INTO conversations (id, workspace_id, harness, profile_id, title, title_set_by_user, acp_session_id, ask_mode, bypass_permissions, config_options, position, worktree, side_chat_of, side_chat_may_change_files, room_id, brought_into_room, works_in_rooms_workspace, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO conversations (id, workspace_id, harness, profile_id, title, title_set_by_user, acp_session_id, ask_mode, bypass_permissions, config_options, position, worktree, side_chat_of, side_chat_may_change_files, room_id, brought_into_room, works_in_rooms_workspace, outside_sandbox, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         conversation.id,
@@ -1224,6 +1227,7 @@ export class Store {
         conversation.roomId ?? null,
         conversation.broughtIntoRoom ? 1 : 0,
         conversation.worksInRoomsWorkspace ? 1 : 0,
+        conversation.outsideSandbox ? 1 : 0,
         conversation.createdAt,
         conversation.updatedAt,
       );
@@ -1255,6 +1259,12 @@ export class Store {
   /** What the conversation's next side chats may do, ahead of its workspace and Settings. */
   setConversationSideChatAccess(conversationId: string, sideChatAccess: SideChatAccess) {
     this.db.query("UPDATE conversations SET side_chat_access = ? WHERE id = ?").run(sideChatAccess, conversationId);
+  }
+
+  /** Whether the conversations' agents run on this computer rather than in their workspace's sandbox, each with its side chats. */
+  setOutsideSandbox(conversationIds: string[], outside: boolean) {
+    const setOne = this.db.query("UPDATE conversations SET outside_sandbox = ?1 WHERE id = ?2 OR side_chat_of = ?2");
+    this.db.transaction(() => conversationIds.forEach((id) => setOne.run(outside ? 1 : 0, id)))();
   }
 
   /** The side chat becomes a conversation of its own. */

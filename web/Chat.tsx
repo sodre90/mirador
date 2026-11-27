@@ -21,7 +21,6 @@ import {
   type StoredEvent,
   type UsageLimitWait,
 } from "../shared/model.ts";
-import type { SandboxSetup } from "../shared/sandbox.ts";
 import { markInitials } from "../shared/marks.ts";
 import { personGoesBy } from "../shared/people.ts";
 import { pastelVariables } from "./pastels.ts";
@@ -130,7 +129,7 @@ import { FullscreenToggle, PaneGrip } from "./Workspace.tsx";
 import { LayoutToggles } from "./LayoutToggles.tsx";
 import { ConversationSettingsPopover, ConversationSettingsToggle, useConversationSettings } from "./ConversationSettings.tsx";
 import { HeldChangeCard } from "./Sandbox.tsx";
-import { openWorkspaceSandbox, SandboxedMark, type ConversationSandbox } from "./WorkspaceSandbox.tsx";
+import { ConversationSandboxMenu, openWorkspaceSandbox, type ConversationSandbox } from "./WorkspaceSandbox.tsx";
 
 const words = t.chat;
 
@@ -175,8 +174,8 @@ function ChatHeader({
   sideChatShown,
   forkable,
   begun,
+  sandbox,
   onOpenSandbox,
-  sandboxSetup,
 }: {
   conversation: Conversation;
   profiles: Profile[];
@@ -190,11 +189,10 @@ function ChatHeader({
   sideChatShown: boolean;
   forkable: boolean;
   begun: boolean;
-  /** Opens the settings of the workspace sandbox the conversation's agent runs in; null where it runs on this computer. */
-  onOpenSandbox: (() => void) | null;
-  sandboxSetup: SandboxSetup;
+  sandbox: ConversationSandbox;
+  onOpenSandbox: () => void;
 }) {
-  const statusDetail = statusDetailOf(conversation, sandboxSetup);
+  const statusDetail = statusDetailOf(conversation, sandbox.setup);
   const settings = useConversationSettings();
   return (
     <header className="chat-header" data-pane-bar>
@@ -220,7 +218,7 @@ function ChatHeader({
             </span>
           )}
           <span className="header-actions">
-            {onOpenSandbox && <SandboxedMark className="conversation-sandboxed" hint={t.shell.workspaceSandbox.conversationSandboxed} onOpen={onOpenSandbox} />}
+            {(sandbox.sandboxed || sandbox.outside) && <ConversationSandboxMenu conversation={conversation} sandboxed={sandbox.sandboxed} onOpenSettings={onOpenSandbox} />}
             <ConversationSettingsToggle conversation={conversation} profiles={profiles} settings={settings} />
             {conversation.bypassPermissions && (
               <span className="yolo-on" data-hint={hints.yoloOn}>
@@ -2517,8 +2515,8 @@ export function ChatPanel({
                         sideChatShown={sideChatShown}
                         forkable={canFork(conversation, open)}
                         begun={begun}
-                        onOpenSandbox={sandbox.sandboxed ? () => openWorkspaceSandbox(dispatch, conversation.workspaceId) : null}
-                        sandboxSetup={sandbox.setup}
+                        sandbox={sandbox}
+                        onOpenSandbox={() => openWorkspaceSandbox(dispatch, conversation.workspaceId)}
                       />
                     )}
                     {find.query !== null && <FindBar find={find} />}

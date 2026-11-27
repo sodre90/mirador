@@ -80,9 +80,12 @@ const sandboxConfigFolders = (dataDir: string, owner: SandboxOwner) => SANDBOXED
 /** The canvas of a conversation, as its agent reaches it in its sandbox's VM. */
 export const sandboxCanvasAddress = (conversationId: string) => `http://127.0.0.1:${CANVAS_RELAY_PORT}/mcp/${conversationId}`;
 
-/** Whether the conversation's agent works in this sandbox: a room's work in their room's, a workspace's own, outside its rooms, in its workspace's. */
-export const belongsToSandbox = ({ roomId, workspaceId }: Pick<Conversation, "roomId" | "workspaceId">, owner: SandboxOwner) =>
-  owner.kind === "room" ? roomId === owner.id : workspaceId === owner.id && roomId === undefined;
+/**
+ * Whether the conversation's agent works in this sandbox: a room's work in their room's, a workspace's own, outside its
+ * rooms, in its workspace's, unless the conversation runs outside it.
+ */
+export const belongsToSandbox = ({ roomId, workspaceId, outsideSandbox }: Pick<Conversation, "roomId" | "workspaceId" | "outsideSandbox">, owner: SandboxOwner) =>
+  owner.kind === "room" ? roomId === owner.id : workspaceId === owner.id && roomId === undefined && !outsideSandbox;
 
 /** The sandbox a conversation's agent runs in: its room's or workspace's, and how that has it set. */
 export interface ConversationSandbox {
@@ -91,14 +94,18 @@ export interface ConversationSandbox {
 }
 
 /**
- * The sandbox a conversation's agent runs in while its room, or else its workspace, has one on: nothing of the
- * conversation runs on this computer then. Null where it runs on this computer.
+ * The sandbox a conversation's agent runs in while its room, or else its workspace, has one on, unless it runs outside
+ * its workspace's: nothing of the conversation runs on this computer then. Null where it runs on this computer.
  */
-export function sandboxOfConversation(store: Pick<Store, "findRoom" | "findWorkspace">, { roomId, workspaceId }: { roomId?: string; workspaceId?: string }): ConversationSandbox | null {
+export function sandboxOfConversation(
+  store: Pick<Store, "findRoom" | "findWorkspace">,
+  { roomId, workspaceId, outsideSandbox }: { roomId?: string; workspaceId?: string; outsideSandbox?: true },
+): ConversationSandbox | null {
   if (roomId) {
     const room = store.findRoom(roomId);
     return room?.sandbox.on ? { owner: roomSandbox(roomId), setting: room.sandbox } : null;
   }
+  if (outsideSandbox) return null;
   const workspace = workspaceId === undefined ? undefined : store.findWorkspace(workspaceId);
   return workspace?.sandbox.on ? { owner: workspaceSandbox(workspace.id), setting: workspace.sandbox } : null;
 }
