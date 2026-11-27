@@ -1,6 +1,6 @@
 import type { AskAnswerEntry, AskOption } from "./model.ts";
 import { isRoomId } from "./machines.ts";
-import { authorNameIn } from "./people.ts";
+import { authorNameIn } from "./person-names.ts";
 import { isRoomAuthorRole, type FramedAuthor } from "./rooms.ts";
 import { shownAsWritten } from "./written-text.ts";
 

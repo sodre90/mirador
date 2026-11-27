@@ -6,17 +6,8 @@ import { join } from "node:path";
 import { DeviceService } from "../host/devices.ts";
 import { signedInWith } from "../host/sign-in.ts";
 import { Store } from "../host/store.ts";
-import {
-  comparableName,
-  LONGEST_PERSON_NAME,
-  namelessPerson,
-  NAMES_KEPT_BY_MIRADOR,
-  nameRefused,
-  nameTaken,
-  personGoesBy,
-  personName,
-  readsAsMiradorsWords,
-} from "../shared/people.ts";
+import { comparableName, namelessPerson, NAMES_KEPT_BY_MIRADOR, nameRefused, nameTaken, personGoesBy, readsAsMiradorsWords } from "../shared/people.ts";
+import { LONGEST_PERSON_NAME, personName } from "../shared/person-names.ts";
 import { TOKEN_COOKIE } from "../shared/protocol.ts";
 
 const scratch = mkdtempSync(join(tmpdir(), "mirador-people-"));

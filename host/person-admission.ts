@@ -6,7 +6,7 @@ import type { PersonMessageType } from "../shared/person-messages.ts";
 import type { ClientMessage } from "../shared/protocol.ts";
 import { isRoomId } from "../shared/machines.ts";
 import { harnessIds } from "../shared/model.ts";
-import { LONGEST_PERSON_NAME } from "../shared/people.ts";
+import { LONGEST_PERSON_NAME } from "../shared/person-names.ts";
 import { MOST_OWN_ANSWER_CHARACTERS } from "../shared/room-votes.ts";
 import { isRoomApprovalAnswer } from "../shared/room-permissions.ts";
 import { BROUGHT_STEP_DELTA_MOST_CHARACTERS, isBroughtStepKind, isRoomWorkspaceAnswer, workspaceCallIn } from "../shared/room-workspace.ts";

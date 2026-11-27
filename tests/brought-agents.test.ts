@@ -9,7 +9,7 @@ import { BROUGHT_TASK_MOST_CHARACTERS, defaultBroughtProfileId, MOST_BROUGHT_TAS
 import { HostProblemError } from "../shared/host-problems.ts";
 import { MOST_ROOMS_READ } from "../shared/machines.ts";
 import type { Conversation, ConversationEvent, Launch, Profile } from "../shared/model.ts";
-import { LONGEST_PERSON_NAME } from "../shared/people.ts";
+import { LONGEST_PERSON_NAME } from "../shared/person-names.ts";
 import type { ClientMessage, ServerMessage } from "../shared/protocol.ts";
 import { broughtAgentName } from "../shared/rooms.ts";
 import { MOST_WORKSPACE_CALLS_A_MINUTE, MOST_WORKSPACE_CALLS_AT_ONCE, WORKSPACE_RESULT_MOST_CHARACTERS, WORKSPACE_TASK_MS, type WorkspaceCall, type WorkspaceCallResult } from "../shared/room-workspace.ts";

@@ -3,7 +3,7 @@ import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, 
 import { PUSH_RELAY_CHOICES, pushRelayChoiceOf, pushRelayHost, type PushRelayChoice, type PushRelayRequest, type PushRelaySetting } from "../shared/push.ts";
 import { saveSetting } from "./saved-setting.ts";
 import { CONVERSATIONS_SHOWN_CHOICES, OLDER_AFTER_CHOICES, SIDE_CHAT_ACCESS_CHOICES, type CanvasUse, type KeepAwake, type KeepDeletedCanvas, type OlderAfter, type ConversationsShown, type ClaudeProgram, type Person, type Profile, type PromptTemplate, type SideChatAccess } from "../shared/model.ts";
-import { LONGEST_PERSON_NAME, personName } from "../shared/people.ts";
+import { LONGEST_PERSON_NAME, personName } from "../shared/person-names.ts";
 import type { VoiceSettings as VoiceSettingsValue } from "../shared/voice.ts";
 import type { VoiceEngineStatus } from "../shared/voice-engine.ts";
 import type { NewerVersion } from "../shared/newer-version.ts";

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { personName } from "../shared/people.ts";
+import { personName } from "../shared/person-names.ts";
 import { framedMessage, type RoomMessage } from "../shared/rooms.ts";
 import { notificationBody } from "../shared/system-notifications.ts";
 import { commandShown, everyCharacterShown, LINE_BREAKS, oneLine, printableInTerminal, shownAsWritten } from "../shared/written-text.ts";

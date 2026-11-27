@@ -1,6 +1,7 @@
 import { HostProblemError } from "../shared/host-problems.ts";
 import { isPastel, type Device, type Pastel } from "../shared/model.ts";
-import { nameRefused, nameTaken, personName, readsAsMiradorsWords } from "../shared/people.ts";
+import { nameRefused, nameTaken, readsAsMiradorsWords } from "../shared/people.ts";
+import { personName } from "../shared/person-names.ts";
 import { broughtAgentName, higherRoomRole, isRoomInviteLetsIn, isRoomInviteLifetime, isRoomInviteSeats, isRoomRole, type RoomInvite, type RoomInviteLetsIn, type RoomInviteLifetime, type RoomInviteSeats, type RoomJoiner, type RoomRole } from "../shared/rooms.ts";
 import { shownAsWritten } from "../shared/written-text.ts";
 import type { InviteTunnel } from "../shared/tunnel.ts";

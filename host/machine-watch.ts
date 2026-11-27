@@ -1,5 +1,5 @@
 import { isRoomId, joinedRoomsIn, withJoinedRoom, withoutJoinedRoom, withReadings } from "../shared/machines.ts";
-import { authorNameIn, LONGEST_PERSON_NAME, personName } from "../shared/people.ts";
+import { authorNameIn, LONGEST_PERSON_NAME, personName } from "../shared/person-names.ts";
 import { alertText, ROOM_ALERT_TEXT_MOST, type RoomAlert } from "../shared/room-reading.ts";
 import { shownAsWritten } from "../shared/written-text.ts";
 import type { Conversation, JoinedRoom, Machine, MachineSeen, MachineStatus, RoomKnock, WaitingFor } from "../shared/model.ts";

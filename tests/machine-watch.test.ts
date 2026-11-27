@@ -8,7 +8,7 @@ import { MachineWatch, MOST_ROOM_CALLS_A_MINUTE, roomAlertIn } from "../host/mac
 import { atAddress, DIALS_THROUGH_SOCKETS, type Way } from "../host/p2p/dial.ts";
 import { Store } from "../host/store.ts";
 import type { Machine, MachineStatus } from "../shared/model.ts";
-import { LONGEST_PERSON_NAME } from "../shared/people.ts";
+import { LONGEST_PERSON_NAME } from "../shared/person-names.ts";
 import { OUT_OF_ROOMS_CLOSE_CODE, type ServerMessage } from "../shared/protocol.ts";
 import { broughtAgentName } from "../shared/rooms.ts";
 import type { SystemNotification } from "../shared/system-notifications.ts";

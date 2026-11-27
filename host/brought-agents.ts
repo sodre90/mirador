@@ -31,7 +31,7 @@ import { HostProblemError, type HostProblem } from "../shared/host-problems.ts";
 import { replyOf } from "../shared/last-words.ts";
 import { isRoomId, MOST_ROOMS_READ } from "../shared/machines.ts";
 import type { AskItem, Conversation, ConversationEvent, Launch, ShowItem, StoredEvent } from "../shared/model.ts";
-import { authorNameIn, personName } from "../shared/people.ts";
+import { authorNameIn, personName } from "../shared/person-names.ts";
 import type { ClientMessage, ServerMessage } from "../shared/protocol.ts";
 import { endsTurn } from "../shared/reverts.ts";
 import {

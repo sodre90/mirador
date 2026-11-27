@@ -34,7 +34,8 @@ import {
   type ClaudeSetup,
   type VariablesChosen,
 } from "../shared/room-agent-setup.ts";
-import { AGENT_GONE, nameRefused, nameTaken, OWNER_WITHOUT_A_NAME, PERSON_WITHOUT_A_NAME, personGoesBy, personName, readsAsMiradorsWords } from "../shared/people.ts";
+import { AGENT_GONE, nameRefused, nameTaken, OWNER_WITHOUT_A_NAME, PERSON_WITHOUT_A_NAME, personGoesBy, readsAsMiradorsWords } from "../shared/people.ts";
+import { personName } from "../shared/person-names.ts";
 import {
   allowedByPreset,
   asksForNothing,

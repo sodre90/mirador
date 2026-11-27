@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { Person } from "../shared/model.ts";
-import { LONGEST_PERSON_NAME, nameRefused, personName } from "../shared/people.ts";
+import { nameRefused } from "../shared/people.ts";
+import { LONGEST_PERSON_NAME, personName } from "../shared/person-names.ts";
 import { t } from "./i18n/index.ts";
 import { problemText } from "./problem-text.ts";
 import { saveSetting } from "./saved-setting.ts";
