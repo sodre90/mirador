@@ -1,3 +1,4 @@
+import { broughtCanvasAskIn, broughtCanvasShowIn } from "../shared/brought-canvas.ts";
 import { HostProblemError } from "../shared/host-problems.ts";
 import { isPastel } from "../shared/model.ts";
 import type { PersonMessageType } from "../shared/person-messages.ts";
@@ -375,6 +376,22 @@ const admissions: { [K in ClientMessage["type"]]: K extends PersonMessageType ? 
     assertTaskNamed(message);
     if (typeof message.text !== "string" || message.text.length > MOST_ANSWER_SENT || !(message.ended === null || isBroughtAnswerEnd(message.ended))) throw unreadable();
     void roleOf(person, message.roomId);
+  },
+  "room.brought-canvas-show": ({ type, roomId, agentId, taskId, itemId, title, html }, person) => {
+    assertTaskNamed({ agentId, taskId });
+    const cleaned = broughtCanvasShowIn({ title, html });
+    if (!isRoomId(itemId) || !cleaned || !asksAgentsAs(roleOf(person, roomId))) throw unreadable();
+    return { type, roomId, agentId, taskId, itemId, ...cleaned };
+  },
+  "room.brought-canvas-ask": ({ type, roomId, agentId, taskId, itemId, ask }, person) => {
+    assertTaskNamed({ agentId, taskId });
+    const cleaned = broughtCanvasAskIn(ask);
+    if (!isRoomId(itemId) || !cleaned || !asksAgentsAs(roleOf(person, roomId))) throw unreadable();
+    return { type, roomId, agentId, taskId, itemId, ask: cleaned };
+  },
+  "room.brought-canvas-cancel": ({ roomId, agentId, itemId }, person) => {
+    if (!isRoomId(agentId) || !isRoomId(itemId)) throw unreadable();
+    void roleOf(person, roomId);
   },
   /** Only a call of a form the host knows, no larger than it may be; what it may do, the room's host checks and answers. */
   "room.workspace-call": ({ type, roomId, agentId, taskId, callId, call }, person) => {

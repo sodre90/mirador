@@ -2377,6 +2377,14 @@ export function startServer(services: HostServices) {
         return rooms.broughtTaskStarted(socket.data.personId, message.roomId, message.agentId, message.taskId);
       case "room.brought-task-answered":
         return rooms.broughtTaskAnswered(socket.data.personId, message.roomId, message.agentId, message.taskId, message.text, message.ended);
+      case "room.brought-canvas-show":
+        if (socket.data.carriesAgents) return rooms.broughtCanvasShow(socket.data.personId, message.roomId, message.agentId, message.taskId, message.itemId, message.title, message.html);
+        throw new HostProblemError({ code: "room-agent-not-yours" });
+      case "room.brought-canvas-ask":
+        if (socket.data.carriesAgents) return rooms.broughtCanvasAsk(socket.data.personId, message.roomId, message.agentId, message.taskId, message.itemId, message.ask);
+        throw new HostProblemError({ code: "room-agent-not-yours" });
+      case "room.brought-canvas-cancel":
+        return rooms.broughtCanvasCancel(socket.data.personId, message.roomId, message.agentId, message.itemId);
       case "room.workspace-call": {
         const { roomId, agentId, taskId, callId, call } = message;
         if (socket.data.carriesAgents) return void rooms.workspaceCalled({ personId: socket.data.personId, roomId, agentId, taskId, callId, call });

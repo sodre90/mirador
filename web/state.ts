@@ -20,7 +20,7 @@ import type { WorkspaceIcon } from "../shared/workspace-icon.ts";
 import { describedText, hostErrorText } from "./host-error.ts";
 import type { RoomSettingsTab } from "./i18n/en/rooms.ts";
 import type { RoomWorkspaceApproval, RoomWorkspaceCall } from "../shared/room-workspace.ts";
-import { shownOnRoomCanvas, type Room, type RoomApproval, type RoomInvite, type RoomJoiner, type RoomPresence, type RoomTaskApproval, type RoomTimeline } from "../shared/rooms.ts";
+import { agentStandIn, shownOnRoomCanvas, type Room, type RoomApproval, type RoomInvite, type RoomJoiner, type RoomPresence, type RoomTaskApproval, type RoomTimeline } from "../shared/rooms.ts";
 import type { RoomReading } from "../shared/room-reading.ts";
 import type { BroughtAgentHere, BroughtTaskWaiting } from "../shared/brought-agents.ts";
 import type { RoomQuestionVotes } from "../shared/room-votes.ts";
@@ -500,9 +500,9 @@ function withRoomTimeline(state: AppState, roomId: string, change: (timeline: Ro
 
 /** The room's canvas shows the pages and questions of its agents still in it; one taken out takes its own along. */
 const madeByAgentOf =
-  ({ agents }: Room) =>
+  ({ id, agents }: Room) =>
   (item: CanvasItem) =>
-    agents.some(({ conversationId }) => conversationId === item.conversationId);
+    agents.some(({ conversationId, profileId, brought }) => conversationId === item.conversationId || (brought !== undefined && agentStandIn(id, profileId) === item.conversationId));
 
 /**
  * An agent's page or question goes on the canvas of the room its conversation is in, while the page shows that room;
@@ -948,6 +948,7 @@ function applyServerMessage(state: AppState, message: ServerMessage): AppState {
     case "room.usage.got":
     case "room.agent-brought":
     case "room.brought-task":
+    case "room.brought-ask-answered":
     case "machine.agent-brought":
       return state;
     case "brought-agents.listed":

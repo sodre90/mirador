@@ -465,8 +465,8 @@ export const rooms: Messages["rooms"] = {
   othersTasksChoices: { "after-ok": "Solo con mi visto bueno", "any-time": "En cualquier momento" },
   bringMeaning: [
     "El agente trabaja aquí, en este equipo, en el espacio de trabajo que elijas, con los permisos de su perfil: sus herramientas te preguntan como siempre, aunque leer archivos de ese espacio de trabajo suele hacerse sin preguntar. Recibe los valores de su perfil y tus ajustes del agente como tus otras conversaciones, pero nunca YOLO ni un modo que no pregunte.",
-    "Su conversación aparece con las demás. Su respuesta final a cada tarea va a la sala; lo que pone en el lienzo se queda aquí.",
-    "Con “Solo con mi visto bueno”, una tarea de cualquier otra persona espera en su conversación hasta que la permitas. Tus propias tareas empiezan enseguida.",
+    "Sus pasos se quedan en este equipo, en Su trabajo junto a la sala. Sus respuestas finales, páginas del lienzo y preguntas van a la sala.",
+    "Con “Solo con mi visto bueno”, una tarea de cualquier otra persona espera hasta que la permitas. Tus propias tareas empiezan enseguida.",
     "La máquina de la sala dice quién escribió cada tarea. Su dueño podría hacer pasar una tarea por tuya, y empezaría sin tu visto bueno; tus ajustes de permisos siguen preguntando antes de usar sus herramientas.",
   ],
   roomsWorkspaceOf: (machine) => `El espacio de trabajo de la sala, en ${machine}`,
@@ -474,11 +474,11 @@ export const rooms: Messages["rooms"] = {
   broughtAgentPlace: (agent, place) => `${agent} (${place})`,
   onlyClaudeInRoomsWorkspace: "De momento, solo los perfiles de Claude Code, pi y opencode pueden trabajar en el espacio de trabajo de la sala.",
   bringIntoWorkspaceMeaning: [
-    "El agente se ejecuta en este equipo, con el modelo y la cuenta de su perfil, y no tiene nada más de este equipo: ni archivos, ni comandos, ni tus ajustes, hooks, servidores MCP, CLAUDE.md o memoria de Claude Code. Su conversación aparece con las demás, en un espacio de trabajo con el nombre de la sala cuya carpeta queda vacía.",
+    "El agente se ejecuta en este equipo, con el modelo y la cuenta de su perfil, y no tiene nada más de este equipo: ni archivos, ni comandos, ni tus ajustes, hooks, servidores MCP, CLAUDE.md o memoria de Claude Code. Sus pasos se quedan en este equipo, en Su trabajo junto a la sala.",
     "El propio Claude Code le dice al agente el correo electrónico de tu cuenta, qué sistema usa este equipo y dónde está esa carpeta, con tu nombre de usuario en la ruta, así que la sala puede llegar a saberlo.",
     "Trabaja en cambio en el espacio de trabajo de la sala, en la máquina de la sala. Antes lo deja entrar alguien que aprueba allí, y puede retirárselo en cualquier momento; lee los archivos de allí, y esas personas permiten cada cambio y cada comando, salvo que los agentes trabajen libremente en el sandbox de la sala.",
-    "Lo que lee allí llega a tu proveedor del modelo a través de tu cuenta. Su respuesta final a cada tarea va a la sala; lo que pone en el lienzo se queda aquí.",
-    "Con “Solo con mi visto bueno”, una tarea de cualquier otra persona espera en su conversación hasta que la permitas. Tus propias tareas empiezan enseguida. La máquina de la sala dice quién escribió cada tarea, así que su dueño podría hacer pasar una por tuya.",
+    "Lo que lee allí llega a tu proveedor del modelo a través de tu cuenta. Sus respuestas finales, páginas del lienzo y preguntas van a la sala.",
+    "Con “Solo con mi visto bueno”, una tarea de cualquier otra persona espera hasta que la permitas. Tus propias tareas empiezan enseguida. La máquina de la sala dice quién escribió cada tarea, así que su dueño podría hacer pasar una por tuya.",
   ],
   asksToWorkHere: (agent) => `${agent} pide trabajar en el espacio de trabajo de esta sala`,
   workHereMeaning:
@@ -551,7 +551,6 @@ export const rooms: Messages["rooms"] = {
     capabilities: "Qué puede hacer aquí",
     repliesInRoom: "Responde en hilos y puede etiquetar a otros agentes",
     usesRoomCanvas: "Dibuja en el lienzo de la sala y hace preguntas",
-    canvasStaysLocal: (person) => `El lienzo se queda en el equipo de ${person}`,
     stepsInThread: "Sus pasos se muestran en su hilo",
     workspaceCallsInThread: (person) => `Las llamadas al espacio de trabajo se muestran en su hilo; los demás pasos se quedan en el equipo de ${person}`,
     stepsStayOnComputer: (person) => `Sus pasos se quedan en el equipo de ${person}`,

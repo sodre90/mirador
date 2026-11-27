@@ -1,9 +1,19 @@
 import { lstatSync, realpathSync } from "node:fs";
 import { homedir, userInfo } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import {
+  BROUGHT_ASSETS_ORIGIN_TOKEN,
+  broughtCanvasAskIn,
+  broughtCanvasShowIn,
+  MOST_BROUGHT_CANVAS_A_MINUTE,
+  replaceAssetsOrigins,
+  rewriteAskAssets,
+  type BroughtAskAnswer,
+  type BroughtCanvasAskPayload,
+} from "../shared/brought-canvas.ts";
 import { HostProblemError } from "../shared/host-problems.ts";
 import { replyOf } from "../shared/last-words.ts";
-import { harnessIds, type CanvasItem, type Conversation, type HarnessId, type Launch, type Profile } from "../shared/model.ts";
+import { harnessIds, type AskAnswerEntry, type AskItem, type CanvasItem, type Conversation, type HarnessId, type Launch, type Profile, type ShowItem } from "../shared/model.ts";
 import type { RoomUsage } from "../shared/room-usage.ts";
 import { agentsTaggedIn, mentionsIn, type RoomMention, type TaggableAgent } from "../shared/room-mentions.ts";
 import {
@@ -32,6 +42,7 @@ import {
 } from "../shared/room-permissions.ts";
 import {
   AGENT_TAGGED_TURNS_AFTER_A_PERSON,
+  agentStandIn,
   agentTaggedTurnsAfter,
   approvesAs,
   approvesIn,
@@ -92,6 +103,7 @@ import { sandboxLeft, sandboxLeftWritableFolders } from "./sandbox/hooks-off.ts"
 import { isRoomWorkspaceAnswer, type RoomWorkspaceAnswer, type RoomWorkspaceApproval, type RoomWorkspaceCall } from "../shared/room-workspace.ts";
 import { shownAsWritten } from "../shared/written-text.ts";
 import { firstGraphemes } from "../shared/text-cut.ts";
+import type { RoomAnswerer, RoomQuestionListener } from "./canvas/service.ts";
 import type { RoomRules, TurnListener, WaitingPermission } from "./conversations.ts";
 import type { Hub, SocketData } from "./hub.ts";
 import { SenderLimit } from "./join-requests.ts";
@@ -251,6 +263,8 @@ export class RoomService implements RoomRules, TurnListener {
   private outOfEveryRoom: (personIds: string[]) => void = () => {};
   private postListener: PostListener = () => {};
   private waitingListener: WaitingListener = () => {};
+  private broughtQuestionListener: RoomQuestionListener = () => {};
+  private readonly pendingBroughtAskAnswers = new Map<string, { personId: string; roomId: string; agentId: string; itemId: string; answer: BroughtAskAnswer }>();
   private sandboxes = NO_SANDBOX_CONTROL;
   private readonly workspaceCalls: RoomWorkspaceCalls;
 
@@ -267,6 +281,8 @@ export class RoomService implements RoomRules, TurnListener {
     private readonly home: HostsHome = { directory: homedir(), user: userRunningTheHost() },
     private readonly bringing = new SenderLimit(Date.now, MOST_AGENTS_BROUGHT_A_MINUTE),
     private readonly broughtTaskStarts = new SenderLimit(Date.now, MOST_BROUGHT_TASK_STARTS_A_MINUTE),
+    private readonly canvasAssetsOrigin = "",
+    private readonly broughtCanvas = new SenderLimit(Date.now, MOST_BROUGHT_CANVAS_A_MINUTE),
   ) {
     this.orphanedAnswering = new Set(
       store.listRooms().flatMap(({ agents }) => agents.flatMap(({ conversationId, answering, brought }) => (!brought && conversationId && answering ? [conversationId] : []))),
@@ -305,6 +321,11 @@ export class RoomService implements RoomRules, TurnListener {
   /** Told each time what waits in a room for its approvers changes. */
   hearWaitingWith(listener: WaitingListener) {
     this.waitingListener = listener;
+  }
+
+  /** Told each time a brought agent's question on a room's canvas opens, closes or changes. */
+  hearBroughtQuestionsWith(listener: RoomQuestionListener) {
+    this.broughtQuestionListener = listener;
   }
 
   /** A person an invite just let into the room: pages hear of them as of one the owner let in, cleaning up if an existing member's role was lowered. */
@@ -721,7 +742,16 @@ export class RoomService implements RoomRules, TurnListener {
     if (socket.isOwner || socket.carriesAgents) return;
     socket.carriesAgents = true;
     this.store.setBroughtAgentsHere(socket.personId, true).forEach((roomId) => this.publish(roomId));
-    this.store.roomBroughtTasksOf(socket.personId).forEach((task) => this.sendBroughtTask(socket.personId, task));
+    this.store
+      .roomBroughtTasksOf(socket.personId)
+      .filter((task) => task.prompt !== "")
+      .forEach((task) => this.sendBroughtTask(socket.personId, task));
+    for (const [itemId, pending] of this.pendingBroughtAskAnswers) {
+      if (pending.personId !== socket.personId) continue;
+      if (this.hub.sendToAgentsOf(pending.personId, { type: "room.brought-ask-answered", ...pending })) {
+        this.pendingBroughtAskAnswers.delete(itemId);
+      }
+    }
   }
 
   /** The person's own Mirador went: their agents show as away, working on nothing the room sees, until it is back. */
@@ -785,6 +815,142 @@ export class RoomService implements RoomRules, TurnListener {
     this.post(answer, passedOn);
     if (waits) this.holdTask(room, answer, passedOn);
     else passedOn.forEach((profileId) => this.ask(room, profileId, answer, undefined));
+  }
+
+  /** A page an agent someone brought drew during an active task of the room goes onto the room's shared canvas. */
+  broughtCanvasShow(personId: string, roomId: string, agentId: string, taskId: string, itemId: string, title: string, html: string) {
+    const room = this.existingRoom(roomId);
+    this.broughtAgentOf(room, agentId, personId);
+    const task = this.store.findRoomBroughtTask(taskId);
+    if (task?.roomId !== roomId || task.agentId !== agentId) return;
+    if (this.store.findRoomBroughtCanvasItem(itemId) || this.store.findCanvasItem(itemId)) return;
+    const cleaned = broughtCanvasShowIn({ title, html });
+    if (!cleaned || !this.broughtCanvas.allows(personId)) return;
+    const now = Date.now();
+    const item: ShowItem = {
+      id: itemId,
+      conversationId: agentStandIn(roomId, agentId),
+      kind: "show",
+      title: cleaned.title,
+      html: replaceAssetsOrigins(cleaned.html, [BROUGHT_ASSETS_ORIGIN_TOKEN], this.canvasAssetsOrigin),
+      status: "shown",
+      createdAt: now,
+      updatedAt: now,
+      madeInRoom: { answering: task.messageId, afterSeq: this.store.lastRoomSeq(roomId) },
+    };
+    this.store.saveRoomBroughtCanvasItem(roomId, agentId, item);
+    this.hub.publishToRoom(roomId, { type: "canvas.upserted", item });
+  }
+
+  /** A question an agent someone brought asked during an active task of the room goes onto the room's canvas for everyone to vote on. */
+  broughtCanvasAsk(personId: string, roomId: string, agentId: string, taskId: string, itemId: string, ask: BroughtCanvasAskPayload) {
+    const room = this.existingRoom(roomId);
+    this.broughtAgentOf(room, agentId, personId);
+    const task = this.store.findRoomBroughtTask(taskId);
+    if (task?.roomId !== roomId || task.agentId !== agentId) return;
+    if (this.store.findRoomBroughtCanvasItem(itemId) || this.store.findCanvasItem(itemId)) return;
+    const cleaned = broughtCanvasAskIn(ask);
+    if (!cleaned || !this.broughtCanvas.allows(personId)) return;
+    const rewritten = rewriteAskAssets(cleaned, [BROUGHT_ASSETS_ORIGIN_TOKEN], this.canvasAssetsOrigin);
+    const ownPageIds = new Set(this.store.listRoomBroughtCanvasItemsOfAgent(roomId, agentId).filter((each) => each.kind === "show").map(({ id }) => id));
+    const shownBefore = rewritten.shownBefore?.filter((id) => ownPageIds.has(id));
+    const now = Date.now();
+    const item: AskItem = {
+      id: itemId,
+      conversationId: agentStandIn(roomId, agentId),
+      kind: "ask",
+      title: rewritten.title,
+      question: rewritten.question,
+      ...(rewritten.html !== undefined && { html: rewritten.html }),
+      ...(rewritten.options !== undefined && { options: rewritten.options }),
+      allowOther: true,
+      ...(rewritten.optionWidth !== undefined && { optionWidth: rewritten.optionWidth }),
+      ...(rewritten.questions !== undefined && { questions: rewritten.questions }),
+      ...(shownBefore && shownBefore.length > 0 && { shownBefore }),
+      status: "waiting",
+      createdAt: now,
+      updatedAt: now,
+      madeInRoom: { answering: task.messageId, afterSeq: this.store.lastRoomSeq(roomId) },
+    };
+    this.store.saveRoomBroughtCanvasItem(roomId, agentId, item);
+    this.hub.publishToRoom(roomId, { type: "canvas.upserted", item });
+    this.broughtQuestionListener(roomId, item, true);
+  }
+
+  /** The bringer's Mirador withdrew a waiting question of an agent they brought. */
+  broughtCanvasCancel(personId: string, roomId: string, agentId: string, itemId: string) {
+    const room = this.existingRoom(roomId);
+    this.broughtAgentOf(room, agentId, personId);
+    const found = this.store.findRoomBroughtCanvasItem(itemId);
+    if (!found || found.roomId !== roomId || found.agentId !== agentId || found.item.kind !== "ask" || found.item.status !== "waiting") return;
+    const cancelled: AskItem = { ...found.item, status: "cancelled", updatedAt: Date.now() };
+    this.store.saveRoomBroughtCanvasItem(roomId, agentId, cancelled);
+    this.hub.publishToRoom(roomId, { type: "canvas.upserted", item: cancelled });
+    this.broughtQuestionListener(roomId, cancelled, false);
+  }
+
+  /** Delivers a confirmed room answer back to the bringer's Mirador for a question asked by a brought agent. */
+  deliverBroughtAskAnswer(
+    roomId: string,
+    agentId: string,
+    itemId: string,
+    chosen: AskAnswerEntry,
+    answers: AskAnswerEntry[] | undefined,
+    answeredBy: string,
+    answerer: RoomAnswerer | undefined,
+  ) {
+    const room = this.existingRoom(roomId);
+    const agent = room.agents.find((each) => each.profileId === agentId && each.brought);
+    const found = this.store.findRoomBroughtCanvasItem(itemId);
+    if (!agent?.brought || !found || found.roomId !== roomId || found.agentId !== agentId || found.item.kind !== "ask" || found.item.status !== "waiting") return;
+    const questionsList = found.item.questions;
+    const namedAnswers = answers?.map((entry, index) => ({ question: questionsList?.[index]?.question ?? found.item.title, ...entry }));
+    const answered: AskItem = {
+      ...found.item,
+      status: "answered",
+      answer: { ...chosen, ...(namedAnswers && { answers: namedAnswers }), deliveredAs: "tool-result", answeredBy },
+      updatedAt: Date.now(),
+    };
+    this.store.saveRoomBroughtCanvasItem(roomId, agentId, answered);
+    this.hub.publishToRoom(roomId, { type: "canvas.upserted", item: answered });
+    this.broughtQuestionListener(roomId, answered, false);
+
+    // If the original brought task already ended (e.g. next-message askMode), open a follow-up task slot so the agent's next turn posts back to this thread.
+    let followUpTaskId: string | undefined;
+    const answeringMessageId = answered.madeInRoom?.answering;
+    if (answeringMessageId) {
+      const hasOpenTask = this.store.roomBroughtTasksOfAgent(roomId, agentId).some(({ messageId }) => messageId === answeringMessageId);
+      if (!hasOpenTask) {
+        const asked = this.store.findRoomMessage(answeringMessageId);
+        if (asked) {
+          followUpTaskId = crypto.randomUUID();
+          const { name, role } = this.authorOf(asked);
+          this.store.insertRoomBroughtTask({
+            id: followUpTaskId,
+            roomId,
+            agentId,
+            messageId: answeringMessageId,
+            prompt: "",
+            byName: name,
+            byRole: role,
+            fromBringer: !writtenByAgent(asked.author) && asked.author.personId === agent.brought.personId,
+            letThrough: true,
+            sentAt: Date.now(),
+          });
+        }
+      }
+    }
+
+    const answer: BroughtAskAnswer = {
+      label: chosen.label,
+      ...(answers && { answers }),
+      ...(answerer && { answerer }),
+      ...(followUpTaskId && { followUpTaskId }),
+    };
+    const payload = { personId: agent.brought.personId, roomId, agentId, itemId, answer };
+    if (!this.hub.sendToAgentsOf(agent.brought.personId, { type: "room.brought-ask-answered", ...payload })) {
+      this.pendingBroughtAskAnswers.set(itemId, payload);
+    }
   }
 
   /**
@@ -917,10 +1083,12 @@ export class RoomService implements RoomRules, TurnListener {
     return roomUsage(roomId, since, agents, this.store.listRoomMessages(roomId));
   }
 
-  /** The pages and questions the room's agents made in their conversations there, oldest first. */
+  /** The pages and questions the room's agents (own and brought) made there, oldest first. */
   canvas(roomId: string): CanvasItem[] {
-    return this.existingRoom(roomId)
-      .agents.flatMap(({ conversationId }) => (conversationId ? this.store.listCanvasItems(conversationId) : []))
+    return [
+      ...this.existingRoom(roomId).agents.flatMap(({ conversationId }) => (conversationId ? this.store.listCanvasItems(conversationId) : [])),
+      ...this.store.listRoomBroughtCanvasItems(roomId),
+    ]
       .filter(shownOnRoomCanvas)
       .toSorted((a, b) => a.createdAt - b.createdAt);
   }
@@ -1297,6 +1465,15 @@ export class RoomService implements RoomRules, TurnListener {
       if (asked) this.postEnding(asked, agent.profileId, "taken-out");
     });
     this.endsInWorkspace(room.id, agent.profileId);
+    for (const item of this.store.listRoomBroughtCanvasItemsOfAgent(room.id, agent.profileId)) {
+      this.pendingBroughtAskAnswers.delete(item.id);
+      if (item.kind === "ask" && item.status === "waiting") {
+        const cancelled: AskItem = { ...item, status: "cancelled", updatedAt: Date.now() };
+        this.store.saveRoomBroughtCanvasItem(room.id, agent.profileId, cancelled);
+        this.hub.publishToRoom(room.id, { type: "canvas.upserted", item: cancelled });
+        this.broughtQuestionListener(room.id, cancelled, false);
+      }
+    }
     this.store.removeBroughtAgent(room.id, agent.profileId);
     if (agent.brought?.workspace !== undefined || heldForOrBy.length > 0) this.waitingChanged(room.id);
   }

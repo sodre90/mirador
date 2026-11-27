@@ -24,6 +24,7 @@ import type {
 } from "./rooms.ts";
 import type { RoomWorkspaceAnswer, RoomWorkspaceApproval, RoomWorkspaceCall, WorkspaceCall, WorkspaceCallResult } from "./room-workspace.ts";
 import type { BroughtAgentHere, BroughtTaskWaiting, OthersTasks } from "./brought-agents.ts";
+import type { BroughtAskAnswer, BroughtCanvasAskPayload } from "./brought-canvas.ts";
 import type { RoomAlert, RoomReading } from "./room-reading.ts";
 import type { RoomConfirmedAnswer, RoomQuestionVotes } from "./room-votes.ts";
 import type { RoomInviteConnect } from "./machines.ts";
@@ -562,6 +563,12 @@ export type ClientMessage =
   | { type: "room.brought-task-started"; roomId: string; agentId: string; taskId: string }
   /** From a person's own Mirador: the final answer of the agent they brought to the task, or how it ended without one. */
   | { type: "room.brought-task-answered"; roomId: string; agentId: string; taskId: string; text: string; ended: BroughtAnswerEnd | null }
+  /** From a person's own Mirador: a canvas page drawn by an agent they brought during a room task. */
+  | { type: "room.brought-canvas-show"; roomId: string; agentId: string; taskId: string; itemId: string; title: string; html: string }
+  /** From a person's own Mirador: a canvas question asked by an agent they brought during a room task. */
+  | { type: "room.brought-canvas-ask"; roomId: string; agentId: string; taskId: string; itemId: string; ask: BroughtCanvasAskPayload }
+  /** From a person's own Mirador: withdraws a waiting canvas question of an agent they brought. */
+  | { type: "room.brought-canvas-cancel"; roomId: string; agentId: string; itemId: string }
   /** From a person's own Mirador: the agent they brought asks for this to be done in the room's workspace, for the task; the host answers `room.workspace-answered`. */
   | { type: "room.workspace-call"; roomId: string; agentId: string; taskId: string; callId: string; call: WorkspaceCall }
   /** From a person's own Mirador: a call is no longer wanted, as the agent's turn ended or was stopped. */
@@ -787,6 +794,8 @@ export type ServerMessage =
   | { type: "room.agent-brought"; requestId: string; personId: string; roomId: string; agentId: string | null; problem: HostProblem | null }
   /** To the person's own Mirador alone: a task for the agent they brought, as one of the room's own agents would be sent it, and who wrote it in what role. */
   | { type: "room.brought-task"; personId: string; roomId: string; agentId: string; taskId: string; text: string; byName: string; byRole: RoomAuthorRole; fromYou: boolean }
+  /** To the person's own Mirador alone: the confirmed answer to a question an agent they brought asked on the room's canvas. */
+  | { type: "room.brought-ask-answered"; personId: string; roomId: string; agentId: string; itemId: string; answer: BroughtAskAnswer }
   /** The agents this computer's owner brought into rooms of other machines, and the tasks of others that wait for their OK, each time either changes. */
   | { type: "brought-agents.listed"; agents: BroughtAgentHere[]; tasks: BroughtTaskWaiting[] }
   | { type: "machine.agent-brought"; requestId: string; problem: string | null; problemAbout?: HostProblem }

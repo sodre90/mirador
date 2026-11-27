@@ -20,7 +20,7 @@ import { errorList } from "./notes.ts";
 import { answerAsToolResult, severalQuestionsRequest, withSomethingElse, type AnswerWaitGivenUp, type CanvasService, type RenderOutcome } from "./service.ts";
 import { ANTIGRAVITY_ASK_WAIT_MS } from "../config.ts";
 import { MIRADOR_VERSION } from "../../shared/version.ts";
-import { worksForARoom, type CanvasUse, type HarnessId } from "../../shared/model.ts";
+import { worksForARoom, type AskItem, type CanvasUse, type HarnessId, type ShowItem } from "../../shared/model.ts";
 import type { AppDocuments } from "../apps/documents.ts";
 import { appToolsGuidance, registerAppTools } from "../apps/tools.ts";
 import type { PluginCatalog } from "../plugin-catalog.ts";
@@ -175,6 +175,12 @@ export function canvasServerInstructions(harness: HarnessId | undefined, canvasU
   return parts.join("\n\n");
 }
 
+/** Forwards pages and questions made by brought agents on this computer to the room's host. */
+export interface BroughtCanvasForwarder {
+  forwardShow(conversationId: string, item: ShowItem): boolean;
+  forwardAsk(conversationId: string, item: AskItem): boolean;
+}
+
 /** What the conversations' canvas servers are built from; a part left out is null, and Antigravity's ask wait its default. */
 export interface CanvasServerParts {
   canvas: CanvasService;
@@ -186,6 +192,7 @@ export interface CanvasServerParts {
   store?: Store | null;
   rooms?: RoomTools | null;
   roomsWorkspaces?: RoomsWorkspaces | null;
+  broughtCanvas?: BroughtCanvasForwarder | null;
   antigravityAskWaitMs?: number;
 }
 
@@ -208,7 +215,7 @@ const runsInASandboxHere = (store: Store | null, conversationId: string) => {
 export type CanvasRequestFrom = "this-computer" | "sandbox";
 
 function buildCanvasServer(conversationId: string, parts: CanvasServerParts, cutInstructionsWarning: CutInstructionsWarning, from: CanvasRequestFrom) {
-  const { canvas, conversations, assetsOrigin, apps = null, canvasPlugins = null, catalog = null, store = null, rooms = null, roomsWorkspaces = null, antigravityAskWaitMs = ANTIGRAVITY_ASK_WAIT_MS } = parts;
+  const { canvas, conversations, assetsOrigin, apps = null, canvasPlugins = null, catalog = null, store = null, rooms = null, roomsWorkspaces = null, broughtCanvas = null, antigravityAskWaitMs = ANTIGRAVITY_ASK_WAIT_MS } = parts;
   const harness = store?.findConversation(conversationId)?.harness;
   const askWaitLimitMs = harness === "antigravity" ? antigravityAskWaitMs : null;
   const reviewFree = reviewFreeFor(harness);
@@ -249,8 +256,10 @@ function buildCanvasServer(conversationId: string, parts: CanvasServerParts, cut
       ...reviewFree,
     },
     async ({ title, html }, ctx) => {
-      const { item, render } = await canvas.show(await callingConversation(ctx), { title, html });
-      return { content: [{ type: "text", text: describeRender(item.id, render) }] };
+      const caller = await callingConversation(ctx);
+      const { item, render } = await canvas.show(caller, { title, html });
+      const forwarded = item.kind === "show" && broughtCanvas?.forwardShow(caller, item) === true;
+      return { content: [{ type: "text", text: forwarded ? `Shown on the room's canvas as item ${item.id}.` : describeRender(item.id, render) }] };
     },
   );
 
@@ -278,10 +287,11 @@ function buildCanvasServer(conversationId: string, parts: CanvasServerParts, cut
     async ({ questions, question, options, ...rest }, ctx) => {
       if (!questions && (!question || !options)) return toolError("Give question and options, or questions.");
       if ((questions ?? [{ ...rest, options: options! }]).some(recommendsMoreThanCanBePicked)) return toolError(ONE_RECOMMENDED_WHERE_ONE_IS_PICKED);
-      if (roomId && (questions ?? [rest]).some(({ multiple }) => multiple)) return toolError(ONE_OPTION_EACH_IN_A_ROOM);
       const caller = await callingConversation(ctx);
+      if ((roomId || worksForARoomHere(store, caller)) && (questions ?? [rest]).some(({ multiple }) => multiple)) return toolError(ONE_OPTION_EACH_IN_A_ROOM);
       canvas.takeBackBrokenAsks(caller);
       const item = canvas.openAsk(caller, withSomethingElse(questions ? severalQuestionsRequest(questions, rest.html) : { question: question!, options: options!, ...rest }));
+      broughtCanvas?.forwardAsk(caller, item);
       if (conversations.get(caller).askMode === "next-message") {
         return { content: [{ type: "text", text: describeAsk(await canvas.errorsOfOpeningPages(item)) }] };
       }

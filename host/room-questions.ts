@@ -13,7 +13,21 @@ import type { Store } from "./store.ts";
 /** How many picks and confirmations a minute one person may make, far more than anyone choosing makes. */
 export const MOST_VOTES_A_MINUTE = 60;
 
-export type QuestionsStore = Pick<Store, "findRoom" | "findCanvasItem" | "listCanvasItems" | "ownerId" | "listRoomMessages" | "setRoomVote" | "listRoomVotes" | "listPeople">;
+export type QuestionsStore = Pick<
+  Store,
+  "findRoom" | "findCanvasItem" | "listCanvasItems" | "findRoomBroughtCanvasItem" | "listRoomBroughtCanvasItems" | "ownerId" | "listRoomMessages" | "setRoomVote" | "listRoomVotes" | "listPeople"
+>;
+
+/** Called when a room confirms an answer to a question asked by a brought agent. */
+export type BroughtAskConfirmer = (
+  roomId: string,
+  agentId: string,
+  itemId: string,
+  answer: AskAnswerEntry,
+  answers: AskAnswerEntry[] | undefined,
+  authorId: string,
+  answerer: RoomAnswerer | undefined,
+) => void;
 
 /**
  * Who may confirm the answer the question's agent gets: the person whose task its turn works on, while they may still ask
@@ -31,8 +45,11 @@ export function confirmersOf(store: Pick<QuestionsStore, "ownerId" | "listRoomMe
 }
 
 /** The questions the room's agents ask there now, which its people vote on. */
-export function questionsIn(store: Pick<QuestionsStore, "listCanvasItems">, room: Room): AskItem[] {
-  return room.agents.flatMap(({ conversationId }) => (conversationId ? store.listCanvasItems(conversationId) : [])).filter((item): item is AskItem => item.kind === "ask");
+export function questionsIn(store: Pick<QuestionsStore, "listCanvasItems" | "listRoomBroughtCanvasItems">, room: Room): AskItem[] {
+  return [
+    ...room.agents.flatMap(({ conversationId }) => (conversationId ? store.listCanvasItems(conversationId) : [])),
+    ...store.listRoomBroughtCanvasItems(room.id),
+  ].filter((item): item is AskItem => item.kind === "ask");
 }
 
 /**
@@ -46,6 +63,7 @@ export class RoomQuestions {
     private readonly hub: Pick<Hub, "publishToRoom">,
     private readonly canvas: Pick<CanvasService, "answer">,
     private readonly picking = new SenderLimit(Date.now, MOST_VOTES_A_MINUTE),
+    private readonly broughtAskAnswered: BroughtAskConfirmer = () => {},
   ) {}
 
   vote(roomId: string, itemId: string, question: number, option: number, personId: string) {
@@ -61,15 +79,17 @@ export class RoomQuestions {
    * questions. The agent is told who confirmed it, and in what role, unless it was the owner.
    */
   confirm(roomId: string, itemId: string, answers: RoomConfirmedAnswer[], personId: string) {
-    const { room, item } = this.waitingQuestion(roomId, itemId, personId);
+    const { room, item, broughtAgentId } = this.waitingQuestion(roomId, itemId, personId);
     if (!confirmersOf(this.store, room, item).includes(personId)) throw new HostProblemError({ code: "room-confirm-not-yours" });
     const questions = questionsOf(item);
     if (answers.length !== questions.length) throw new HostProblemError({ code: "answer-all-questions", count: questions.length });
     if (!this.picking.allows(personId)) throw new HostProblemError({ code: "room-voting-too-fast" });
     const entries = answers.map((answer, index) => this.entryOf(room, questions[index]!, answer, personId));
     const answerer = this.answererOf(room, personId, answers);
-    if (item.questions) this.canvas.answer(itemId, { label: answersSummary(entries) }, entries, personId, answerer);
-    else this.canvas.answer(itemId, entries[0]!, undefined, personId, answerer);
+    const chosen = item.questions ? { label: answersSummary(entries) } : entries[0]!;
+    const multi = item.questions ? entries : undefined;
+    if (broughtAgentId !== null) this.broughtAskAnswered(room.id, broughtAgentId, itemId, chosen, multi, personId, answerer);
+    else this.canvas.answer(itemId, chosen, multi, personId, answerer);
   }
 
   /** Where each question of the room's agents stands, for a page that opens the room. */
@@ -94,13 +114,20 @@ export class RoomQuestions {
   }
 
   /** The room, which the person is in, and the question one of its agents asks there now that still waits for its answer. */
-  private waitingQuestion(roomId: string, itemId: string, personId: string) {
+  private waitingQuestion(roomId: string, itemId: string, personId: string): { room: Room; item: AskItem; broughtAgentId: string | null } {
     const room = this.store.findRoom(roomId);
     if (!room || !(personId === this.store.ownerId() || room.people.some((person) => person.personId === personId))) throw new HostProblemError({ code: "room-gone" });
-    const item = this.store.findCanvasItem(itemId);
-    if (item?.kind !== "ask" || !room.agents.some(({ conversationId }) => conversationId === item.conversationId)) throw new HostProblemError({ code: "unknown-question" });
-    if (item.status !== "waiting") throw new HostProblemError({ code: "room-question-not-waiting" });
-    return { room, item };
+    const own = this.store.findCanvasItem(itemId);
+    if (own?.kind === "ask" && room.agents.some(({ conversationId }) => conversationId === own.conversationId)) {
+      if (own.status !== "waiting") throw new HostProblemError({ code: "room-question-not-waiting" });
+      return { room, item: own, broughtAgentId: null };
+    }
+    const brought = this.store.findRoomBroughtCanvasItem(itemId);
+    if (brought?.roomId === roomId && brought.item.kind === "ask") {
+      if (brought.item.status !== "waiting") throw new HostProblemError({ code: "room-question-not-waiting" });
+      return { room, item: brought.item, broughtAgentId: brought.agentId };
+    }
+    throw new HostProblemError({ code: "unknown-question" });
   }
 
   /** A confirmer other than the owner, as the agent is told of them: their role in the room, their name, and which answers are their own words. */

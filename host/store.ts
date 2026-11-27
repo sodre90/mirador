@@ -193,6 +193,14 @@ const schema = `
   CREATE TABLE IF NOT EXISTS room_workspace_calls (
     id TEXT PRIMARY KEY, room_id TEXT NOT NULL REFERENCES rooms(id) ON DELETE CASCADE, agent_id TEXT NOT NULL, thread_id TEXT NOT NULL,
     at INTEGER NOT NULL, kind TEXT NOT NULL, about TEXT NOT NULL, state TEXT NOT NULL, diff TEXT, result TEXT, answered_by TEXT);
+  CREATE TABLE IF NOT EXISTS room_brought_canvas_items (
+    id TEXT PRIMARY KEY, room_id TEXT NOT NULL REFERENCES rooms(id) ON DELETE CASCADE, agent_id TEXT NOT NULL,
+    created_at INTEGER NOT NULL, item TEXT NOT NULL);
+  CREATE TABLE IF NOT EXISTS room_brought_votes (
+    item_id TEXT NOT NULL REFERENCES room_brought_canvas_items(id) ON DELETE CASCADE,
+    room_id TEXT NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
+    person_id TEXT NOT NULL REFERENCES people(id) ON DELETE CASCADE, question INTEGER NOT NULL, option INTEGER NOT NULL,
+    PRIMARY KEY (item_id, person_id, question));
   CREATE INDEX IF NOT EXISTS room_workspace_calls_by_agent ON room_workspace_calls (room_id, agent_id, at);
   CREATE TABLE IF NOT EXISTS sandbox_left_folders (path TEXT PRIMARY KEY, left_at INTEGER NOT NULL);
   CREATE TABLE IF NOT EXISTS sandbox_folders (
@@ -1446,7 +1454,9 @@ export class Store {
   /** Takes the person out of the room with their picks on its questions, their read mark and their mute there. */
   removeRoomPerson(roomId: string, personId: string) {
     this.db.transaction(() => {
-      ["room_people", "room_votes", "room_readers"].forEach((table) => this.db.query(`DELETE FROM ${table} WHERE room_id = ? AND person_id = ?`).run(roomId, personId));
+      ["room_people", "room_votes", "room_brought_votes", "room_readers"].forEach((table) =>
+        this.db.query(`DELETE FROM ${table} WHERE room_id = ? AND person_id = ?`).run(roomId, personId),
+      );
     })();
   }
 
@@ -1891,16 +1901,48 @@ export class Store {
     return this.findRoomMessage(message.id)!;
   }
 
+  saveRoomBroughtCanvasItem(roomId: string, agentId: string, item: CanvasItem) {
+    this.db
+      .query(
+        `INSERT INTO room_brought_canvas_items (id, room_id, agent_id, created_at, item) VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET item = excluded.item WHERE room_id = excluded.room_id AND agent_id = excluded.agent_id`,
+      )
+      .run(item.id, roomId, agentId, item.createdAt, JSON.stringify(item));
+  }
+
+  findRoomBroughtCanvasItem(id: string): { roomId: string; agentId: string; item: CanvasItem } | undefined {
+    const row = this.db.query("SELECT room_id AS roomId, agent_id AS agentId, item FROM room_brought_canvas_items WHERE id = ?").get(id) as
+      | { roomId: string; agentId: string; item: string }
+      | null;
+    return row ? { roomId: row.roomId, agentId: row.agentId, item: JSON.parse(row.item) } : undefined;
+  }
+
+  listRoomBroughtCanvasItems(roomId: string): CanvasItem[] {
+    return this.db
+      .query("SELECT item FROM room_brought_canvas_items WHERE room_id = ? ORDER BY created_at")
+      .all(roomId)
+      .map((row: any) => JSON.parse(row.item));
+  }
+
+  listRoomBroughtCanvasItemsOfAgent(roomId: string, agentId: string): CanvasItem[] {
+    return this.db
+      .query("SELECT item FROM room_brought_canvas_items WHERE room_id = ? AND agent_id = ? ORDER BY created_at")
+      .all(roomId, agentId)
+      .map((row: any) => JSON.parse(row.item));
+  }
+
   /** The person's pick for the question at `question` of the item, in place of the one they made before. */
   setRoomVote(itemId: string, roomId: string, { personId, question, option }: RoomBallot) {
+    const table = this.findRoomBroughtCanvasItem(itemId) ? "room_brought_votes" : "room_votes";
     this.db
-      .query("INSERT INTO room_votes (item_id, room_id, person_id, question, option) VALUES (?, ?, ?, ?, ?) ON CONFLICT DO UPDATE SET option = excluded.option")
+      .query(`INSERT INTO ${table} (item_id, room_id, person_id, question, option) VALUES (?, ?, ?, ?, ?) ON CONFLICT DO UPDATE SET option = excluded.option`)
       .run(itemId, roomId, personId, question, option);
   }
 
   /** Everyone's picks on the item's questions, in the order they first picked. */
   listRoomVotes(itemId: string): RoomBallot[] {
-    return this.db.query("SELECT person_id AS personId, question, option FROM room_votes WHERE item_id = ? ORDER BY rowid").all(itemId) as RoomBallot[];
+    const table = this.findRoomBroughtCanvasItem(itemId) ? "room_brought_votes" : "room_votes";
+    return this.db.query(`SELECT person_id AS personId, question, option FROM ${table} WHERE item_id = ? ORDER BY rowid`).all(itemId) as RoomBallot[];
   }
 
   /** The number of the room's last message the person read; 0 before they read any. */

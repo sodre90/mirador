@@ -10,6 +10,7 @@ import type { RoomQuestionVotes } from "../shared/room-votes.ts";
 import { roomCanvasAuthorOf } from "../shared/room-canvas.ts";
 import {
   AGENT_TAGGED_TURNS_AFTER_A_PERSON,
+  agentStandIn,
   approvesIn,
   askedInThread,
   broughtAgentName,
@@ -776,7 +777,7 @@ function AgentChip({
   const capabilities = agent.brought
     ? [
         words.agentCard.repliesInRoom,
-        words.agentCard.canvasStaysLocal(agent.brought.bringer),
+        words.agentCard.usesRoomCanvas,
         agent.brought.workspace ? words.agentCard.workspaceCallsInThread(agent.brought.bringer) : words.agentCard.stepsStayOnComputer(agent.brought.bringer),
       ]
     : [words.agentCard.repliesInRoom, words.agentCard.usesRoomCanvas, words.agentCard.stepsInThread];
@@ -1169,8 +1170,14 @@ export function RoomView({
   const messagesById = new Map(timeline?.messages.map((message) => [message.id, message]));
   const shown = timeline?.messages.filter(shownInRoom) ?? [];
   const canvasOfAnswers = useMemo(
-    () => (timeline ? canvasItemsOfAnswers(timeline.messages, timeline.canvas, (profileId) => room.agents.find((agent) => agent.profileId === profileId)?.conversationId) : new Map<string, CanvasItem[]>()),
-    [timeline, room.agents],
+    () =>
+      timeline
+        ? canvasItemsOfAnswers(timeline.messages, timeline.canvas, (profileId) => {
+            const agent = room.agents.find((each) => each.profileId === profileId);
+            return agent?.brought ? agentStandIn(room.id, profileId) : agent?.conversationId;
+          })
+        : new Map<string, CanvasItem[]>(),
+    [timeline, room.id, room.agents],
   );
   const authorOf = useMemo(() => roomCanvasAuthorOf(room, profiles, people, words.nameless), [room, profiles, people]);
   const votesOf = new Map(timeline?.votes.map((votes): [string, RoomQuestionVotes] => [votes.itemId, votes]));

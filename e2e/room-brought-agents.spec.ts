@@ -422,6 +422,44 @@ test("a brought agent with a long name keeps its bringer visible when cut short 
   await expect(chip).toHaveCount(0);
 });
 
+test("a brought agent's canvas drawings and questions appear on the room's canvas for everyone and return confirmed answers", async () => {
+  const miasRoom = mia.frameLocator(".invited-room .machine-frame.shown");
+
+  await test.step("Coder draws a page, and both Ann and Mia see it on the room's canvas attributed to Coder (Mia)", async () => {
+    const show = { title: "Friendly robot", html: "<p id='robot'>Waving hello</p>" };
+    await tagCoder(`CANVAS show ${JSON.stringify(show)}`);
+    const answer = answersOfCoder(ann).last();
+    await expect(answer.locator(".room-canvas-line")).toContainText("On the canvas: 1 page");
+    await expect(answer.locator(".room-canvas-title-chip")).toHaveText("Friendly robot");
+    await expect(ann.locator(".canvas-panel:visible .canvas-author")).toContainText("Coder (Mia)");
+    await expect(ann.frameLocator(".canvas-panel:visible .canvas-frame.show iframe").locator("#robot")).toHaveText("Waving hello");
+
+    await expect(miasRoom.locator(".canvas-panel:visible .canvas-author")).toContainText("Coder (Mia)");
+    await expect(miasRoom.frameLocator(".canvas-panel:visible .canvas-frame.show iframe").locator("#robot")).toHaveText("Waving hello");
+  });
+
+  await test.step("Coder asks a question on the room's canvas; everyone votes, Ann confirms, and Coder receives the confirmed answer", async () => {
+    const question = "Which robot?";
+    const ask = { question, options: [{ label: "Beep" }, { label: "Boop" }] };
+    await tagCoder(`CANVAS ask ${JSON.stringify(ask)}`);
+    const annVote = ann.getByRole("region", { name: question });
+    const miaVote = miasRoom.getByRole("region", { name: question });
+    await expect(annVote).toBeVisible();
+    await expect(annVote.locator(".room-vote-asker")).toContainText("Coder (Mia) asks");
+    await expect(miaVote).toBeVisible();
+    await expect(ann.locator(".canvas-panel:visible .ask h3")).toHaveText(question);
+
+    await miaVote.locator(".room-vote-option").filter({ has: miasRoom.getByRole("button", { name: "Boop", exact: true }) }).getByRole("button").click();
+    await annVote.locator(".room-vote-option").filter({ has: ann.getByRole("button", { name: "Boop", exact: true }) }).getByRole("button").click();
+    await expect(annVote.locator(".room-vote-option").filter({ has: ann.getByRole("button", { name: "Boop", exact: true }) }).locator(".room-vote-count")).toHaveText("2");
+    await annVote.getByRole("button", { name: "Confirm: Boop" }).click();
+
+    await expect(annVote.locator(".room-vote-status")).toHaveText("Ann confirmed: Boop");
+    await expect(miaVote.locator(".room-vote-status")).toHaveText("Ann confirmed: Boop");
+    await expect(answersOfCoder(ann).last().locator(".message.agent")).toContainText("The user chose: Boop");
+  });
+});
+
 test("while Mia's Mirador is away, the room says so at once, and Ann takes the agent out", async () => {
   await mias.stop();
   await expect(agentChip(ann)).toHaveClass(/\baway\b/);

@@ -97,15 +97,16 @@ export class RoomReadingService {
 
   /**
    * One of the room's agents' questions opened, closed or changed: what waits for its confirmers changed. One that just
-   * opened calls them, but the owner, whom its agent's conversation already notifies.
+   * opened calls them, skipping the owner only for the room's own agents, whose conversation already notifies the owner.
    */
   questionChanged(room: Room, item: AskItem, opened: boolean) {
     this.tellRoom(room);
     if (!opened) return;
     const ownerId = this.store.ownerId();
+    const isBrought = this.store.findRoomBroughtCanvasItem(item.id) !== undefined;
     const alert: RoomAlert = { about: "confirm", question: alertText(item.title) };
     confirmersOf(this.store, room, item)
-      .filter((personId) => personId !== ownerId)
+      .filter((personId) => isBrought || personId !== ownerId)
       .forEach((personId) => this.call(room, personId, alert, item.conversationId));
   }
 

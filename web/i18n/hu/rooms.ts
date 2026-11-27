@@ -464,8 +464,8 @@ export const rooms: Messages["rooms"] = {
   othersTasksChoices: { "after-ok": "Csak az engedélyemmel", "any-time": "Bármikor" },
   bringMeaning: [
     "Az ágens itt dolgozik, ezen a gépen, a választott munkaterületen, a profilja engedélyeivel: az eszközei ugyanúgy rákérdeznek, mint mindig, bár a munkaterület fájljait általában kérdezés nélkül olvassa. A profilja értékeit és az ágensbeállításaidat ugyanúgy megkapja, mint a többi beszélgetésed, de YOLO-t vagy kérdezés nélküli módot soha.",
-    "A beszélgetése a többi között látszik. Minden feladatra adott végső válasza a szobába kerül; amit a vászonra tesz, itt marad.",
-    "„Csak az engedélyemmel” esetén bárki más feladata a beszélgetésében vár, amíg nem engeded. A saját feladataid azonnal indulnak.",
+    "A lépései ezen a gépen maradnak a Munkája panelen a szoba mellett. A végső válaszai, vászonoldalai és kérdései a szobába kerülnek.",
+    "„Csak az engedélyemmel” esetén bárki más feladata vár, amíg nem engeded. A saját feladataid azonnal indulnak.",
     "A szoba gépe mondja meg, ki írta az egyes feladatokat. A tulajdonosa a tiédnek adhatna ki egy feladatot, és az az engedélyed nélkül indulna; az engedélybeállításaid így is rákérdeznek az eszközei előtt.",
   ],
   roomsWorkspaceOf: (machine) => `A szoba munkaterülete, itt: ${machine}`,
@@ -473,11 +473,11 @@ export const rooms: Messages["rooms"] = {
   broughtAgentPlace: (agent, place) => `${agent} (${place})`,
   onlyClaudeInRoomsWorkspace: "A szoba munkaterületén egyelőre csak Claude Code-, pi- és opencode-profil dolgozhat.",
   bringIntoWorkspaceMeaning: [
-    "Az ágens ezen a gépen fut, a profilja modelljével és fiókjával, és semmi mást nem kap erről a gépről: sem fájlt, sem parancsot, sem a Claude Code-beállításaidat, hookjaidat, MCP-szervereidet, CLAUDE.md-det vagy memóriádat. A beszélgetése a többi között látszik, a szobáról elnevezett munkaterületen, amelynek a mappája üres marad.",
+    "Az ágens ezen a gépen fut, a profilja modelljével és fiókjával, és semmi mást nem kap erről a gépről: sem fájlt, sem parancsot, sem a Claude Code-beállításaidat, hookjaidat, MCP-szervereidet, CLAUDE.md-det vagy memóriádat. A lépései ezen a gépen maradnak a Munkája panelen a szoba mellett.",
     "Az ágens magától a Claude Code-tól tudja meg a fiókod e-mail-címét, hogy milyen rendszer fut ezen a gépen, és hogy hol van ez a mappa, az útvonalában a felhasználóneveddel, így mindezt a szoba is megtudhatja.",
     "Ehelyett a szoba munkaterületén dolgozik, a szoba gépén. Előbb be kell engednie valakinek, aki ott jóváhagy, és ezt bármikor visszavonhatja; az ottani fájlokat olvassa, és minden módosítást és minden parancsot ők engednek, kivéve, ha a szoba sandboxában az ágensek szabadon dolgoznak.",
-    "Amit ott elolvas, a te fiókodon át a modellszolgáltatódhoz kerül. Minden feladatra adott végső válasza a szobába kerül; amit a vászonra tesz, itt marad.",
-    "„Csak az engedélyemmel” esetén bárki más feladata a beszélgetésében vár, amíg nem engeded. A saját feladataid azonnal indulnak. A szoba gépe mondja meg, ki írta az egyes feladatokat, így a tulajdonosa a tiédnek adhatna ki egyet.",
+    "Amit ott elolvas, a te fiókodon át a modellszolgáltatódhoz kerül. A végső válaszai, vászonoldalai és kérdései a szobába kerülnek.",
+    "„Csak az engedélyemmel” esetén bárki más feladata vár, amíg nem engeded. A saját feladataid azonnal indulnak. A szoba gépe mondja meg, ki írta az egyes feladatokat, így a tulajdonosa a tiédnek adhatna ki egyet.",
   ],
   asksToWorkHere: (agent) => `${agent} a szoba munkaterületén szeretne dolgozni`,
   workHereMeaning:
@@ -550,7 +550,6 @@ export const rooms: Messages["rooms"] = {
     capabilities: "Mit tud itt tenni",
     repliesInRoom: "Témákban válaszol, és más ágenseket is megjelölhet",
     usesRoomCanvas: "Rajzol a szoba vásznára és kérdéseket tesz fel",
-    canvasStaysLocal: (person) => `A vászna ezen a gépen marad: ${person}`,
     stepsInThread: "A lépései a témájában látszanak",
     workspaceCallsInThread: (person) => `A munkaterületi hívások a témájában látszanak; a többi lépés ezen a gépen marad: ${person}`,
     stepsStayOnComputer: (person) => `A lépései ezen a gépen maradnak: ${person}`,

@@ -10,16 +10,26 @@ import {
   type BroughtTaskWaiting,
   type OthersTasks,
 } from "../shared/brought-agents.ts";
+import {
+  BROUGHT_ASSETS_ORIGIN_TOKEN,
+  broughtAskAnswerIn,
+  MOST_BROUGHT_CANVAS_HTML_CHARACTERS,
+  MOST_BROUGHT_CANVAS_TITLE_CHARACTERS,
+  replaceAssetsOrigins,
+  rewriteAskAssets,
+  type BroughtCanvasAskPayload,
+} from "../shared/brought-canvas.ts";
 import { HostProblemError, type HostProblem } from "../shared/host-problems.ts";
 import { replyOf } from "../shared/last-words.ts";
 import { isRoomId, MOST_ROOMS_READ } from "../shared/machines.ts";
-import type { Conversation, Launch, StoredEvent } from "../shared/model.ts";
+import type { AskItem, Conversation, Launch, ShowItem, StoredEvent } from "../shared/model.ts";
 import { authorNameIn, personName } from "../shared/people.ts";
 import type { ClientMessage, ServerMessage } from "../shared/protocol.ts";
 import { endsTurn } from "../shared/reverts.ts";
 import { MOST_WORKSPACE_CALLS_A_MINUTE, MOST_WORKSPACE_CALLS_AT_ONCE, WORKSPACE_TASK_MS, workspaceCallResultIn, type WorkspaceCall, type WorkspaceCallResult } from "../shared/room-workspace.ts";
 import { broughtTaskPrompt, isRoomAuthorRole, MOST_AGENTS_BROUGHT, ROOM_MESSAGE_MOST_CHARACTERS, type BroughtAnswerEnd, type FramedAuthor } from "../shared/rooms.ts";
 import { shownAsWritten } from "../shared/written-text.ts";
+import type { CanvasService } from "./canvas/service.ts";
 import type { Hub } from "./hub.ts";
 import { SenderLimit } from "./join-requests.ts";
 import { isInside, realOrAsIs } from "./sandbox/paths-on-disk.ts";
@@ -132,6 +142,8 @@ export class BroughtAgents {
   /** The task each conversation's turn under way works on, and since when. */
   private readonly turnsOnTasks = new Map<string, { taskId: string; since: number }>();
   private readonly workspaceCalls = new Map<string, WorkspaceCallUnderWay>();
+  private readonly forwardedAsks = new Map<string, { broughtId: string; machineId: string; roomId: string; agentId: string }>();
+  private canvas: Pick<CanvasService, "answer" | "hasWaiter"> | null = null;
   private holding: ReadonlySet<string>;
 
   constructor(
@@ -143,6 +155,7 @@ export class BroughtAgents {
     private readonly emptyFolders: string,
     private readonly now: () => number = Date.now,
     private readonly lettingInMs = LETTING_IN_MS,
+    private readonly canvasAssetsOrigins: readonly string[] = [],
   ) {
     this.tasksArriving = new SenderLimit(now, MOST_BROUGHT_TASKS_A_MINUTE);
     this.workspaceCallsMade = new SenderLimit(now, MOST_WORKSPACE_CALLS_A_MINUTE);
@@ -289,6 +302,84 @@ export class BroughtAgents {
     });
   }
 
+  /** Delivers confirmed room answers for brought agents' questions to their local canvas service. */
+  answersCanvasWith(canvas: Pick<CanvasService, "answer" | "hasWaiter">) {
+    this.canvas = canvas;
+  }
+
+  /** Forwards a page drawn by a brought agent during an active room task onto the room's shared canvas. */
+  forwardShow(conversationId: string, item: ShowItem): boolean {
+    const active = this.activeBroughtTask(conversationId);
+    if (!active || !item.html) return false;
+    const { brought, task } = active;
+    const title = item.title.slice(0, MOST_BROUGHT_CANVAS_TITLE_CHARACTERS);
+    const html = replaceAssetsOrigins(item.html, this.canvasAssetsOrigins, BROUGHT_ASSETS_ORIGIN_TOKEN);
+    if (html.length > MOST_BROUGHT_CANVAS_HTML_CHARACTERS) return false;
+    return this.machines.send(brought.machineId, {
+      type: "room.brought-canvas-show",
+      roomId: brought.roomId,
+      agentId: brought.agentId!,
+      taskId: task.taskId,
+      itemId: item.id,
+      title,
+      html,
+    });
+  }
+
+  /** Forwards a question asked by a brought agent during an active room task onto the room's canvas for room voting. */
+  forwardAsk(conversationId: string, item: AskItem): boolean {
+    const active = this.activeBroughtTask(conversationId);
+    if (!active) return false;
+    const { brought, task } = active;
+    const payload: BroughtCanvasAskPayload = rewriteAskAssets(
+      {
+        title: item.title.slice(0, MOST_BROUGHT_CANVAS_TITLE_CHARACTERS),
+        question: (item.question ?? item.title).slice(0, MOST_BROUGHT_CANVAS_TITLE_CHARACTERS),
+        ...(item.html !== undefined && { html: item.html }),
+        ...(item.options !== undefined && { options: item.options }),
+        allowOther: true,
+        ...(item.optionWidth !== undefined && { optionWidth: item.optionWidth }),
+        ...(item.questions !== undefined && {
+          questions: item.questions.map((each) => ({
+            question: each.question.slice(0, MOST_BROUGHT_CANVAS_TITLE_CHARACTERS),
+            ...(each.html !== undefined && { html: each.html }),
+            options: each.options,
+            allowOther: true,
+            ...(each.optionWidth !== undefined && { optionWidth: each.optionWidth }),
+          })),
+        }),
+        ...(item.shownBefore !== undefined && item.shownBefore.length > 0 && { shownBefore: item.shownBefore }),
+      },
+      this.canvasAssetsOrigins,
+      BROUGHT_ASSETS_ORIGIN_TOKEN,
+    );
+    const sent = this.machines.send(brought.machineId, {
+      type: "room.brought-canvas-ask",
+      roomId: brought.roomId,
+      agentId: brought.agentId!,
+      taskId: task.taskId,
+      itemId: item.id,
+      ask: payload,
+    });
+    if (sent) this.forwardedAsks.set(item.id, { broughtId: brought.id, machineId: brought.machineId, roomId: brought.roomId, agentId: brought.agentId! });
+    return sent;
+  }
+
+  /** Tells the room's machine that a brought agent's waiting question was cancelled locally. */
+  cancelAsk(_conversationId: string, itemId: string) {
+    const forwarded = this.forwardedAsks.get(itemId);
+    if (!forwarded) return;
+    this.forwardedAsks.delete(itemId);
+    this.machines.send(forwarded.machineId, { type: "room.brought-canvas-cancel", roomId: forwarded.roomId, agentId: forwarded.agentId, itemId });
+  }
+
+  private activeBroughtTask(conversationId: string) {
+    const turn = this.turnsOnTasks.get(conversationId);
+    const task = turn && this.store.findBroughtTaskById(turn.taskId);
+    const brought = task?.state === "sent" ? this.store.findBroughtAgentHere(task.broughtId) : undefined;
+    return brought?.agentId && task ? { brought, task } : null;
+  }
+
   /** What a machine joined as a person said: whether it let an agent in, a task for one, how a call in its workspace came out, and its rooms with the agents still in them. */
   heard(machineId: string, message: ServerMessage) {
     const said = saidOf(message);
@@ -304,6 +395,8 @@ export class BroughtAgents {
         return this.agentLetIn(machineId, said);
       case "room.brought-task":
         return this.taskArrived(machineId, said);
+      case "room.brought-ask-answered":
+        return this.askAnswered(machineId, said);
       case "room.workspace-answered":
         return this.workspaceAnswered(machineId, said);
     }
@@ -426,6 +519,41 @@ export class BroughtAgents {
     call.settle(workspaceCallResultIn(result) ?? callRefused(ANSWER_UNREADABLE));
   }
 
+  private askAnswered(machineId: string, { roomId, agentId, itemId, answer }: Said) {
+    if (!this.canvas || !isRoomId(roomId) || !isRoomId(agentId) || !isRoomId(itemId)) return;
+    const brought = this.broughtInto(machineId, roomId).find((each) => each.agentId === agentId);
+    if (!brought?.conversationId) return;
+    const item = this.store.findCanvasItem(itemId);
+    if (!item || item.conversationId !== brought.conversationId || item.kind !== "ask" || item.status !== "waiting") return;
+    const cleaned = broughtAskAnswerIn(answer);
+    if (!cleaned) return;
+    this.forwardedAsks.delete(itemId);
+    let followUpLocalId: string | undefined;
+    if (!this.canvas.hasWaiter(itemId) && cleaned.followUpTaskId) {
+      const existing = this.store.findBroughtTask(machineId, cleaned.followUpTaskId);
+      if (existing) {
+        followUpLocalId = existing.id;
+      } else {
+        const task: BroughtTask = {
+          id: crypto.randomUUID(),
+          machineId,
+          taskId: cleaned.followUpTaskId,
+          broughtId: brought.id,
+          state: "sent",
+          byName: cleaned.answerer?.author.name ?? "",
+          byRole: cleaned.answerer?.author.role ?? "owner",
+          text: cleaned.label,
+          at: this.now(),
+          answer: null,
+          ended: null,
+        };
+        this.store.insertBroughtTask(task);
+        followUpLocalId = task.id;
+      }
+    }
+    this.canvas.answer(itemId, { label: cleaned.label }, cleaned.answers, undefined, cleaned.answerer, followUpLocalId);
+  }
+
   private callsUnderWay(conversationId: string) {
     return [...this.workspaceCalls.values()].filter((call) => call.conversationId === conversationId).length;
   }
@@ -531,6 +659,9 @@ export class BroughtAgents {
     const unanswered = this.store.broughtTasksQueued(brought.id).map(({ id }) => id);
     this.store.deleteBroughtAgentHere(brought.id);
     this.endWorkspaceCalls((call) => call.broughtId === brought.id, OUT_OF_THE_ROOM);
+    for (const [itemId, forwarded] of this.forwardedAsks) {
+      if (forwarded.broughtId === brought.id) this.forwardedAsks.delete(itemId);
+    }
     if (brought.conversationId) this.sessions.dropQueuedBroughtTasks(brought.conversationId, unanswered);
     this.settleLettingIn(brought.id, { code: "brought-agent-gone" });
     this.changed();

@@ -465,8 +465,8 @@ export const rooms: Messages["rooms"] = {
   othersTasksChoices: { "after-ok": "Nur nach meinem OK", "any-time": "Jederzeit" },
   bringMeaning: [
     "Der Agent arbeitet hier, auf diesem Computer, in dem Arbeitsbereich, den du wählst, mit den Berechtigungen seines Profils: Seine Tools fragen dich wie immer, nur Dateien in diesem Arbeitsbereich liest er meist ohne zu fragen. Er bekommt die Werte seines Profils und deine Agent-Einstellungen wie deine anderen Unterhaltungen, aber nie YOLO oder einen Modus, der nicht fragt.",
-    "Seine Unterhaltung steht bei deinen anderen. Seine letzte Antwort auf jede Aufgabe kommt in den Raum; was er auf den Canvas legt, bleibt hier.",
-    "Mit „Nur nach meinem OK“ wartet eine Aufgabe von jemand anderem in seiner Unterhaltung, bis du sie erlaubst. Deine eigenen Aufgaben starten sofort.",
+    "Seine Schritte bleiben auf diesem Computer in Seine Arbeit neben dem Raum. Seine letzten Antworten, Canvas-Seiten und Fragen kommen in den Raum.",
+    "Mit „Nur nach meinem OK“ wartet eine Aufgabe von jemand anderem, bis du sie erlaubst. Deine eigenen Aufgaben starten sofort.",
     "Der Rechner des Raums sagt, wer jede Aufgabe geschrieben hat. Sein Besitzer könnte eine Aufgabe als deine ausgeben, und sie würde ohne dein OK starten; deine Berechtigungseinstellungen fragen trotzdem, bevor er Tools nutzt.",
   ],
   roomsWorkspaceOf: (machine) => `Der Arbeitsbereich des Raums, auf ${machine}`,
@@ -474,11 +474,11 @@ export const rooms: Messages["rooms"] = {
   broughtAgentPlace: (agent, place) => `${agent} (${place})`,
   onlyClaudeInRoomsWorkspace: "Bisher können nur Claude-Code-, pi- und opencode-Profile im Arbeitsbereich des Raums arbeiten.",
   bringIntoWorkspaceMeaning: [
-    "Der Agent läuft auf diesem Computer, mit dem Modell und dem Konto seines Profils, und hat sonst nichts von diesem Computer: keine Dateien, keine Befehle und nichts von deinen Claude-Code-Einstellungen, Hooks, MCP-Servern, CLAUDE.md oder deinem Memory. Seine Unterhaltung steht bei deinen anderen, in einem nach dem Raum benannten Arbeitsbereich, dessen Ordner leer bleibt.",
+    "Der Agent läuft auf diesem Computer, mit dem Modell und dem Konto seines Profils, und hat sonst nichts von diesem Computer: keine Dateien, keine Befehle und nichts von deinen Claude-Code-Einstellungen, Hooks, MCP-Servern, CLAUDE.md oder deinem Memory. Seine Schritte bleiben auf diesem Computer in Seine Arbeit neben dem Raum.",
     "Claude Code selbst teilt dem Agenten die E-Mail-Adresse deines Kontos mit, welches System auf diesem Computer läuft und wo dieser Ordner liegt, mit deinem Benutzernamen im Pfad; der Raum kann das also erfahren.",
     "Er arbeitet stattdessen im Arbeitsbereich des Raums, auf dem Rechner des Raums. Dort lässt ihn erst jemand hinein, der genehmigt, und kann das jederzeit zurücknehmen; er liest die Dateien dort, und jede Änderung und jeder Befehl wird von ihnen erlaubt, außer wenn Agenten in der Sandbox des Raums frei arbeiten.",
-    "Was er dort liest, geht über dein Konto an deinen Modellanbieter. Seine letzte Antwort auf jede Aufgabe kommt in den Raum; was er auf den Canvas legt, bleibt hier.",
-    "Mit „Nur nach meinem OK“ wartet eine Aufgabe von jemand anderem in seiner Unterhaltung, bis du sie erlaubst. Deine eigenen Aufgaben starten sofort. Der Rechner des Raums sagt, wer jede Aufgabe geschrieben hat, sein Besitzer könnte also eine als deine ausgeben.",
+    "Was er dort liest, geht über dein Konto an deinen Modellanbieter. Seine letzten Antworten, Canvas-Seiten und Fragen kommen in den Raum.",
+    "Mit „Nur nach meinem OK“ wartet eine Aufgabe von jemand anderem, bis du sie erlaubst. Deine eigenen Aufgaben starten sofort. Der Rechner des Raums sagt, wer jede Aufgabe geschrieben hat, sein Besitzer könnte also eine als deine ausgeben.",
   ],
   asksToWorkHere: (agent) => `${agent} möchte im Arbeitsbereich dieses Raums arbeiten`,
   workHereMeaning:
@@ -551,7 +551,6 @@ export const rooms: Messages["rooms"] = {
     capabilities: "Was er hier tun kann",
     repliesInRoom: "Antwortet in Threads und kann andere Agenten markieren",
     usesRoomCanvas: "Zeichnet im Canvas des Raums und stellt Fragen",
-    canvasStaysLocal: (person) => `Der Canvas bleibt auf dem Computer von ${person}`,
     stepsInThread: "Schritte erscheinen in seinem Thread",
     workspaceCallsInThread: (person) => `Aufrufe im Arbeitsbereich erscheinen in seinem Thread; andere Schritte bleiben auf dem Computer von ${person}`,
     stepsStayOnComputer: (person) => `Schritte bleiben auf dem Computer von ${person}`,

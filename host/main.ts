@@ -15,7 +15,7 @@ import { PluginSettingsStore } from "./plugin-settings.ts";
 import { officialPluginInstaller, PluginCatalog, revokedWhileRunning } from "./plugin-catalog.ts";
 import { CanvasService } from "./canvas/service.ts";
 import { restoreCanvas } from "./canvas/canvas-calls.ts";
-import { DAY_MS, workingCopyIdOf } from "../shared/model.ts";
+import { DAY_MS, workingCopyIdOf, type AskItem } from "../shared/model.ts";
 import { agentLogsDirectory, loadConfig } from "./config.ts";
 import { ConversationService } from "./conversations.ts";
 import { DeviceService } from "./devices.ts";
@@ -189,19 +189,35 @@ await apps.reopenAll();
 const stopWatchingViews = watchViews(loadedPlugins, () =>
   hub.broadcast({ type: "plugins.views", installedApps: apps.installed(), canvasViews: canvasPlugins.viewPaths() }),
 );
-const rooms = new RoomService(store, hub, conversations, notifications, config.dataDir, () => basicEnvironment(agentEnvironment()));
+const rooms = new RoomService(
+  store,
+  hub,
+  conversations,
+  notifications,
+  config.dataDir,
+  () => basicEnvironment(agentEnvironment()),
+  undefined,
+  undefined,
+  undefined,
+  undefined,
+  config.canvasAssetsOrigin,
+);
 conversations.followsRoomRulesOf(rooms);
-const roomQuestions = new RoomQuestions(store, hub, canvas);
+const roomQuestions = new RoomQuestions(store, hub, canvas, undefined, (roomId, agentId, itemId, chosen, answers, authorId, answerer) =>
+  rooms.deliverBroughtAskAnswer(roomId, agentId, itemId, chosen, answers, authorId, answerer),
+);
 const roomReading = new RoomReadingService(store, hub, notifications);
 rooms.hearPostsWith((message, newlyTagged, by) => roomReading.posted(message, newlyTagged, by));
 rooms.hearWaitingWith((roomId, approvals, tasks, workspace) => roomReading.waitingChanged(roomId, approvals, tasks, workspace));
 roomReading.countsWaitingWith((roomId) => rooms.countWaiting(roomId));
-canvas.hearRoomQuestionsWith((roomId, item, startsWaiting) => {
+const roomQuestionChanged = (roomId: string, item: AskItem, startsWaiting: boolean) => {
   const room = store.findRoom(roomId);
   if (!room) return;
   roomQuestions.changed(room, item);
   roomReading.questionChanged(room, item, startsWaiting);
-});
+};
+canvas.hearRoomQuestionsWith(roomQuestionChanged);
+rooms.hearBroughtQuestionsWith(roomQuestionChanged);
 const mcp = new CanvasMcpEndpoints({
   canvas,
   conversations,
@@ -212,6 +228,10 @@ const mcp = new CanvasMcpEndpoints({
   store,
   rooms,
   roomsWorkspaces: { callInWorkspace: (conversationId, call, signal) => broughtAgents.callInWorkspace(conversationId, call, signal) },
+  broughtCanvas: {
+    forwardShow: (conversationId, item) => broughtAgents.forwardShow(conversationId, item),
+    forwardAsk: (conversationId, item) => broughtAgents.forwardAsk(conversationId, item),
+  },
   antigravityAskWaitMs: config.antigravityAskWaitMs,
 });
 const sandboxSettingOf = (owner: SandboxOwner) => (owner.kind === "room" ? store.findRoom(owner.id) : store.findWorkspace(owner.id))?.sandbox;
@@ -322,7 +342,9 @@ const watch = new MachineWatch(
   machineSignedOut,
   tunnels,
 );
-const broughtAgents = new BroughtAgents(store, hub, watch, conversations, notifications, broughtAgentsFolder(config.dataDir));
+const broughtAgents = new BroughtAgents(store, hub, watch, conversations, notifications, broughtAgentsFolder(config.dataDir), undefined, undefined, canvasAssetsOrigins);
+broughtAgents.answersCanvasWith(canvas);
+canvas.hearAskCancelledWith((conversationId, itemId) => broughtAgents.cancelAsk(conversationId, itemId));
 watch.hearRoomMachinesWith({
   opened: (machineId) => broughtAgents.connected(machineId),
   closed: (machineId) => broughtAgents.disconnected(machineId),

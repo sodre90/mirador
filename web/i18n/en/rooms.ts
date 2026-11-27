@@ -478,8 +478,8 @@ export const rooms = {
   othersTasksChoices: { "after-ok": "Only after my OK", "any-time": "Any time" } satisfies Record<OthersTasks, string>,
   bringMeaning: [
     "The agent works here, on this computer, in the workspace you choose, with its profile's permissions: its tools ask you as they always do, though reading files in that workspace usually goes ahead without asking. It gets its profile's values and your agent settings as your other conversations do, but never YOLO or a mode that skips asking.",
-    "Its conversation shows with your others. Its final answer to each task goes into the room; what it puts on the canvas stays here.",
-    "With “Only after my OK”, a task from anyone else waits in its conversation until you allow it. Your own tasks start at once.",
+    "Its steps stay on this computer in Its work beside the room. Its final answers, canvas pages and questions go into the room.",
+    "With “Only after my OK”, a task from anyone else waits until you allow it. Your own tasks start at once.",
     "The room's machine says who wrote each task. Its owner could pass a task off as yours, and it would start without your OK; your permission settings still ask before its tools.",
   ],
   roomsWorkspaceOf: (machine: string) => `The room's workspace, on ${machine}`,
@@ -487,11 +487,11 @@ export const rooms = {
   broughtAgentPlace: (agent: string, place: string) => `${agent} (${place})`,
   onlyClaudeInRoomsWorkspace: "Only Claude Code, pi and opencode profiles can work in the room's workspace so far.",
   bringIntoWorkspaceMeaning: [
-    "The agent runs on this computer, on its profile's model and account, and has nothing else of this computer: no files, no commands, and none of your Claude Code settings, hooks, MCP servers, CLAUDE.md or memory. Its conversation shows with your others, in a workspace named after the room, whose folder stays empty.",
+    "The agent runs on this computer, on its profile's model and account, and has nothing else of this computer: no files, no commands, and none of your Claude Code settings, hooks, MCP servers, CLAUDE.md or memory. Its steps stay on this computer in Its work beside the room.",
     "Claude Code itself tells the agent your account's email address, which system this computer runs and where that folder is, with your user name in its path, so the room may learn these.",
     "It works in the room's workspace instead, on the room's machine. Someone who approves there lets it in first, and can take that away at any time; it reads the files there, and they allow each change and each command, unless the room's sandbox lets agents work freely.",
-    "What it reads there goes to your model provider through your account. Its final answer to each task goes into the room; what it puts on the canvas stays here.",
-    "With “Only after my OK”, a task from anyone else waits in its conversation until you allow it. Your own tasks start at once. The room's machine says who wrote each task, so its owner could pass one off as yours.",
+    "What it reads there goes to your model provider through your account. Its final answers, canvas pages and questions go into the room.",
+    "With “Only after my OK”, a task from anyone else waits until you allow it. Your own tasks start at once. The room's machine says who wrote each task, so its owner could pass one off as yours.",
   ],
   asksToWorkHere: (agent: string) => `${agent} asks to work in this room's workspace`,
   workHereMeaning:
@@ -564,7 +564,6 @@ export const rooms = {
     capabilities: "What it can do here",
     repliesInRoom: "Replies in threads and can tag other agents",
     usesRoomCanvas: "Draws on the room's canvas and asks questions",
-    canvasStaysLocal: (person: string) => `Canvas stays on ${person}'s computer`,
     stepsInThread: "Steps show in its thread",
     workspaceCallsInThread: (person: string) => `Workspace calls show in its thread; other steps stay on ${person}'s computer`,
     stepsStayOnComputer: (person: string) => `Steps stay on ${person}'s computer`,

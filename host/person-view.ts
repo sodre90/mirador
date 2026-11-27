@@ -213,7 +213,7 @@ export function namesShownIn(store: PeopleSeen & Pick<Store, "listProfiles" | "w
  * there, as made for them; nothing else. A message type missing here
  * does not compile.
  */
-export function personView(store: PeopleSeen & Pick<Store, "findRoom" | "listProfiles" | "findConversation" | "findRoomThread">): ShownToPerson {
+export function personView(store: PeopleSeen & Pick<Store, "findRoom" | "listProfiles" | "findConversation" | "findRoomThread" | "findRoomBroughtCanvasItem">): ShownToPerson {
   const isIn = (socket: SocketData, roomId: string) => store.findRoom(roomId)?.people.some(({ personId }) => personId === socket.personId) === true;
   const shownIf = (shown: boolean, message: ServerMessage) => (shown ? [message] : []);
   const readsAgentsWorkIn = (socket: SocketData, roomId: string) => {
@@ -282,17 +282,24 @@ export function personView(store: PeopleSeen & Pick<Store, "findRoom" | "listPro
   };
 
   const canvasItemFor = (item: CanvasItem, socket: SocketData): ServerMessage[] => {
+    if (!shownOnRoomCanvas(item)) return [];
     const conversation = store.findConversation(item.conversationId);
-    const roomId = conversation?.roomId;
-    if (!shownOnRoomCanvas(item) || typeof roomId !== "string" || conversation?.profileId == null || !isIn(socket, roomId)) return [];
-    return [{ type: "canvas.upserted", item: canvasItemSeen(item, roomId, conversation.profileId) }];
+    if (conversation) {
+      const roomId = conversation.roomId;
+      if (typeof roomId !== "string" || conversation.profileId == null || !isIn(socket, roomId)) return [];
+      return [{ type: "canvas.upserted", item: canvasItemSeen(item, roomId, conversation.profileId) }];
+    }
+    const brought = store.findRoomBroughtCanvasItem(item.id);
+    if (!brought || !isIn(socket, brought.roomId)) return [];
+    return [{ type: "canvas.upserted", item }];
   };
 
   const timelineCanvasSeen = (roomId: string, items: CanvasItem[]) => {
     const agents = store.findRoom(roomId)?.agents ?? [];
     return items.flatMap((item) => {
       const profileId = agents.find(({ conversationId }) => conversationId === item.conversationId)?.profileId;
-      return profileId === undefined ? [] : [canvasItemSeen(item, roomId, profileId)];
+      if (profileId !== undefined) return [canvasItemSeen(item, roomId, profileId)];
+      return item.conversationId.startsWith(`${roomId}/`) ? [item] : [];
     });
   };
 
@@ -445,6 +452,7 @@ export function personView(store: PeopleSeen & Pick<Store, "findRoom" | "listPro
     "room.usage.got": HIDDEN,
     "room.agent-brought": (message, socket) => shownIf(message.personId === socket.personId, message),
     "room.brought-task": (message, socket) => shownIf(message.personId === socket.personId && socket.carriesAgents, message),
+    "room.brought-ask-answered": (message, socket) => shownIf(message.personId === socket.personId && socket.carriesAgents, message),
     "brought-agents.listed": HIDDEN,
     "machine.agent-brought": HIDDEN,
     "rooms.people-here": HIDDEN,

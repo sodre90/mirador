@@ -87,6 +87,7 @@ export class CanvasService {
   private readonly askingTurns = new Map<string, { conversationId: string; turnEnded: AbortController }>();
   private readonly renderWaiters = new Map<string, (report: RenderReport) => void>();
   private roomQuestionChanged: RoomQuestionListener = () => {};
+  private askCancelled: (conversationId: string, itemId: string) => void = () => {};
   private readonly openingPages = new Map<string, OpeningPages>();
   private readonly brokenAsksOfTurn = new Map<string, string[]>();
 
@@ -101,6 +102,14 @@ export class CanvasService {
 
   hearRoomQuestionsWith(listener: RoomQuestionListener) {
     this.roomQuestionChanged = listener;
+  }
+
+  hearAskCancelledWith(listener: (conversationId: string, itemId: string) => void) {
+    this.askCancelled = listener;
+  }
+
+  hasWaiter(itemId: string): boolean {
+    return this.answerWaiters.has(itemId);
   }
 
   list(conversationId: string): CanvasItem[] {
@@ -277,7 +286,7 @@ export class CanvasService {
    * agent hears it after the turn it may be in, as going on with the room message whose turn asked, so that its answer
    * goes into that message's thread. One a person other than the owner confirmed for a room tells the agent who they are.
    */
-  answer(itemId: string, answer: AskAnswerEntry, answers?: AskAnswerEntry[], authorId?: string, answerer?: RoomAnswerer) {
+  answer(itemId: string, answer: AskAnswerEntry, answers?: AskAnswerEntry[], authorId?: string, answerer?: RoomAnswerer, broughtTaskId?: string) {
     const item = this.store.findCanvasItem(itemId);
     if (!item || item.kind !== "ask") throw new HostProblemError({ code: "unknown-question" });
     if (item.status !== "waiting") throw new HostProblemError({ code: "question-already-answered" });
@@ -288,7 +297,14 @@ export class CanvasService {
     this.save({ ...item, status: "answered", answer: { ...chosen, deliveredAs: waiter ? "tool-result" : "next-message", ...(authorId && { answeredBy: authorId }) } });
     if (waiter) waiter.answered(given);
     else if (item.installsPluginOffer) void this.installThenTell(item, item.installsPluginOffer, given, authorId);
-    else this.conversations.send(item.conversationId, answerAsMessage(item, given), [], { authorId, ...this.roomMessageAsking(item) }).catch(() => {});
+    else
+      this.conversations
+        .send(item.conversationId, answerAsMessage(item, given), [], {
+          authorId,
+          ...this.roomMessageAsking(item),
+          ...(broughtTaskId && { fromScript: true as const, fromMirador: true as const, afterTurn: true as const, broughtTaskId }),
+        })
+        .catch(() => {});
   }
 
   private roomMessageAsking({ madeInRoom }: AskItem) {
@@ -354,6 +370,7 @@ export class CanvasService {
     if (item?.status !== "waiting") return;
     this.answerWaiters.delete(itemId);
     this.save({ ...item, status: "cancelled" });
+    this.askCancelled(item.conversationId, itemId);
   }
 
   withdrawWaitingAsks(conversationId: string) {
@@ -364,6 +381,7 @@ export class CanvasService {
         const waiter = this.answerWaiters.get(item.id);
         this.answerWaiters.delete(item.id);
         this.save({ ...item, status: "cancelled" });
+        this.askCancelled(conversationId, item.id);
         waiter?.withdrawn();
       });
   }
