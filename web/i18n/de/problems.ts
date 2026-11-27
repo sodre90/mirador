@@ -531,6 +531,7 @@ export const problems: Messages["problems"] = {
     "pull-failed": (image: string, cause: string) => `Das Basis-Image der Sandbox, ${image}, konnte nicht geladen werden: ${cause}`,
     "could-not-check": (image: string, cause: string) => `Das Basis-Image der Sandbox, ${image}, konnte nicht geprüft werden: ${cause}`,
     lacks: (image: string, needs: string[]) => `Dem Basis-Image der Sandbox, ${image}, fehlt, was die Agenten brauchen: ${needs.join(", ")}.`,
+    "agent-fails": (image: string, agent: string, version: string, cause: string) => `${agent} ${version} läuft nicht auf dem Basis-Image der Sandbox, ${image}: ${cause}`,
   },
   baseImageNeeds: { bash: "bash", git: "git", glibc: "eine glibc für den Prozessor dieses Rechners, auf der Bun und Node.js laufen" },
   sandboxNotReadyInTime: (seconds: number) => `Sie war nicht innerhalb von ${seconds} s bereit.`,

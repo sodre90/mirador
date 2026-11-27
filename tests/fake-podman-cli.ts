@@ -1,5 +1,5 @@
 import type { ContainerCli, ContainerRun, ContainerRunOptions } from "../host/sandbox/container-cli.ts";
-import { checkFinding, imageOfRun, isBaseCheck } from "./fake-container-cli.ts";
+import { agentCheckFinding, checkFinding, imageOfRun, isAgentCheck, isBaseCheck } from "./fake-container-cli.ts";
 import { runHere } from "./in-vm-here.ts";
 
 const done = (output = ""): ContainerRun => ({ exitCode: 0, output, stdout: output });
@@ -37,6 +37,8 @@ export class FakePodmanCli implements ContainerCli {
   private readonly ids = new Map<string, string>();
   /** What a check of an owner's base image says, by the image it runs. */
   checkSays: (image: string) => ContainerRun = () => checkFinding("/own/bin:/usr/bin:/bin");
+  /** What a check of an agent's program on an owner's base image says, by the image it runs. */
+  agentCheckSays: (image: string) => ContainerRun = () => agentCheckFinding();
 
   /** The calls of this subcommand. */
   callsOf(command: string) {
@@ -98,6 +100,7 @@ export class FakePodmanCli implements ContainerCli {
     this.ranOnce.push(args);
     const failure = this.failing(args);
     if (failure !== null) return failed(failure);
+    if (isAgentCheck(args)) return this.agentCheckSays(imageOfRun(args));
     return isBaseCheck(args) ? this.checkSays(imageOfRun(args)) : done();
   }
 

@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { environmentInVm, KEY_PLACEHOLDER } from "../host/sandbox/agent-environment.ts";
 import { CONTAINER_READS, execArguments, ownBaseIn, pullArguments, vmIdsLabelled, writtenByOthersIn } from "../host/sandbox/apple-container.ts";
-import { baseCheck, verdictIn } from "../host/sandbox/base-check.ts";
+import { agentCheck, agentVerdictIn, baseCheck, verdictIn } from "../host/sandbox/base-check.ts";
 import { appleContainerAvailability, appleContainerRuntime, podmanAvailability, podmanStorageIn, selinuxEnforcingAt } from "../host/sandbox/availability.ts";
 import { execProcessEnvironment } from "../host/sandbox/exec-environment.ts";
 import { versionSaidIn } from "../host/sandbox/agent-version.ts";
@@ -145,6 +145,22 @@ test("an owner's base image is pulled afresh unless it names its digest and is h
   expect(pulls).toHaveLength(2);
   await expect(pulledOrHere("team/dev:latest", pull(1, "progress\nError: 404 Not Found\n"), async () => null)).rejects.toEqual(new BaseNotPulled("Error: 404 Not Found"));
   await expect(pulledOrHere("team/dev:latest", pull(7), async () => null)).rejects.toEqual(new BaseNotPulled("exit 7"));
+});
+
+test.skipIf(process.platform === "win32")("a check of an agent kind's own program says it runs, or what it said last as it failed, and is a finding only where it got that far", () => {
+  expect(agentCheck("ghcr.io/team/dev:1", "/data/sandbox-tools", "/opt/mirador/claude-2.1.330/bin/claude")).toMatchObject({
+    image: "ghcr.io/team/dev:1",
+    entrypoint: "/bin/sh",
+    user: "65534:65534",
+    network: false,
+    mounts: [{ source: "/data/sandbox-tools", target: "/opt/mirador", readOnly: true }],
+  });
+  const ranHere = (program: string) => Bun.spawnSync(["/bin/sh", "-c", agentCheck("image", "/tools", program).args[1]!]).stdout.toString();
+  expect(agentVerdictIn(ranHere("/usr/bin/true"))).toEqual({ runs: true });
+  expect(agentVerdictIn(ranHere("/usr/bin/false"))).toEqual({ fails: "exit 1" });
+  expect(agentVerdictIn(ranHere("/nonexistent/claude"))).toEqual({ fails: expect.stringContaining("/nonexistent/claude") });
+  expect(agentVerdictIn("mirador-agent-check\n")).toBeNull();
+  expect(agentVerdictIn("Error: failed to find target executable /bin/sh")).toBeNull();
 });
 
 test("the owner's base image runs by its name in Apple's container, as pulled for this Mac, and by its ID in Podman", () => {

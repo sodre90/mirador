@@ -526,6 +526,7 @@ export const problems: Messages["problems"] = {
     "pull-failed": (image: string, cause: string) => `A sandbox alap-image-e (${image}) nem tölthető le: ${cause}`,
     "could-not-check": (image: string, cause: string) => `A sandbox alap-image-e (${image}) nem ellenőrizhető: ${cause}`,
     lacks: (image: string, needs: string[]) => `A sandbox alap-image-éből (${image}) hiányzik, ami az ágenseknek kell: ${needs.join(", ")}.`,
+    "agent-fails": (image: string, agent: string, version: string, cause: string) => `A sandbox alap-image-én (${image}) nem fut ez: ${agent} ${version}. ${cause}`,
   },
   baseImageNeeds: { bash: "bash", git: "git", glibc: "a gép processzorához való glibc, amelyen a Bun és a Node.js fut" },
   sandboxNotReadyInTime: (seconds: number) => `Nem állt készen ${seconds} mp alatt.`,

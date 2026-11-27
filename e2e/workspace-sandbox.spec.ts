@@ -342,7 +342,7 @@ test("a change to an agent config file is put back and held in the conversation 
   });
 });
 
-test("a base image of the owner's own is pulled and checked for what the agents need before a VM runs on it, what it lacks said in the sandbox's settings and its conversation, and Mirador's comes back once it is cleared", async ({ page }) => {
+test("a base image of the owner's own is pulled and checked for what the agents need, Claude Code's own program too, before a VM runs on it, what it lacks said in the sandbox's settings and its conversation, and Mirador's comes back once it is cleared", async ({ page }) => {
   test.skip(!sandboxesRunHere, "Sandboxes run on macOS 26 on Apple silicon only.");
   await signIn(page, host);
   const card = projectCard(page);
@@ -386,6 +386,14 @@ test("a base image of the owner's own is pulled and checked for what the agents 
     expect(runs()).toHaveLength(runsBefore);
   });
 
+  await test.step("one whose glibc is too old for Claude Code's own program is checked for it once that is installed, which says what it said", async () => {
+    const dialog = await useBaseImage("team/old-glibc:1");
+    await expect(dialog.locator(".room-sandbox-setup")).toHaveText(
+      /^Setting it up failed: Claude Code \S+ doesn't run on the sandbox's base image team\/old-glibc:1: claude: \/lib\/aarch64-linux-gnu\/libc\.so\.6: version `GLIBC_2\.38' not found$/,
+    );
+    await dialog.getByRole("button", { name: "Done" }).click();
+  });
+
   await test.step("one with all they need runs the VM, by its name as Docker reads it, checked once", async () => {
     const dialog = await useBaseImage("team/dev:1");
     await expect(dialog.locator(".room-sandbox-setup")).toHaveText("Set up on this Mac.");
@@ -394,8 +402,8 @@ test("a base image of the owner's own is pulled and checked for what the agents 
     await waitForTurnToEnd(page);
     await expect(lastAgentMessage(page)).toHaveText("On the team's base.");
     expect(imageRun(runs().at(-1)!)).toBe("docker.io/team/dev:1");
-    expect(containerCalls().flatMap(([command, sub, ...rest]) => (command === "image" && sub === "pull" ? [rest.at(-1)] : []))).toEqual(["docker.io/team/lacks-git:1", "docker.io/team/dev:1"]);
-    expect(loggedCalls("checks.log").map(imageRun)).toEqual(["docker.io/team/lacks-git:1", "docker.io/team/dev:1"]);
+    expect(containerCalls().flatMap(([command, sub, ...rest]) => (command === "image" && sub === "pull" ? [rest.at(-1)] : []))).toEqual(["docker.io/team/lacks-git:1", "docker.io/team/old-glibc:1", "docker.io/team/dev:1"]);
+    expect(loggedCalls("checks.log").map(imageRun)).toEqual(["docker.io/team/lacks-git:1", "docker.io/team/old-glibc:1", "docker.io/team/old-glibc:1", "docker.io/team/dev:1", "docker.io/team/dev:1"]);
   });
 
   await test.step("cleared, the sandbox runs on Mirador's base again", async () => {

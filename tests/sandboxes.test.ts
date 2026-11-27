@@ -3,13 +3,14 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, realpathSyn
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { HELD_CHANGES_MOST, roomSandbox, sameOwner, workspaceSandbox, type HeldChange, type OwnedSetup, type SandboxAvailability, type SandboxNetwork, type SandboxNotReadyWhy, type SandboxOwner, type SandboxSetup } from "../shared/sandbox.ts";
+import { englishProblem } from "../shared/host-problems.ts";
 import { KEY_PLACEHOLDER } from "../host/sandbox/agent-environment.ts";
 import { BASE_IMAGE_NAME } from "../host/sandbox/image.ts";
 import { BUN_IN_VM, GUARD_IN_VM, NODE_FOLDER_IN_VM, toolsFolderOf } from "../host/sandbox/tools-folder.ts";
 import { ANTHROPIC_API } from "../host/sandbox/model-proxy.ts";
 import { AppleContainer } from "../host/sandbox/apple-container.ts";
 import { Sandboxes, type AgentInSandbox, type SandboxHost } from "../host/sandbox/sandboxes.ts";
-import { checkFinding, FakeContainerCli, imageOfRun, isBaseCheck } from "./fake-container-cli.ts";
+import { agentCheckFinding, checkFinding, FakeContainerCli, imageOfRun, isAgentCheck, isBaseCheck } from "./fake-container-cli.ts";
 import { FakeVmLauncher } from "./fake-vm-launcher.ts";
 import { guardedIn, mountsOfRun } from "./guard-told.ts";
 import { RUNS_SANDBOXES } from "./sandbox-computer.ts";
@@ -549,8 +550,11 @@ describe("a sandbox on its owner's own base image", () => {
     expect(check![check!.indexOf("--entrypoint") + 1]).toBe("/bin/sh");
     expect(mountsOfRun(check!)).toEqual([{ source: toolsFolderOf(host.dataDir), target: "/opt/mirador", readOnly: true }]);
     expect(launched.command).toContain(`PATH=/opt/mirador/claude-2.1.330/bin:${dirname(BUN_IN_VM)}:${NODE_FOLDER_IN_VM}:/team/bin:/usr/bin:/bin`);
-    expect(setups.map(({ stage }) => stage)).toEqual(["starting-service", "pulling-image", "installing-tool", "installing-tool", "installing-tool", "checking-image", "installing-tool", "ready"]);
-    expect(setups.flatMap(({ image }) => image ?? [])).toEqual(["team/dev", "team/dev"]);
+    expect(setups.map(({ stage }) => stage)).toEqual(["starting-service", "pulling-image", "installing-tool", "installing-tool", "installing-tool", "checking-image", "installing-tool", "checking-image", "ready"]);
+    expect(setups.flatMap(({ image }) => image ?? [])).toEqual(["team/dev", "team/dev", "team/dev"]);
+    const [agentRan] = cli.ranOnce.filter(isAgentCheck);
+    expect([imageOfRun(agentRan!), agentRan![agentRan!.indexOf("--user") + 1], agentRan![agentRan!.indexOf("--network") + 1]]).toEqual([TEAM_IMAGE, "65534:65534", "none"]);
+    expect(agentRan!.at(-1)).toContain("'/opt/mirador/claude-2.1.330/bin/claude' --version");
 
     const brought = await sandboxes.launchForBrought({ owner: ROOM, agentId: "visitor", allowsSharedKernel: false, workingDirectory: workspace, command: ["git", "status"] });
     const broughtRun = cli.callsOf("run").at(-1)!;
@@ -563,6 +567,7 @@ describe("a sandbox on its owner's own base image", () => {
     (await sandboxes.launch(agentIn(workspace))).gone!();
     expect(pullsOf(cli)).toHaveLength(1);
     expect(checksOf(cli)).toHaveLength(1);
+    expect(cli.ranOnce.filter(isAgentCheck)).toHaveLength(1);
     await sandboxes.stopAll();
   });
 
@@ -585,6 +590,34 @@ describe("a sandbox on its owner's own base image", () => {
     await expect(sandboxes.launch(agentIn(workspace))).rejects.toMatchObject(notReady(unusable));
     expect(checksOf(cli)).toHaveLength(1);
     expect(cli.callsOf("run").map((run) => run[run.indexOf("--entrypoint") + 2])).toEqual([expect.stringMatching(new RegExp(`^${BASE_IMAGE_NAME}:`))]);
+    await sandboxes.stopAll();
+  });
+
+  test.skipIf(!RUNS_SANDBOXES)("on which an agent kind's own program doesn't run fails that kind's agents, saying what it said, checked once for each version, and pi, which Node.js runs, isn't checked", async () => {
+    const workspace = repository();
+    const { host } = hostFor(workspace, teamImageForTheRoom);
+    const cli = new FakeContainerCli();
+    cli.registry.set(TEAM_IMAGE, TEAM_DIGEST);
+    const tooOld = "claude: /lib/aarch64-linux-gnu/libc.so.6: version `GLIBC_2.38' not found";
+    cli.agentCheckSays = () => ({ exitCode: 0, output: "mirador-agent-check\n", stdout: "" });
+    const sandboxes = new Sandboxes(new AppleContainer(cli, AVAILABLE), host, IDLE_STOP_MS);
+    const failsFor = (problem: SandboxNotReadyWhy) => expect(sandboxes.launch(agentIn(workspace))).rejects.toMatchObject(notReady(problem));
+
+    await failsFor({ kind: "base-image-unusable", image: "team/dev", problem: { kind: "could-not-check", cause: "mirador-agent-check" } });
+    cli.agentCheckSays = () => agentCheckFinding(tooOld);
+    const unusable: SandboxNotReadyWhy = { kind: "base-image-unusable", image: "team/dev", problem: { kind: "agent-fails", harness: "claude", version: "2.1.330", cause: tooOld } };
+    await failsFor(unusable);
+    await failsFor(unusable);
+    expect(cli.ranOnce.filter(isAgentCheck)).toHaveLength(2);
+    expect(englishProblem({ code: "sandbox-not-ready", why: unusable })).toContain(`Claude Code 2.1.330 doesn't run on the sandbox's base image team/dev: ${tooOld}`);
+
+    const pi = agentIn(workspace, {
+      profileId: "pi",
+      kind: { harness: "pi", model: { providerId: "gateway", provider: { api: "openai-responses", models: [{ id: "m1" }] }, settings: { defaultProvider: "gateway", defaultModel: "m1" } }, keyVariables: [] },
+      version: "1.6.0",
+    });
+    (await sandboxes.launch(pi)).gone!();
+    expect(cli.ranOnce.filter(isAgentCheck)).toHaveLength(2);
     await sandboxes.stopAll();
   });
 

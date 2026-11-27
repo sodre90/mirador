@@ -520,6 +520,7 @@ export const problems = {
     "pull-failed": (image: string, cause: string) => `The sandbox's base image ${image} could not be pulled: ${cause}`,
     "could-not-check": (image: string, cause: string) => `The sandbox's base image ${image} could not be checked: ${cause}`,
     lacks: (image: string, needs: string[]) => `The sandbox's base image ${image} lacks what the agents need: ${needs.join(", ")}.`,
+    "agent-fails": (image: string, agent: string, version: string, cause: string) => `${agent} ${version} doesn't run on the sandbox's base image ${image}: ${cause}`,
   },
   baseImageNeeds: { bash: "bash", git: "git", glibc: "a glibc for this computer's processor, which Bun and Node.js run on" } satisfies Record<BaseImageNeed, string>,
   sandboxNotReadyInTime: (seconds: number) => `It did not get ready within ${seconds} s.`,

@@ -235,8 +235,15 @@ export interface WorkspaceSandboxCheck extends SandboxCheck {
 /** What a sandbox's agents need of a base image that one may lack: bash, git, and a glibc of this computer's processor, which Bun and Node.js run on. */
 export type BaseImageNeed = "bash" | "git" | "glibc";
 
-/** Why the owner's base image is no use: it couldn't be pulled, nor found here; it couldn't be checked; or it lacks what the agents need. */
-export type BaseImageProblem = { kind: "pull-failed"; cause: string } | { kind: "could-not-check"; cause: string } | { kind: "lacks"; needs: BaseImageNeed[] };
+/**
+ * Why the owner's base image is no use: it couldn't be pulled, nor found here; it couldn't be checked; it lacks what the
+ * agents need; or an agent kind's own program, at its version, doesn't run on it.
+ */
+export type BaseImageProblem =
+  | { kind: "pull-failed"; cause: string }
+  | { kind: "could-not-check"; cause: string }
+  | { kind: "lacks"; needs: BaseImageNeed[] }
+  | { kind: "agent-fails"; harness: SandboxedHarness; version: string; cause: string };
 
 /** The owner's base image, as they named it, and why it is no use. */
 export interface UnusableBase {

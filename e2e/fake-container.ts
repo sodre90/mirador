@@ -29,7 +29,8 @@ const stateFolder = process.env.FAKE_CONTAINER_STATE!;
 const statePath = join(stateFolder, "state.json");
 const args = process.argv.slice(2);
 const isThrowaway = args[0] === "run" && !args.includes("--detach");
-const isCheck = isThrowaway && args.join(" ").includes("mirador-base-check");
+const isAgentCheck = isThrowaway && args.join(" ").includes("mirador-agent-check");
+const isCheck = (isThrowaway && args.join(" ").includes("mirador-base-check")) || isAgentCheck;
 appendFileSync(join(stateFolder, isCheck ? "checks.log" : isThrowaway ? "installs.log" : "calls.log"), `${JSON.stringify(args)}\n`);
 
 const read = (): State => (existsSync(statePath) ? JSON.parse(readFileSync(statePath, "utf8")) : { serviceRunning: false, builderRunning: false, images: [], vms: {} });
@@ -79,9 +80,16 @@ function inspect(name: string) {
 
 function checkImage() {
   const image = args[args.indexOf("--entrypoint") + 2]!;
+  if (isAgentCheck) return checkAgent(image);
   console.log("mirador-base-check");
   if (image.includes("lacks-git")) console.log("lacks git");
   console.log("PATH=/team/bin:/usr/local/bin:/usr/bin:/bin");
+}
+
+/** Claude Code runs on every image, but one whose name says its glibc is too old. */
+function checkAgent(image: string) {
+  console.log("mirador-agent-check");
+  console.log(image.includes("old-glibc") ? "agent-fails claude: /lib/aarch64-linux-gnu/libc.so.6: version `GLIBC_2.38' not found" : "agent-runs");
 }
 
 async function installTool() {

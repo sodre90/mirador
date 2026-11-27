@@ -14,6 +14,12 @@ export const isBaseCheck = (args: string[]) => args.join(" ").includes("mirador-
 /** What a check of a base image that has all the agents need says: that it started, and the image's PATH. */
 export const checkFinding = (path: string) => done(`mirador-base-check\nPATH=${path}`);
 
+/** Whether a throwaway run is the check that an agent kind's own program runs on an owner's base image. */
+export const isAgentCheck = (args: string[]) => args.join(" ").includes("mirador-agent-check");
+
+/** What a check of an agent's program says where it runs, or what it said as it failed. */
+export const agentCheckFinding = (failed?: string) => done(`mirador-agent-check\n${failed === undefined ? "agent-runs" : `agent-fails ${failed}`}`);
+
 /** The image a throwaway run runs: the one after its program. */
 export const imageOfRun = (args: string[]) => args[args.indexOf("--entrypoint") + 2]!;
 
@@ -47,6 +53,8 @@ export class FakeContainerCli implements ContainerCli {
   private readonly digests = new Map<string, string>();
   /** What a check of an owner's base image says, by the image it runs. */
   checkSays: (image: string) => ContainerRun = () => checkFinding("/own/bin:/usr/bin:/bin");
+  /** What a check of an agent's program on an owner's base image says, by the image it runs. */
+  agentCheckSays: (image: string) => ContainerRun = () => agentCheckFinding();
 
   callsOf(command: string) {
     return this.calls.filter(([first]) => first === command);
@@ -127,6 +135,7 @@ export class FakeContainerCli implements ContainerCli {
     this.ranOnce.push(args);
     const failure = this.failing(args);
     if (failure !== null) return failed(failure);
+    if (isAgentCheck(args)) return this.agentCheckSays(imageOfRun(args));
     return isBaseCheck(args) ? this.checkSays(imageOfRun(args)) : done();
   }
 

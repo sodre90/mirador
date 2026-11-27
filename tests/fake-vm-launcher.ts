@@ -73,17 +73,21 @@ export class FakeVmLauncher implements VmLauncher {
     return this.ranOnce.filter(isCheck).map(({ image }) => image);
   }
 
+  /** What a check of an agent's program on an owner's base image says, by the image it runs: that it runs, where it isn't given. */
+  agentCheckSays = (_image: string) => ({ exitCode: 0, output: "mirador-agent-check\nagent-runs" });
+
   async runOnce(run: ThrowawayRun) {
     this.ranOnce.push(run);
     await this.runningOnce;
     if (isCheck(run)) return this.checkSays(run.image);
+    if (isAgentCheck(run)) return this.agentCheckSays(run.image);
     const fails = this.runOnceFailsFor !== null && run.args.join(" ").includes(this.runOnceFailsFor);
     return fails ? { exitCode: 1, output: `npm error 404 ${this.runOnceFailsFor} is not in this registry` } : { exitCode: 0, output: "" };
   }
 
   /** What the throwaway containers installed: each npm package at its version, `@anthropic-ai/claude-code@2.1.330`, the guard or Node.js. */
   installed() {
-    return this.ranOnce.filter((run) => !isCheck(run)).map(({ args }) => {
+    return this.ranOnce.filter((run) => !isCheck(run) && !isAgentCheck(run)).map(({ args }) => {
       const script = args.join(" ");
       return /--loglevel=error ([^\s;]+)/.exec(script)?.[1] ?? (script.includes("/src/build.sh") ? "guard" : "node");
     });
@@ -136,3 +140,4 @@ export class FakeVmLauncher implements VmLauncher {
 }
 
 const isCheck = ({ args }: ThrowawayRun) => args.join(" ").includes("mirador-base-check");
+const isAgentCheck = ({ args }: ThrowawayRun) => args.join(" ").includes("mirador-agent-check");

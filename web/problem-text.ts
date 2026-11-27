@@ -76,7 +76,14 @@ export function sandboxBlockerText(blocker: SandboxBlocker, words: ProblemWords)
 /** Why the sandbox's base image is no use, in plain words. */
 export function unusableBaseText({ image, problem }: UnusableBase, words: ProblemWords) {
   const said = words.sandboxBaseImageUnusable;
-  return problem.kind === "lacks" ? said.lacks(image, problem.needs.map((need) => words.baseImageNeeds[need])) : said[problem.kind](image, problem.cause);
+  switch (problem.kind) {
+    case "lacks":
+      return said.lacks(image, problem.needs.map((need) => words.baseImageNeeds[need]));
+    case "agent-fails":
+      return said["agent-fails"](image, harnessLabels[problem.harness], problem.version, problem.cause);
+    default:
+      return said[problem.kind](image, problem.cause);
+  }
 }
 
 function sandboxNotReadyText(why: SandboxNotReadyWhy, words: ProblemWords) {

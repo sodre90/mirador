@@ -210,7 +210,7 @@ describe("a room's sandbox on rootless Podman", () => {
     expect(run![run!.indexOf("--entrypoint") + 2]).toBe(id);
     const [check] = cli.ranOnce.filter(isBaseCheck);
     expect([imageOfRun(check!), valueAfter(check!, "--user"), valueAfter(check!, "--network")]).toEqual([id, "65534:65534", "none"]);
-    expect(setups.flatMap(({ stage, image }) => (image ? [`${stage} ${image}`] : []))).toEqual(["pulling-image ghcr.io/team/dev:1", "checking-image ghcr.io/team/dev:1"]);
+    expect(setups.flatMap(({ stage, image }) => (image ? [`${stage} ${image}`] : []))).toEqual(["pulling-image ghcr.io/team/dev:1", "checking-image ghcr.io/team/dev:1", "checking-image ghcr.io/team/dev:1"]);
     await sandboxes.stopAll();
   });
 

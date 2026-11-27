@@ -59,11 +59,17 @@ const NODE_IMAGE = `docker.io/library/node:${NODE_MAJOR}-bookworm-slim`;
 /** Alpine's packages hold the static libraries the guard links. */
 const GUARD_BUILD_IMAGE = "docker.io/library/alpine:3.22";
 
-/** Each kind's npm package and its program. */
-const AGENT_PACKAGES: Record<SandboxedHarness, { npmPackage: string; program: string }> = {
-  claude: { npmPackage: "@anthropic-ai/claude-code", program: "claude" },
-  pi: { npmPackage: "@earendil-works/pi-coding-agent", program: "pi" },
+/** Each kind's npm package and its program, and whether that is a program of its own, not a script that Node.js runs. */
+const AGENT_PACKAGES: Record<SandboxedHarness, { npmPackage: string; program: string; native: boolean }> = {
+  claude: { npmPackage: "@anthropic-ai/claude-code", program: "claude", native: true },
+  pi: { npmPackage: "@earendil-works/pi-coding-agent", program: "pi", native: false },
 };
+
+/** The agent kind's program in the VM where it is one of its own, which a base image may lack what it needs to run; null where Node.js runs it. */
+export function nativeProgramInVm(agent: AgentTools) {
+  const { program, native } = AGENT_PACKAGES[agent.harness];
+  return native ? `${agentProgramsInVm(agent)}/${program}` : null;
+}
 
 const INSTALLED_INTO = "/out";
 

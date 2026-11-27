@@ -493,6 +493,7 @@ export const problems: Messages["problems"] = {
     "pull-failed": (image: string, cause: string) => `无法拉取沙箱的基础镜像 ${image}：${cause}`,
     "could-not-check": (image: string, cause: string) => `无法检查沙箱的基础镜像 ${image}：${cause}`,
     lacks: (image: string, needs: string[]) => `沙箱的基础镜像 ${image} 缺少 Agent 所需的：${needs.join("、")}。`,
+    "agent-fails": (image: string, agent: string, version: string, cause: string) => `${agent} ${version} 无法在沙箱的基础镜像 ${image} 上运行：${cause}`,
   },
   baseImageNeeds: { bash: "bash", git: "git", glibc: "适用于这台电脑处理器的 glibc（Bun 和 Node.js 靠它运行）" },
   sandboxNotReadyInTime: (seconds: number) => `它没有在 ${seconds} 秒内就绪。`,

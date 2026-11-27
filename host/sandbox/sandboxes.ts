@@ -40,7 +40,7 @@ import { behindGuard, guardMounts, MANIFEST_FOLDER_IN_VM, RAW_FOLDERS_IN_VM, typ
 import { guardPlanOf, partsNamedFrom, sandboxRefusalOf, withMoreParts, type GuardPlan, type MiradorPlaces, type NamedByGit } from "./guarded-workspace.ts";
 import { HeldFiles, HeldFilesRefused, type HeldSandbox } from "./held-files.ts";
 import type { PlacesPutBack, PlacesRequest } from "./in-vm/held-places.ts";
-import { baseCheck, CHECK_TIMEOUT_MS, verdictIn } from "./base-check.ts";
+import { agentCheck, agentVerdictIn, baseCheck, CHECK_TIMEOUT_MS, verdictIn } from "./base-check.ts";
 import { lastLineOf } from "./container-cli.ts";
 import { BaseNotPulled, SetupFailed } from "./image.ts";
 import { secretsOf, startModelProxy, type ModelRoute } from "./model-proxy.ts";
@@ -48,9 +48,9 @@ import { startNetworkProxy, type NetworkProxy } from "./network-proxy.ts";
 import { entryOf, isInside, realOrAsIs, wayTo, type WayTo } from "./paths-on-disk.ts";
 import { PlanWatch } from "./plan-watch.ts";
 import { removeLeftSocketFolders, SOCKETS_FOLDER_PREFIX } from "./socket-folders.ts";
-import { BUN_IN_VM, TOOLS_IN_VM, TOOLS_OF_EVERY_VM, toolOfAgent, ToolInstallFailed, ToolsFolder, type AgentTools } from "./tools-folder.ts";
+import { BUN_IN_VM, nativeProgramInVm, TOOLS_IN_VM, TOOLS_OF_EVERY_VM, toolOfAgent, ToolInstallFailed, ToolsFolder, type AgentTools } from "./tools-folder.ts";
 import type { RunningSocket } from "./vm-connections.ts";
-import { HOST_LABEL, OWNER_LABEL, SandboxNotReady, type AgentInVm, type BaseImage, type Mount, type OwnBase, type VmLauncher } from "./vm-launcher.ts";
+import { HOST_LABEL, OWNER_LABEL, SandboxNotReady, type AgentInVm, type BaseImage, type Mount, type OwnBase, type ThrowawayRun, type VmLauncher } from "./vm-launcher.ts";
 
 /** The ports a sandbox's VM gives its agents on its own 127.0.0.1, relayed to Mirador's sockets on this computer. */
 export const CANVAS_RELAY_PORT = 7701;
@@ -1194,6 +1194,7 @@ export class Sandboxes {
       for (const tool of TOOLS_OF_EVERY_VM) await this.piece(toolKey(tool), () => this.installed(tool));
       const base = own ? await this.checked(owner, name!, own) : defaultBase!;
       if (agent) await this.piece(toolKey(toolOfAgent(agent)), () => this.installed(toolOfAgent(agent)));
+      if (own && agent) await this.runsAgent(owner, name!, own, agent);
       if (preparing.launches === 1 && this.setupOf(owner).stage !== "ready") this.tell(owner, { stage: "ready" });
       return base;
     } catch (error) {
@@ -1244,15 +1245,28 @@ export class Sandboxes {
    * each content, whatever it found, as that never changes; a check that didn't get to its end is tried again.
    */
   private async checked(owner: SandboxOwner, name: string, own: OwnBase): Promise<BaseImage> {
-    const verdict = await this.piece(checkKey(own), async () => {
-      this.tell(owner, { stage: "checking-image", image: name });
-      const ran = await this.launcher.runOnce(baseCheck(own.image, this.tools.root), CHECK_TIMEOUT_MS);
-      const found = verdictIn(ran.output);
-      if (!found) throw new BaseUnusable({ image: name, problem: { kind: "could-not-check", cause: lastLineOf(ran.output) || `exit ${ran.exitCode}` } });
-      return found;
-    });
+    const verdict = await this.checkOnce(checkKey(own), owner, name, baseCheck(own.image, this.tools.root), verdictIn);
     if ("lacks" in verdict) throw new BaseUnusable({ image: name, problem: { kind: "lacks", needs: verdict.lacks } });
     return { image: own.image, path: verdict.path };
+  }
+
+  /** Whether the agent kind's own program, at its version, runs on the owner's base image, where it is one of its own: checked once for each content. */
+  private async runsAgent(owner: SandboxOwner, name: string, own: OwnBase, agent: AgentTools) {
+    const program = nativeProgramInVm(agent);
+    if (program === null) return;
+    const verdict = await this.checkOnce(`${checkKey(own)}:${toolKey(toolOfAgent(agent))}`, owner, name, agentCheck(own.image, this.tools.root, program), agentVerdictIn);
+    if ("fails" in verdict) throw new BaseUnusable({ image: name, problem: { kind: "agent-fails", harness: agent.harness, version: agent.version, cause: verdict.fails } });
+  }
+
+  /** A check of the owner's base image, run once for each content, whatever it found; one that didn't get to its end is tried again. */
+  private checkOnce<T>(key: string, owner: SandboxOwner, name: string, check: ThrowawayRun, verdictIn: (output: string) => T | null): Promise<T> {
+    return this.piece(key, async () => {
+      this.tell(owner, { stage: "checking-image", image: name });
+      const ran = await this.launcher.runOnce(check, CHECK_TIMEOUT_MS);
+      const found = verdictIn(ran.output);
+      if (found === null) throw new BaseUnusable({ image: name, problem: { kind: "could-not-check", cause: lastLineOf(ran.output) || `exit ${ran.exitCode}` } });
+      return found;
+    });
   }
 
   private startPreparing(owner: SandboxOwner) {

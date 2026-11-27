@@ -50,3 +50,31 @@ export function verdictIn(output: string): BaseVerdict | null {
   const lacks = said.flatMap((line) => (line.startsWith(LACKS) ? [line.slice(LACKS.length)] : [])).filter(isNeed);
   return lacks.length > 0 ? { lacks } : { path: path.slice(PATH_IS.length) || null };
 }
+
+const AGENT_CHECK_STARTED = "mirador-agent-check";
+const AGENT_RUNS = "agent-runs";
+const AGENT_FAILS = "agent-fails ";
+
+/** Runs the program for its version, as nobody, whose home the image may lack: what it said last where it failed, else how it exited. */
+const agentCheckScript = (program: string) => `echo ${AGENT_CHECK_STARTED}
+said=$(HOME=/tmp DISABLE_AUTOUPDATER=1 '${program}' --version 2>&1)
+exited=$?
+newline='
+'
+if [ "$exited" -eq 0 ]; then echo ${AGENT_RUNS}; else last=\${said##*"$newline"}; echo "${AGENT_FAILS}\${last:-exit $exited}"; fi`;
+
+/** The check that an agent kind's own program runs on an owner's base image: as nobody, with no network, from the tools folder. */
+export const agentCheck = (image: string, toolsFolder: string, program: string): ThrowawayRun => ({
+  ...baseCheck(image, toolsFolder),
+  args: ["-c", agentCheckScript(program)],
+});
+
+/** Whether the agent's program ran, or what it said as it failed; null where the check didn't get that far, which says nothing of the image for sure. */
+export function agentVerdictIn(output: string): { runs: true } | { fails: string } | null {
+  const lines = output.split("\n").map((line) => line.trim());
+  if (!lines.includes(AGENT_CHECK_STARTED)) return null;
+  const said = lines.slice(lines.indexOf(AGENT_CHECK_STARTED) + 1);
+  if (said.includes(AGENT_RUNS)) return { runs: true };
+  const failed = said.find((line) => line.startsWith(AGENT_FAILS));
+  return failed === undefined ? null : { fails: failed.slice(AGENT_FAILS.length) };
+}
