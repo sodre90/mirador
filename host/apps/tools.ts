@@ -1,8 +1,10 @@
 import type { McpServer, ServerContext } from "@modelcontextprotocol/server";
 import { normalize } from "node:path";
 import * as z from "zod/v4";
+import { withProgressHeartbeat } from "../canvas/progress-heartbeat.ts";
 import type { ConversationService } from "../conversations.ts";
 import { toPosix } from "../paths.ts";
+import type { ApproveHostAction } from "../rooms.ts";
 import { takenUpWords, type AppDocuments, type TakenUp } from "./documents.ts";
 import { AppProblem } from "./plugins.ts";
 
@@ -45,6 +47,7 @@ export function registerAppTools(
   conversations: ConversationService,
   callingConversation: (ctx: ServerContext) => Promise<string>,
   onlyNames?: readonly string[],
+  approveHostAction?: ApproveHostAction,
 ) {
   const names = installedNames(apps, onlyNames);
   const answered = async (ctx: ServerContext, answer: (conversationId: string) => Promise<string> | string) => {
@@ -103,6 +106,18 @@ export function registerAppTools(
     },
     ({ task, app }, ctx) =>
       answered(ctx, async (conversationId) => {
+        if (approveHostAction) {
+          const target = apps.describeTaskForApproval(conversationId, app, task);
+          const allowed = await withProgressHeartbeat(ctx, "Waiting for room approval", () =>
+            approveHostAction(conversationId, {
+              title: `Run ${target.appTitle} task “${target.taskTitle}”`,
+              detail: `${target.app}:${task} on ${target.file}`,
+              allowanceKey: `app_run:${target.app}:${task}`,
+              signal: ctx.mcpReq.signal,
+            }),
+          );
+          if (!allowed) throw new AppProblem("Whoever approves in the room said no.");
+        }
         const { ended, takenUp } = apps.startTask(conversationId, app, task, { kind: "agent", conversationId, turnSeq: conversations.latestTurnSeq(conversationId) });
         return `${takenUpWords(takenUp)}${await ended}`;
       }),

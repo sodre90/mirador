@@ -204,6 +204,7 @@ const rooms = new RoomService(
   config.canvasAssetsOrigin,
 );
 canvasPlugins.sendsRoomPromptsWith((roomId, personId, profileId, answeringMessageId, text) => void rooms.writeFromPlugin(roomId, personId, profileId, answeringMessageId, text));
+canvasPlugins.approvesHostActionsWith((conversationId, request) => rooms.approveHostAction(conversationId, request));
 conversations.followsRoomRulesOf(rooms);
 const roomQuestions = new RoomQuestions(store, hub, canvas, undefined, (roomId, agentId, itemId, chosen, answers, authorId, answerer) =>
   rooms.deliverBroughtAskAnswer(roomId, agentId, itemId, chosen, answers, authorId, answerer),
@@ -234,6 +235,7 @@ const mcp = new CanvasMcpEndpoints({
     forwardShow: (conversationId, item) => broughtAgents.forwardShow(conversationId, item),
     forwardAsk: (conversationId, item) => broughtAgents.forwardAsk(conversationId, item),
   },
+  approveHostAction: (conversationId, request) => rooms.approveHostAction(conversationId, request),
   antigravityAskWaitMs: config.antigravityAskWaitMs,
 });
 rooms.hearPluginsChangedWith((roomId, removed) => {

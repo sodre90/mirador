@@ -33,6 +33,7 @@ import { registerRoomTools, type RoomTools } from "./room-tools.ts";
 import { registerRoomWorkspaceTools, type RoomsWorkspaces } from "./room-workspace-tools.ts";
 import { withProgressHeartbeat } from "./progress-heartbeat.ts";
 import { sandboxOfConversation } from "../sandbox/sandboxes.ts";
+import type { ApproveHostAction } from "../rooms.ts";
 
 const optionShape = {
   label: z.string().min(1),
@@ -195,6 +196,7 @@ export interface CanvasServerParts {
   rooms?: RoomTools | null;
   roomsWorkspaces?: RoomsWorkspaces | null;
   broughtCanvas?: BroughtCanvasForwarder | null;
+  approveHostAction?: ApproveHostAction | null;
   antigravityAskWaitMs?: number;
 }
 
@@ -217,7 +219,7 @@ const runsInASandboxHere = (store: Store | null, conversationId: string) => {
 export type CanvasRequestFrom = "this-computer" | "sandbox";
 
 function buildCanvasServer(conversationId: string, parts: CanvasServerParts, cutInstructionsWarning: CutInstructionsWarning, from: CanvasRequestFrom) {
-  const { canvas, conversations, assetsOrigin, apps = null, canvasPlugins = null, catalog = null, store = null, rooms = null, roomsWorkspaces = null, broughtCanvas = null, antigravityAskWaitMs = ANTIGRAVITY_ASK_WAIT_MS } = parts;
+  const { canvas, conversations, assetsOrigin, apps = null, canvasPlugins = null, catalog = null, store = null, rooms = null, roomsWorkspaces = null, broughtCanvas = null, approveHostAction = null, antigravityAskWaitMs = ANTIGRAVITY_ASK_WAIT_MS } = parts;
   const harness = store?.findConversation(conversationId)?.harness;
   const askWaitLimitMs = harness === "antigravity" ? antigravityAskWaitMs : null;
   const reviewFree = reviewFreeFor(harness);
@@ -312,7 +314,7 @@ function buildCanvasServer(conversationId: string, parts: CanvasServerParts, cut
 
   if (showAndAskAlone) {
     if (inHostRoom && rooms) registerRoomTools(server, rooms, callingConversation, { _meta: loadedUpFront, ...reviewFree });
-    if (inHostRoom && roomHasApps && apps) registerAppTools(server, apps, conversations, callingConversation, roomPlugins);
+    if (inHostRoom && roomHasApps && apps) registerAppTools(server, apps, conversations, callingConversation, roomPlugins, approveHostAction ?? undefined);
     if (inHostRoom) canvasPlugins?.registerTools(server, conversationId, callingConversation, reviewFree);
     if (worksInRoomsWorkspace && roomsWorkspaces && from === "this-computer") registerRoomWorkspaceTools(server, roomsWorkspaces, callingConversation, { _meta: loadedUpFront });
     return server;

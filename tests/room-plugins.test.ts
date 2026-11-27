@@ -439,3 +439,134 @@ describe("room app plugins (slice 2)", () => {
     expect(() => admittedFromPerson({ type: "app.open-file", requestId: "r", conversationId: "c", app: "counter", file: "a.json" }, personFor("approver"))).toThrow();
   });
 });
+
+describe("room plugin approver gates (slice 3)", () => {
+  test("app_run and plugin startConversation wait for an approver in rooms (including sandboxed rooms), support deny and allow-for-task, and hold member prompts when peoplesTasksWait is on", async () => {
+    const workspaceDir = mkdtempSync(join(tmpdir(), "mirador-room-gates-"));
+    try {
+      const store = storeWithConversation();
+      store.saveProfile(profile);
+      store.insertWorkspace({ id: "w-real", name: "Proj", path: workspaceDir, defaultLaunch: { harness: "claude", profileId: null }, createdAt: 1 });
+      for (const [id, name] of [["mia", "Mia"], ["ava", "Ava"]] as const) store.insertPerson({ id, name, color: null });
+
+      const sentToAgent: string[] = [];
+      const sessions = {
+        startInRoom: () => {
+          throw new Error("unused");
+        },
+        send: async (_convId: string, text: string) => void sentToAgent.push(text),
+        deleteWithAllItHolds: () => {},
+        waitingPermissions: () => [],
+        answerPermission: () => {},
+        followRoomPreset: async () => {},
+        followRoomAgentModel: async () => {},
+        takeQueuedRoomPrompts: () => [],
+        startAfreshInRoom: () => {},
+      } satisfies RoomSessions;
+      const hub = { broadcast: () => {}, publishToRoom: () => {}, publishToConversation: () => {}, publishToPluginWindows: () => {}, publishToPluginTabs: () => {}, sendToAgentsOf: () => false } as unknown as Hub;
+      const notifications = { notify: () => {}, roomTaskHeld: () => {} } as unknown as SystemNotifications;
+      const rooms = new RoomService(store, hub, sessions, notifications, "/tmp/data");
+      const room = rooms.create("Secure", "w-real", ["p1"], "read-freely");
+      rooms.setPersonRole(room.id, "mia", "member");
+      rooms.setPersonRole(room.id, "ava", "approver");
+      store.insertConversation({ ...store.findConversation("c1")!, id: "c-sec", workspaceId: "w-real", profileId: "p1", roomId: room.id });
+      store.setRoomAgentConversation(room.id, "p1", "c-sec");
+      rooms.setPlugins(room.id, ["board", "counter"]);
+
+      const loadedApps = await loadPlugins(APP_FIXTURES);
+      const loadedCanvas = await loadPlugins(BOARD_FIXTURES);
+      const apps = new AppDocuments(store, loadedApps.apps, { openAppsChanged: () => {}, stateChanged: () => {} });
+      const plugins = new CanvasPlugins(store, hub, loadedCanvas.canvases);
+      const started: string[] = [];
+      plugins.startsConversationsWith((_c, _p, targetProfile, prompt) => {
+        started.push(`${targetProfile}:${prompt}`);
+        return { id: "child-1", profile: targetProfile };
+      });
+      plugins.approvesHostActionsWith((convId, req) => rooms.approveHostAction(convId, req));
+      plugins.sendsRoomPromptsWith((roomId, personId, profileId, answering, text) => void rooms.writeFromPlugin(roomId, personId, profileId, answering, text));
+
+      const endpoints = new CanvasMcpEndpoints({
+        canvas: {} as CanvasService,
+        conversations: { conversationOfSession: async () => "c-sec", latestTurnSeq: () => 1 } as unknown as ConversationService,
+        assetsOrigin: "http://127.0.0.1:4601",
+        apps,
+        canvasPlugins: plugins,
+        store,
+        rooms: {} as RoomTools,
+        approveHostAction: (convId, req) => rooms.approveHostAction(convId, req),
+      });
+
+      const callTool = async (name: string, args: object, from: CanvasRequestFrom = "this-computer") => {
+        const request = new Request("http://127.0.0.1/mcp/c-sec", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Accept: "application/json, text/event-stream", "MCP-Protocol-Version": "2025-11-25" },
+          body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args } }),
+        });
+        const response = await (from === "sandbox" ? endpoints.handleFromSandbox("c-sec", request) : endpoints.handle("c-sec", request));
+        const body = await response.text();
+        const payload = body.split("\n").find((line) => line.startsWith("data: "))?.slice("data: ".length) ?? body;
+        const { result } = JSON.parse(payload);
+        return { text: result.content[0].text as string, isError: result.isError === true };
+      };
+
+      await apps.open("c-sec", "counter", "count.counter.json");
+
+      // 1. app_run waits for approver; member cannot approve; deny blocks execution.
+      const deniedRun = callTool("app_run", { app: "counter", task: "count-up" });
+      await new Promise((r) => setTimeout(r, 20));
+      const waiting1 = rooms.approvals(room.id);
+      expect(waiting1).toHaveLength(1);
+      expect(waiting1[0]!.request.title).toContain("Count up");
+      expect(() => rooms.approve(room.id, "p1", waiting1[0]!.request.permissionId, "allow", "mia")).toThrow();
+      rooms.approve(room.id, "p1", waiting1[0]!.request.permissionId, "deny", "ava");
+      expect(await deniedRun).toEqual({ isError: true, text: "Whoever approves in the room said no." });
+
+      // 2. allow-for-task runs the task and skips asking a second time in the same turn, until turnEnded resets it.
+      const allowedRun = callTool("app_run", { app: "counter", task: "count-up" });
+      await new Promise((r) => setTimeout(r, 20));
+      const waiting2 = rooms.approvals(room.id);
+      expect(waiting2).toHaveLength(1);
+      rooms.approve(room.id, "p1", waiting2[0]!.request.permissionId, "allow-for-task", "ava");
+      expect((await allowedRun).isError).toBe(false);
+      // Second call in same turn runs immediately without asking.
+      expect((await callTool("app_run", { app: "counter", task: "count-up" })).isError).toBe(false);
+      rooms.turnEnded("c-sec", 1);
+
+      // 3. Sandboxed room STILL gates app_run even with never-asks + workFreely!
+      store.setRoomPermissions(room.id, "never-asks");
+      store.setRoomSandbox(room.id, SANDBOX_ON);
+      const sandboxRun = callTool("app_run", { app: "counter", task: "count-up" }, "sandbox");
+      await new Promise((r) => setTimeout(r, 20));
+      const waitingSandbox = rooms.approvals(room.id);
+      expect(waitingSandbox).toHaveLength(1);
+      rooms.approve(room.id, "p1", waitingSandbox[0]!.request.permissionId, "allow", "ava");
+      expect((await sandboxRun).isError).toBe(false);
+
+      // 4. Canvas plugin tool calling startConversation (hand_over) waits for approver too.
+      const handOver = callTool("hand_over", { profile: "Builder", task: "Inspect build" });
+      await new Promise((r) => setTimeout(r, 20));
+      const waitingStart = rooms.approvals(room.id);
+      expect(waitingStart).toHaveLength(1);
+      expect(waitingStart[0]!.request.title).toContain("start a conversation on Builder");
+      rooms.approve(room.id, "p1", waitingStart[0]!.request.permissionId, "allow", "ava");
+      expect((await handOver).isError).toBe(false);
+      expect(started).toEqual(["Builder:Inspect build"]);
+
+      // 5. Member prompt from a plugin card waits as a RoomTaskApproval when peoplesTasksWait is true.
+      expect(store.findRoom(room.id)!.peoplesTasksWait).toBe(true);
+      await callTool("show_card", { title: "Board", text: "Hi" });
+      const cardId = store.listCanvasItems("c-sec")[0]!.id;
+      await plugins.act(cardId, { kind: "ask", text: "Please review" }, { personId: "mia", isOwner: false, mayApprove: false });
+      expect(sentToAgent).toEqual([]);
+      expect(rooms.tasksWaiting(room.id)).toHaveLength(1);
+      expect(rooms.tasksWaiting(room.id)[0]!.text).toBe("Please review");
+      rooms.answerTask(room.id, rooms.tasksWaiting(room.id)[0]!.messageId, "allow", "ava");
+      expect(rooms.tasksWaiting(room.id)).toHaveLength(0);
+      expect(sentToAgent.length).toBeGreaterThan(0);
+
+      apps.stop();
+    } finally {
+      rmSync(workspaceDir, { recursive: true, force: true });
+    }
+  });
+});

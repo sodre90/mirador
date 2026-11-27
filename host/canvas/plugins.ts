@@ -1,6 +1,8 @@
 import { isAbsolute } from "node:path";
 import { launchEditor } from "../editor.ts";
 import { fromJsonSchema, type McpServer, type ServerContext, type ToolAnnotations } from "@modelcontextprotocol/server";
+import type { ApproveHostAction } from "../rooms.ts";
+import { withProgressHeartbeat } from "./progress-heartbeat.ts";
 import {
   pluginItemOf,
   type CanvasActionContext,
@@ -202,6 +204,8 @@ export class CanvasPlugins {
     throw new Error("Mirador can't notify yet.");
   };
 
+  private approveHostAction: ApproveHostAction = async () => true;
+
   constructor(
     private readonly store: Store,
     private readonly hub: Hub,
@@ -215,6 +219,10 @@ export class CanvasPlugins {
 
   sendsRoomPromptsWith(send: SendRoomPrompt) {
     this.sendRoomPrompt = send;
+  }
+
+  approvesHostActionsWith(approve: ApproveHostAction) {
+    this.approveHostAction = approve;
   }
 
   startsConversationsWith(start: StartBeside) {
@@ -775,7 +783,10 @@ export class CanvasPlugins {
         if (!runsNatively(plugin, tool)) continue;
         server.registerTool(name, { description: tool.description, inputSchema: fromJsonSchema(tool.input), _meta: loadedUpFront, ...reviewFree }, async (input, ctx) => {
           try {
-            const text = await tool.run(input, this.toolContext(plugin, await callingConversation(ctx), "agent"));
+            const caller = await callingConversation(ctx);
+            const text = await withProgressHeartbeat(ctx, "Running canvas plugin tool", () =>
+              Promise.resolve(tool.run(input, this.toolContext(plugin, caller, "agent", ctx.mcpReq.signal))),
+            );
             return { content: [{ type: "text" as const, text: String(text) }] };
           } catch (error) {
             return { isError: true, content: [{ type: "text" as const, text: messageOf(error) }] };
@@ -820,7 +831,9 @@ export class CanvasPlugins {
         if (parsed.issues)
           return toolError([loadText, `The input doesn't fit ${name}'s schema:`, ...parsed.issues.map(({ path, message }) => `- ${path?.length ? `${path.map((segment) => (typeof segment === "object" ? segment.key : segment)).join(".")}: ` : ""}${message}`), schema].filter(Boolean).join("\n"));
         try {
-          const text = await tool.run(parsed.value, this.toolContext(plugin, caller, "agent"));
+          const text = await withProgressHeartbeat(ctx, "Running canvas plugin tool", () =>
+            Promise.resolve(tool.run(parsed.value, this.toolContext(plugin, caller, "agent", ctx.mcpReq.signal))),
+          );
           return toolText([loadText, String(text)]);
         } catch (error) {
           return toolError([loadText, messageOf(error)].filter(Boolean).join("\n"));
@@ -901,15 +914,34 @@ export class CanvasPlugins {
     return [...this.settingNotesFor(conversationId), ...fromPlugins];
   }
 
-  private toolContext(plugin: CanvasPlugin, conversationId: string, caller: ToolCaller): CanvasToolContext {
+  private toolContext(plugin: CanvasPlugin, conversationId: string, caller: ToolCaller, signal?: AbortSignal): CanvasToolContext {
+    const inRoomAsAgent = caller === "agent" && this.store.findConversation(conversationId)?.roomId !== undefined;
+    const requireRoomApproval = async (title: string, detail: string | null, allowanceKey: string) => {
+      if (!inRoomAsAgent) return;
+      const allowed = await this.approveHostAction(conversationId, { title, detail, allowanceKey, signal });
+      if (!allowed) throw new Error("Whoever approves in the room said no.");
+    };
     return {
       ...this.context(plugin, conversationId, { byAgent: caller === "agent" }),
       caller,
       publish: ({ type, title, data }) => pluginItemOf(this.publish(plugin, conversationId, type, title, data)),
       prompt: this.promptOfItsOwn(plugin, conversationId),
-      startConversation: this.startsConversationsFrom(plugin, conversationId),
-      stopConversation: (startedConversationId) => this.stopStarted(conversationId, plugin.manifest.name, startedConversationId),
-      deleteStarted: (startedConversationId) => this.deleteStarted(conversationId, plugin.manifest.name, startedConversationId),
+      startConversation: async (start) => {
+        await requireRoomApproval(
+          `${plugin.manifest.title}: start a conversation on ${start.profile}`,
+          start.title ? `${start.title} — ${start.prompt.slice(0, 120)}` : start.prompt.slice(0, 120),
+          `plugin:start:${plugin.manifest.name}:${start.profile}`,
+        );
+        return this.startsConversationsFrom(plugin, conversationId)(start);
+      },
+      stopConversation: async (startedConversationId) => {
+        await requireRoomApproval(`${plugin.manifest.title}: stop a conversation`, startedConversationId, `plugin:stop:${plugin.manifest.name}`);
+        return this.stopStarted(conversationId, plugin.manifest.name, startedConversationId);
+      },
+      deleteStarted: async (startedConversationId) => {
+        await requireRoomApproval(`${plugin.manifest.title}: delete a conversation`, startedConversationId, `plugin:delete:${plugin.manifest.name}`);
+        return this.deleteStarted(conversationId, plugin.manifest.name, startedConversationId);
+      },
     };
   }
 

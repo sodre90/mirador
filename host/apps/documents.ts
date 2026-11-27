@@ -434,6 +434,22 @@ export class AppDocuments {
   }
 
   /**
+   * Validates and names the task an agent is about to run without starting it, so a room can ask an approver first.
+   */
+  describeTaskForApproval(conversationId: string, appName: string | undefined, name: string): { app: string; appTitle: string; taskTitle: string; file: string } {
+    const { opened } = this.openFor(conversationId, appName);
+    const { manifest, host } = opened.plugin;
+    const task = Object.hasOwn(host.tasks ?? {}, name) ? host.tasks![name]! : null;
+    if (!task) {
+      const names = taskNamesOf(opened.plugin);
+      throw new AppProblem(`${manifest.title} has no task called ${name}; ${names.length > 0 ? `its tasks: ${names.join(", ")}` : "it has no tasks"}.`);
+    }
+    if (opened.running) throw new AppProblem(`${opened.running.state.title} is still running; wait for it to end, or stop it in the app.`);
+    if (opened.problem) throw new AppProblem(`${opened.file} can't be read: ${opened.problem}. Fix the file, or open it again with app_open.`);
+    return { app: manifest.name, appTitle: manifest.title, taskTitle: task.title, file: opened.file };
+  }
+
+  /**
    * Starts one of the app's tasks on the conversation's document, or on the workspace's one it takes up, bringing its
    * tab forward; `ended` resolves to the task's summary once it is done, or rejects with its problem.
    */

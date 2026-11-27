@@ -247,3 +247,80 @@ test("owner opts an app plugin into a room, members edit and read workspace file
   await avaSession.context.close();
   await ottoSession.context.close();
 });
+
+test("privileged agent app_run tasks and member plugin prompts wait in ApprovalStrip for an approver", async ({ page, browser }) => {
+  const lena = host.admitPerson("Lena");
+  const sam = host.admitPerson("Sam");
+  await signIn(page, host);
+  await createRoom(page, "GateRoom", ["Builder"]);
+
+  const gateComposer = page.getByRole("textbox", { name: "Write in GateRoom, @ tags an agent…" });
+  await gateComposer.fill("@Bu");
+  await page.getByRole("listbox", { name: "Agents and people of the room" }).getByRole("option", { name: "@Builder" }).click();
+  await gateComposer.pressSequentially(" SAY Gate ready");
+  await gateComposer.press("Enter");
+  await expect(roomMessages(page)).toContainText(["Gate ready"]);
+
+  await test.step("owner adds Lena (Member) and Sam (Approver), keeps peoplesTasksWait on, and enables Board + Counter", async () => {
+    const dialog = await openRoomSettings(page, "GateRoom");
+    await dialog.getByRole("combobox", { name: "Add someone you let in before" }).selectOption({ label: "Lena" });
+    await dialog.getByLabel("Role of Lena").selectOption({ label: "Member" });
+    await dialog.getByRole("combobox", { name: "Add someone you let in before" }).selectOption({ label: "Sam" });
+    await dialog.getByLabel("Role of Sam").selectOption({ label: "Approver" });
+    await dialog.getByRole("tab", { name: "Plugins" }).click();
+    await dialog.getByRole("switch", { name: "Use Board in this room" }).click();
+    await dialog.getByRole("button", { name: "Change" }).click();
+    await expect(dialog.getByRole("switch", { name: "Use Board in this room" })).toBeChecked();
+    await dialog.getByRole("switch", { name: "Use Counter in this room" }).click();
+    await expect(dialog.getByRole("switch", { name: "Use Counter in this room" })).toBeChecked();
+    await dialog.getByRole("button", { name: "Close" }).click();
+  });
+
+  const convId = roomConversationId("GateRoom");
+  const openAs = async (person: ReturnType<typeof host.admitPerson>) => {
+    const context = await browser.newContext();
+    await context.addCookies([person.cookie]);
+    const p = await context.newPage();
+    await p.goto(host.origin);
+    await roomCard(p, "GateRoom").click();
+    return { context, page: p };
+  };
+  const lenaSession = await openAs(lena);
+  const samSession = await openAs(sam);
+
+  await test.step("agent app_run waits in ApprovalStrip for approver Sam (never shown to member Lena), supports Deny and Allow", async () => {
+    expect(await callCanvasTool(host, convId, "app_open", { app: "counter", file: "gate.counter.json" })).toContain("Counter is open on gate.counter.json");
+    await expect(appView(samSession.page).locator("#count")).toHaveText("0");
+
+    const deniedCall = callCanvasTool(host, convId, "app_run", { app: "counter", task: "count-up" });
+    const samApproval = samSession.page.locator(".room-approvals");
+    await expect(samApproval).toContainText("Run Counter task");
+    await expect(lenaSession.page.locator(".room-approvals")).toHaveCount(0);
+    await samApproval.getByRole("button", { name: "Deny" }).click();
+    expect(await deniedCall).toContain("Whoever approves in the room said no.");
+    await expect(appView(samSession.page).locator("#count")).toHaveText("0");
+
+    const allowedCall = callCanvasTool(host, convId, "app_run", { app: "counter", task: "count-up" });
+    await expect(samApproval).toContainText("Run Counter task");
+    await samApproval.getByRole("button", { name: "Allow", exact: true }).click();
+    expect(await allowedCall).toContain("Counted up");
+    await expect(appView(samSession.page).locator("#count")).toHaveText("3");
+    await expect(appView(lenaSession.page).locator("#count")).toHaveText("3");
+  });
+
+  await test.step("member Lena's plugin prompt waits for approval when peoplesTasksWait is on", async () => {
+    expect(await callCanvasTool(host, convId, "show_card", { title: "Review", text: "Needs ok" })).toMatch(/^Shown as /);
+    await lenaSession.page.locator(".canvas-panel:visible .page-tab").click();
+    await pageView(lenaSession.page).getByLabel("Question").fill("SAY Approved plugin prompt");
+    await pageView(lenaSession.page).getByRole("button", { name: "Ask the agent" }).click();
+    await expect(pageView(lenaSession.page).locator("#asked")).toHaveText("Asked");
+
+    const taskApproval = samSession.page.locator(".room-task-approval");
+    await expect(taskApproval).toContainText("SAY Approved plugin prompt");
+    await taskApproval.getByRole("button", { name: "Allow", exact: true }).click();
+    await expect(roomMessages(page)).toContainText(["Approved plugin prompt"]);
+  });
+
+  await lenaSession.context.close();
+  await samSession.context.close();
+});

@@ -169,6 +169,25 @@ function cutToRoomMessage(text: string) {
 /** Told of each message that goes up in a room: the people it tags that it didn't tag before, and its author's name. */
 export type PostListener = (message: RoomMessage, newlyTagged: RoomMention[], by: string) => void;
 
+/** A privileged host-side plugin action (such as an app task or starting a conversation) that waits for a room approver. */
+export interface HostApprovalRequest {
+  title: string;
+  detail: string | null;
+  allowanceKey: string;
+  signal?: AbortSignal;
+}
+
+export type ApproveHostAction = (conversationId: string, request: HostApprovalRequest) => Promise<boolean>;
+
+interface PendingHostApproval {
+  roomId: string;
+  conversationId: string;
+  profileId: string;
+  allowanceKey: string;
+  approval: RoomApproval;
+  settle: (allowed: boolean) => void;
+}
+
 export type WaitingListener = (roomId: string, approvals: RoomApproval[], tasks: RoomTaskApproval[], workspace: RoomWorkspaceApproval[]) => void;
 
 export type TaskAnswer = "allow" | "deny";
@@ -259,6 +278,10 @@ function realPlaceOf(path: string): string | null {
 export class RoomService implements RoomRules, TurnListener {
   /** What an approver let through for the rest of each conversation's turn, by `taskAllowanceOf`. */
   private readonly allowedForTurn = new Map<string, Set<string>>();
+  /** Privileged host-side plugin actions currently waiting for an approver in a room, by synthetic permissionId. */
+  private readonly pendingHostApprovals = new Map<string, PendingHostApproval>();
+  /** Host-side plugin allowance keys approved for the rest of each conversation's turn. */
+  private readonly allowedHostForTurn = new Map<string, Set<string>>();
   /** Own-agent conversations that were still answering when the previous host stopped or died. */
   private readonly orphanedAnswering: Set<string>;
   private outOfEveryRoom: (personIds: string[]) => void = () => {};
@@ -459,6 +482,7 @@ export class RoomService implements RoomRules, TurnListener {
     const removed = room.plugins.filter((name) => !chosen.includes(name));
     const stopsTurn = removed.length > 0;
     this.store.setRoomPlugins(roomId, chosen);
+    if (stopsTurn) this.denyPendingHostApprovals((pending) => pending.roomId === roomId);
     this.publish(roomId);
     this.pluginsChangedListener(roomId, removed);
     room.agents.filter(({ brought }) => !brought).forEach((agent) => this.startAfresh(agent, stopsTurn));
@@ -623,6 +647,7 @@ export class RoomService implements RoomRules, TurnListener {
 
   delete(roomId: string) {
     const room = this.existingRoom(roomId);
+    this.denyPendingHostApprovals((pending) => pending.roomId === roomId);
     room.agents.forEach(({ conversationId }) => conversationId && this.sessions.deleteWithAllItHolds(conversationId));
     this.workspaceCalls.endAll((sent) => sent.roomId === roomId);
     void this.sandboxes.ownerGone(roomSandbox(roomId));
@@ -1075,16 +1100,17 @@ export class RoomService implements RoomRules, TurnListener {
     this.waitingChanged(roomId);
   }
 
-  /** The requests the room's agents wait on, oldest first. */
+  /** The requests the room's agents wait on, oldest first (both ACP permissions and host-side plugin gates). */
   approvals(roomId: string): RoomApproval[] {
     const room = this.store.findRoom(roomId);
     if (!room) return [];
     const messagesById = new Map(this.store.listRoomMessages(roomId).map((message) => [message.id, message]));
-    return room.agents
-      .flatMap(({ profileId, conversationId }) =>
-        conversationId ? this.sessions.waitingPermissions(conversationId).map((waiting) => this.approvalOf(room, profileId, conversationId, waiting, messagesById)) : [],
-      )
-      .toSorted((a, b) => a.at - b.at);
+    const approvers = this.approversOf(room);
+    const acp = room.agents.flatMap(({ profileId, conversationId }) =>
+      conversationId ? this.sessions.waitingPermissions(conversationId).map((waiting) => this.approvalOf(room, profileId, conversationId, waiting, messagesById)) : [],
+    );
+    const host = [...this.pendingHostApprovals.values()].filter((pending) => pending.roomId === roomId).map(({ approval }) => ({ ...approval, approvers }));
+    return [...acp, ...host].toSorted((a, b) => a.at - b.at);
   }
 
   /** How many of the requests the room's agents wait on, and of people's tasks, wait there for an approver. */
@@ -1092,11 +1118,80 @@ export class RoomService implements RoomRules, TurnListener {
     const room = this.store.findRoom(roomId);
     if (!room) return 0;
     const requests = room.agents.flatMap(({ conversationId }) => (conversationId ? this.sessions.waitingPermissions(conversationId) : []));
-    return requests.length + this.store.listRoomTasksWaiting(roomId).length + this.workspaceWaiting(roomId).length;
+    const hostRequests = [...this.pendingHostApprovals.values()].filter((pending) => pending.roomId === roomId).length;
+    return requests.length + hostRequests + this.store.listRoomTasksWaiting(roomId).length + this.workspaceWaiting(roomId).length;
   }
 
   allApprovals(): RoomApproval[] {
     return this.list().flatMap(({ id }) => this.approvals(id));
+  }
+
+  /**
+   * Gates a privileged host-side plugin action (app_run, startConversation, stopConversation, deleteStarted) called by an
+   * agent in a room behind Owner/Approver approval. Skips asking only in non-sandboxed rooms whose preset is never-asks;
+   * sandboxed rooms always ask because these actions run on the host outside the sandbox.
+   */
+  approveHostAction(conversationId: string, request: HostApprovalRequest): Promise<boolean> {
+    const conversation = this.store.findConversation(conversationId);
+    const room = conversation?.roomId ? this.store.findRoom(conversation.roomId) : undefined;
+    if (!conversation || !room || conversation.profileId === null) return Promise.resolve(true);
+    if (!room.sandbox.on && asksForNothing(room.permissions)) return Promise.resolve(true);
+    if (this.allowedHostForTurn.get(conversationId)?.has(request.allowanceKey)) return Promise.resolve(true);
+    if (request.signal?.aborted) return Promise.resolve(false);
+    const profileId = conversation.profileId;
+    const permissionId = `host-${crypto.randomUUID()}`;
+    const messagesById = new Map(this.store.listRoomMessages(room.id).map((message) => [message.id, message]));
+    const asked = this.askedIn(conversationId, Number.MAX_SAFE_INTEGER);
+    const approval: RoomApproval = {
+      roomId: room.id,
+      conversationId,
+      profileId,
+      request: {
+        kind: "permission",
+        permissionId,
+        title: request.title,
+        toolKind: "other",
+        command: request.detail,
+        description: null,
+        options: [],
+      },
+      file: null,
+      outsideWorkspace: false,
+      at: Date.now(),
+      threadId: (asked && this.threadOf(asked, profileId)?.id) ?? null,
+      task: asked ? taskOf(asked, messagesById, this.store.ownerId()) : null,
+      approvers: this.approversOf(room),
+    };
+    return new Promise<boolean>((resolve) => {
+      let settled = false;
+      const finish = (allowed: boolean) => {
+        if (settled) return;
+        settled = true;
+        this.pendingHostApprovals.delete(permissionId);
+        request.signal?.removeEventListener("abort", onAbort);
+        resolve(allowed);
+      };
+      const onAbort = () => {
+        finish(false);
+        this.waitingChanged(room.id);
+      };
+      this.pendingHostApprovals.set(permissionId, { roomId: room.id, conversationId, profileId, allowanceKey: request.allowanceKey, approval, settle: finish });
+      request.signal?.addEventListener("abort", onAbort, { once: true });
+      this.notifications.notify(conversationId, { kind: "permission", tool: request.title });
+      this.waitingChanged(room.id);
+    });
+  }
+
+  private denyPendingHostApprovals(matches: (pending: PendingHostApproval) => boolean) {
+    const affectedRooms = new Set<string>();
+    for (const pending of [...this.pendingHostApprovals.values()]) {
+      if (!matches(pending)) continue;
+      affectedRooms.add(pending.roomId);
+      pending.settle(false);
+    }
+    affectedRooms.forEach((roomId) => {
+      if (this.store.findRoom(roomId)) this.waitingChanged(roomId);
+    });
   }
 
   /**
@@ -1107,6 +1202,20 @@ export class RoomService implements RoomRules, TurnListener {
   approve(roomId: string, profileId: string, permissionId: string, answer: RoomApprovalAnswer, personId: string) {
     const room = this.existingRoom(roomId);
     this.assertMayApprove(room, personId);
+    const hostPending = this.pendingHostApprovals.get(permissionId);
+    if (hostPending) {
+      if (hostPending.roomId !== roomId || hostPending.profileId !== profileId) throw new HostProblemError({ code: "permission-no-longer-pending" });
+      if (answer === "allow-for-task") {
+        this.allowedHostForTurn.set(hostPending.conversationId, new Set([...(this.allowedHostForTurn.get(hostPending.conversationId) ?? []), hostPending.allowanceKey]));
+        for (const waiting of [...this.pendingHostApprovals.values()]) {
+          if (waiting.conversationId === hostPending.conversationId && waiting.allowanceKey === hostPending.allowanceKey) waiting.settle(true);
+        }
+      } else {
+        hostPending.settle(answer === "allow");
+      }
+      this.waitingChanged(roomId);
+      return;
+    }
     const conversationId = room.agents.find((agent) => agent.profileId === profileId && !agent.brought)?.conversationId;
     if (!conversationId) throw new HostProblemError({ code: "permission-no-longer-pending" });
     const waiting = this.sessions.waitingPermissions(conversationId).find(({ request }) => request.permissionId === permissionId);
@@ -1212,6 +1321,8 @@ export class RoomService implements RoomRules, TurnListener {
    */
   turnEnded(conversationId: string, turnSeq: number, { cutShortByRestart = false }: { cutShortByRestart?: boolean } = {}) {
     this.allowedForTurn.delete(conversationId);
+    this.allowedHostForTurn.delete(conversationId);
+    this.denyPendingHostApprovals((pending) => pending.conversationId === conversationId);
     const conversation = this.store.findConversation(conversationId);
     if (!conversation?.roomId || conversation.profileId === null) return;
     this.showAnswering(conversation.roomId, conversationId, null);
