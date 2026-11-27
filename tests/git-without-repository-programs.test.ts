@@ -61,10 +61,10 @@ describe("Mirador's own git", () => {
     expect(unguarded).toEqual([]);
   });
 
-  test("every git the host starts in a workspace takes the repository's own common folder, never one its .git/commondir names", () => {
+  test("every git the host starts in a workspace takes the repository as committed: its own common folder, never one its .git/commondir names, and no replace refs", () => {
     const outsideWorkspaces = new Set(["newer-version.ts", "apps/installed-plugins.ts"]);
     const startingGit = sourcesUnder(hostFolder).filter((path) => gitStartsIn(readFileSync(path, "utf8")).length > 0);
-    const unpinned = startingGit.map(inHostFolder).filter((file) => !outsideWorkspaces.has(file) && !/gitEnvironmentFor\(|ownCommonFolderOf\(/.test(readFileSync(join(hostFolder, file), "utf8")));
+    const unpinned = startingGit.map(inHostFolder).filter((file) => !outsideWorkspaces.has(file) && !/gitEnvironmentFor\(|repositoryAsCommitted\(/.test(readFileSync(join(hostFolder, file), "utf8")));
     expect(startingGit.length).toBeGreaterThan(5);
     expect(unpinned).toEqual([]);
   });
@@ -164,6 +164,50 @@ describe("Mirador's own git", () => {
 
       expect((await git(repository, ["log", "-1", "--format=%s"])).stdout.trim()).toBe("second");
       expect(existsSync(join(root, "filter-ran"))).toBe(false);
+    });
+  });
+
+  describe("in a repository where replace refs show other content in place of what was written", () => {
+    let root = "";
+    let repository = "";
+    withOnlyRepositoryConfig();
+    const setUp = (...args: string[]) => Bun.spawnSync(["git", "-C", repository, "-c", "user.email=owner@example.com", "-c", "user.name=Owner", ...args]).stdout.toString().trim();
+    const blobOf = (text: string) => Bun.spawnSync(["git", "-C", repository, "hash-object", "-w", "--stdin"], { stdin: new Blob([text]) }).stdout.toString().trim();
+    /** As a sandboxed agent could leave it: a replace ref that has git show the content of one blob for another's. */
+    const replace = (written: string, shown: string) => setUp("replace", blobOf(written), blobOf(shown));
+
+    beforeAll(() => {
+      root = mkdtempSync(join(tmpdir(), "git-replace-"));
+      repository = join(root, "repository");
+      mkdirSync(repository);
+      setUp("init", "-q");
+      writeFileSync(join(repository, "notes.txt"), "harmless\n");
+      setUp("add", "notes.txt");
+      setUp("commit", "-q", "-m", "first");
+    });
+
+    afterAll(() => rmSync(root, { recursive: true, force: true }));
+
+    test("Mirador's git reads what was committed", async () => {
+      writeFileSync(join(repository, "notes.txt"), "harmful\nmore harm\n");
+      setUp("commit", "-q", "-am", "second");
+      replace("harmful\nmore harm\n", "harmless\n");
+
+      expect((await git(repository, ["show", "HEAD:notes.txt"])).stdout).toBe("harmful\nmore harm\n");
+      expect((await git(repository, ["diff", "--ignore-submodules=dirty", "--numstat", "HEAD~1", "HEAD"])).stdout).toBe("2\t1\tnotes.txt\n");
+    });
+
+    test("undoing a turn puts back what its checkpoint kept", async () => {
+      const workspace: Workspace = { id: `ws-${crypto.randomUUID()}`, name: "replace", path: repository, defaultLaunch: { harness: "claude", profileId: null }, color: null, position: 0, groupId: null, newConversationsIn: "folder", worktreeSetup: "", sandbox: NO_SANDBOX, sideChatAccess: null, createdAt: 0 };
+      const checkpoints = new Checkpoints(join(root, "data"));
+      writeFileSync(join(repository, "kept.txt"), "as written\n");
+      const kept = (await checkpoints.snapshot(workspace))!;
+      replace("as written\n", "planted\n");
+      writeFileSync(join(repository, "kept.txt"), "later\n");
+
+      await checkpoints.restore(workspace, kept);
+
+      expect(readFileSync(join(repository, "kept.txt"), "utf8")).toBe("as written\n");
     });
   });
 

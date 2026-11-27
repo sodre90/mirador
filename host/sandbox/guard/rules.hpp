@@ -121,12 +121,16 @@ inline bool makesRepositoryOfItsFolder(std::string_view folded) { return folded 
 
 }  // namespace names
 
-/** Below the top of every git folder, by name: the files that have git take objects from other folders besides its own. */
+/**
+ * Below the top of every git folder, by name: the files that have git take objects from other folders besides its own,
+ * and the one that gives commits other parents than they were made with.
+ */
 inline const Paths& protectedBelowGitFolders() {
   static const Paths paths = [] {
     Paths named;
     named.add("objects/info/alternates", Paths::Kind::ProtectedFile);
     named.add("objects/info/http-alternates", Paths::Kind::ProtectedFile);
+    named.add("info/grafts", Paths::Kind::ProtectedFile);
     return named;
   }();
   return paths;

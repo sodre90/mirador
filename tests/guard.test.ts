@@ -86,12 +86,12 @@ describe.skipIf(CXX === null)("what the guard lets agents do, by the rules it is
     expect(await mayBeDone(folders, others)).toEqual(all(others, DOES_ANYTHING));
   });
 
-  test("git's folders take what git writes, but not what it runs programs from or is led elsewhere by, objects of other folders and remotes of their own files too, nor a link", async () => {
+  test("git's folders take what git writes, but not what it runs programs from or is led elsewhere by, objects of other folders, remotes of their own files and grafted parents too, nor a link", async () => {
     const gitWrites = ["index", "index.lock", "HEAD", "HEAD.lock", "refs/heads/main", "logs/HEAD", "objects/ab/cdef", "rebase-merge/done", "COMMIT_EDITMSG", "packed-refs.lock"];
     const kept = ["config", "config.lock", "CONFIG.worktree", "hooks", "hooks/pre-commit", "Hooks", "worktrees", "worktrees/w/gitdir", "commondir", "gitdir"];
-    const ledToOtherObjects = ["objects/info/alternates", "objects/info/alternates.lock", "Objects/Info/Alternates", "objects/info/http-alternates", "remotes", "remotes/origin", "branches", "branches/origin"];
-    const onTheWayToThose = ["objects", "objects/info"];
-    const gitWritesBesideThose = ["objects/info/packs", "objects/info/commit-graph", "objects/pack/pack-1.pack", "objects/incoming-1/ab/cdef"];
+    const ledToOtherObjects = ["objects/info/alternates", "objects/info/alternates.lock", "Objects/Info/Alternates", "objects/info/http-alternates", "remotes", "remotes/origin", "branches", "branches/origin", "info/grafts", "Info/Grafts", "info/grafts.tmp"];
+    const onTheWayToThose = ["objects", "objects/info", "info"];
+    const gitWritesBesideThose = ["objects/info/packs", "objects/info/commit-graph", "objects/pack/pack-1.pack", "objects/incoming-1/ab/cdef", "info/exclude", "info/attributes"];
     for (const gitFolder of [".git", "vendor/lib/.git", "a/b/c/.GIT"]) {
       const inside = (names: string[]) => names.map((name) => `${gitFolder}/${name}`);
       expect(await mayBeDone([guarded("/w")], inside(gitWrites))).toEqual(all(inside(gitWrites), "change move make-file make-folder"));

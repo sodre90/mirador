@@ -34,5 +34,11 @@ export function ownCommonFolderOf(directory: string): { GIT_COMMON_DIR?: string 
   }
 }
 
-/** The environment Mirador's own git runs with in `directory`: no prompts, and the repository's own common folder. */
-export const gitEnvironmentFor = (directory: string) => ({ ...environmentWithoutPrompts(), ...ownCommonFolderOf(directory) });
+/**
+ * The repository as its commits were made: its own common folder, and objects as written, never what a replace ref,
+ * which a sandboxed room's agent may add, shows in their place, so a diff can't show harmless content for harmful.
+ */
+export const repositoryAsCommitted = (directory: string) => ({ ...ownCommonFolderOf(directory), GIT_NO_REPLACE_OBJECTS: "1" });
+
+/** The environment Mirador's own git runs with in `directory`: no prompts, and the repository as committed. */
+export const gitEnvironmentFor = (directory: string) => ({ ...environmentWithoutPrompts(), ...repositoryAsCommitted(directory) });
