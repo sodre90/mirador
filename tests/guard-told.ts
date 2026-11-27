@@ -8,9 +8,9 @@ import type { Mount } from "../host/sandbox/vm-launcher.ts";
  * colon is no separator, as a folder of this computer can be mounted at its own path.
  */
 export function mountOf(arg: string): Mount {
-  const [, source, target, access] = /^(.+?):((?:[A-Za-z]:)?[\\/][^:]*)(?::(ro|rw))?$/.exec(arg) ?? [];
+  const [, source, target, readOnly] = /^(.+?):((?:[A-Za-z]:)?[\\/][^:]*)(:ro)?$/.exec(arg) ?? [];
   if (source === undefined || target === undefined) throw new Error(`not a volume argument: ${arg}`);
-  return { source, target, readOnly: access === "ro" };
+  return { source, target, readOnly: readOnly !== undefined };
 }
 
 /** The mounts a container tool's `run` is given. */

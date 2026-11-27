@@ -13,6 +13,7 @@
  */
 import { appendFileSync, existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { mountsOfRun } from "../tests/guard-told.ts";
 
 interface State {
   serviceRunning: boolean;
@@ -47,11 +48,7 @@ const change = (changing: (state: State) => void) => {
 };
 const valueAfter = (flag: string) => args[args.indexOf(flag) + 1]!;
 const valuesAfter = (flag: string) => args.flatMap((arg, index) => (args[index - 1] === flag ? [arg] : []));
-const mountsOfRun = () =>
-  valuesAfter("-v").map((mount) => {
-    const [source, , access] = mount.split(":");
-    return { source: `${source}/`, options: access === "ro" ? ["ro"] : [] };
-  });
+const mountsAsListed = () => mountsOfRun(args).map(({ source, readOnly }) => ({ source: `${source}/`, options: readOnly ? ["ro"] : [] }));
 
 async function waitForFile(path: string | undefined) {
   while (path && !existsSync(path)) await Bun.sleep(100);
@@ -168,7 +165,7 @@ switch (command) {
     }
     change((state) => {
       state.vms[valueAfter("--name")] = Object.fromEntries(valuesAfter("--label").map((label) => label.split("=") as [string, string]));
-      state.mounts = { ...state.mounts, [valueAfter("--name")]: mountsOfRun() };
+      state.mounts = { ...state.mounts, [valueAfter("--name")]: mountsAsListed() };
     });
     break;
   case "logs":

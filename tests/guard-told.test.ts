@@ -4,6 +4,7 @@ import { mountOf } from "./guard-told.ts";
 test("a volume argument's source keeps a Windows drive, and only a last :ro makes it read-only", () => {
   expect(mountOf("/work/project:/mirador/raw/0")).toEqual({ source: "/work/project", target: "/mirador/raw/0", readOnly: false });
   expect(mountOf("/work/project:/mirador/raw/0:ro")).toEqual({ source: "/work/project", target: "/mirador/raw/0", readOnly: true });
+  expect(mountOf("/work/ro:/mirador/ro")).toEqual({ source: "/work/ro", target: "/mirador/ro", readOnly: false });
   expect(mountOf("D:\\a\\mirador\\workspace:/mirador/raw/0")).toEqual({ source: "D:\\a\\mirador\\workspace", target: "/mirador/raw/0", readOnly: false });
   expect(mountOf("D:\\a\\mirador\\workspace:/mirador/raw/1:ro")).toEqual({ source: "D:\\a\\mirador\\workspace", target: "/mirador/raw/1", readOnly: true });
 });
