@@ -45,3 +45,10 @@ describe("an error of a room agent, for a person who reads its work", () => {
     expect(seenByPeople(onTheLimit)).toEqual(onTheLimit);
   });
 });
+
+describe("a user message in a room agent's thread, for a person who reads its work", () => {
+  test("drops stored imageIds that only the owner's image route can serve, while keeping the message itself", () => {
+    const sent: ConversationEvent = { type: "user-message", text: "Check this", imageIds: ["img-1", "img-2"], roomMessageId: "m-1" };
+    expect(seenByPeople(sent)).toEqual({ type: "user-message", text: "Check this", roomMessageId: "m-1" });
+  });
+});

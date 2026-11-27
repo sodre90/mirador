@@ -132,6 +132,10 @@ function errorSeen(event: ConversationError): ConversationError | null {
 export function eventSeen(stored: StoredEvent): StoredEvent | null {
   const { event } = stored;
   if (event.type === "acp" && OWNERS_SESSION_STATE.has(event.update.sessionUpdate)) return null;
+  if (event.type === "user-message" && event.imageIds?.length) {
+    const { imageIds: _omitted, ...rest } = event;
+    return { ...stored, event: rest };
+  }
   if (event.type === "turn-end") return { ...stored, event: { type: "turn-end", stopReason: event.stopReason, ...(event.cutShortByRestart && { cutShortByRestart: true }), ...measuresSeen(event) } };
   if (event.type === "error") {
     const error = errorSeen(event);

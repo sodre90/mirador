@@ -1097,7 +1097,7 @@ function TimelineEntry({ block, conversationId, harness, canRewind, endsReply }:
           ) : (
             <div className="message user">
               <SlackMessageText text={block.text} conversationId={filesOpenIn} />
-              <MessageImages conversationId={conversationId} imageIds={block.imageIds} carried={block.images} />
+              <MessageImages conversationId={conversationId} imageIds={onlyReads ? undefined : block.imageIds} carried={block.images} />
             </div>
           )}
           {block.turnSeq !== undefined && (block.filesKept || canRewind) && (
