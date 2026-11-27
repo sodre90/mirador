@@ -173,11 +173,13 @@ test("a room's agent gets this computer's environment only when the owner turns 
   await expect(answerSaying(page, "Held answer")).toHaveCount(0);
 });
 
-async function giveHostsEnvironmentTo(page: Page, room: string, agent: string, given: boolean) {
+async function giveHostsEnvironmentTo(page: Page, room: string, agent: string, given: boolean, expectWarning?: RegExp) {
   const settings = await openRoomSettings(page, room, "Agents");
   await openRoomAgent(settings, agent);
   await wholeHostEnvironment(settings).setChecked(given);
-  const confirm = settings.locator(".room-starts-afresh").getByRole("button", { name: "Change" });
+  const warning = settings.locator(".room-starts-afresh");
+  if (expectWarning) await expect(warning).toContainText(expectWarning);
+  const confirm = warning.getByRole("button", { name: "Change" });
   if (await confirm.isVisible()) await confirm.click();
   await settings.getByRole("button", { name: "Agents", exact: true }).click();
   await expect(agentRow(settings, agent).getByText("Everything from this computer's environment")).toHaveCount(given ? 1 : 0);
@@ -193,7 +195,7 @@ test("a change made while an agent's session opens stops the turn when it gives 
   writeFileSync(sessionsHeld(), "");
   await tagAgent(page, "Opening", "Opener", "ENV HOSTS_SECRET");
   await expect(workingLine(page, "Opener")).toBeVisible();
-  await giveHostsEnvironmentTo(page, "Opening", "Opener", false);
+  await giveHostsEnvironmentTo(page, "Opening", "Opener", false, /Opener stops any turn under way, starts afresh and reads the room again, once\./);
   await expect(page.locator(".room-timeline")).toContainText("Stopped before it finished.");
   await page.locator(".room-timeline").getByRole("button", { name: "Open thread" }).click();
   const thread = page.getByRole("complementary", { name: "Thread of Opener" });

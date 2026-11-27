@@ -24,7 +24,8 @@ import { useSentChoice } from "./sent-choice.ts";
 
 const words = t.rooms;
 
-export const workingThere = (agent: RoomAgent, roomConversations: Conversation[]) => roomConversations.some(({ id, acpSessionId }) => id === agent.conversationId && acpSessionId !== null);
+export const workingThere = (agent: RoomAgent, roomConversations: Conversation[]) =>
+  agent.answering !== null || roomConversations.some(({ id, acpSessionId, status }) => id === agent.conversationId && (acpSessionId !== null || status === "running"));
 
 const choiceChanged = (before: VariablesChosen, after: VariablesChosen) => Object.entries(after).find(([name, given]) => !Object.hasOwn(before, name) || before[name] !== given);
 
