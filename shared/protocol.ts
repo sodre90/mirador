@@ -829,10 +829,14 @@ export type ServerMessage =
       filesNote?: string;
       filesNoteAbout?: HostProblem;
     }
-  /** The rewind this page asked for is done: the events from `fromSeq` on are gone. */
-  | { type: "conversation.rewind-done"; requestId: string; conversationId: string; fromSeq: number }
-  /** The conversation was taken back to before `fromSeq`, which every page showing it drops its events from. */
-  | { type: "conversation.rewound"; conversationId: string; fromSeq: number }
+  /** The rewind this page asked for is done: the events from `fromSeq` through `throughSeq` are gone. */
+  | { type: "conversation.rewind-done"; requestId: string; conversationId: string; fromSeq: number; throughSeq?: number }
+  /**
+   * The conversation was taken back to before `fromSeq`, which every page showing it drops its events from through
+   * `throughSeq`, and keeps any event numbered after that, which the host wrote once the rewind was done. A host that
+   * does not send `throughSeq` drops everything from `fromSeq` on.
+   */
+  | { type: "conversation.rewound"; conversationId: string; fromSeq: number; throughSeq?: number }
   | { type: "conversation.rewind-failed"; requestId: string; message: string; problem?: HostProblem }
   | { type: "canvas.upserted"; item: CanvasItem }
   | { type: "canvas.exported"; requestId: string; html: string }

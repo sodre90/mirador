@@ -1850,7 +1850,7 @@ export function startServer(services: HostServices) {
       case "conversation.rewind":
         return conversations
           .rewind(message.conversationId, message.seq, { keepFiles: message.keepFiles === true })
-          .then(({ fromSeq }) => reply({ type: "conversation.rewind-done", requestId: message.requestId, conversationId: message.conversationId, fromSeq }))
+          .then(({ fromSeq, throughSeq }) => reply({ type: "conversation.rewind-done", requestId: message.requestId, conversationId: message.conversationId, fromSeq, throughSeq }))
           .catch((error) => reply({ type: "conversation.rewind-failed", requestId: message.requestId, ...failure(error) }));
       case "conversation.set-ask-mode":
         return conversations.setAskMode(message.conversationId, message.askMode);

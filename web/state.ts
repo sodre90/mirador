@@ -446,6 +446,11 @@ function withRoomCanvasItem(state: AppState, item: CanvasItem): AppState {
 
 const notLoaded = (conversationId: string): OpenConversation => ({ conversationId, loaded: false, events: [], hasEarlier: false, canvas: [] });
 
+/** Whether a rewind took the event numbered `seq` away: from `fromSeq` on, or up to `throughSeq` where the host names it. */
+function rewoundAway({ fromSeq, throughSeq }: { fromSeq: number; throughSeq?: number }, seq: number) {
+  return seq >= fromSeq && (throughSeq === undefined || seq <= throughSeq);
+}
+
 function withOpen(state: AppState, conversationId: string, change: (open: OpenConversation) => OpenConversation) {
   const changed = (opened: OpenConversation[]) =>
     opened.some((open) => open.conversationId === conversationId) ? opened.map((open) => (open.conversationId === conversationId ? change(open) : open)) : opened;
@@ -627,7 +632,7 @@ function applyServerMessage(state: AppState, message: ServerMessage): AppState {
       });
     case "conversation.rewound":
     case "conversation.rewind-done":
-      return withOpen(state, message.conversationId, (open) => ({ ...open, events: open.events.filter(({ seq }) => seq < message.fromSeq) }));
+      return withOpen(state, message.conversationId, (open) => ({ ...open, events: open.events.filter(({ seq }) => !rewoundAway(message, seq)) }));
     case "canvas.upserted":
       return withRoomCanvasItem(
         withOpen(state, message.item.conversationId, (open) => ({ ...open, canvas: upsert(open.canvas, withThisPagesAssetsOrigin(state, message.item)) })),

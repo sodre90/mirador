@@ -520,8 +520,6 @@ export class ConversationService {
   /** Room and sandboxed workspace conversations' agent processes, each stopped once it has sat idle for `roomAgentIdleMs` since its last turn ended. */
   private readonly idleOwnProcesses = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly sessions = new ConversationSessions();
-  /** Conversations whose log this host run has read for subagent tasks a killed host left running; the runtimes' sets track them from then on. */
-  private readonly tasksLeftRunningChecked = new Set<string>();
   private readonly subagentSessions = new SubagentSessions();
   /** Sessions whose agent left an option change unanswered for too long, so their next changes don't wait. */
   private readonly sessionsSlowToAnswer = new Set<string>();
@@ -2498,7 +2496,7 @@ export class ConversationService {
    * dropped, which leaves what the agent has and what the user sees the same. `keepFiles` leaves the files as they are
    * now, without telling the agent, as Claude Code's own restore of the conversation alone does.
    */
-  async rewind(conversationId: string, seq: number, { keepFiles = false } = {}): Promise<{ fromSeq: number }> {
+  async rewind(conversationId: string, seq: number, { keepFiles = false } = {}): Promise<{ fromSeq: number; throughSeq: number }> {
     const cannotRewind = this.rewindProblem(conversationId, seq);
     if (cannotRewind) throw new HostProblemError(cannotRewind);
     const runtime = this.runtime(conversationId);
@@ -2511,13 +2509,13 @@ export class ConversationService {
       const checkpoint = this.checkpointAt(conversationId, seq);
       if (!keepFiles && checkpoint && (await this.checkpoints.keeps(this.workspaceOf(conversationId), checkpoint))) await this.restoredWithNoVmAtWork(this.workspaceOf(conversationId), checkpoint);
       const released = this.releaseSession(conversationId, runtime, conversation.acpSessionId, { endBackgroundWork: false });
-      this.store.deleteEventsFrom(conversationId, seq);
+      const throughSeq = this.store.deleteEventsFrom(conversationId, seq);
       this.endBackgroundWorkOf(conversationId);
       this.forgetContextUsage(conversationId);
       this.save({ ...this.get(conversationId), acpSessionId: forked });
-      this.hub.publishToConversation(conversationId, { type: "conversation.rewound", conversationId, fromSeq: seq });
+      this.hub.publishToConversation(conversationId, { type: "conversation.rewound", conversationId, fromSeq: seq, throughSeq });
       await released;
-      return { fromSeq: seq };
+      return { fromSeq: seq, throughSeq };
     } finally {
       this.setStatus(conversationId, "idle");
     }
@@ -3122,12 +3120,6 @@ export class ConversationService {
   private ensureSession(conversationId: string, open = () => this.openSession(conversationId)): Promise<string> {
     const runtime = this.runtime(conversationId);
     if (runtime.sessionId) return runtime.sessionId;
-    // A host that was killed hard left no event for the subagent tasks that ran on the process it lost. Read once per host run:
-    // since then, subagentTasksAtWork knows them, and every end of a process is logged as it happens.
-    if (!this.tasksLeftRunningChecked.has(conversationId)) {
-      this.tasksLeftRunningChecked.add(conversationId);
-      if (subagentTaskLeftRunning(this.store.listEvents(conversationId))) this.append(conversationId, { type: "agent-process-ended" });
-    }
     const opening: Promise<string> = (this.get(conversationId).worktree ? this.openAfterItsWorktree(conversationId, open) : open()).catch((error) => {
       if (runtime.sessionId && runtime.sessionId !== opening) throw error;
       runtime.sessionId = undefined;
@@ -4421,7 +4413,16 @@ export class ConversationService {
         .forEach((permissionId) =>
           this.store.appendEvent(conversation.id, { type: "permission-resolved", permissionId, optionId: null }),
         );
+      this.endSubagentTaskLeftRunningByRestart(conversation.id, events);
     });
+  }
+
+  /**
+   * A host killed hard left no event for the subagent task that ran on the process it lost, so its subagent would show
+   * working for good. Read here, once, as the host starts: from then on every end of a process is logged as it happens.
+   */
+  private endSubagentTaskLeftRunningByRestart(conversationId: string, events: StoredEvent[]) {
+    if (subagentTaskLeftRunning(events)) this.store.appendEvent(conversationId, { type: "agent-process-ended" });
   }
 
   /**

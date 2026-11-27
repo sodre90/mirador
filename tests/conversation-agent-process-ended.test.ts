@@ -7,6 +7,7 @@ import { ConversationService } from "../host/conversations.ts";
 import { Hub } from "../host/hub.ts";
 import { SystemNotifications } from "../host/system-notifications.ts";
 import { Store } from "../host/store.ts";
+import { buildTimeline, subagentState, subagentsIn } from "../shared/timeline.ts";
 import type * as acp from "@agentclientprotocol/sdk/unstable";
 import type { ConversationEvent } from "../shared/model.ts";
 
@@ -35,12 +36,44 @@ interface Internals {
  * A Claude conversation whose log holds `events`, on an agent process that is a stand-in. The subagent flag is driven
  * through the real path, handleSessionUpdate, with the session `s1` registered to the conversation.
  */
-function conversationWithLog(events: ConversationEvent[] = []) {
+function storeWithWorkspace() {
   const store = new Store(":memory:");
   const project = join(scratch, `project-${crypto.randomUUID()}`);
   mkdirSync(project);
   store.saveProfile({ id: "p1", name: "p", harness: "claude", environment: "", prelaunch: "", model: null, mode: null, effort: null, bypassPermissions: false, askMode: "wait", color: null, pluginsOff: [], createdAt: 1 });
   store.insertWorkspace({ id: "w1", name: "p", path: project, defaultLaunch: { harness: "claude", profileId: "p1" }, createdAt: 1 });
+  return store;
+}
+
+/** A host as it starts over `store`: its constructor reads every conversation's log, as it does after a restart. */
+function hostOver(store: Store) {
+  const config = loadConfig({ MIRADOR_DATA_DIR: join(scratch, `data-${crypto.randomUUID()}`) });
+  return new ConversationService(store, new Hub(), config, {} as never, {} as never, {} as never, new SystemNotifications(store, new Hub()));
+}
+
+/** A conversation whose log holds `events`, in a store a host starts over; `turnInFlight` says the host was killed mid-turn. */
+function storeWithLog(events: ConversationEvent[], { turnInFlight = false } = {}) {
+  const store = storeWithWorkspace();
+  const conversation = (hostOver(store) as unknown as { insertConversation(workspaceId: string, launch: object, title: string, titleSetByUser: boolean): { id: string } }).insertConversation("w1", { harness: "claude", profileId: "p1" }, "Untitled", false);
+  events.forEach((event) => store.appendEvent(conversation.id, event));
+  if (turnInFlight) store.turnStarted(conversation.id);
+  return { store, conversationId: conversation.id };
+}
+
+const storedEventsOf = (store: Store, conversationId: string) => store.listEvents(conversationId).map(({ event }) => event);
+const processEndsOf = (store: Store, conversationId: string) => storedEventsOf(store, conversationId).filter((event) => event.type === "agent-process-ended").length;
+
+const subagentLaunch = (toolCallId: string): ConversationEvent => ({
+  type: "acp",
+  update: { sessionUpdate: "tool_call", toolCallId, title: "Task", kind: "think", status: "pending", rawInput: { description: "Verify screenshot pass" }, _meta: { claudeCode: { toolName: "Agent" } } },
+});
+const subagentAnsweredAtOnce = (toolCallId: string): ConversationEvent => ({
+  type: "acp",
+  update: { sessionUpdate: "tool_call_update", toolCallId, _meta: { claudeCode: { toolName: "Agent", toolResponse: { isAsync: true, status: "async_launched" } } } },
+});
+
+function conversationWithLog(events: ConversationEvent[] = []) {
+  const store = storeWithWorkspace();
   const config = loadConfig({ MIRADOR_DATA_DIR: join(scratch, `data-${crypto.randomUUID()}`) });
   const conversations = new ConversationService(store, new Hub(), config, {} as never, {} as never, {} as never, new SystemNotifications(store, new Hub()));
   // Not `create`, which opens a session on a real agent process at once.
@@ -113,26 +146,41 @@ test("releasing the session appends it, unless the caller defers it until after 
   expect(deferred.eventsNow().at(-1)).toEqual({ type: "agent-process-ended" });
 });
 
-test("a session opening on a new process with a log that shows a task left running appends agent-process-ended once", async () => {
+test("a host starting over a log with a subagent task left running appends agent-process-ended once, and an idle conversation shows the subagent stopped with no message sent", () => {
+  const { store, conversationId } = storeWithLog([...yourTurn, subagentLaunch("b1"), eventUpdate("b1", "running"), subagentAnsweredAtOnce("b1")]);
+  hostOver(store);
+  expect(storedEventsOf(store, conversationId).at(-1)).toEqual({ type: "agent-process-ended" });
+  expect(processEndsOf(store, conversationId)).toBe(1);
+  const subagentStates = subagentsIn(buildTimeline(store.listEvents(conversationId))).map((block) => subagentState(block, false));
+  expect(subagentStates).toEqual(["stopped"]);
+});
+
+test("a host starting again over the same log appends nothing more, the first start having ended the task", () => {
+  const { store, conversationId } = storeWithLog([...yourTurn, subagentLaunch("b1"), eventUpdate("b1", "running"), subagentAnsweredAtOnce("b1")]);
+  hostOver(store);
+  hostOver(store);
+  expect(processEndsOf(store, conversationId)).toBe(1);
+});
+
+test("a host starting over a log whose task ended appends nothing", () => {
+  const { store, conversationId } = storeWithLog([...yourTurn, subagentLaunch("b1"), eventUpdate("b1", "running"), subagentAnsweredAtOnce("b1"), eventUpdate("b1", "completed")]);
+  hostOver(store);
+  expect(processEndsOf(store, conversationId)).toBe(0);
+});
+
+test("a host starting over a turn it was killed in ends the task left running, and the turn as cut short, each once", () => {
+  const { store, conversationId } = storeWithLog([{ type: "user-message", text: "Go" }, subagentLaunch("b1"), eventUpdate("b1", "running"), subagentAnsweredAtOnce("b1")], { turnInFlight: true });
+  hostOver(store);
+  expect(storedEventsOf(store, conversationId).slice(-2)).toEqual([{ type: "agent-process-ended" }, { type: "turn-end", stopReason: "cancelled", cutShortByRestart: true }]);
+  hostOver(store);
+  expect(processEndsOf(store, conversationId)).toBe(1);
+});
+
+test("a session opening on a new process appends nothing for a task left running in the log, the host start having ended it", async () => {
   const { internals, conversationId, runtime, processEnds } = conversationWithLog([...yourTurn, eventUpdate("a1", "running")]);
   runtime.harness = undefined;
   expect(await internals.ensureSession(conversationId, async () => "s2")).toBe("s2");
-  expect(processEnds()).toBe(1);
-  runtime.sessionId = undefined;
-  await internals.ensureSession(conversationId, async () => "s3");
-  expect(processEnds(), "the event ended it in the log").toBe(1);
-});
-
-test("the log is read for tasks left running once per host run: a later open in the same run does not read it again", async () => {
-  const { internals, conversationId, runtime, store, processEnds } = conversationWithLog(yourTurn);
-  runtime.harness = undefined;
-  expect(await internals.ensureSession(conversationId, async () => "s2")).toBe("s2");
   expect(processEnds()).toBe(0);
-
-  store.appendEvent(conversationId, eventUpdate("a1", "running"));
-  runtime.sessionId = undefined;
-  expect(await internals.ensureSession(conversationId, async () => "s3")).toBe("s3");
-  expect(processEnds(), "the run's own process ends are logged as they happen, so the later read is not needed").toBe(0);
 });
 
 test("a session already open appends nothing, nor does one opening where the log shows no task left running", async () => {
