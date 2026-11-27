@@ -3,12 +3,12 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ConversationService } from "../host/conversations.ts";
-import { answerAsToolResult, CanvasService, severalQuestionsRequest } from "../host/canvas/service.ts";
+import { answerAsToolResult, canvasQuestion, CanvasService, severalQuestionsRequest } from "../host/canvas/service.ts";
 import { Hub } from "../host/hub.ts";
 import { Store } from "../host/store.ts";
 import type { SystemNotifications } from "../host/system-notifications.ts";
 import { questionsOf } from "../shared/ask.ts";
-import type { AskItem, CanvasItem } from "../shared/model.ts";
+import type { AskItem, AskQuestion, CanvasItem } from "../shared/model.ts";
 import type { NotificationReason } from "../shared/system-notifications.ts";
 import { completeDirectories } from "../host/paths.ts";
 
@@ -260,6 +260,16 @@ describe("CanvasService", () => {
     expect(() => canvas.answer(ask().id, { label: "Red" }, [{ label: "Red" }])).toThrow("takes one answer");
   });
 
+  test("a question the agent asks offers Something else, whatever allowOther it passed, and so does each of several", () => {
+    const { canvas } = setUp();
+    const passedFalse: AskQuestion = { question: "Color?", options: [{ label: "Red" }, { label: "Blue" }], allowOther: false };
+    const left: AskQuestion = { question: "Size?", options: [{ label: "S" }, { label: "L" }] };
+    expect(canvasQuestion(passedFalse)).toEqual({ ...passedFalse, allowOther: true });
+    expect(canvasQuestion(left)).toEqual({ ...left, allowOther: true });
+    expect(severalQuestionsRequest([passedFalse, left], undefined)).toEqual({ questions: [{ ...passedFalse, allowOther: true }, { ...left, allowOther: true }] });
+    expect(canvas.openAsk("c1", canvasQuestion(passedFalse)).allowOther).toBe(true);
+  });
+
   test("questionsOf gives the one question of an item that holds just one", () => {
     const { ask, askSeveral } = setUp();
     expect(questionsOf(ask())).toEqual([{ question: "Color?", options: [{ label: "Red" }, { label: "Blue" }], allowOther: false }]);
@@ -326,15 +336,17 @@ describe("severalQuestionsRequest", () => {
   const color = { question: "Which color?", options: [{ label: "Red" }, { label: "Blue" }] };
   const size = { question: "Which size?", options: [{ label: "Small" }, { label: "Large" }] };
 
+  const offered = { allowOther: true };
+
   test("a page given beside the questions goes to the first question when it has none of its own", () => {
-    expect(severalQuestionsRequest([color, size], "<p>Wall</p>")).toEqual({ questions: [{ ...color, html: "<p>Wall</p>" }, size] });
-    expect(severalQuestionsRequest([{ ...color, html: "" }, size], "<p>Wall</p>")).toEqual({ questions: [{ ...color, html: "<p>Wall</p>" }, size] });
+    expect(severalQuestionsRequest([color, size], "<p>Wall</p>")).toEqual({ questions: [{ ...color, ...offered, html: "<p>Wall</p>" }, { ...size, ...offered }] });
+    expect(severalQuestionsRequest([{ ...color, html: "" }, size], "<p>Wall</p>")).toEqual({ questions: [{ ...color, ...offered, html: "<p>Wall</p>" }, { ...size, ...offered }] });
   });
 
-  test("the first question's own page stays, and without a page beside them the questions go as they are", () => {
+  test("the first question's own page stays, and without a page beside them the questions go as they are, each offering Something else", () => {
     const withPage = { ...color, html: "<p>Own</p>" };
-    expect(severalQuestionsRequest([withPage, size], "<p>Wall</p>")).toEqual({ questions: [withPage, size] });
-    expect(severalQuestionsRequest([color, size], undefined)).toEqual({ questions: [color, size] });
+    expect(severalQuestionsRequest([withPage, size], "<p>Wall</p>")).toEqual({ questions: [{ ...withPage, ...offered }, { ...size, ...offered }] });
+    expect(severalQuestionsRequest([color, size], undefined)).toEqual({ questions: [{ ...color, ...offered }, { ...size, ...offered }] });
     expect(severalQuestionsRequest([], "<p>Wall</p>")).toEqual({ questions: [] });
   });
 });

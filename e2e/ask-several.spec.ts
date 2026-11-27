@@ -112,6 +112,26 @@ test("several questions come one page at a time, can be changed on a review page
   });
 });
 
+test("a question asked without allowOther offers Something else, and a typed answer goes back, even when allowOther: false is passed", async ({ page }) => {
+  await signIn(page, host);
+  await page.goto(host.origin);
+  const conversationId = await startConversation(page);
+  const ask = page.locator(".ask");
+  const ownAnswer = ask.getByRole("textbox", { name: "Your own answer" });
+  const toolResult = callCanvasTool(host, conversationId, "ask", { question: "What should it say?", options: [{ label: "Hello" }, { label: "Goodbye" }] });
+
+  await expect(ask.getByRole("radio", { name: "Something else" })).toBeVisible();
+  await ownAnswer.pressSequentially("Hi there");
+  await ownAnswer.press("Enter");
+  expect(await toolResult).toBe("The user chose: Hi there");
+
+  const passedFalse = callCanvasTool(host, conversationId, "ask", { question: "How big?", options: [{ label: "Small" }, { label: "Big" }], allowOther: false });
+  await expect(ask.getByRole("radio", { name: "Something else" })).toBeVisible();
+  await ownAnswer.pressSequentially("Huge");
+  await ownAnswer.press("Enter");
+  expect(await passedFalse).toBe("The user chose: Huge");
+});
+
 test("your own answer to one question can run over several lines with Shift+Enter, and Enter sends it", async ({ page }) => {
   await signIn(page, host);
   await page.goto(host.origin);

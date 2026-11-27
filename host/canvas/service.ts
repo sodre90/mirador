@@ -35,13 +35,19 @@ export interface ShowRequest {
 export type AskRequest = AskQuestion | { questions: AskQuestion[] };
 
 /**
+ * A question the agent asks on the canvas. Every one offers "Something else…" for the user's own answer, whatever
+ * `allowOther` the agent passed, so the agent is never left to decide it. Elicitation forms don't come this way.
+ */
+export const canvasQuestion = (question: AskQuestion): AskQuestion => ({ ...question, allowOther: true });
+
+/**
  * GPT models fill in every field a tool takes, so a call with questions can also carry a single question's fields
  * beside them; the questions win. A context page given only beside them goes to the first question, so it isn't lost.
  */
 export function severalQuestionsRequest(questions: AskQuestion[], htmlBesideThem: string | undefined): AskRequest {
   const [first, ...rest] = questions;
   const firstTakesHtml = first !== undefined && !first.html && !!htmlBesideThem;
-  return { questions: firstTakesHtml ? [{ ...first, html: htmlBesideThem }, ...rest] : questions };
+  return { questions: (firstTakesHtml ? [{ ...first, html: htmlBesideThem }, ...rest] : questions).map(canvasQuestion) };
 }
 
 export interface RenderReport {

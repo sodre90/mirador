@@ -7,7 +7,7 @@ import type { ConversationService } from "../host/conversations.ts";
 import type { Hub } from "../host/hub.ts";
 import type { SystemNotifications } from "../host/system-notifications.ts";
 import type { AskItem, CanvasItem, ConversationEvent, PickedSeveral, StoredEvent } from "../shared/model.ts";
-import { pickedOnOneLine } from "../shared/ask.ts";
+import { pickedOnOneLine, questionsOf } from "../shared/ask.ts";
 import { canvasPluginHost } from "./canvas-plugin-host.ts";
 
 const FIXTURES = join(import.meta.dir, "fixtures", "canvas-plugins");
@@ -213,6 +213,20 @@ describe("rebuildCanvas", () => {
     const canvas = new CanvasService(store, hub, conversations, { notify: () => {} } as unknown as SystemNotifications, ["http://127.0.0.1:4601"]);
     return { store, canvas, plugins, items, prompts };
   }
+
+  test("every question the agent asked reads back with Something else, whatever allowOther it passed, and so does each of several", async () => {
+    const { store, canvas, plugins } = await setUp();
+    const events = stored([
+      userSays("Go"),
+      ...claudeCall("t1", "mcp__canvas__ask", { question: "Which?", options: [{ label: "One" }] }, "Showing."),
+      ...claudeCall("t2", "mcp__canvas__ask", { question: "Left?", options: [{ label: "Yes" }, { label: "No" }], allowOther: false }, "Showing."),
+      ...claudeCall("t3", "mcp__canvas__ask", { questions: [{ question: "A?", options: [{ label: "X" }, { label: "Y" }], allowOther: false }, { question: "B?", options: [{ label: "P" }, { label: "Q" }] }] }, "Showing."),
+    ]);
+
+    await rebuildCanvas("c1", events, canvas, plugins);
+
+    expect(store.listCanvasItems("c1").map((item) => (item.kind === "ask" ? questionsOf(item).map(({ allowOther }) => allowOther) : item.kind))).toEqual([[true], [true], [true, true]]);
+  });
 
   test("puts back pages, answered questions with the pages shown before them, and the items plugin calls made, pages in order", async () => {
     const { store, canvas, plugins, prompts } = await setUp();
