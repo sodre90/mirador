@@ -531,4 +531,6 @@ export const rooms = {
   broughtSettingsNote: "Your profile only gives them their first values: changes here are for this agent in this room alone.",
   taskFromRoom: "Task from the room",
   allItWasSent: "All it was sent",
+  broughtStepsOnYourComputer: "Its steps stay on your computer.",
+  showInItsWork: "Show in Its work",
 };

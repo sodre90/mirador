@@ -3147,6 +3147,20 @@ input.picker-search {
   font-size: calc(12px * var(--font-scale));
 }
 
+.brought-task-sent.jumped {
+  animation: brought-task-flash 1.4s ease-out;
+}
+
+@keyframes brought-task-flash {
+  0% {
+    box-shadow: 0 0 0 2px var(--accent);
+    background: var(--accent-soft);
+  }
+  100% {
+    box-shadow: 0 0 0 2px transparent;
+  }
+}
+
 .terminal-command {
   margin-top: 8px;
 }
@@ -10888,6 +10902,19 @@ button.link.more-rows {
 
 .room-entry .room-thread-line {
   padding-left: 0;
+}
+
+.room-brought-steps-link {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  padding: 2px 0 4px 38px;
+  font-size: calc(12px * var(--font-scale));
+}
+
+.room-brought-steps-link .hint {
+  margin: 0;
 }
 
 .room-tags-line {

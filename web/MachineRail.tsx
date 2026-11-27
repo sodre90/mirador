@@ -11,7 +11,7 @@ import { hints } from "./hints.ts";
 import { replyProblemText } from "./host-error.ts";
 import { t } from "./i18n/index.ts";
 import { useMachineColorStyle } from "./machine-colors.ts";
-import { placeIn, shownInAnotherMirador, tellTheMachineItIsShown } from "./machine-place.ts";
+import { openBroughtWorkIn, placeIn, shownInAnotherMirador, tellTheMachineItIsShown, type OpenBroughtWorkRequest } from "./machine-place.ts";
 import { machineRemovalAsked, removeMachine } from "./machine-removal.ts";
 import { giveMessageBoxToMachine, useFormatBar, useMessageBox } from "./message-box.ts";
 import { NameToJoinWith, useNameToJoinWith, type JoiningPerson } from "./name-to-join.tsx";
@@ -256,6 +256,7 @@ function MachineFrame({
   striped,
   place,
   onPlace,
+  onOpenBroughtWork,
 }: {
   machine: Machine;
   shown: boolean;
@@ -263,9 +264,12 @@ function MachineFrame({
   striped: boolean;
   place: string;
   onPlace: (machineId: string, place: string) => void;
+  onOpenBroughtWork?: (machineId: string, request: OpenBroughtWorkRequest) => void;
 }) {
   const frame = useRef<HTMLIFrameElement>(null);
   const openedWith = useRef(opening);
+  const onOpenBroughtWorkRef = useRef(onOpenBroughtWork);
+  onOpenBroughtWorkRef.current = onOpenBroughtWork;
   const [address] = useState(() => `${relayAddress(machine)}${opening?.place ?? place}`);
   useEffect(() => {
     if (opening && opening !== openedWith.current) frame.current!.contentWindow!.location.href = `${relayAddress(machine)}${opening.place}`;
@@ -283,7 +287,15 @@ function MachineFrame({
   };
   useEffect(giveMessageBox, [messageBox, formatBar]);
   useEffect(() => {
-    if (machine.asPerson) return;
+    if (machine.asPerson) {
+      const hearBroughtWork = (event: MessageEvent) => {
+        if (event.source !== frame.current?.contentWindow) return;
+        const request = openBroughtWorkIn(event.data);
+        if (request) onOpenBroughtWorkRef.current?.(machine.id, request);
+      };
+      window.addEventListener("message", hearBroughtWork);
+      return () => window.removeEventListener("message", hearBroughtWork);
+    }
     const rememberPlace = (event: MessageEvent) => {
       const sent = placeIn(event.data);
       if (sent !== null && event.source === frame.current?.contentWindow && event.origin === new URL(address).origin) onPlace(machine.id, sent);
@@ -446,6 +458,7 @@ export function MachineFrames({
   placeOf,
   onPlace,
   onJoinedRoom,
+  onOpenBroughtWork,
 }: {
   machines: Machine[];
   person: JoiningPerson;
@@ -456,6 +469,7 @@ export function MachineFrames({
   onPlace: (machineId: string, place: string) => void;
   /** An invite pasted in a machine's place took this computer's owner into this room of it, or to its door. */
   onJoinedRoom: (machineId: string, roomId: string, waiting: boolean) => void;
+  onOpenBroughtWork?: (machineId: string, request: OpenBroughtWorkRequest) => void;
 }) {
   const striped = useMachineColorStyle() === "strip";
   return framesInOneOrder(machines)
@@ -470,6 +484,7 @@ export function MachineFrames({
           striped={striped && !machine.asPerson}
           place={placeOf(machine.id)}
           onPlace={onPlace}
+          onOpenBroughtWork={onOpenBroughtWork}
         />
       ) : (
         machine.id === shownId && <JoinMachinePanel key={machine.id} machine={machine} person={person} onJoinedRoom={onJoinedRoom} />

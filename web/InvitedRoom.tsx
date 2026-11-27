@@ -1,10 +1,11 @@
-import { useMemo, type Dispatch, type ReactNode } from "react";
+import { useMemo, useState, type Dispatch, type ReactNode } from "react";
 import type { BroughtAgentHere, BroughtTaskWaiting } from "../shared/brought-agents.ts";
 import type { Conversation, Machine, MachineStatus, Profile } from "../shared/model.ts";
-import { BroughtAgentsBar, BroughtAgentsWaiting, broughtInto, BroughtWorkPanel, useBroughtWorkKept, type BroughtHere } from "./BroughtWork.tsx";
+import { BroughtAgentsBar, BroughtAgentsWaiting, broughtInto, BroughtWorkPanel, useBroughtWorkKept, type BroughtHere, type BroughtWorkJump } from "./BroughtWork.tsx";
 import { t } from "./i18n/index.ts";
 import { SidebarToggle, type PaneToggle } from "./LayoutToggles.tsx";
 import { MachineFrames, useKeptLoaded, type PlaceToOpen } from "./MachineRail.tsx";
+import type { OpenBroughtWorkRequest } from "./machine-place.ts";
 import type { JoiningPerson } from "./name-to-join.tsx";
 import { JoinedRoomMark, JoinedRoomMenu, joinedRoomShown, joinedRoomsOf, MuteHereToggle, type JoinedRoomShown } from "./RoomsSidebar.tsx";
 import type { AppAction, AppState, OpenConversation } from "./state.ts";
@@ -104,6 +105,16 @@ export function InvitedRoomPane({
   const here = machine ? broughtInto(machine.id, roomId ?? null, { broughtAgents, broughtConversations, broughtWork, broughtTasks, profiles }) : [];
   useBroughtWorkKept(here, dispatch);
   const workBeside = here.find(({ conversation }) => conversation.id === broughtWorkShown);
+  const [jumpTo, setJumpTo] = useState<(BroughtWorkJump & { conversationId: string }) | null>(null);
+  const openBroughtWork = (fromMachineId: string, request: OpenBroughtWorkRequest) => {
+    if (!machine || fromMachineId !== machine.id || (roomId !== undefined && request.roomId !== roomId)) return;
+    const brought = broughtAgents.find(
+      (agent) => agent.machineId === fromMachineId && agent.roomId === request.roomId && agent.agentId === request.agentId && agent.conversationId !== null,
+    );
+    if (!brought?.conversationId) return;
+    dispatch({ type: "show-brought-work", conversationId: brought.conversationId });
+    if (request.messageSeq !== undefined) setJumpTo({ conversationId: brought.conversationId, messageSeq: request.messageSeq, at: Date.now() });
+  };
   return (
     <section className={`invited-room ${machine ? "shown" : ""}`} aria-label={machine && whoseRoom(machine)}>
       {machine && (
@@ -123,7 +134,13 @@ export function InvitedRoomPane({
           <BroughtAgentsWaiting here={here} />
         </div>
       )}
-      {workBeside && <BroughtWorkPanel agent={workBeside} onClose={() => dispatch({ type: "show-brought-work", conversationId: null })} />}
+      {workBeside && (
+        <BroughtWorkPanel
+          agent={workBeside}
+          jumpTo={jumpTo?.conversationId === workBeside.conversation.id ? jumpTo : null}
+          onClose={() => dispatch({ type: "show-brought-work", conversationId: null })}
+        />
+      )}
       <MachineFrames
         machines={machines.filter(({ asPerson }) => asPerson)}
         person={person}
@@ -133,6 +150,7 @@ export function InvitedRoomPane({
         placeOf={NO_PLACE}
         onPlace={KEEPS_NO_PLACE}
         onJoinedRoom={onJoinedRoom}
+        onOpenBroughtWork={openBroughtWork}
       />
     </section>
   );

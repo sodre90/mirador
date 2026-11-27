@@ -1,4 +1,4 @@
-import { useEffect, type Dispatch } from "react";
+import { useEffect, useRef, type Dispatch, type RefObject } from "react";
 import type { BroughtAgentHere, BroughtTaskWaiting } from "../shared/brought-agents.ts";
 import type { Conversation, Profile } from "../shared/model.ts";
 import { BroughtTaskCard, isBusy, JumpToLatest, PendingApprovals, QueuedMessages, TimelineOfEvents, useScrollAnchor } from "./Chat.tsx";
@@ -110,8 +110,14 @@ function PendingApprovalsOf({ name, conversationId, opened }: { name: string; co
   );
 }
 
+/** A room message to scroll to inside Its work; `at` distinguishes repeated clicks on the same task. */
+export interface BroughtWorkJump {
+  messageSeq: number;
+  at: number;
+}
+
 /** Beside the room, what an agent you brought did on its tasks there, read as its conversation shows it, and nothing to write to it with. */
-export function BroughtWorkPanel({ agent, onClose }: { agent: BroughtHere; onClose: () => void }) {
+export function BroughtWorkPanel({ agent, jumpTo = null, onClose }: { agent: BroughtHere; jumpTo?: BroughtWorkJump | null; onClose: () => void }) {
   const { conversation, name, opened } = agent;
   const { ref, onScroll, awayFromLatest, jumpToLatest } = useScrollAnchor();
   useEffect(() => {
@@ -133,7 +139,7 @@ export function BroughtWorkPanel({ agent, onClose }: { agent: BroughtHere; onClo
         </button>
       </header>
       <div className="timeline" ref={ref} onScroll={onScroll}>
-        {opened?.loaded ? <WorkSoFar conversation={conversation} name={name} opened={opened} /> : <div className="notice-line">{words.loading}</div>}
+        {opened?.loaded ? <WorkSoFar conversation={conversation} name={name} opened={opened} jumpTo={jumpTo} container={ref} /> : <div className="notice-line">{words.loading}</div>}
       </div>
       {awayFromLatest && <JumpToLatest onJump={jumpToLatest} />}
       {conversation.queuedMessages.length > 0 && (
@@ -149,8 +155,34 @@ export function BroughtWorkPanel({ agent, onClose }: { agent: BroughtHere; onClo
   );
 }
 
-function WorkSoFar({ conversation, name, opened }: { conversation: Conversation; name: string; opened: OpenConversation }) {
+function WorkSoFar({
+  conversation,
+  name,
+  opened,
+  jumpTo,
+  container,
+}: {
+  conversation: Conversation;
+  name: string;
+  opened: OpenConversation;
+  jumpTo: BroughtWorkJump | null;
+  container: RefObject<HTMLDivElement | null>;
+}) {
   const earlier = useEarlierHistory(opened);
+  const jumpedAt = useRef<number | null>(null);
+  useEffect(() => {
+    if (!jumpTo || jumpedAt.current === jumpTo.at) return;
+    const target = container.current?.querySelector<HTMLElement>(`[data-room-message-seq="${jumpTo.messageSeq}"]`);
+    if (target) {
+      jumpedAt.current = jumpTo.at;
+      target.scrollIntoView({ block: "start" });
+      target.classList.remove("jumped");
+      void target.offsetWidth;
+      target.classList.add("jumped");
+      return;
+    }
+    if (earlier.available && !earlier.loading) earlier.load();
+  }, [jumpTo, opened.events.length, earlier.available, earlier.loading]);
   if (opened.events.length === 0) return <div className="notice-line">{words.noWorkYet}</div>;
   return (
     <>

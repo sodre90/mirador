@@ -507,4 +507,6 @@ export const rooms: Messages["rooms"] = {
   broughtSettingsNote: "你的配置只提供它们的初始值：在这里的更改只对这个房间里的这个 Agent 有效。",
   taskFromRoom: "来自房间的任务",
   allItWasSent: "发给它的全部内容",
+  broughtStepsOnYourComputer: "它的步骤保留在你的电脑上。",
+  showInItsWork: "在“它的工作”中显示",
 };

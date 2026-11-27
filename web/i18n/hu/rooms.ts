@@ -517,4 +517,6 @@ export const rooms: Messages["rooms"] = {
   broughtSettingsNote: "A profilod csak a kezdőértékeiket adja meg: amit itt változtatsz, csak erre az ágensre vonatkozik ebben a szobában.",
   taskFromRoom: "Feladat a szobából",
   allItWasSent: "Minden, amit kapott",
+  broughtStepsOnYourComputer: "A lépései a te gépeden maradnak.",
+  showInItsWork: "Mutatás a Munkájában",
 };

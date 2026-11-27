@@ -58,6 +58,7 @@ import { formatNumber, t } from "./i18n/index.ts";
 import { LayoutToggles } from "./LayoutToggles.tsx";
 import { movedCaretToLineEdge } from "./line-edge-keys.ts";
 import { LineIcon } from "./LineIcon.tsx";
+import { askParentToOpenBroughtWork, shownInAnotherMirador } from "./machine-place.ts";
 import { MarkdownText, MentionsOfMessage, SlackMessageText } from "./Markdown.tsx";
 import { useMessageBox } from "./message-box.ts";
 import { writersIn, writingLine, WritingSignals } from "./room-writing.ts";
@@ -589,6 +590,8 @@ function ThreadColumn({
     onClose();
   };
   const [threadPrefix = "", threadSuffix = ""] = words.thread("\0").split("\0");
+  const isYourBroughtAgent = agent.brought !== undefined && you !== null && agent.brought.personId === you;
+  const opensWorkInParent = isYourBroughtAgent && shownInAnotherMirador();
   return (
     <aside className="side-chat room-thread" aria-label={words.thread(agent.name)} onKeyDown={closeOnEscape}>
       <header className="side-chat-header">
@@ -610,13 +613,30 @@ function ThreadColumn({
       )}
       <div className="timeline" ref={threadTimeline} onScroll={onScroll}>
         {agent.conversation && opened?.loaded && firstReached && <HistoryReachingBack opened={opened} messageId={firstReached.id} />}
-        {shownHere.map((message, index) => (
-          <div key={message.id} className="room-thread-turn">
-            <RoomEntry message={message} answered={message.answers === undefined ? undefined : messagesById.get(message.answers)} agentsById={agentsById} />
-            <WorkspaceCalls calls={callsAfter(callsHere, message, shownHere[index + 1])} />
-            {agent.conversation && opened?.loaded && <TimelineOfEvents conversation={agent.conversation} events={eventsAnswering(opened.events, message.id)} agentName={agent.name} onlyReads={onlyReads} />}
-          </div>
-        ))}
+        {shownHere.map((message, index) => {
+          const askedThisAgent = !(writtenByAgent(message.author) && message.author.profileId === agent.profileId);
+          return (
+            <div key={message.id} className="room-thread-turn">
+              <RoomEntry message={message} answered={message.answers === undefined ? undefined : messagesById.get(message.answers)} agentsById={agentsById} />
+              <WorkspaceCalls calls={callsAfter(callsHere, message, shownHere[index + 1])} />
+              {!agent.conversation && isYourBroughtAgent && askedThisAgent && (
+                <div className="room-brought-steps-link">
+                  <span className="hint">{words.broughtStepsOnYourComputer}</span>
+                  {opensWorkInParent && (
+                    <button
+                      type="button"
+                      className="link"
+                      onClick={() => askParentToOpenBroughtWork({ roomId: thread.roomId, agentId: agent.profileId, messageSeq: message.seq })}
+                    >
+                      {words.showInItsWork}
+                    </button>
+                  )}
+                </div>
+              )}
+              {agent.conversation && opened?.loaded && <TimelineOfEvents conversation={agent.conversation} events={eventsAnswering(opened.events, message.id)} agentName={agent.name} onlyReads={onlyReads} />}
+            </div>
+          );
+        })}
         {workingLine && <div className="working">{workingLine}</div>}
         <WritingLine writing={writing} threadId={thread.id} you={you} />
       </div>

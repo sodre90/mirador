@@ -655,6 +655,14 @@ const lastQuotedOf = (lines: string[]) => lines.slice(lines.findLastIndex((line)
 /** Of a task's prompt as `broughtTaskPrompt` writes it, the words of the room's last message, the one it asks the agent to answer. */
 export const askedInBroughtTask = (prompt: string) => lastQuotedOf(lastQuotedOf(prompt.split("\n"))).join("\n").trim();
 
+/** The room message number (#12 -> 12) that a brought task's prompt asks the agent to answer, or null if it has none. */
+export function roomMessageSeqInBroughtTask(prompt: string): number | null {
+  const inner = lastQuotedOf(prompt.split("\n"));
+  const headerIndex = inner.findLastIndex((line) => !isQuoted(line));
+  const match = headerIndex >= 0 ? inner[headerIndex]!.match(/^#(\d+)\s+\[/) : null;
+  return match ? Number(match[1]) : null;
+}
+
 /** What Mirador ends a prompt of others' words with, in a block of its own, for an agent that would otherwise act on the last of theirs. */
 export const END_OF_OTHERS_WORDS = "End of the message.";
 

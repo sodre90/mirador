@@ -166,6 +166,24 @@ test("Mia brings an agent of hers into Ann's room: Ann's tasks for it wait for M
     await expect(workPanel(mia)).toHaveCount(0);
   });
 
+  await test.step("opening her brought agent's thread inside the room offers a one-click jump to that task in Its work, and Ann does not see it", async () => {
+    const miasRoom = mia.frameLocator(".invited-room .machine-frame.shown");
+    const miasAnswer = miasRoom.locator(".room-timeline .room-entry").filter({ hasText: "Weeded the beds" }).last();
+    await miasAnswer.getByRole("button", { name: "Open thread" }).click();
+    const miasThread = miasRoom.locator(".room-thread");
+    await expect(miasThread).toContainText("Its steps stay on your computer.");
+    await miasThread.getByRole("button", { name: "Show in Its work" }).click();
+    await expect(workPanel(mia)).toBeVisible();
+    await expect(workPanel(mia).locator(".brought-task-sent.jumped")).toContainText("Weeded the beds");
+    await workPanel(mia).getByRole("button", { name: "Close its work" }).click();
+    await expect(workPanel(mia)).toHaveCount(0);
+    await miasThread.getByRole("button", { name: "Close thread" }).click();
+
+    await answersOfCoder(ann).last().getByRole("button", { name: "Open thread" }).click();
+    await expect(ann.locator(".room-thread").getByRole("button", { name: "Show in Its work" })).toHaveCount(0);
+    await ann.locator(".room-thread").getByRole("button", { name: "Close thread" }).click();
+  });
+
   await test.step("its model and effort are chosen from the line above the room, and nothing a room's agent may not change is offered", async () => {
     await invitedBar(mia).locator(".conversation-settings-toggle").click();
     const settings = mia.getByRole("dialog", { name: "Settings of Coder" });

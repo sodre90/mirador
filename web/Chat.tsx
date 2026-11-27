@@ -69,7 +69,7 @@ import { FormatBarToggle } from "./FormatBar.tsx";
 import { ReadAloud, ReadsRepliesAloud } from "./ReadAloud.tsx";
 import { CopyReply, TimelineNow } from "./CopyReply.tsx";
 import { replyEnds, type ReplyEnd } from "../shared/replies.ts";
-import { askedInBroughtTask, BROUGHT_AGENT_ROLE } from "../shared/rooms.ts";
+import { askedInBroughtTask, BROUGHT_AGENT_ROLE, roomMessageSeqInBroughtTask } from "../shared/rooms.ts";
 import { awaitSpokenReply, forgetSpokenReply, readWhenSpokenTurnEnds, stopReading, stopReadingIn } from "./reply-player.ts";
 import { canFork } from "./actions.ts";
 import { hints, statusHints } from "./hints.ts";
@@ -832,8 +832,9 @@ export function BroughtTaskCard({ task }: { task: BroughtTaskWaiting }) {
 /** A task a room of another machine sent an agent you brought, in short: the words of the room's message it answers, and all it was sent on asking. */
 function BroughtTaskSent({ text, conversationId }: { text: string; conversationId: string | undefined }) {
   const roomWords = t.rooms;
+  const roomMessageSeq = roomMessageSeqInBroughtTask(text);
   return (
-    <div className="message user brought-task-sent">
+    <div className="message user brought-task-sent" data-room-message-seq={roomMessageSeq ?? undefined}>
       <div className="brought-task-sent-asked">
         <span className="hint">{roomWords.taskFromRoom}</span>
         <SlackMessageText text={askedInBroughtTask(text)} conversationId={conversationId} />

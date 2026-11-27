@@ -1,5 +1,26 @@
 const PLACE_MESSAGE = "mirador:machine-place";
 const SHOWN_MESSAGE = "mirador:machine-shown";
+const BROUGHT_WORK_MESSAGE = "mirador:open-brought-work";
+
+/** Request from an invited room's frame to open Its work for an agent the viewer brought, optionally jumped to one room message. */
+export interface OpenBroughtWorkRequest {
+  roomId: string;
+  agentId: string;
+  messageSeq?: number;
+}
+
+/** Asks the bringer's outer Mirador to open Its work for an agent they brought into this room. */
+export function askParentToOpenBroughtWork(request: OpenBroughtWorkRequest) {
+  if (window.parent !== window) window.parent.postMessage({ type: BROUGHT_WORK_MESSAGE, ...request }, "*");
+}
+
+/** A valid open-brought-work message from an invited room's frame; anything else is ignored. */
+export function openBroughtWorkIn(data: unknown): OpenBroughtWorkRequest | null {
+  const { type, roomId, agentId, messageSeq } = (typeof data === "object" && data !== null ? data : {}) as Record<string, unknown>;
+  if (type !== BROUGHT_WORK_MESSAGE || typeof roomId !== "string" || typeof agentId !== "string" || !roomId || !agentId) return null;
+  if (messageSeq !== undefined && (!Number.isSafeInteger(messageSeq) || (messageSeq as number) <= 0)) return null;
+  return { roomId, agentId, ...(typeof messageSeq === "number" && { messageSeq }) };
+}
 
 /** In the frame another computer's Mirador shows this machine in: its rail, or the pane its invited rooms open in. */
 export const shownInAnotherMirador = () => window.self !== window.top;

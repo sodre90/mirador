@@ -518,4 +518,6 @@ export const rooms: Messages["rooms"] = {
   broughtSettingsNote: "Tu perfil solo les da sus valores iniciales: lo que cambies aquí vale solo para este agente en esta sala.",
   taskFromRoom: "Tarea de la sala",
   allItWasSent: "Todo lo que se le envió",
+  broughtStepsOnYourComputer: "Sus pasos se quedan en tu equipo.",
+  showInItsWork: "Mostrar en Su trabajo",
 };

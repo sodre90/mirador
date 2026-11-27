@@ -26,6 +26,7 @@ import {
   AGENT_TAGGED_TURNS_AFTER_A_PERSON,
   askedInBroughtTask,
   broughtTaskPrompt,
+  roomMessageSeqInBroughtTask,
   canvasItemsOfAnswers,
   catchUpPrompt,
   eventsAnswering,
@@ -332,6 +333,8 @@ describe("the prompt that catches an agent up on a room", () => {
     const prompt = (inRoomsWorkspace: boolean) => broughtTaskPrompt({ roomName: "Launch", machineName: "Ann's machine", by: { role: "owner", name: "Ann" }, text: roomText, inRoomsWorkspace });
     expect([false, true].map((inRoomsWorkspace) => askedInBroughtTask(prompt(inRoomsWorkspace)))).toEqual(Array(2).fill("@Reviewer check it\n\nand the tests\n> quoted too"));
     expect(askedInBroughtTask("A line of no task")).toBe("");
+    expect([false, true].map((inRoomsWorkspace) => roomMessageSeqInBroughtTask(prompt(inRoomsWorkspace)))).toEqual([2, 2]);
+    expect(roomMessageSeqInBroughtTask("A line of no task")).toBeNull();
   });
 
   test("makes the square brackets of every name round, so that only the roles Mirador writes are in brackets", () => {
