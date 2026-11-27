@@ -102,6 +102,14 @@ test("the agent recommends an official plugin, and Mirador installs it, at the c
     await expect(page.locator(".message.user:visible").last()).toContainText("Nothing was installed.");
   });
 
+  await test.step("an answer in the user's own words installs nothing either, and reaches the agent", async () => {
+    await callCanvasTool(host, conversationId, "plugin_install", { name: "counter", reason: "You keep counting by hand." });
+    await ask.getByRole("textbox", { name: "Your own answer" }).fill("Tell me more first");
+    await ask.getByRole("button", { name: "Submit" }).click();
+    await expect(page.locator(".message.user:visible").last()).toContainText("Tell me more first");
+    await expect(page.locator(".message.user:visible").last()).toContainText("Nothing was installed.");
+  });
+
   await test.step("Install clones the plugin into Mirador's plugins folder, and the agent hears to have the user restart", async () => {
     await callCanvasTool(host, conversationId, "plugin_install", { name: "counter", reason: "You keep counting by hand." });
     await expect(ask.frameLocator("iframe").first().getByText("You keep counting by hand.")).toBeVisible();

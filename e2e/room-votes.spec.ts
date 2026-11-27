@@ -85,7 +85,7 @@ test("an agent's question in a room is everyone's vote, which the person whose t
   const question = "Which colour?";
 
   await test.step("Mia gives the agent a task, which asks the room a question once the owner allows it", async () => {
-    const ask = { question, options: [{ label: "Blue" }, { label: "Green" }], allowOther: true };
+    const ask = { question, options: [{ label: "Blue" }, { label: "Green" }] };
     await writeTagging(memberComposer(mia, "Launch"), tagMenu(mia), "Bu", "Builder", `CANVAS ask ${JSON.stringify(ask)}`);
     await page.locator(".room-timeline ~ .room-approvals").getByRole("button", { name: "Allow", exact: true }).click();
     for (const each of [page, mia, gus]) await expect(vote(each, question)).toBeVisible();
@@ -152,7 +152,7 @@ test("an agent's several questions are each voted on and confirmed together, onl
   const ask = {
     questions: [
       { question: "Which bed?", options: [{ label: "North" }, { label: "South" }] },
-      { question: "Which seeds?", options: [{ label: "Peas" }, { label: "Beans" }], allowOther: true },
+      { question: "Which seeds?", options: [{ label: "Peas" }, { label: "Beans" }] },
     ],
   };
   await writeTagging(memberComposer(page, "Launch"), tagMenu(page), "Bu", "Builder", `CANVAS ask ${JSON.stringify(ask)}`);

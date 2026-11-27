@@ -3,7 +3,7 @@ import * as z from "zod/v4";
 import { offerRuns, offerSource, type PluginOffer } from "../../shared/apps.ts";
 import type { PluginCatalog } from "../plugin-catalog.ts";
 import { PLUGIN_INSTALL_TOOL } from "./guidance.ts";
-import { INSTALL_ANSWER, type CanvasService } from "./service.ts";
+import { INSTALL_ANSWER, withSomethingElse, type CanvasService } from "./service.ts";
 
 const escaped = (text: string) => text.replace(/[&<>"]/g, (character) => `&#${character.charCodeAt(0)};`);
 
@@ -32,14 +32,14 @@ export function registerPluginInstallTool(server: McpServer, catalog: PluginCata
         const offer = await canvas.offerPlugin(plugin.name);
         canvas.openAsk(
           await callingConversation(ctx),
-          {
+          withSomethingElse({
             question: `Install the ${plugin.title} plugin?`,
             html: aboutPlugin(offer, plugin.description, reason),
             options: [
               { label: INSTALL_ANSWER, description: "Build it now; Mirador uses it from its next restart.", recommended: true },
               { label: "Not now", description: "Nothing is installed." },
             ],
-          },
+          }),
           { installsPluginOffer: offer.id },
         );
         return { content: [{ type: "text" as const, text: "The question is showing in the user's browser. Their answer, and whether the install went through, arrive as their next message. End your turn now." }] };

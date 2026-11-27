@@ -5,7 +5,7 @@ import { canvasToolName, USE_TOOL_TOOL } from "./tool-names.ts";
 import type { LoadedSession } from "../conversations.ts";
 import type { Store } from "../store.ts";
 import type { CanvasPlugins } from "./plugins.ts";
-import { canvasQuestion, severalQuestionsRequest, type AskRequest, type CanvasService, type ShowRequest } from "./service.ts";
+import { severalQuestionsRequest, withSomethingElse, type AskRequest, type CanvasService, type ShowRequest } from "./service.ts";
 
 /** A canvas tool call the agent made, as its session's history has it: what it was given, and what it returned. */
 export interface CanvasCall {
@@ -57,7 +57,7 @@ export async function rebuildCanvas(conversationId: string, events: StoredEvent[
       const request = askRequestOf(call.input);
       if (!request) continue;
       const shownBefore = pagesSinceQuestion.filter(({ userMessagesBefore }) => userMessagesBefore === call.userMessagesBefore).map(({ id }) => id);
-      canvas.restoreAsk(conversationId, request, { shownBefore, toolResult: call.result, nextUserMessage: call.nextUserMessage });
+      canvas.restoreAsk(conversationId, withSomethingElse(request), { shownBefore, toolResult: call.result, nextUserMessage: call.nextUserMessage });
       pagesSinceQuestion = [];
     } else {
       await plugins.replay(conversationId, call.tool, call.input);
@@ -71,13 +71,13 @@ const showRequestOf = ({ title, html }: Record<string, unknown>): ShowRequest | 
 function askRequestOf({ questions, question, options, html, multiple, optionWidth }: Record<string, unknown>): AskRequest | null {
   if (Array.isArray(questions)) return severalQuestionsRequest(questions as AskQuestion[], typeof html === "string" ? html : undefined);
   if (typeof question !== "string" || !Array.isArray(options)) return null;
-  return canvasQuestion({
+  return {
     question,
     options: options as AskOption[],
     ...(typeof html === "string" && { html }),
     ...(multiple === true && { multiple }),
     ...(typeof optionWidth === "number" && { optionWidth }),
-  });
+  };
 }
 
 interface CallInProgress extends CanvasCall {

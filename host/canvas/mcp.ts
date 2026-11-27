@@ -17,7 +17,7 @@ import { TITLE_CONVERSATION_TOOL } from "./tool-names.ts";
 import type { CanvasPlugins } from "./plugins.ts";
 import { readJobWaitRequest, waitSetUpReply } from "../../shared/job-waits.ts";
 import { errorList } from "./notes.ts";
-import { answerAsToolResult, canvasQuestion, severalQuestionsRequest, type AnswerWaitGivenUp, type CanvasService, type RenderOutcome } from "./service.ts";
+import { answerAsToolResult, severalQuestionsRequest, withSomethingElse, type AnswerWaitGivenUp, type CanvasService, type RenderOutcome } from "./service.ts";
 import { ANTIGRAVITY_ASK_WAIT_MS } from "../config.ts";
 import { MIRADOR_VERSION } from "../../shared/version.ts";
 import { worksForARoom, type CanvasUse, type HarnessId } from "../../shared/model.ts";
@@ -258,7 +258,7 @@ function buildCanvasServer(conversationId: string, parts: CanvasServerParts, cut
     "ask",
     {
       description:
-        "Ask the user to choose between options in their browser, optionally with an HTML preview per option and a shared HTML context page. The user can always type an answer of their own instead of picking an option. Use this instead of asking multiple-choice questions in plain text. Depending on the user's setting, the choice is returned as this tool's result or arrives as the user's next message (the result tells you which). When you have two or more things to ask, pass questions instead of question and options, one entry per question with its own options: the user answers them page by page, and all their answers come back together. Never fold several questions into one question, and never offer options such as \"Accept all\" or \"Change some answers\" that stand for several answers: the user then has no way to say which.",
+        "Ask the user to choose between options in their browser, optionally with an HTML preview per option and a shared HTML context page. The user can also type an answer of their own, so don't add an option such as \"Other\" for it. Use this instead of asking multiple-choice questions in plain text. Depending on the user's setting, the choice is returned as this tool's result or arrives as the user's next message (the result tells you which). When you have two or more things to ask, pass questions instead of question and options, one entry per question with its own options: the user answers them page by page, and all their answers come back together. Never fold several questions into one question, and never offer options such as \"Accept all\" or \"Change some answers\" that stand for several answers: the user then has no way to say which.",
       inputSchema: z.object({
         ...describedAskQuestionShape,
         question: z.string().min(1).optional().describe("The question, when you ask just one."),
@@ -281,7 +281,7 @@ function buildCanvasServer(conversationId: string, parts: CanvasServerParts, cut
       if (roomId && (questions ?? [rest]).some(({ multiple }) => multiple)) return toolError(ONE_OPTION_EACH_IN_A_ROOM);
       const caller = await callingConversation(ctx);
       canvas.takeBackBrokenAsks(caller);
-      const item = canvas.openAsk(caller, questions ? severalQuestionsRequest(questions, rest.html) : canvasQuestion({ question: question!, options: options!, ...rest }));
+      const item = canvas.openAsk(caller, withSomethingElse(questions ? severalQuestionsRequest(questions, rest.html) : { question: question!, options: options!, ...rest }));
       if (conversations.get(caller).askMode === "next-message") {
         return { content: [{ type: "text", text: describeAsk(await canvas.errorsOfOpeningPages(item)) }] };
       }

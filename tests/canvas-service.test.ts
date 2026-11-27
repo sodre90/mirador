@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ConversationService } from "../host/conversations.ts";
-import { answerAsToolResult, canvasQuestion, CanvasService, severalQuestionsRequest } from "../host/canvas/service.ts";
+import { answerAsToolResult, CanvasService, severalQuestionsRequest, withSomethingElse } from "../host/canvas/service.ts";
 import { Hub } from "../host/hub.ts";
 import { Store } from "../host/store.ts";
 import type { SystemNotifications } from "../host/system-notifications.ts";
@@ -186,7 +186,7 @@ describe("CanvasService", () => {
     expect(nextMessages).toEqual([]);
   });
 
-  test("an install question installs the offered plugin only on Install, discards it otherwise, then tells the agent what came of it", async () => {
+  test("an install question installs the offered plugin only on Install, discards it otherwise, own words too, then tells the agent what came of it", async () => {
     const { canvas, nextMessages } = setUp();
     const settled: [string, boolean][] = [];
     canvas.installsPluginsWith({
@@ -202,14 +202,17 @@ describe("CanvasService", () => {
       canvas.openAsk("c1", { question: "Install the Media plugin?", options: [{ label: "Install" }, { label: "Not now" }] }, { installsPluginOffer: offerId });
     canvas.answer(installQuestion("declined").id, { label: "Not now" });
     canvas.answer(installQuestion("agreed").id, { label: "Install" });
+    canvas.answer(installQuestion("talked over").id, { label: "Tell me more first" });
     await Bun.sleep(0);
     expect(settled).toEqual([
       ["declined", false],
       ["agreed", true],
+      ["talked over", false],
     ]);
     expect(nextMessages).toEqual([
       'Nothing was installed.\n\nMy answer to your question "Install the Media plugin?": Not now',
       'Mirador installed the Media plugin.\n\nMy answer to your question "Install the Media plugin?": Install',
+      'Nothing was installed.\n\nMy answer to your question "Install the Media plugin?": Tell me more first',
     ]);
   });
 
@@ -264,10 +267,10 @@ describe("CanvasService", () => {
     const { canvas } = setUp();
     const passedFalse: AskQuestion = { question: "Color?", options: [{ label: "Red" }, { label: "Blue" }], allowOther: false };
     const left: AskQuestion = { question: "Size?", options: [{ label: "S" }, { label: "L" }] };
-    expect(canvasQuestion(passedFalse)).toEqual({ ...passedFalse, allowOther: true });
-    expect(canvasQuestion(left)).toEqual({ ...left, allowOther: true });
-    expect(severalQuestionsRequest([passedFalse, left], undefined)).toEqual({ questions: [{ ...passedFalse, allowOther: true }, { ...left, allowOther: true }] });
-    expect(canvas.openAsk("c1", canvasQuestion(passedFalse)).allowOther).toBe(true);
+    expect(withSomethingElse(passedFalse)).toEqual({ ...passedFalse, allowOther: true });
+    expect(withSomethingElse(left)).toEqual({ ...left, allowOther: true });
+    expect(withSomethingElse({ questions: [passedFalse, left] })).toEqual({ questions: [{ ...passedFalse, allowOther: true }, { ...left, allowOther: true }] });
+    expect(canvas.openAsk("c1", withSomethingElse(passedFalse)).allowOther).toBe(true);
   });
 
   test("questionsOf gives the one question of an item that holds just one", () => {
@@ -336,17 +339,15 @@ describe("severalQuestionsRequest", () => {
   const color = { question: "Which color?", options: [{ label: "Red" }, { label: "Blue" }] };
   const size = { question: "Which size?", options: [{ label: "Small" }, { label: "Large" }] };
 
-  const offered = { allowOther: true };
-
   test("a page given beside the questions goes to the first question when it has none of its own", () => {
-    expect(severalQuestionsRequest([color, size], "<p>Wall</p>")).toEqual({ questions: [{ ...color, ...offered, html: "<p>Wall</p>" }, { ...size, ...offered }] });
-    expect(severalQuestionsRequest([{ ...color, html: "" }, size], "<p>Wall</p>")).toEqual({ questions: [{ ...color, ...offered, html: "<p>Wall</p>" }, { ...size, ...offered }] });
+    expect(severalQuestionsRequest([color, size], "<p>Wall</p>")).toEqual({ questions: [{ ...color, html: "<p>Wall</p>" }, size] });
+    expect(severalQuestionsRequest([{ ...color, html: "" }, size], "<p>Wall</p>")).toEqual({ questions: [{ ...color, html: "<p>Wall</p>" }, size] });
   });
 
-  test("the first question's own page stays, and without a page beside them the questions go as they are, each offering Something else", () => {
+  test("the first question's own page stays, and without a page beside them the questions go as they are", () => {
     const withPage = { ...color, html: "<p>Own</p>" };
-    expect(severalQuestionsRequest([withPage, size], "<p>Wall</p>")).toEqual({ questions: [{ ...withPage, ...offered }, { ...size, ...offered }] });
-    expect(severalQuestionsRequest([color, size], undefined)).toEqual({ questions: [{ ...color, ...offered }, { ...size, ...offered }] });
+    expect(severalQuestionsRequest([withPage, size], "<p>Wall</p>")).toEqual({ questions: [withPage, size] });
+    expect(severalQuestionsRequest([color, size], undefined)).toEqual({ questions: [color, size] });
     expect(severalQuestionsRequest([], "<p>Wall</p>")).toEqual({ questions: [] });
   });
 });

@@ -21,7 +21,7 @@ test("several questions come one page at a time, can be changed on a review page
   const toolResult = callCanvasTool(host, conversationId, "ask", {
     questions: [
       { question: "Which color?", options: [{ label: "Red" }, { label: "Blue" }] },
-      { question: "Which size?", options: [{ label: "Small" }, { label: "Large" }], allowOther: true },
+      { question: "Which size?", options: [{ label: "Small" }, { label: "Large" }] },
     ],
   });
 
@@ -112,24 +112,18 @@ test("several questions come one page at a time, can be changed on a review page
   });
 });
 
-test("a question asked without allowOther offers Something else, and a typed answer goes back, even when allowOther: false is passed", async ({ page }) => {
+test("a question offers Something else even when the agent passes allowOther: false, and the typed answer goes back", async ({ page }) => {
   await signIn(page, host);
   await page.goto(host.origin);
   const conversationId = await startConversation(page);
   const ask = page.locator(".ask");
   const ownAnswer = ask.getByRole("textbox", { name: "Your own answer" });
-  const toolResult = callCanvasTool(host, conversationId, "ask", { question: "What should it say?", options: [{ label: "Hello" }, { label: "Goodbye" }] });
+  const toolResult = callCanvasTool(host, conversationId, "ask", { question: "How big?", options: [{ label: "Small" }, { label: "Big" }], allowOther: false });
 
-  await expect(ask.getByRole("radio", { name: "Something else" })).toBeVisible();
-  await ownAnswer.pressSequentially("Hi there");
-  await ownAnswer.press("Enter");
-  expect(await toolResult).toBe("The user chose: Hi there");
-
-  const passedFalse = callCanvasTool(host, conversationId, "ask", { question: "How big?", options: [{ label: "Small" }, { label: "Big" }], allowOther: false });
   await expect(ask.getByRole("radio", { name: "Something else" })).toBeVisible();
   await ownAnswer.pressSequentially("Huge");
   await ownAnswer.press("Enter");
-  expect(await passedFalse).toBe("The user chose: Huge");
+  expect(await toolResult).toBe("The user chose: Huge");
 });
 
 test("your own answer to one question can run over several lines with Shift+Enter, and Enter sends it", async ({ page }) => {
@@ -137,7 +131,7 @@ test("your own answer to one question can run over several lines with Shift+Ente
   await page.goto(host.origin);
   const conversationId = await startConversation(page);
   const ask = page.locator(".ask");
-  const toolResult = callCanvasTool(host, conversationId, "ask", { question: "What should it say?", options: [{ label: "Hello" }, { label: "Goodbye" }], allowOther: true });
+  const toolResult = callCanvasTool(host, conversationId, "ask", { question: "What should it say?", options: [{ label: "Hello" }, { label: "Goodbye" }] });
   const ownAnswer = ask.getByRole("textbox", { name: "Your own answer" });
 
   await test.step("the field takes the row beside its radio button", async () => {
@@ -302,7 +296,7 @@ test("a call that also fills in a single question's fields, as GPT does, asks th
   await page.goto(host.origin);
   const conversationId = await startConversation(page);
   const ask = page.locator(".ask");
-  const color = { question: "Which color?", html: "", allowOther: true, optionWidth: 300, options: [{ label: "Red", html: "", recommended: false }, { label: "Blue" }] };
+  const color = { question: "Which color?", html: "", optionWidth: 300, options: [{ label: "Red", html: "", recommended: false }, { label: "Blue" }] };
   const toolResult = callCanvasTool(host, conversationId, "ask", {
     ...color,
     html: "<p>The wall is white</p>",
@@ -421,7 +415,6 @@ test("a question that takes several keeps the ticked options and your own words 
   const toolResult = callCanvasTool(host, conversationId, "ask", {
     question: "Which fixes?",
     options: [{ label: "Cache" }, { label: "Cache; with a TTL" }, { label: "Neither" }],
-    allowOther: true,
     multiple: true,
   });
 
@@ -446,7 +439,7 @@ test("your own words beside ticked options, unticked again, stay out of the answ
   const ask = page.locator(".ask");
   const somethingElse = ask.getByRole("checkbox", { name: "Something else" });
   const ownAnswer = ask.getByRole("textbox", { name: "Your own answer" });
-  const toolResult = callCanvasTool(host, conversationId, "ask", { question: "Which apply?", options: [{ label: "Red" }, { label: "Blue" }], allowOther: true, multiple: true });
+  const toolResult = callCanvasTool(host, conversationId, "ask", { question: "Which apply?", options: [{ label: "Red" }, { label: "Blue" }], multiple: true });
 
   await ask.getByRole("checkbox", { name: "Red", exact: true }).check();
   await ownAnswer.focus();
