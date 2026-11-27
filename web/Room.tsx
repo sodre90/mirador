@@ -678,7 +678,13 @@ function ThreadColumn({
           return (
             <div key={message.id} className="room-thread-turn">
               <RoomEntry message={message} answered={message.answers === undefined ? undefined : messagesById.get(message.answers)} agentsById={agentsById} />
-              <BroughtThreadActivity calls={callsForTurn} steps={stepsForTurn} finalAnswerText={finalAnswerText} />
+              <BroughtThreadActivity
+                agentAvatar={<AuthorMark author={{ profileId: agent.profileId }} agentsById={agentsById} />}
+                agentAuthor={<AuthorName author={{ profileId: agent.profileId }} agentsById={agentsById} />}
+                calls={callsForTurn}
+                steps={stepsForTurn}
+                finalAnswerText={finalAnswerText}
+              />
               {!agent.conversation && isYourBroughtAgent && askedThisAgent && (stepsStayOnComputer || opensWorkInParent) && (
                 <div className="room-brought-steps-link">
                   {stepsStayOnComputer && <span className="hint">{words.broughtStepsOnYourComputer}</span>}

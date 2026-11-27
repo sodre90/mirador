@@ -7,16 +7,19 @@ import {
   type RoomWorkspaceAnswer,
   type RoomWorkspaceApproval,
   type RoomWorkspaceCall,
-  type ThreadActivityItem,
+  type WorkspaceCallState,
 } from "../shared/room-workspace.ts";
 import type { BroughtAgent, BroughtWorkspaceScope } from "../shared/rooms.ts";
-import { Timestamp, usePersonName } from "./Chat.tsx";
+import { commandShownClosed, outputStartsOpen } from "../shared/shell-output.ts";
+import { oneLine } from "../shared/written-text.ts";
+import { CommandLine, statusIcons, TerminalOutput, Timestamp, usePersonName } from "./Chat.tsx";
 import { ConfirmButton } from "./ConfirmButton.tsx";
 import { connection } from "./connection.ts";
 import { t } from "./i18n/index.ts";
 import { LineIcon } from "./LineIcon.tsx";
 import { HighlightedText, MarkdownText } from "./Markdown.tsx";
 import { MeaningMark } from "./RoomSection.tsx";
+import { useShellOutputStyle } from "./shell-output.ts";
 
 const words = t.rooms;
 
@@ -157,102 +160,158 @@ export function WorkspaceAccessLine({ roomId, agentId, agentName, access, answer
   );
 }
 
-function WorkspaceCallEntry({ call }: { call: RoomWorkspaceCall }) {
-  const answeredBy = usePersonName(call.answeredBy);
+function workspaceCallToolStatus(state: WorkspaceCallState): "pending" | "in_progress" | "completed" | "failed" {
+  switch (state) {
+    case "done":
+      return "completed";
+    case "running":
+      return "in_progress";
+    case "waiting":
+      return "pending";
+    case "denied":
+    case "refused":
+    case "stopped":
+      return "failed";
+  }
+}
+
+function WorkspaceRunCard({ call, answeredBy }: { call: RoomWorkspaceCall; answeredBy: string }) {
+  const style = useShellOutputStyle();
+  const status = workspaceCallToolStatus(call.state);
+  const failed = status === "failed";
+  const finished = call.state === "done" || failed;
+  const showsOutput = Boolean(call.result) || call.state === "done" || call.state === "running" || call.state === "waiting";
+  const showsBody = !commandShownClosed(style) || showsOutput;
+  const commandLine = <CommandLine command={call.about} />;
   return (
-    <li>
-      <details className="workspace-call" data-workspace-call={call.id} data-state={call.state}>
-        <summary>
-          <span className="workspace-call-did">{words.callDid[call.kind]}</span>
-          {call.kind === "run" ? (
-            <code className="workspace-call-about highlighted-code">
-              <ShellCommand command={call.about} />
-            </code>
-          ) : (
-            <code className="workspace-call-about">{call.about}</code>
-          )}
-          <span className="workspace-call-state">{words.callStates[call.state]}</span>
-          <Timestamp at={call.at} />
-        </summary>
-        {call.kind === "run" ? (
-          <pre className="workspace-call-text whole highlighted-code">
-            <ShellCommand command={call.about} />
-          </pre>
-        ) : (
-          <code className="workspace-call-path">{call.about}</code>
-        )}
-        {call.diff !== null && (
-          <pre className="workspace-call-text whole">
+    <details
+      className={`shell tool-${status} workspace-call`}
+      data-workspace-call={call.id}
+      data-state={call.state}
+      open={outputStartsOpen(style, failed)}
+    >
+      <summary>
+        <div className="shell-header">
+          <span className="tool-status" aria-label={words.callStates[call.state]}>
+            {statusIcons[status]}
+          </span>
+          <span className="shell-description">
+            <span className="workspace-call-did">{words.callDid.run}</span>
+            {!commandShownClosed(style) && (
+              <>
+                {" "}
+                <code className="workspace-call-about highlighted-code">
+                  <ShellCommand command={oneLine(call.about)} />
+                </code>
+              </>
+            )}
+          </span>
+          {call.state !== "done" && <span className="workspace-call-state">{words.callStates[call.state]}</span>}
+        </div>
+        {commandShownClosed(style) && <div className="shell-body">{commandLine}</div>}
+      </summary>
+      {showsBody && (
+        <div className={`shell-body ${commandShownClosed(style) ? "below-command" : ""}`}>
+          {!commandShownClosed(style) && commandLine}
+          {showsOutput && <TerminalOutput output={call.result ?? ""} finished={finished} awaitingPermission={call.state === "waiting"} />}
+        </div>
+      )}
+      {call.answeredBy !== null && (
+        <div className="workspace-call-meta">
+          {call.state === "denied" ? words.callDeniedBy(answeredBy) : words.callAllowedBy(answeredBy)}
+        </div>
+      )}
+    </details>
+  );
+}
+
+function WorkspaceCallCard({ call }: { call: RoomWorkspaceCall }) {
+  const answeredBy = usePersonName(call.answeredBy);
+  if (call.kind === "run") return <WorkspaceRunCard call={call} answeredBy={answeredBy} />;
+  const status = workspaceCallToolStatus(call.state);
+  const hasDetails = call.diff !== null || Boolean(call.result) || call.answeredBy !== null;
+  return (
+    <details className={`tool tool-${status} workspace-call`} data-workspace-call={call.id} data-state={call.state}>
+      <summary>
+        <span className="tool-status" aria-label={words.callStates[call.state]}>
+          {statusIcons[status]}
+        </span>
+        <span className="tool-title" title={call.about}>
+          <span className="workspace-call-did">{words.callDid[call.kind]}</span>{" "}
+          <span className="workspace-call-about">{call.about}</span>
+        </span>
+        {call.state !== "done" && <span className="workspace-call-state">{words.callStates[call.state]}</span>}
+      </summary>
+      {call.diff !== null && (
+        <div className="diff">
+          <div className="diff-path">{call.about}</div>
+          <pre>
             <DiffLines diff={call.diff} />
           </pre>
-        )}
-        {call.answeredBy !== null && <div className="hint">{call.state === "denied" ? words.callDeniedBy(answeredBy) : words.callAllowedBy(answeredBy)}</div>}
-        {call.result && <pre className="workspace-call-text">{call.result}</pre>}
-      </details>
-    </li>
+        </div>
+      )}
+      {call.result && <pre className="tool-output">{call.result}</pre>}
+      {call.answeredBy !== null && (
+        <div className="workspace-call-meta">
+          {call.state === "denied" ? words.callDeniedBy(answeredBy) : words.callAllowedBy(answeredBy)}
+        </div>
+      )}
+      {!hasDetails && <div className="workspace-call-meta">{words.callStates[call.state]}</div>}
+    </details>
   );
 }
 
-/** What an agent someone brought had done in the room's workspace, oldest first. */
-export function WorkspaceCalls({ calls }: { calls: RoomWorkspaceCall[] }) {
-  if (calls.length === 0) return null;
-  return (
-    <ul className="workspace-calls" aria-label={words.workspaceCalls}>
-      {calls.map((call) => (
-        <WorkspaceCallEntry key={call.id} call={call} />
-      ))}
-    </ul>
-  );
-}
-
-type ActivityGroup = { kind: "step"; step: RoomBroughtStep } | { kind: "calls"; calls: RoomWorkspaceCall[] };
-
-function groupActivity(items: ThreadActivityItem[]): ActivityGroup[] {
-  const groups: ActivityGroup[] = [];
-  for (const entry of items) {
-    if (entry.item === "step") {
-      groups.push({ kind: "step", step: entry.step });
-    } else {
-      const previous = groups.at(-1);
-      if (previous?.kind === "calls") previous.calls.push(entry.call);
-      else groups.push({ kind: "calls", calls: [entry.call] });
-    }
-  }
-  return groups;
-}
-
-/** Streamed thinking/text steps and workspace calls of a brought agent working in the room's workspace, interleaved in order. */
+/** Streamed thinking/text steps and workspace calls of a brought agent working in the room's workspace, interleaved as chat-style timeline entries. */
 export function BroughtThreadActivity({
+  agentAvatar,
+  agentAuthor,
   calls,
   steps,
   finalAnswerText,
 }: {
+  agentAvatar: ReactNode;
+  agentAuthor: ReactNode;
   calls: RoomWorkspaceCall[];
   steps: RoomBroughtStep[];
   finalAnswerText?: string | null;
 }) {
-  const groups = groupActivity(interleavedThreadActivity(calls, steps, finalAnswerText));
-  if (groups.length === 0) return null;
+  const items = interleavedThreadActivity(calls, steps, finalAnswerText);
+  if (items.length === 0) return null;
   return (
-    <div className="brought-thread-steps">
-      {groups.map((group) => {
-        if (group.kind === "calls") return <WorkspaceCalls key={`calls:${group.calls[0]!.id}`} calls={group.calls} />;
-        const { step } = group;
-        if (step.kind === "thought") {
-          return (
-            <details key={`step:${step.id}`} className="thought brought-step-thought" data-brought-step={step.id}>
-              <summary>{t.chat.entry.thinking}</summary>
-              <MarkdownText text={step.text} />
-            </details>
-          );
-        }
+    <>
+      {items.map((entry, index) => {
+        const startsGroup = index === 0;
+        const at = entry.item === "step" ? entry.step.at : entry.call.at;
+        const key = entry.item === "step" ? `step:${entry.step.id}` : `call:${entry.call.id}`;
         return (
-          <div key={`step:${step.id}`} className="brought-step-text message agent" data-brought-step={step.id}>
-            <MarkdownText text={step.text} />
+          <div key={key} className={`timeline-entry${startsGroup ? " group-start" : ""}`}>
+            <div className="gutter">{startsGroup ? agentAvatar : <Timestamp at={at} />}</div>
+            <div className="entry-body">
+              {startsGroup && (
+                <div className="author">
+                  {agentAuthor}
+                  <Timestamp at={at} />
+                </div>
+              )}
+              {entry.item === "step" ? (
+                entry.step.kind === "thought" ? (
+                  <details className="thought brought-step-thought" data-brought-step={entry.step.id}>
+                    <summary>{t.chat.entry.thinking}</summary>
+                    <MarkdownText text={entry.step.text} />
+                  </details>
+                ) : (
+                  <div className="brought-step-text message agent" data-brought-step={entry.step.id}>
+                    <MarkdownText text={entry.step.text} />
+                  </div>
+                )
+              ) : (
+                <WorkspaceCallCard call={entry.call} />
+              )}
+            </div>
           </div>
         );
       })}
-    </div>
+    </>
   );
 }
 
@@ -323,18 +382,17 @@ export function WorkspaceActivityPanel({
         {newestFirst.length === 0 ? (
           <div className="notice-line">{words.noWorkspaceActivityYet}</div>
         ) : (
-          <ul className="workspace-calls workspace-activity-list" aria-label={words.workspaceActivity}>
+          <ul className="workspace-activity-list" aria-label={words.workspaceActivity}>
             {newestFirst.map((call) => (
               <li key={call.id} className="workspace-activity-item">
                 <div className="workspace-activity-meta">
                   <span className="workspace-activity-agent">{agentNameOf(call.agentId)}</span>
+                  <Timestamp at={call.at} />
                   <button type="button" className="link" onClick={() => onOpenThread(call.threadId)}>
                     {words.openThread}
                   </button>
                 </div>
-                <ul className="workspace-calls">
-                  <WorkspaceCallEntry call={call} />
-                </ul>
+                <WorkspaceCallCard call={call} />
               </li>
             ))}
           </ul>

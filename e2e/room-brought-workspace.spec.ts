@@ -245,21 +245,26 @@ test("a task's thread shows what it did there and who allowed it; Ann takes the 
       return callsInThread(ann);
     };
     const summaryOf = (call: Locator) => call.locator("summary");
-    await expect(summaryOf(await shownFor("READ THE NOTES"))).toContainText("Readnotes.txtdone");
+    const readCall = await shownFor("READ THE NOTES");
+    await expect(readCall).toHaveClass(/\btool\b/);
+    await expect(readCall).toHaveAttribute("data-state", "done");
+    await expect(summaryOf(readCall)).toContainText("Read notes.txt");
     const changed = await shownFor("CHANGE THE NOTES");
-    await expect(summaryOf(changed)).toContainText("Changenotes.txtdone");
+    await expect(changed).toHaveClass(/\btool\b/);
+    await expect(summaryOf(changed)).toContainText("Change notes.txt");
     await expect(changed).toContainText("Allowed by Ann");
     await expect(changed.locator(".diff-added")).toHaveText("+Sow the peas");
     const thought = thread(ann).locator(".brought-step-thought");
     await expect(thought).toHaveCount(1);
+    await expect(thread(ann).locator(".timeline-entry.group-start .author", { hasText: "Coder (Mia)" }).first()).toBeVisible();
     await thought.locator("summary").click();
     await expect(thought).toContainText("I should replace beets with peas in notes.txt.");
     await expect(thread(ann).locator(".brought-step-text")).toHaveText("Updating notes.txt now.");
     const ran = await shownFor("COPY THE NOTES");
-    await expect(summaryOf(ran).locator(".workspace-call-about .token.function").first()).toHaveText("cat");
-    await expect(ran.locator(".workspace-call-text.highlighted-code .token.function").first()).toHaveText("cat");
+    await expect(ran).toHaveClass(/\bshell\b/);
+    await expect(summaryOf(ran).locator(".shell-typed .token.function").first()).toHaveText("cat");
     await expect(ran).toContainText("It exited with 0.");
-    await expect(ran.locator(".workspace-call-text").last()).toContainText(owners.projectDir);
+    await expect(ran.locator(".shell-output")).toContainText(owners.projectDir);
     await screenshot(ann, "workspace-thread");
     const denied = await shownFor("DROP THE NOTES");
     await expect(summaryOf(denied)).toContainText("denied");
@@ -274,7 +279,7 @@ test("a task's thread shows what it did there and who allowed it; Ann takes the 
     await activityPanel.locator(".workspace-activity-item").last().getByRole("button", { name: "Open thread" }).click();
     await expect(thread(ann)).toBeVisible();
     await expect(callsInThread(ann)).toHaveCount(1);
-    await expect(callsInThread(ann).locator("summary")).toContainText("Readnotes.txtdone");
+    await expect(callsInThread(ann).locator("summary")).toContainText("Read notes.txt");
   });
 
   await test.step("taken away, what waits stops, and its next call is refused", async () => {

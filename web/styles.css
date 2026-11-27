@@ -11438,63 +11438,71 @@ button.link.more-rows {
   font-weight: 500;
 }
 
-.workspace-calls {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  margin: 0;
-  padding: 0 0 0 38px;
-  list-style: none;
-  font-size: calc(12px * var(--font-scale));
-}
-
-.workspace-call summary {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-  color: var(--muted);
-  cursor: pointer;
-}
-
 .workspace-call-did {
-  flex: none;
   color: var(--text);
-  font-weight: 500;
+  font-weight: 600;
+  font-family: var(--sans);
 }
 
 .workspace-call-about {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  color: var(--muted);
 }
 
 .workspace-call-state {
   flex: none;
+  margin-left: auto;
+  font-size: calc(11px * var(--font-scale));
+  font-weight: 500;
+  padding: 0 7px;
+  border-radius: 9px;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--muted) 12%, transparent);
 }
 
-.workspace-call:is([data-state="refused"], [data-state="denied"]) .workspace-call-state {
+.workspace-call[data-state="waiting"] .tool-status {
+  color: var(--warn);
+}
+
+.workspace-call[data-state="waiting"] .workspace-call-state {
+  color: var(--warn-on-soft);
+  background: var(--warn-soft);
+}
+
+.workspace-call[data-state="running"] .workspace-call-state {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 13%, transparent);
+}
+
+.workspace-call:is([data-state="refused"], [data-state="denied"], [data-state="stopped"]) .workspace-call-state {
   color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 13%, transparent);
 }
 
-.workspace-call[open] {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding-bottom: 6px;
+.workspace-call.tool > .tool-output {
+  margin-top: 8px;
+  margin-bottom: 8px;
+  border: 1px solid var(--border);
+  font-size: calc(11.5px * var(--font-scale));
+  line-height: 1.5;
 }
 
-.brought-thread-steps {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-top: 4px;
+.workspace-call.tool > .workspace-call-meta {
+  margin-top: 6px;
+  font-size: calc(11.5px * var(--font-scale));
+  color: var(--muted);
 }
 
-.brought-step-thought,
-.brought-step-text {
-  margin-left: 38px;
+.workspace-call.shell > .workspace-call-meta {
+  padding: 5px 10px;
+  background: var(--panel-2);
+  border-top: 1px solid var(--border);
+  font-size: calc(11.5px * var(--font-scale));
+  color: var(--muted);
+}
+
+.workspace-call.shell:not([open]) > summary .shell-command {
+  max-height: 6lh;
+  overflow: hidden;
 }
 
 .room-workspace-files {
@@ -11538,27 +11546,31 @@ button.link.more-rows {
 }
 
 .workspace-activity-list {
+  display: flex;
+  flex-direction: column;
   gap: 10px;
-  padding: 12px 16px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: calc(12px * var(--font-scale));
 }
 
 .workspace-activity-item {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding-bottom: 8px;
+  gap: 6px;
+  padding-bottom: 10px;
   border-bottom: 1px solid var(--border);
-}
-
-.workspace-activity-item .workspace-calls {
-  padding-left: 0;
 }
 
 .workspace-activity-meta {
   display: flex;
   align-items: baseline;
-  justify-content: space-between;
   gap: 8px;
+}
+
+.workspace-activity-meta > .link {
+  margin-left: auto;
 }
 
 .workspace-activity-agent {

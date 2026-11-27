@@ -340,7 +340,7 @@ function RawOutput({ block, conversationId }: { block: ToolBlock; conversationId
 
 const readableToolTitle = (block: ToolBlock) => readableToolTitleOf(block.title, toolTitlesOfPlugins(), block.rawInput);
 
-const statusIcons: Record<string, string> = { pending: "○", in_progress: "◐", completed: "●", failed: "✕" };
+export const statusIcons: Record<string, string> = { pending: "○", in_progress: "◐", completed: "●", failed: "✕" };
 
 const StepsAtWork = createContext<ReadonlySet<string>>(new Set());
 
@@ -371,7 +371,7 @@ function usePerson(personId: string | null) {
 
 const lastPathSegment = (path: string) => path.split("/").filter(Boolean).at(-1) ?? path;
 
-function CommandLine({ command, directory }: { command: string; directory?: string | null }) {
+export function CommandLine({ command, directory }: { command: string; directory?: string | null }) {
   return (
     <div className="shell-command">
       <span className="shell-prompt" data-hint={directory ?? undefined}>
@@ -384,7 +384,7 @@ function CommandLine({ command, directory }: { command: string; directory?: stri
   );
 }
 
-function TerminalOutput({ output, finished, awaitingPermission }: { output: string; finished: boolean; awaitingPermission: boolean }) {
+export function TerminalOutput({ output, finished, awaitingPermission }: { output: string; finished: boolean; awaitingPermission: boolean }) {
   const [expanded, setExpanded] = useState(false);
   const lines = output ? output.split("\n") : [];
   const matchesFind = useContext(MatchesFind);
