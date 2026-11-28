@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSyn
 import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { FakeClaudeApi, fakeClaudeEnvironment } from "./fake-claude-api.ts";
-import { addWorkspace, createProfile, createRoom, openRoomSettings, signIn, whatItMeans } from "./helpers.ts";
+import { addWorkspace, bashPath, createProfile, createRoom, openRoomSettings, signIn, whatItMeans } from "./helpers.ts";
 import { TestHost } from "./test-host.ts";
 
 const api = new FakeClaudeApi();
@@ -14,7 +14,7 @@ const WORKSPACE_NOTES = "WORKSPACE-NOTES-MARKER";
 const OWNERS_MEMORY = "OWNERS-MEMORY-MARKER";
 
 const probeServer = () => ({ command: "bun", args: [join(import.meta.dirname, "probe-mcp-server.ts")] });
-const hookWriting = (marker: string) => ({ UserPromptSubmit: [{ hooks: [{ type: "command", command: `echo ${marker} >> ${hooksRan()}` }] }] });
+const hookWriting = (marker: string) => ({ UserPromptSubmit: [{ hooks: [{ type: "command", command: `echo ${marker} >> ${bashPath(hooksRan())}` }] }] });
 
 /** The owner's own Claude Code folder, with a hook, an MCP server, a CLAUDE.md and a memory of the workspace. */
 function setUpOwnersClaudeCode() {
