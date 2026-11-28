@@ -213,7 +213,8 @@ test("Ann lets it in, and it reads the room's workspace, changes a file and runs
   });
 
   await test.step("a command shows whole, with what it runs as, and runs in the room's workspace once she allows it", async () => {
-    await giveTask("COPY THE NOTES", `CALL mcp__canvas__room_run {"command":"cat notes.txt > copy.txt\\npwd\\ncat ${join(mias.projectDir, "nothing-here.txt")} || true"}\nTHEN Copied.`);
+    const copyTheNotes = { command: `cat notes.txt > copy.txt\npwd\ncat ${join(mias.projectDir, "nothing-here.txt")} || true` };
+    await giveTask("COPY THE NOTES", `CALL mcp__canvas__room_run ${JSON.stringify(copyTheNotes)}\nTHEN Copied.`);
     await expect(callCard(ann)).toContainText("Coder (Mia) asks to run a command", { timeout: 60_000 });
     await expect(callCard(ann).locator(".workspace-call-text")).toContainText("cat notes.txt > copy.txt");
     await expect(callCard(ann).locator(".workspace-call-text .token.function").first()).toHaveText("cat");
