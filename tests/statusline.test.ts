@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { SessionConfigOption } from "@agentclientprotocol/sdk/unstable";
@@ -73,6 +74,12 @@ describe("statusline", () => {
     expect(claudeTranscriptPath("/home/me/.claude", "/Users/me/.dotfiles/my_app", "s1")).toBe(
       join("/home/me/.claude", "projects", "-Users-me--dotfiles-my-app", "s1.jsonl"),
     );
+  });
+
+  test("the transcript's directory is named after the folder as Claude Code works in it, by the async realpath, long names and all", async () => {
+    const folder = mkdtempSync(join(tmpdir(), "statusline-project-"));
+    const asClaudeCodeWorksIn = (await realpath(folder)).replace(/[^a-zA-Z0-9]/g, "-");
+    expect(claudeTranscriptPath("/home/me/.claude", folder, "s1")).toBe(join("/home/me/.claude", "projects", asClaudeCodeWorksIn, "s1.jsonl"));
   });
 
   test("Copilot's credits are no dollars in the cost", () => {

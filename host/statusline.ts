@@ -33,11 +33,15 @@ export async function statusLineCommandIn(configDir: string): Promise<string | n
   }
 }
 
-/** Claude Code keeps a session's transcript under a directory named after the project path, with every character but letters and digits turned into "-". */
+/**
+ * Claude Code keeps a session's transcript under a directory named after the project path, with every character but
+ * letters and digits turned into "-". The path is the native call's: on Windows, realpathSync keeps a short 8.3 name
+ * (RUNNER~1) that Claude Code's folder spells out in full.
+ */
 export const claudeTranscriptPath = (configDir: string, directory: string, sessionId: string) => {
   const canonical = (() => {
     try {
-      return realpathSync(directory);
+      return realpathSync.native(directory);
     } catch {
       return directory;
     }
