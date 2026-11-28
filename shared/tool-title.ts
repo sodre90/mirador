@@ -21,9 +21,15 @@ export function antigravityMcpToolName(update: { name?: unknown; title?: string 
   return server && tool ? `mcp__${server}__${tool}` : null;
 }
 
+/** claude-agent-acp titles an MCP tool's call "<server>: <tool>"; it goes by the tool's own name, which the call's meta keeps. */
+export function claudeCodeMcpToolName(update: { _meta?: { [key: string]: unknown } | null }) {
+  const { toolName } = (update._meta?.claudeCode ?? {}) as { toolName?: unknown };
+  return typeof toolName === "string" && toolName.startsWith("mcp__") ? toolName : null;
+}
+
 /** An MCP tool's call by Claude Code's name for it, from the agents that name or title such calls otherwise. */
 export const mcpToolNameOf = (update: { _meta?: { [key: string]: unknown } | null; rawInput?: unknown; name?: unknown; title?: string | null }) =>
-  codexMcpToolName(update) ?? antigravityMcpToolName(update);
+  claudeCodeMcpToolName(update) ?? codexMcpToolName(update) ?? antigravityMcpToolName(update);
 
 /** The one canvas tool through which agents run the plugin tools that are not in their tool list. */
 export const USE_TOOL_TOOL = "use_tool";
