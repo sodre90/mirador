@@ -9,7 +9,7 @@ import { Hub } from "../host/hub.ts";
 import { SystemNotifications } from "../host/system-notifications.ts";
 import { Store } from "../host/store.ts";
 import { ALL_OF_CLAUDE_SETUP } from "../shared/room-agent-setup.ts";
-import { allowsBroughtMode, askingModeOf, offeredConfigOption } from "../shared/room-permissions.ts";
+import { allowsMode, askingModeOf, offeredConfigOption } from "../shared/room-permissions.ts";
 import { NO_SANDBOX } from "../shared/sandbox.ts";
 
 const scratch = mkdtempSync(join(tmpdir(), "room-preset-modes-"));
@@ -223,6 +223,8 @@ test("a brought agent's conversation refuses switching to a mode that never asks
   expect(valuesOf(offeredConfigOption({ harness: "claude", broughtIntoRoom: true }, claudeModes))).toEqual(["default", "acceptEdits"]);
   expect(valuesOf(offeredConfigOption({ harness: "claude", broughtIntoRoom: true, worksInRoomsWorkspace: true }, claudeModes))).toEqual(["default"]);
   expect(valuesOf(offeredConfigOption({ harness: "claude" }, claudeModes))).toEqual(["default", "acceptEdits", "plan", "dontAsk", "bypassPermissions"]);
-  expect(allowsBroughtMode({ harness: "claude", broughtIntoRoom: true, sideChatOf: "parent" }, "plan")).toBe(true);
-  expect(allowsBroughtMode({ harness: "claude", broughtIntoRoom: true, sideChatOf: "parent" }, "bypassPermissions")).toBe(false);
+  expect(allowsMode({ harness: "claude", broughtIntoRoom: true, sideChatOf: "parent" }, "plan")).toBe(true);
+  expect(allowsMode({ harness: "claude", broughtIntoRoom: true, sideChatOf: "parent" }, "bypassPermissions")).toBe(false);
+  expect(valuesOf(offeredConfigOption({ harness: "claude", sideChatOf: "parent" }, { ...claudeModes, currentValue: "plan" })), "a side chat held to reading").toEqual(["plan"]);
+  expect(valuesOf(offeredConfigOption({ harness: "claude", sideChatOf: "parent", sideChatMayChangeFiles: true }, claudeModes)), "a side chat that may change files").toEqual(["default", "acceptEdits", "plan", "dontAsk", "bypassPermissions"]);
 });

@@ -75,7 +75,7 @@ import { canTryAgain } from "../shared/try-again.ts";
 import { currentActivity, isAgentsNextStep, OpenToolCalls } from "./activity.ts";
 import { editDiffsOf } from "./edit-diff.ts";
 import { askedPermissionOf, pendingAsk, pendingPermission } from "./pending-requests.ts";
-import { allowsBroughtMode, askingDefaultModeOf, askingModeOf, presetModeOf, type AskedPermission } from "../shared/room-permissions.ts";
+import { allowsMode, askingDefaultModeOf, askingModeOf, presetModeOf, type AskedPermission } from "../shared/room-permissions.ts";
 import { END_OF_OTHERS_WORDS, PROFILES_MODEL, type Room, type RoomAgentModel } from "../shared/rooms.ts";
 import { newestWaitingAsk } from "../shared/ask.ts";
 import { launchEditor } from "./editor.ts";
@@ -2208,11 +2208,9 @@ export class ConversationService {
   }
 
   private assertModeAllowed(conversation: Conversation, configId: string, value: ConfigValue) {
-    if (!conversation.broughtIntoRoom || typeof value !== "string") return;
     const option = conversation.configOptions.find(({ id }) => id === configId);
-    if ((option?.category === "mode" || configId === "mode") && !allowsBroughtMode(conversation, value)) {
-      throw new Error("A conversation that works for a room always asks.");
-    }
+    if (typeof value !== "string" || (option?.category !== "mode" && configId !== "mode") || allowsMode(conversation, value)) return;
+    throw new Error(conversation.sideChatOf ? "A side chat held to reading stays in its agent's read-only mode." : "A conversation that works for a room always asks.");
   }
 
   /**
@@ -3767,10 +3765,14 @@ export class ConversationService {
     }
   }
 
-  /** Sets the mode the session starts in, as `startingModeOf` says; returns the conversation's profile. */
+  /** Sets the mode the session starts in, as `startingModeOf` says, or a side chat's own; returns the conversation's profile. */
   private async applyStartingMode(conversationId: string, sessionId: string) {
     const conversation = this.get(conversationId);
     const profile = conversation.profileId === null ? undefined : this.store.findProfile(conversation.profileId);
+    if (conversation.sideChatOf) {
+      await this.applySideChatMode(conversationId, sessionId);
+      return profile;
+    }
     const mode = this.startingModeOf(conversation, profile);
     const modeOption = conversation.configOptions.find(({ category }) => category === "mode");
     if (mode && modeOption) await this.trySetConfigOption(conversationId, sessionId, modeOption.id, mode);

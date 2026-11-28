@@ -82,6 +82,37 @@ test("a side chat stays in its agent's read-only mode after /clear, though its p
   expect(promptedIn).toEqual(["plan", "plan"]);
 });
 
+describe("a side chat held to reading, set from the phone's conversation settings", () => {
+  const claudeModes = ["default", "acceptEdits", "plan"];
+
+  test("stays in its agent's read-only mode on another profile of its agent, though that profile names another mode", async () => {
+    const { store, conversations, conversation, promptedIn, agent } = serviceWith("claude", "default", claudeModes);
+    store.saveProfile({ ...store.findProfile("p1")!, id: "p2", name: "q", mode: "acceptEdits" });
+    (conversations as unknown as { agentProcesses: Map<string, unknown> }).agentProcesses.set("p2", agent);
+    const sideChat = conversations.startSideChat(conversation.id, "What does this do");
+    await until(() => promptedIn.length === 1 && conversations.get(sideChat.id).status === "idle");
+
+    await conversations.setProfile(sideChat.id, "p2");
+    await conversations.send(sideChat.id, "And this", []);
+    await until(() => promptedIn.length === 2);
+
+    expect(promptedIn).toEqual(["plan", "plan"]);
+  });
+
+  test("takes no mode but its agent's read-only one", async () => {
+    const { conversations, conversation, promptedIn } = serviceWith("claude", "default", claudeModes);
+    const sideChat = conversations.startSideChat(conversation.id, "What does this do");
+    await until(() => promptedIn.length === 1 && conversations.get(sideChat.id).status === "idle");
+
+    await expect(conversations.setConfigOption(sideChat.id, "mode", "acceptEdits")).rejects.toThrow("read-only mode");
+    await conversations.setConfigOption(sideChat.id, "mode", "plan");
+    await conversations.send(sideChat.id, "And this", []);
+    await until(() => promptedIn.length === 2);
+
+    expect(promptedIn).toEqual(["plan", "plan"]);
+  });
+});
+
 describe("a side chat that Settings or its workspace let change files", () => {
   const claudeModes = ["default", "acceptEdits", "plan"];
 
@@ -95,6 +126,8 @@ describe("a side chat that Settings or its workspace let change files", () => {
     expect(promptedIn).toEqual(["default"]);
     expect(firstWords[0]).toContain("may be editing the same files");
     expect(store.findConversation(sideChat.id)?.sideChatMayChangeFiles).toBe(true);
+    await conversations.setConfigOption(sideChat.id, "mode", "acceptEdits");
+    await conversations.setConfigOption(sideChat.id, "mode", "default");
 
     await conversations.send(sideChat.id, "/clear", []);
     await until(() => store.listEvents(sideChat.id).some(({ event }) => event.type === "context-cleared") && conversations.get(sideChat.id).status === "idle");
