@@ -5,6 +5,7 @@ import { connect, type AddressInfo, type Socket } from "node:net";
 import { release } from "node:os";
 import { dirname, join } from "node:path";
 import { expect, test, type Locator, type Page } from "@playwright/test";
+import { MODEL_KEY_VARIABLES } from "../shared/sandbox.ts";
 import { guardedIn, mountsOfRun } from "../tests/guard-told.ts";
 import { addWorkspace, addWorkspaceFromSidebar, clickWorkspaceButton, createProfile, lastAgentMessage, openProfiles, sendMessage, signIn, waitForTurnToEnd, workspaceCard } from "./helpers.ts";
 import { bunProgramPath, TestHost, writeBunProgram } from "./test-host.ts";
@@ -12,7 +13,9 @@ import { bunProgramPath, TestHost, writeBunProgram } from "./test-host.ts";
 const sandboxesRunHere = process.platform === "darwin" && process.arch === "arm64" && Number(release().split(".")[0]) >= 25;
 const KEY = "sk-e2e-sandboxed-workspace-key-8765";
 
-const host = new TestHost({ fakePrograms: true, environment: () => ({ ANTHROPIC_BASE_URL: "http://127.0.0.1:9", MIRADOR_SANDBOX: fakeContainer() }) });
+/** Profiles here sign in only with what the spec gives them, not with a model server key the run exports, as the Windows workflow does. */
+const noInheritedModelKey = Object.fromEntries(MODEL_KEY_VARIABLES.map((variable) => [variable, ""]));
+const host = new TestHost({ fakePrograms: true, environment: () => ({ ...noInheritedModelKey, ANTHROPIC_BASE_URL: "http://127.0.0.1:9", MIRADOR_SANDBOX: fakeContainer() }) });
 const fakeContainer = () => bunProgramPath(join(host.root, "fake-container"), "container");
 const containerState = () => join(host.root, "fake-container-state");
 const buildHeldBy = () => join(host.root, "build-may-go-on");
