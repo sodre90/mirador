@@ -103,6 +103,12 @@ export const rooms: Messages["rooms"] = {
   tagMenu: "A szoba ágensei és emberei",
   working: (agent) => `${agent} dolgozik…`,
   waiting: (agent) => `${agent} a mostani feladata után válaszol.`,
+  waitsForSandbox: {
+    setUp: (agent) => `${agent} a szoba sandboxának előkészítésére vár…`,
+    setUpStep: (agent, at, of, step) => `${agent} a szoba sandboxának előkészítésére vár (${at}/${of}): ${step}`,
+    behindAnother: (agent) => `${agent} a szoba sandboxára vár, amely egy másik sandbox előkészítésére vár…`,
+    start: (agent) => `${agent} a szoba sandboxának indulására vár…`,
+  },
   openThread: "Téma megnyitása",
   thread: (agent) => `${agent} témája`,
   closeThread: "Téma bezárása",

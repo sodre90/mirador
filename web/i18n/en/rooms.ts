@@ -114,6 +114,12 @@ export const rooms = {
   tagMenu: "Agents and people of the room",
   working: (agent: string) => `${agent} is working…`,
   waiting: (agent: string) => `${agent} answers after its current task.`,
+  waitsForSandbox: {
+    setUp: (agent: string) => `${agent} waits for the room's sandbox to be set up…`,
+    setUpStep: (agent: string, at: number, of: number, step: string) => `${agent} waits for the room's sandbox to be set up, step ${at} of ${of}: ${step}`,
+    behindAnother: (agent: string) => `${agent} waits for the room's sandbox to be set up: waiting for another sandbox's setup…`,
+    start: (agent: string) => `${agent} waits for the room's sandbox to start…`,
+  },
   openThread: "Open thread",
   thread: (agent: string) => `Thread of ${agent}`,
   closeThread: "Close thread",

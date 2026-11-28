@@ -138,7 +138,7 @@ test("the sandbox switch stays off, with the reason under it, where the computer
   expect(containerCalls().filter(([command]) => command !== "system")).toEqual([]);
 });
 
-test("turned on, the sandbox is set up on this Mac with its progress shown, and the agent works in its VM as the agent user, without the key", async ({ page }) => {
+test("turned on, the sandbox is set up on this Mac with its progress shown, in the room's line too while its agent waits for it, and the agent works in its VM as the agent user, without the key", async ({ page }) => {
   test.skip(!sandboxesRunHere, "Sandboxes run on macOS 26 on Apple silicon only.");
   await signIn(page, host);
   await createRoom(page, "Sandboxed", ["Builder"], { workspace: "project" });
@@ -159,8 +159,22 @@ test("turned on, the sandbox is set up on this Mac with its progress shown, and 
   await expect(building.locator(".sandbox-setup-detail")).toHaveText("Part 2 of 3 of the build");
   await expect(building.getByRole("progressbar", { name: "How far this step got" })).toHaveAttribute("aria-valuenow", "2");
   await keepScreenshot(dialog, "setup-progress");
+  await dialog.getByRole("button", { name: "Close" }).click();
+
+  await test.step("while the image builds, the room's line says its agent waits for the sandbox's setup and how far it got, until it works", async () => {
+    const turnMayEnd = join(host.root, "set-up-turn-may-end");
+    await tag(page, "Sandboxed", "Builder", `WAIT ${turnMayEnd} SAY Set up.`);
+    const workLine = page.locator(".room-timeline > .room-thread-line > span");
+    await expect(workLine).toHaveText("Builder waits for the room's sandbox to be set up, step 2 of 6: Build Mirador's base image");
+    writeFileSync(buildHeldBy(), "");
+    await expect(workLine).toHaveText("Builder is working…");
+    await expect.poll(promptsSoFar).toContain(turnMayEnd);
+    writeFileSync(turnMayEnd, "");
+    await expect(answerSaying(page, "Set up.")).toBeVisible();
+  });
+
+  await openRoomSettings(page, "Sandboxed", "Permissions");
   const setup = dialog.locator(".room-sandbox-setup");
-  writeFileSync(buildHeldBy(), "");
   await expect(setup).toHaveText("Set up on this Mac.");
   const optionsStart = (await dialog.getByRole("radio", { name: "Agents work freely inside" }).boundingBox())!.x;
   for (const underTheSwitch of [network(dialog).getByText("Network", { exact: true }), setup]) expect(Math.abs((await textStart(underTheSwitch)) - optionsStart)).toBeLessThan(2);

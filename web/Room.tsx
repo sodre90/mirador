@@ -50,7 +50,7 @@ import {
 import { threadItemsBetween, type RoomBroughtStep, type RoomWorkspaceApproval, type RoomWorkspaceCall } from "../shared/room-workspace.ts";
 import { cutWithEllipsis } from "../shared/text-cut.ts";
 import { oneLine } from "../shared/written-text.ts";
-import type { HeldChange } from "../shared/sandbox.ts";
+import type { HeldChange, SandboxSetup } from "../shared/sandbox.ts";
 import { placedBelowOnItsSide, useClosing, useKeptInWindow } from "./BarMenu.tsx";
 import { CanvasPanel, CanvasShown, type WorkspaceApps } from "./Canvas.tsx";
 import { agentMarks, JumpToLatest, MessageWriters, pendingPermissionNeeded, PersonAvatar, PersonName, TimelineOfEvents, Timestamp, usePersonName, usePersonNames, useScrollAnchor } from "./Chat.tsx";
@@ -76,6 +76,7 @@ import { SuggestionList, suggestionAttributes, suggestionKey, usePickedSuggestio
 import { ModelChoice, offeredAlready } from "./RoomAgents.tsx";
 import { nameOf } from "./RoomAgentSetup.tsx";
 import { HeldChangeCard } from "./Sandbox.tsx";
+import { roomLineWaitingForSandbox } from "./sandbox-setup-steps.ts";
 import { JoinerAtTheDoor, RemovePerson, WaitingToJoin } from "./RoomSettings.tsx";
 import { RoomVote } from "./RoomVote.tsx";
 import { broughtScopeLabel, BroughtThreadActivity, WorkspaceAccessApproval, WorkspaceAccessLine, WorkspaceActivityLine, WorkspaceActivityPanel, WorkspaceCallApproval, WorkspaceScopePill } from "./RoomWorkspace.tsx";
@@ -592,6 +593,7 @@ function ThreadColumn({
   waitedIn,
   waitingForYou,
   workspaceCalls,
+  sandboxSetup,
   broughtSteps,
   workspaceWaitingForYou,
   answersWorkspace,
@@ -612,6 +614,7 @@ function ThreadColumn({
   waitedIn: Set<string>;
   waitingForYou: RoomApproval[];
   workspaceCalls: RoomWorkspaceCall[];
+  sandboxSetup: SandboxSetup;
   broughtSteps: RoomBroughtStep[];
   workspaceWaitingForYou: RoomWorkspaceApproval[];
   /** You let agents people brought into the room's workspace, and take that away. */
@@ -627,7 +630,7 @@ function ThreadColumn({
   const shownHere = threadMessagesShown(timeline, thread, agent);
   const messagesById = useMemo(() => new Map(timeline.messages.map((message) => [message.id, message])), [timeline.messages]);
   const firstReached = firstReachingTheAgent(timeline, thread, agent.answering);
-  const workingLine = workUnderWay(pending, agentsById, waitedIn, workspaceCalls).find((work) => work.thread.id === thread.id)?.text;
+  const workingLine = workUnderWay(pending, agentsById, waitedIn, workspaceCalls, sandboxSetup).find((work) => work.thread.id === thread.id)?.text;
   const callsHere = workspaceCalls.filter(({ threadId }) => threadId === thread.id);
   const stepsHere = broughtSteps.filter(({ threadId }) => threadId === thread.id);
   const access = agent.brought?.workspace;
@@ -742,9 +745,10 @@ const LIVE_CALL_ABOUT_MAX = 60;
 
 /**
  * What the room shows of its agents' work under way: a line for each message an agent has to answer, and whether it
- * works on it, runs a workspace call, waits for approval in it, comes to it later, or waits for its task to be allowed.
+ * works on it, runs a workspace call, waits for approval in it, comes to it later, waits for its task to be allowed, or
+ * waits for the room's sandbox to be set up or to start.
  */
-function workUnderWay(pending: WorkPending[], agentsById: Map<string, RoomAgentShown>, waitedIn: Set<string>, workspaceCalls: RoomWorkspaceCall[]) {
+function workUnderWay(pending: WorkPending[], agentsById: Map<string, RoomAgentShown>, waitedIn: Set<string>, workspaceCalls: RoomWorkspaceCall[], sandboxSetup: SandboxSetup) {
   const sent = pending.filter(({ message }) => !taskWaits(message));
   return pending.map(({ message, thread }) => {
     const agent = agentsById.get(thread.profileId);
@@ -761,7 +765,7 @@ function workUnderWay(pending: WorkPending[], agentsById: Map<string, RoomAgentS
             ? words.notStartedYet(name)
             : runningCall
               ? words.workingOnCall[runningCall.kind](name, cutWithEllipsis(oneLine(runningCall.about), LIVE_CALL_ABOUT_MAX))
-              : words.working(name);
+              : (roomLineWaitingForSandbox(name, agent?.conversation?.busyWith, sandboxSetup) ?? words.working(name));
     return { key: `${message.id}-${thread.id}`, thread, text };
   });
 }
@@ -1162,6 +1166,7 @@ export function RoomView({
   workspaceWaiting,
   heldChanges,
   holdsTooMany,
+  sandboxSetup,
   homeDir,
   presence,
   joiners,
@@ -1190,6 +1195,8 @@ export function RoomView({
   heldChanges: HeldChange[];
   /** Whether its sandbox stopped as it holds as many changes as a room may. */
   holdsTooMany: boolean;
+  /** How far the room's sandbox is set up, which an agent waiting for it shows. */
+  sandboxSetup: SandboxSetup;
   homeDir: string;
   /** Who is in the room now and who of them writes, once the host said. */
   presence: RoomPresence | null;
@@ -1345,7 +1352,7 @@ export function RoomView({
           );
         })}
         {timeline && questionsOfNoAnswer(timeline.canvas, canvasOfAnswers).map(voteOn)}
-        {workUnderWay(pending, agentsById, waitedIn, timeline?.workspaceCalls ?? []).map(({ key, thread: working, text }) => {
+        {workUnderWay(pending, agentsById, waitedIn, timeline?.workspaceCalls ?? [], sandboxSetup).map(({ key, thread: working, text }) => {
           const pendingItem = pending.find(({ thread: each }) => each.id === working.id);
           const openWork = canOpenBroughtWork(working.profileId)
             ? () => askParentToOpenBroughtWork({ roomId: room.id, agentId: working.profileId, ...(pendingItem && { messageSeq: pendingItem.message.seq }) })
@@ -1390,6 +1397,7 @@ export function RoomView({
         waitedIn={waitedIn}
         waitingForYou={waitingForYou}
         workspaceCalls={timeline.workspaceCalls}
+        sandboxSetup={sandboxSetup}
         broughtSteps={timeline.broughtSteps}
         workspaceWaitingForYou={workspaceWaitingForYou}
         answersWorkspace={owns || approvesIn(room, you)}

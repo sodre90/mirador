@@ -923,6 +923,7 @@ export function App() {
             workspaceWaiting={state.roomWorkspaceWaiting.filter(({ roomId }) => roomId === shownRoom.id)}
             heldChanges={state.heldChanges.filter(ofSandbox(roomSandbox(shownRoom.id)))}
             holdsTooMany={holdsTooMany(state.sandboxesHoldingTooMany, roomSandbox(shownRoom.id))}
+            sandboxSetup={setupOf(state.sandboxSetups, roomSandbox(shownRoom.id))}
             homeDir={state.homeDir}
             presence={state.roomPresence?.roomId === shownRoom.id ? state.roomPresence : null}
             joiners={state.roomJoiners.filter(({ roomId }) => roomId === shownRoom.id)}

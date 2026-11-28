@@ -104,6 +104,12 @@ export const rooms: Messages["rooms"] = {
   tagMenu: "Agenten und Personen des Raums",
   working: (agent) => `${agent} arbeitet…`,
   waiting: (agent) => `${agent} antwortet nach seiner aktuellen Aufgabe.`,
+  waitsForSandbox: {
+    setUp: (agent) => `${agent} wartet, bis die Sandbox des Raums eingerichtet ist…`,
+    setUpStep: (agent, at, of, step) => `${agent} wartet, bis die Sandbox des Raums eingerichtet ist, Schritt ${at} von ${of}: ${step}`,
+    behindAnother: (agent) => `${agent} wartet auf die Sandbox des Raums, die auf die Einrichtung einer anderen Sandbox wartet…`,
+    start: (agent) => `${agent} wartet, bis die Sandbox des Raums gestartet ist…`,
+  },
   openThread: "Thread öffnen",
   thread: (agent) => `Thread von ${agent}`,
   closeThread: "Thread schließen",

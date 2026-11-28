@@ -103,6 +103,12 @@ export const rooms: Messages["rooms"] = {
   tagMenu: "房间的 Agent 和成员",
   working: (agent) => `${agent} 正在工作…`,
   waiting: (agent) => `${agent} 会在当前任务之后回答。`,
+  waitsForSandbox: {
+    setUp: (agent) => `${agent} 正在等待房间的沙箱准备好…`,
+    setUpStep: (agent, at, of, step) => `${agent} 正在等待房间的沙箱准备好，第 ${at} 步，共 ${of} 步：${step}`,
+    behindAnother: (agent) => `${agent} 正在等待房间的沙箱，它正在等待另一个沙箱的准备…`,
+    start: (agent) => `${agent} 正在等待房间的沙箱启动…`,
+  },
   openThread: "打开话题",
   thread: (agent) => `${agent} 的话题`,
   closeThread: "关闭话题",

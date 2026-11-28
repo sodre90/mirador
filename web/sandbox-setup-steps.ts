@@ -1,3 +1,4 @@
+import type { BusyWith } from "../shared/model.ts";
 import { toolNameOf, type SandboxSetup, type SetupPiece, type SetupStep } from "../shared/sandbox.ts";
 import { t } from "./i18n/index.ts";
 
@@ -45,4 +46,18 @@ export function setupStatusText({ steps, waitingBehind }: SandboxSetup) {
   if (waitingBehind) return t.chat.sandboxSetupWaiting;
   const { at, of, current } = progressOf(steps);
   return current ? t.chat.sandboxSetupStep(at, of, stepText(current.piece)) : null;
+}
+
+/**
+ * The line a room shows of an agent whose conversation waits for the room's sandbox: to be set up, with the step it is
+ * on of how many where the setup has steps, or to start; null where it waits for neither.
+ */
+export function roomLineWaitingForSandbox(agent: string, busyWith: BusyWith | undefined, { steps, waitingBehind }: SandboxSetup) {
+  const waits = t.rooms.waitsForSandbox;
+  if (busyWith === "starting-sandbox") return waits.start(agent);
+  if (busyWith !== "preparing-sandbox") return null;
+  if (!steps) return waits.setUp(agent);
+  if (waitingBehind) return waits.behindAnother(agent);
+  const { at, of, current } = progressOf(steps);
+  return current ? waits.setUpStep(agent, at, of, stepText(current.piece)) : waits.setUp(agent);
 }

@@ -3,6 +3,7 @@ import type { Person } from "../shared/model.ts";
 import { namelessPerson } from "../shared/people.ts";
 import { isMuted } from "../shared/room-reading.ts";
 import { approvesIn } from "../shared/rooms.ts";
+import { roomSandbox, setupOf } from "../shared/sandbox.ts";
 import { t } from "./i18n/index.ts";
 import { inView, toggledInView, type PaneLayout } from "./layout.ts";
 import { LayoutToggles, LayoutToggleState } from "./LayoutToggles.tsx";
@@ -131,6 +132,7 @@ export function RoomsOnlyApp({
             workspaceWaiting={state.roomWorkspaceWaiting.filter(({ roomId }) => roomId === room.id)}
             heldChanges={[]}
             holdsTooMany={false}
+            sandboxSetup={setupOf(state.sandboxSetups, roomSandbox(room.id))}
             homeDir=""
             presence={state.roomPresence?.roomId === room.id ? state.roomPresence : null}
             joiners={[]}

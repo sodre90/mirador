@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import type { SandboxSetup, SetupStep } from "../shared/sandbox.ts";
-import { clockText, progressOf, stepText } from "../web/sandbox-setup-steps.ts";
+import { clockText, progressOf, roomLineWaitingForSandbox, stepText } from "../web/sandbox-setup-steps.ts";
 import { statusDetailOf } from "../web/status-detail.ts";
 
 const preparing = { busyWith: "preparing-sandbox" as const, statusDetail: null, statusProblem: undefined };
@@ -26,6 +26,22 @@ test("a conversation whose sandbox waits behind another sandbox's setup says so"
 
 test("a conversation whose sandbox setup has no steps yet says what the host is busy with", () => {
   expect(statusDetailOf(preparing, { stage: "starting-service" })).toBe(statusDetailOf(preparing));
+});
+
+test("a room's line says its agent waits for the room's sandbox: the setup's step, of how many, or its start", () => {
+  expect(roomLineWaitingForSandbox("Builder", "preparing-sandbox", pulling)).toBe("Builder waits for the room's sandbox to be set up, step 2 of 4: Pull team/dev:1");
+  expect(roomLineWaitingForSandbox("Builder", "starting-sandbox", pulling)).toBe("Builder waits for the room's sandbox to start…");
+});
+
+test("a room's line says its agent waits for the room's sandbox to be set up, where the setup has no steps yet or waits behind another sandbox's", () => {
+  expect(roomLineWaitingForSandbox("Builder", "preparing-sandbox", { stage: "starting-service" })).toBe("Builder waits for the room's sandbox to be set up…");
+  expect(roomLineWaitingForSandbox("Builder", "preparing-sandbox", { ...pulling, waitingBehind: { kind: "tool", tool: { kind: "claude", version: "1" } } })).toBe(
+    "Builder waits for the room's sandbox to be set up: waiting for another sandbox's setup…",
+  );
+});
+
+test("a room's line says nothing of the sandbox where its agent's conversation waits for none", () => {
+  expect([undefined, "making-worktree" as const].map((busyWith) => roomLineWaitingForSandbox("Builder", busyWith, pulling))).toEqual([null, null]);
 });
 
 test("the steps count those done, and the one it is on goes by its place: under way or failed, else the first still to come", () => {
