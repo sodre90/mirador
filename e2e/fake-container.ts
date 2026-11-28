@@ -10,7 +10,8 @@
  * FAKE_CONTAINER_PULL_HELD_BY, one whose name has /dev: in it stops at 40% until that file exists, and with
  * FAKE_CONTAINER_UNPACK_HELD_BY, at 60% of its unpacking; with FAKE_CONTAINER_INSTALLER_PULL_HELD_BY, the pull of the
  * Node.js image tools are installed with stops at 40% too. The check of an owner's base image, noted in checks.log, finds
- * all the agents need but in one whose name has lacks-git in it.
+ * all the agents need but in one whose name has lacks-git in it; with FAKE_CONTAINER_CHECK_HELD_BY, that of one whose
+ * name has slow-check in it waits for that file.
  */
 import { appendFileSync, existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -88,9 +89,10 @@ function inspect(name: string) {
   console.log(JSON.stringify([{ name, index: { digest: `sha256:${new Bun.CryptoHasher("sha256").update(name).digest("hex")}` } }]));
 }
 
-function checkImage() {
+async function checkImage() {
   const image = args[args.indexOf("--entrypoint") + 2]!;
   if (isAgentCheck) return checkAgent(image);
+  if (image.includes("slow-check")) await waitForFile(process.env.FAKE_CONTAINER_CHECK_HELD_BY);
   console.log("mirador-base-check");
   if (image.includes("lacks-git")) console.log("lacks git");
   console.log("PATH=/team/bin:/usr/local/bin:/usr/bin:/bin");
@@ -158,7 +160,7 @@ switch (command) {
     break;
   case "run":
     if (isCheck) {
-      checkImage();
+      await checkImage();
       break;
     }
     if (isThrowaway) {

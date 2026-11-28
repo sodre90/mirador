@@ -838,6 +838,35 @@ describe("a sandbox's setup steps", () => {
     expect(otherUnderWay.at(-1)!.waitingBehind).toBeUndefined();
   });
 
+  test("one whose own image is pulled while another's is checked says it waits behind that check, which tells only its own", async () => {
+    const MIRADORS = workspaceSandbox("w4");
+    const imageOf = (owner: SandboxOwner) => (sameOwner(owner, ROOM) ? "team/dev" : sameOwner(owner, OTHER) ? "acme/tools" : null);
+    const { host, toldWithSteps } = hostFor(repository(), imageOf);
+    const launcher = new FakeVmLauncher();
+    launcher.registry.set("docker.io/team/dev:latest", `sha256:${"a".repeat(64)}`);
+    launcher.registry.set("docker.io/acme/tools:latest", `sha256:${"c".repeat(64)}`);
+    const sandboxes = new Sandboxes(launcher, host, IDLE_STOP_MS);
+    sandboxes.prepareInBackground(MIRADORS, null);
+    expect(await until(() => lastOf(toldWithSteps, MIRADORS)?.stage === "ready")).toBe(true);
+    const check = Promise.withResolvers<void>();
+    launcher.runningOnce = check.promise;
+    sandboxes.prepareInBackground(ROOM, null);
+    expect(await until(() => launcher.checked().length === 1)).toBe(true);
+
+    sandboxes.prepareInBackground(OTHER, null);
+
+    const pulledAndWaiting = () => {
+      const last = lastOf(toldWithSteps, OTHER);
+      return last?.waitingBehind !== undefined && last.steps!.some(({ piece, state }) => piece.kind === "base-pull" && state === "done");
+    };
+    expect(await until(pulledAndWaiting)).toBe(true);
+    const waiting = lastOf(toldWithSteps, OTHER)!;
+    expect(waiting.waitingBehind).toEqual({ kind: "base-check", image: "team/dev" });
+    expect(statesOf(waiting)).toEqual(["service done", "base-pull done", "tool:guard done", "tool:bun done", "tool:node done", "base-check waiting"]);
+    check.resolve();
+    expect(await until(() => [ROOM, OTHER].every((owner) => lastOf(toldWithSteps, owner)?.stage === "ready"))).toBe(true);
+  });
+
   test("where a step fails, says which, with those before it done", async () => {
     const { host, toldWithSteps } = hostFor(repository());
     const launcher = new FakeVmLauncher();

@@ -20,6 +20,7 @@ const installHeldBy = () => join(host.root, "install-may-go-on");
 const pullHeldBy = () => join(host.root, "pull-may-go-on");
 const unpackHeldBy = () => join(host.root, "unpack-may-go-on");
 const installerPullHeldBy = () => join(host.root, "installer-pull-may-go-on");
+const checkHeldBy = () => join(host.root, "check-may-go-on");
 const worktree = () => join(host.root, "worktree");
 const promptsFile = () => join(host.root, "prompts");
 const promptsSoFar = () => (existsSync(promptsFile()) ? readFileSync(promptsFile(), "utf8") : "");
@@ -37,6 +38,7 @@ function writeFakeContainer() {
     FAKE_CONTAINER_PULL_HELD_BY: pullHeldBy(),
     FAKE_CONTAINER_UNPACK_HELD_BY: unpackHeldBy(),
     FAKE_CONTAINER_INSTALLER_PULL_HELD_BY: installerPullHeldBy(),
+    FAKE_CONTAINER_CHECK_HELD_BY: checkHeldBy(),
     FAKE_ACP_PROMPTS: promptsFile(),
   });
   const claude = join(host.fakeProgramsDir, "claude");
@@ -473,6 +475,59 @@ test("a base image of the owner's own is pulled and checked for what the agents 
     await expect(lastAgentMessage(page)).toHaveText("On Mirador's base.");
     expect(imageRun(runs().at(-1)!)).toMatch(/^mirador-sandbox-base:[0-9a-f]{10}$/);
   });
+});
+
+test("a sandbox whose next step comes after another sandbox's says what it waits for, in its settings and in the conversation waiting for it, and is set up once that step is over", async ({ page }) => {
+  test.skip(!sandboxesRunHere, "Sandboxes run on macOS 26 on Apple silicon only.");
+  await signIn(page, host);
+  const card = projectCard(page);
+  const useBaseImage = async (dialog: Locator, name: string, { startsConversationsAfresh }: { startsConversationsAfresh: boolean }) => {
+    await dialog.getByRole("textbox", { name: "Base image" }).fill(name);
+    await dialog.getByRole("button", { name: "Use" }).click();
+    if (startsConversationsAfresh) await dialog.getByRole("button", { name: "Change" }).click();
+    await expect(dialog.getByRole("textbox", { name: "Base image" })).toHaveValue(name);
+  };
+  const theProjects = await openSandboxOf(page, card, "project");
+  await useBaseImage(theProjects, "team/slow-check:1", { startsConversationsAfresh: true });
+  const checkingTheProjects = stepRow(setupSteps(theProjects), "Check that team/slow-check:1 has what the agents need");
+  await expect(checkingTheProjects.getByRole("img", { name: "Under way" })).toBeVisible();
+  await theProjects.getByRole("button", { name: "Done" }).click();
+
+  const behind = join(host.root, "behind");
+  execFileSync("git", ["init", "-q", behind]);
+  await addWorkspaceFromSidebar(page, behind, "Builder · Claude Code");
+  const dialog = await openSandboxOf(page, workspaceCard(page, behind), "behind");
+  await sandboxSwitch(dialog).check();
+  await expect(dialog.locator(".room-sandbox-setup")).toHaveText("Set up on this Mac.");
+  await useBaseImage(dialog, "acme/tools:1", { startsConversationsAfresh: false });
+  const steps = setupSteps(dialog);
+  const waitsFor = /^Waiting for another sandbox's setup: Check that team\/slow-check:1 has what the agents need · \d+:\d\d$/;
+  await expect(steps.locator(".sandbox-setup-waiting")).toHaveText(waitsFor);
+  await expect(steps.getByRole("status")).toHaveText("Step 6 of 8");
+  await expect(stepRow(steps, "Check that acme/tools:1 has what the agents need").getByRole("img", { name: "Still to come" })).toBeVisible();
+  await expect(steps.getByRole("img", { name: "Under way" })).toHaveCount(0);
+  await keepScreenshot(dialog, "waiting-behind");
+  await dialog.getByRole("button", { name: "Done" }).click();
+
+  const previousUrl = page.url();
+  await workspaceCard(page, behind).getByRole("button", { name: "+ New conversation" }).click();
+  await expect(page).not.toHaveURL(previousUrl);
+  const waitingFor = chatHeader(page).locator(".status-detail");
+  await expect(waitingFor).toHaveText("Setting up the sandbox: waiting for another sandbox's setup…");
+  const setupCard = page.locator(".sandbox-setup-card:visible");
+  await expect(setupCard.locator(".sandbox-setup-doing")).toHaveText("Step 6 of 8: Waiting for another sandbox's setup: Check that team/slow-check:1 has what the agents need");
+  await keepScreenshot(setupCard, "conversation-waiting-behind");
+
+  writeFileSync(checkHeldBy(), "");
+  await expect(waitingFor).toHaveCount(0);
+  await expect(setupCard).toHaveCount(0);
+  const settled = await openSandboxOf(page, workspaceCard(page, behind), "behind");
+  await expect(settled.locator(".room-sandbox-setup")).toHaveText("Set up on this Mac.");
+  await settled.getByRole("button", { name: "Done" }).click();
+  const cleared = await openSandboxOf(page, card, "project");
+  await useBaseImage(cleared, "", { startsConversationsAfresh: true });
+  await expect(cleared.locator(".room-sandbox-setup")).toHaveText("Set up on this Mac.");
+  await cleared.getByRole("button", { name: "Done" }).click();
 });
 
 test("while the workspace is sandboxed, a Codex profile is refused with what to do instead, and new conversations can't start in worktrees", async ({ page }) => {

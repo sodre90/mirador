@@ -1296,7 +1296,7 @@ export class Sandboxes {
       throw error instanceof BaseNotPulled ? new BaseUnusable({ image: name, problem: { kind: "pull-failed", cause: error.message } }) : error;
     } finally {
       pull.leave(owner);
-      if (preparing && --preparing.pulling === 0 && this.toldEveryOne) this.tellOfPieceMade(owner, this.toldEveryOne);
+      if (preparing && --preparing.pulling === 0) this.tellOfPieceUnderWay(owner);
     }
   }
 
@@ -1352,7 +1352,7 @@ export class Sandboxes {
     preparing.launches += 1;
     preparing.agents.push(agent);
     this.preparing.set(ownerKey(owner), preparing);
-    if (!before && this.making) this.tellOfPieceMade(owner, this.toldEveryOne ?? { stage: STAGE_OF_PIECE[this.making.piece.kind] });
+    if (!before) this.tellOfPieceUnderWay(owner);
     return preparing;
   }
 
@@ -1374,6 +1374,11 @@ export class Sandboxes {
     this.toldEveryOne = setup;
     [...this.preparing.values()].filter(({ pulling }) => pulling === 0).forEach(({ owner }) => this.tellOfPieceMade(owner, setup));
   };
+
+  /** A sandbox hears of the piece being made, where one is: how far it got, as it told every sandbox, or which it is, where it told only its own, as a check does. */
+  private tellOfPieceUnderWay(owner: SandboxOwner) {
+    if (this.making) this.tellOfPieceMade(owner, this.toldEveryOne ?? { stage: STAGE_OF_PIECE[this.making.piece.kind] });
+  }
 
   /** How the piece being made moves on, to a sandbox that takes it; one that doesn't hears only that it waits behind it. */
   private tellOfPieceMade(owner: SandboxOwner, setup: SandboxSetup) {
