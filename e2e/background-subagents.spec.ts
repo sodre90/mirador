@@ -3,7 +3,7 @@ import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test } from "@playwright/test";
 import { FakeClaudeApi, subscriptionEnvironment } from "./fake-claude-api.ts";
-import { addWorkspace, createProfile, eventsInOrderOn, sendMessage, signIn, startConversation, waitForTurnToEnd, turnOnYolo, startInManualMode } from "./helpers.ts";
+import { addWorkspace, createProfile, eventsInOrderOn, openProfiles, sendMessage, signIn, startConversation, waitForTurnToEnd, turnOnYolo, startInManualMode } from "./helpers.ts";
 import { TestHost } from "./test-host.ts";
 
 const host = new TestHost();
@@ -165,4 +165,70 @@ test("a message joins the turn also while a background subagent waits for permis
   await expect.poll(() => api.endedCommandsWaiting, { timeout: 30_000 }).toBe(1);
   api.answerEndedCommands();
   await waitForTurnToEnd(page);
+});
+
+test("a subagent Claude Code starts between your turns shows running while the conversation is idle and through your next turn, and done once it ends", async ({ page }) => {
+  await signIn(page, host);
+  await page.goto(host.origin);
+  await page.getByLabel("Agent", { exact: true }).selectOption({ label: `${PROFILE} · Claude Code` });
+  await startConversation(page);
+  await turnOnYolo(page);
+
+  const card = page.locator(".timeline .tool.subagent");
+  const badge = page.locator(".chat-header .badge");
+  const chip = page.locator(".chat-header .subagents-running");
+  await tellingTheStoredAgentUpdates(async () => {
+    api.subagentWhenNotified = "sleep 20; echo slept";
+    await sendMessage(page, "BACKGROUND sleep 8; echo ready");
+    await waitForTurnToEnd(page);
+
+    await test.step("the subagent started by Claude Code's own turn shows running while nothing is asked of it", async () => {
+      await expect(card).toHaveCount(1, { timeout: 60_000 });
+      await expect(chip).toHaveText("◐ 1 subagent running");
+      await expect(card).not.toHaveClass(/subagent-done/);
+      await expect(badge).not.toHaveText("running");
+    });
+
+    await test.step("it still shows running through a short turn of the user's", async () => {
+      await sendMessage(page, "?");
+      await expect(page.locator(".timeline .message.agent", { hasText: "Answered: ?" })).toBeVisible({ timeout: 30_000 });
+      await waitForTurnToEnd(page);
+      await expect(card).not.toHaveClass(/subagent-done/);
+      await expect(chip).toHaveText("◐ 1 subagent running");
+    });
+
+    await expect(card).toHaveClass(/subagent-done/, { timeout: 60_000 });
+    api.answerEndedCommands();
+  });
+});
+
+test("saving the profile restarts Claude Code, and a subagent it started between your turns shows stopped, not running, once the agent is restarted", async ({ page }) => {
+  await signIn(page, host);
+  await page.goto(host.origin);
+  await page.getByLabel("Agent", { exact: true }).selectOption({ label: `${PROFILE} · Claude Code` });
+  await startConversation(page);
+  await turnOnYolo(page);
+
+  const card = page.locator(".timeline .tool.subagent");
+  const chip = page.locator(".chat-header .subagents-running");
+  await tellingTheStoredAgentUpdates(async () => {
+    api.subagentWhenNotified = "sleep 20; echo slept";
+    await sendMessage(page, "BACKGROUND sleep 8; echo ready");
+    await waitForTurnToEnd(page);
+    await expect(card).toHaveCount(1, { timeout: 60_000 });
+    await expect(chip).toHaveText("◐ 1 subagent running");
+
+    const dialog = await openProfiles(page);
+    await dialog.locator(".profile-list li", { hasText: PROFILE }).click();
+    await dialog.getByRole("button", { name: "Edit environment" }).click();
+    const field = dialog.getByLabel("Environment", { exact: true });
+    await field.fill(`${await field.inputValue()}\nFAKE_RESTART_MARK=1`);
+    await dialog.getByRole("button", { name: "Save" }).click();
+    await expect(dialog.getByText("Saved")).toBeVisible();
+    await dialog.getByRole("button", { name: "Close" }).click();
+
+    await expect(chip, "the restart ends the subagent's task with the process").toHaveCount(0);
+    await expect(card).toHaveClass(/subagent-stopped/);
+    await expect(card).not.toHaveClass(/subagent-running/);
+  });
 });

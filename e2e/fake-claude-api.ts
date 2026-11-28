@@ -106,7 +106,8 @@ const answersEndedBackgroundCommand = ({ messages }: MessagesRequest) => {
  * request after it runs into the usage limit. A message starting with `LIMITED SUBAGENT ` starts a subagent in the
  * background that does the rest. The agent ends its turn at once, and the subagent's request waits for
  * `limitTheSubagent`, then a moment more, before it is refused with the usage limit, the way the limit reached a live
- * turn; every request after it is refused too.
+ * turn; every request after it is refused too. While `subagentWhenNotified` is set, the reply to the next such
+ * notification starts a background subagent that runs it in Bash, as Claude Code does between the user's turns.
  */
 /** Claude Code counts the tokens of its prompt's parts on its own; a rough count serves, and it is no message to answer. */
 const countTokens = (body: string, response: ServerResponse) =>
@@ -131,6 +132,8 @@ export class FakeClaudeApi {
   readonly oneHourCacheAsked: string[] = [];
   /** The `CALL ` message that stands for any message holding these words, as a task's do that a room quotes to an agent. */
   readonly callsWhenSaid = new Map<string, string>();
+  /** The command a background subagent runs, which the reply to the next notification of an ended background command starts instead of waiting; cleared once used. */
+  subagentWhenNotified: string | null = null;
   /** Ends every reply in text, e.g. with a question for the user. */
   replySuffix = "";
   readonly answered: string[] = [];
@@ -250,6 +253,11 @@ export class FakeClaudeApi {
       this.contextTokens = null;
       this.answered.push(typed);
       return this.send(body, response, [this.bashCall("true", false)]);
+    }
+    if (offersAgent(body) && this.subagentWhenNotified !== null && answersEndedBackgroundCommand(body)) {
+      const command = this.subagentWhenNotified;
+      this.subagentWhenNotified = null;
+      return this.send(body, response, [this.agentCall(`${RUN}${command}`, true)]);
     }
     if (offersBash(body) && answersEndedBackgroundCommand(body)) return void this.heldNotificationReplies.push(() => this.send(body, response, [this.bashCall("true", false)]));
     this.answered.push(typed);

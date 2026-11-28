@@ -2873,8 +2873,11 @@ export class Store {
     return stored;
   }
 
-  /** Drops the events from `seq` on, as a rewind to that point does; the seqs it frees are not handed out again, also after a restart. */
-  deleteEventsFrom(conversationId: string, seq: number) {
+  /**
+   * Drops the events from `seq` on, as a rewind to that point does; the seqs it frees are not handed out again, also after a
+   * restart. Returns the last seq it freed, so a page can tell the events it dropped from any numbered after them.
+   */
+  deleteEventsFrom(conversationId: string, seq: number): number {
     const lastSeq = this.lastEventSeq(conversationId);
     this.nextSeq.set(conversationId, Math.max(this.nextSeq.get(conversationId) ?? 0, lastSeq + 1));
     this.db.query("UPDATE conversations SET rewound_through_seq = MAX(rewound_through_seq, ?) WHERE id = ?").run(lastSeq, conversationId);
@@ -2887,6 +2890,7 @@ export class Store {
          WHERE id = ?`,
       )
       .run(conversationId, conversationId, conversationId);
+    return lastSeq;
   }
 
   lastEventSeq(conversationId: string): number {
