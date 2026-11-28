@@ -1,4 +1,5 @@
-import { useState, type CSSProperties, type Dispatch, type ReactNode, type SetStateAction } from "react";
+import { useEffect, useState, type CSSProperties, type Dispatch, type ReactNode, type SetStateAction } from "react";
+import type { Person } from "../shared/model.ts";
 import { namelessPerson } from "../shared/people.ts";
 import { isMuted } from "../shared/room-reading.ts";
 import { approvesIn } from "../shared/rooms.ts";
@@ -31,6 +32,19 @@ function Welcome({ state }: { state: AppState }) {
     <p className="rooms-only-welcome">
       {owner ? words.machineOf(owner) : words.machineOfNamelessOwner} {state.rooms.length > 0 && words.invitedTo(state.rooms.map(({ name }) => name).join(", "))}
     </p>
+  );
+}
+
+function OwnProfileDialog({ you, onClose }: { you: Person; onClose: () => void }) {
+  useEffect(() => {
+    const closeOnEscape = (event: KeyboardEvent) => event.key === "Escape" && !event.defaultPrevented && onClose();
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [onClose]);
+  return (
+    <Modal label={t.settings.ownProfile.title} className="own-profile-dialog" onClose={onClose}>
+      <OwnProfileSettings person={you} nameless={namelessPerson(t.rooms.nameless, you)} />
+    </Modal>
   );
 }
 
@@ -165,11 +179,7 @@ export function RoomsOnlyApp({
           </div>
         ))}
       </div>
-      {ownProfileOpen && you && (
-        <Modal label={t.settings.ownProfile.title} className="own-profile-dialog" onClose={() => setOwnProfileOpen(false)}>
-          <OwnProfileSettings person={you} nameless={namelessPerson(t.rooms.nameless, you)} />
-        </Modal>
-      )}
+      {ownProfileOpen && you && <OwnProfileDialog you={you} onClose={() => setOwnProfileOpen(false)} />}
     </div>
   );
 }

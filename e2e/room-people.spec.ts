@@ -207,6 +207,13 @@ test("a person the owner lets into a room sees only that room on their own brows
     await expect(page.locator(".room-timeline .room-entry .author").first()).toContainText("Mia Rossi");
   });
 
+  await test.step("Escape closes Mia's profile", async () => {
+    const profile = miaPage.getByRole("dialog", { name: "Your profile" });
+    await expect(profile).toBeVisible();
+    await miaPage.keyboard.press("Escape");
+    await expect(profile).toHaveCount(0);
+  });
+
   await test.step("the owner can't take Mia's name either, and keeps their own", async () => {
     const settings = await openSettings(page);
     const name = settings.getByLabel("Name", { exact: true });
