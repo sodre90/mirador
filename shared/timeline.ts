@@ -148,6 +148,10 @@ export function subagentsIn(blocks: TimelineBlock[]): SubagentBlock[] {
   return blocks.flatMap((block) => (block.kind === "tool" && block.subagent ? [block as SubagentBlock, ...subagentsIn(block.subagent.blocks)] : []));
 }
 
+/** The subagents whose work the subagent is part of, outermost first. */
+export const subagentsAround = (timeline: TimelineBlock[], subagent: SubagentBlock) =>
+  subagentsIn(timeline).filter((block) => subagentsIn(block.subagent.blocks).includes(subagent));
+
 export interface PermissionBlock extends Origin {
   kind: "permission";
   permissionId: string;

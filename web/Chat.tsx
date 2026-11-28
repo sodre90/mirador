@@ -105,6 +105,7 @@ import {
   subagentEndedAt,
   subagentInput,
   subagentAsking,
+  subagentsAround,
   subagentsIn,
   subagentState,
   timelineWithStreamedText,
@@ -548,8 +549,8 @@ function useTallerThanTimeline(ref: RefObject<HTMLElement | null>) {
   return taller;
 }
 
-/** The subagent the user asked to see, whose card opens at its latest work. */
-const SubagentToShow = createContext<string | null>(null);
+/** The subagent the user asked to see, after those it works within, outermost first: their cards open, at its latest work. */
+const SubagentToShow = createContext<readonly string[] | null>(null);
 
 /**
  * A tool call's card, a subagent's too, draws its work from the first time it opens, and while find has a match in it:
@@ -559,7 +560,7 @@ const SubagentToShow = createContext<string | null>(null);
  */
 function useDrawnWork(block: ToolBlock) {
   const [everOpened, setEverOpened] = useState(false);
-  const askedFor = useContext(SubagentToShow) === block.toolCallId;
+  const askedFor = useContext(SubagentToShow)?.includes(block.toolCallId) ?? false;
   if (askedFor && !everOpened) setEverOpened(true);
   const matchesFind = useContext(MatchesFind);
   const drawsWork = everOpened || (matchesFind !== null && textsOf(block).some(matchesFind));
@@ -2463,14 +2464,13 @@ export function ChatPanel({
   const { ref, onScroll, holdPlace, isPinned, rememberPlace, awayFromLatest, jumpToLatest } = useScrollAnchor();
   const earlier = useEarlierHistory(open);
   const { firstLoaded, loadFrom, loadEarlier } = useLoadedEntries(timeline, open.loaded, { holdPlace, isPinned }, earlier);
-  const [subagentToShow, setSubagentToShow] = useState<string | null>(null);
+  const [subagentToShow, setSubagentToShow] = useState<readonly string[] | null>(null);
   useEffect(() => {
     if (!subagentToShow) return;
-    const card = ref.current?.querySelector<HTMLDetailsElement>(`[data-tool-call-id="${CSS.escape(subagentToShow)}"]`);
-    if (card) {
-      card.open = true;
-      latestWorkIn(card).scrollIntoView({ block: "end", behavior: "smooth" });
-    }
+    const cards = subagentToShow.flatMap((toolCallId) => ref.current?.querySelector<HTMLDetailsElement>(`[data-tool-call-id="${CSS.escape(toolCallId)}"]`) ?? []);
+    cards.forEach((card) => (card.open = true));
+    const innermost = cards.at(-1);
+    if (innermost) latestWorkIn(innermost).scrollIntoView({ block: "end", behavior: "smooth" });
     setSubagentToShow(null);
   }, [subagentToShow]);
   const onTimelineScroll = () => {
@@ -2485,7 +2485,7 @@ export function ChatPanel({
   const runningSubagents = subagents.filter((block) => subagentStates.get(block.toolCallId) === "running");
   const showSubagent = (subagent: SubagentBlock) => {
     loadFrom(timeline.findIndex((block) => subagentsIn([block]).includes(subagent)));
-    setSubagentToShow(subagent.toolCallId);
+    setSubagentToShow([...subagentsAround(timeline, subagent), subagent].map(({ toolCallId }) => toolCallId));
   };
   const showRunningSubagent = () => {
     if (runningSubagents[0]) showSubagent(runningSubagents[0]);

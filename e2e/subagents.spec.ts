@@ -178,4 +178,27 @@ test("a subagent's work folds into its card, and the header counts the subagents
     await expect(watchBar).toBeInViewport();
     await expect(closeAtEnd(watch)).toHaveCount(0);
   });
+
+  await test.step("a subagent another subagent started opens from the list of those at work, with the cards around it", async () => {
+    await host.stop();
+    execFileSync("bun", [join(import.meta.dirname, "seed-nested-subagents.ts"), join(host.dataDir, "state.sqlite"), conversationId]);
+    await host.start();
+    await reloadFromRestartedHost(page);
+    const review = page.locator('.timeline [data-tool-call-id="toolu_review"]');
+    const releaseTests = page.locator('.timeline [data-tool-call-id="toolu_release_tests"]');
+    const releaseTestsLatest = releaseTests.locator(":scope > .subagent-work > *").last();
+    api.hold();
+    await sendMessage(page, "How is the review going?");
+    await expect(dock.getByRole("button")).toHaveCount(2, { timeout: 60_000 });
+    await expect(review).not.toHaveAttribute("open");
+    await expect(releaseTests, "the inner card is not drawn inside its closed outer one").toHaveCount(0);
+    await page.locator(".timeline").evaluate((timeline) => timeline.scrollTo(0, 0));
+    await dock.getByRole("button").filter({ has: page.locator(".subagent-task", { hasText: "Run the release tests" }) }).click();
+    await expect(review).toHaveAttribute("open");
+    await expect(releaseTests).toHaveAttribute("open");
+    await expect(releaseTestsLatest).toContainText("bun run test");
+    await expect(releaseTestsLatest, "the inner subagent's latest work, at the end of its long card").toBeInViewport();
+    api.answerHeld();
+    await waitForTurnToEnd(page);
+  });
 });

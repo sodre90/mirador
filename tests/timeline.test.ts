@@ -5,7 +5,7 @@ import { MODE_NAME_META_KEY } from "../shared/notices.ts";
 import { lineDiff } from "../web/diff.ts";
 import { pageEvent } from "../host/low-data.ts";
 import { canTryAgain } from "../shared/try-again.ts";
-import { approvalsWaiting, authorOf, buildTimeline, latestPlan, runsInBackground, spokenSeverity, startsAuthorGroup, stepsAtWork, stepsRunning, subagentAsking, subagentEndedAt, subagentsIn, subagentState, timelineWithStreamedText, toolCallsAwaitingPermission, withStreamedEvent, writtenByAPerson, type SubagentBlock, type TimelineBlock } from "../shared/timeline.ts";
+import { approvalsWaiting, authorOf, buildTimeline, latestPlan, runsInBackground, spokenSeverity, startsAuthorGroup, stepsAtWork, stepsRunning, subagentAsking, subagentEndedAt, subagentsAround, subagentsIn, subagentState, timelineWithStreamedText, toolCallsAwaitingPermission, withStreamedEvent, writtenByAPerson, type SubagentBlock, type TimelineBlock } from "../shared/timeline.ts";
 
 function stored(events: ConversationEvent[]): StoredEvent[] {
   return events.map((event, index) => ({ seq: index + 1, at: (index + 1) * 1000, event }));
@@ -355,6 +355,18 @@ describe("subagents", () => {
     expect(first!.subagent.blocks.map((block) => (block.kind === "tool" ? block.title : block.kind))).toEqual(["Read r1.ts", "agent", "Inside"]);
     expect(second!.subagent.blocks.map((block) => (block.kind === "tool" ? block.title : block.kind))).toEqual(["Deeper"]);
     expect(first!.subagent.lastActivityAt).toBe(9000);
+  });
+
+  test("the subagents around one are those it works within, outermost first", () => {
+    const launchWithin = (toolCallId: string, parent: string) =>
+      acp({ sessionUpdate: "tool_call", toolCallId, title: "Task", kind: "think", status: "pending", rawInput: {}, _meta: { claudeCode: { toolName: "Agent", parentToolUseId: parent } } });
+    const timeline = buildTimeline(stored([launch("outer", {}), launchWithin("middle", "outer"), launchWithin("sibling", "outer"), launchWithin("inner", "middle"), launch("alone", {})]));
+    const around = (toolCallId: string) => subagentsAround(timeline, subagentsIn(timeline).find((block) => block.toolCallId === toolCallId)!).map((block) => block.toolCallId);
+
+    expect(around("inner")).toEqual(["outer", "middle"]);
+    expect(around("sibling")).toEqual(["outer"]);
+    expect(around("outer")).toEqual([]);
+    expect(around("alone")).toEqual([]);
   });
 
   test("a call that says it starts a subagent only in a later update still gathers that subagent's work", () => {
