@@ -279,6 +279,7 @@ test("turned on, the workspace's sandbox is set up with its progress shown, in a
   await expect(dialog).toBeHidden();
 
   const sidebarMark = card.locator(".workspace-sandboxed");
+  await expect(card.locator(".workspace-heading > .workspace-name + .workspace-sandboxed")).toBeVisible();
   await expect(sidebarMark).toHaveAccessibleName("Sandboxed");
   await expect(sidebarMark).toHaveAttribute("data-hint", "This workspace's agents run in a sandbox. Click for its settings.");
   await keepScreenshot(card.locator(":scope > header"), "sidebar-mark");

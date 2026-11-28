@@ -1170,6 +1170,9 @@ body.resizing iframe {
 
 .workspace-heading {
   flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 4px;
   min-width: 0;
 }
 
@@ -1181,6 +1184,7 @@ body.resizing iframe {
 }
 
 .workspace-name {
+  min-width: 0;
   font-weight: 600;
 }
 
@@ -3510,12 +3514,14 @@ input.picker-search {
   white-space: nowrap;
 }
 
-.workspace-subline .workspace-sandboxed {
+.workspace-heading .workspace-sandboxed {
   flex: none;
-  padding: 2px 4px;
+  padding: 2px;
+  background: none;
+  color: var(--accent);
 }
 
-.workspace-subline .workspace-sandboxed .line-icon {
+.workspace-heading .workspace-sandboxed .line-icon {
   width: calc(12px * var(--font-scale));
   height: calc(12px * var(--font-scale));
 }

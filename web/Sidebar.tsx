@@ -633,8 +633,11 @@ function WorkspaceSection({
         >
           {shownIcon ? <img src={shownIcon} alt="" draggable={false} onError={() => setBrokenIcon(shownIcon)} /> : markInitials(workspace.name)}
         </button>
-        <div className="workspace-heading" title={workspace.path}>
-          <div className="workspace-name">{workspace.name}</div>
+        <div className="workspace-heading">
+          <div className="workspace-name" title={workspace.path}>
+            {workspace.name}
+          </div>
+          {workspace.sandbox.on && <SandboxedMark className="workspace-sandboxed" hint={sandboxWords.workspaceSandboxed} wordless onOpen={() => openWorkspaceSandbox(dispatch, workspace.id)} />}
         </div>
         <WaitingCount conversations={conversations} />
         {holdsChanges && (
@@ -690,7 +693,6 @@ function WorkspaceSection({
           +
         </button>
         <div className="workspace-subline">
-          {workspace.sandbox.on && <SandboxedMark className="workspace-sandboxed" hint={sandboxWords.workspaceSandboxed} wordless onOpen={() => openWorkspaceSandbox(dispatch, workspace.id)} />}
           <span className="workspace-folder">{parentFolder(workspace.path, homeDir)}</span>
           <LaunchPicker workspace={workspace} profiles={profiles} dispatch={dispatch} />
         </div>

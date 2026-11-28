@@ -128,7 +128,7 @@ export async function pickProfileIfAsked(page: Page, directory: string, profile?
 const cssString = (text: string) => `"${text.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"`;
 
 export const workspaceCard = (scope: Page | FrameLocator, directory: string) =>
-  scope.locator(".workspace", { has: scope.locator(`.workspace-heading[title=${cssString(directory)}]`) });
+  scope.locator(".workspace", { has: scope.locator(`.workspace-name[title=${cssString(directory)}]`) });
 
 /** A button of a workspace card's heading that shows while the pointer is on the heading: "Continue a session…" or "Where conversations work…". */
 export async function clickWorkspaceButton(card: Locator, name: string) {
