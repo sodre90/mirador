@@ -7,7 +7,7 @@ import {
   pluginWindowStateMessage,
   type CanvasFrameMessage,
 } from "../shared/canvas-document.ts";
-import { HostBanner, useConnectionStatus, useReloadWhenHostRestarted } from "./App.tsx";
+import { HostBanner, useConnectionStatus } from "./App.tsx";
 import { CanvasFrame } from "./Canvas.tsx";
 import { connection, type ConnectionStatus } from "./connection.ts";
 import { JoinMachine } from "./Devices.tsx";
@@ -95,7 +95,6 @@ function PluginWindowView({ plugin, state, viewUrl, assetsOrigin }: { plugin: st
 export function PluginWindow({ plugin }: { plugin: string }) {
   const [state, dispatch] = useReducer(reducer, null, initialStateFor);
   const status = useConnectionStatus();
-  useReloadWhenHostRestarted(state.hostRunId);
   const windowState = useWindowState(status, plugin);
   useEffect(() => {
     followTitleInDesktopApp();

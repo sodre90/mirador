@@ -47,6 +47,31 @@ describe("Connection.send", () => {
   });
 });
 
+describe("a snapshot of a restarted host", () => {
+  test("loads the page again before anything on it reads that snapshot, and the reconnection's snapshots of the same run go on to it", () => {
+    const reloads: number[] = [];
+    const pageLocation = globalThis.location;
+    globalThis.location = { reload: () => void reloads.push(Date.now()) } as unknown as Location;
+    try {
+      const { connection } = connectionWithSocket();
+      const read: ServerMessage[] = [];
+      connection.onMessage((message) => read.push(message));
+      const ofRun = (hostRunId: string) => ({ ...snapshotFor("owner"), hostRunId }) as ServerMessage;
+
+      connection.dispatchMessage(ofRun("first"));
+      connection.dispatchMessage(ofRun("first"));
+      expect(read).toHaveLength(2);
+      expect(reloads).toHaveLength(0);
+
+      connection.dispatchMessage(ofRun("second"));
+      expect(read, "the page never reads the newer host's snapshot").toHaveLength(2);
+      expect(reloads).toHaveLength(1);
+    } finally {
+      globalThis.location = pageLocation;
+    }
+  });
+});
+
 describe("Connection.sendAndAwait", () => {
   test("rejects immediately when not connected, without leaking listeners", async () => {
     const connection = new Connection();

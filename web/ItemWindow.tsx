@@ -2,7 +2,7 @@ import { OpensIn } from "./opens-in.ts";
 import { useEffect, useReducer } from "react";
 import type { ItemWindowRoute } from "../shared/item-window.ts";
 import type { PluginCanvasItem } from "../shared/model.ts";
-import { HostBanner, useConnectionStatus, useReloadWhenHostRestarted } from "./App.tsx";
+import { HostBanner, useConnectionStatus } from "./App.tsx";
 import { isTabItem } from "./Checklist.tsx";
 import { connection, type ConnectionStatus } from "./connection.ts";
 import { JoinMachine } from "./Devices.tsx";
@@ -39,7 +39,6 @@ function ItemView({ item, state }: { item: PluginCanvasItem; state: AppState }) 
 export function ItemWindow({ route }: { route: ItemWindowRoute }) {
   const [state, dispatch] = useReducer(reducer, route.conversationId, initialStateFor);
   const status = useConnectionStatus();
-  useReloadWhenHostRestarted(state.hostRunId);
   useConversationSubscribed(status, route.conversationId);
   useEffect(() => {
     followTitleInDesktopApp();

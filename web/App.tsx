@@ -101,15 +101,6 @@ export function useConnectionStatus() {
 
 const restartHost = () => connection.send({ type: "host.restart" });
 
-/** A restarted host may speak a newer protocol and serves newer UI code, so the page loads again from it. */
-export function useReloadWhenHostRestarted(hostRunId: string | null) {
-  const loadedFrom = useRef(hostRunId);
-  useEffect(() => {
-    loadedFrom.current ??= hostRunId;
-    if (hostRunId !== loadedFrom.current) location.reload();
-  }, [hostRunId]);
-}
-
 export function HostBanner({ status, state }: { status: ConnectionStatus; state: AppState }) {
   if (state.hostRestarting) return <div className="banner connection">{t.shell.app.restartingHost}</div>;
   if (status === "out-of-rooms") return null;
@@ -465,7 +456,6 @@ export function App() {
   const shownMachine = railShown ? machines.shown : null;
   const waitingHere = state.conversations.flatMap(({ waitingFor }) => (waitingFor ? [waitingFor] : []));
   const status = useConnectionStatus();
-  useReloadWhenHostRestarted(state.hostRunId);
   const conversationLayouts = useConversationLayouts();
   const conversationIds = state.conversations.map(({ id }) => id).join(" ");
   const roomIds = state.rooms.map(({ id }) => id).join(" ");

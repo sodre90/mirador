@@ -28,6 +28,8 @@ export class Connection {
   private snapshotCame = false;
   /** Signed in as a person other than the machine's owner, the page holds back all the host refuses from people. */
   private sendsAsPerson = false;
+  /** The run of the host the page was loaded from: a restarted host may speak a newer protocol and serves newer UI code. */
+  private loadedFromHostRun: string | null = null;
   status: ConnectionStatus = "connecting";
 
   connect() {
@@ -129,9 +131,18 @@ export class Connection {
     return () => void this.statusListeners.delete(listener);
   }
 
+  /** A snapshot of a restarted host loads the page again from it before any of the page reads that snapshot, which its older code may not be able to. */
   dispatchMessage(message: ServerMessage) {
-    if (message.type === "snapshot") this.sendWaitingAs(message);
+    if (message.type === "snapshot") {
+      this.sendWaitingAs(message);
+      if (this.isOfAnotherHostRun(message.hostRunId)) return location.reload();
+    }
     this.messageListeners.forEach((listener) => listener(message));
+  }
+
+  private isOfAnotherHostRun(hostRunId: string) {
+    this.loadedFromHostRun ??= hostRunId;
+    return hostRunId !== this.loadedFromHostRun;
   }
 
   setStatus(status: ConnectionStatus) {
