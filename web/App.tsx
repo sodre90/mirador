@@ -702,16 +702,17 @@ export function App() {
     return () => window.removeEventListener("hashchange", selectFromHash);
   }, []);
 
-  const dialogIsOpen = useRef(false);
-  dialogIsOpen.current = isModal(state);
+  const latestState = useRef(state);
+  latestState.current = state;
   useEffect(() => {
     const showSettings = () => dispatch({ type: "open-overlay", overlay: { kind: "settings" } });
     /**
      * ⌘, comes through the app's menu from wherever the keys are, a canvas frame or the message box: Esc then has to
-     * reach the dialog, not what had focus. An open dialog stays, as it does for the page's own shortcuts.
+     * reach the dialog, not what had focus. An open dialog stays, as it does for the page's own shortcuts. Whether one
+     * is open is asked as the key comes, since the render that closes one still finds its backdrop in the page.
      */
     const showSettingsAndTakeTheKeys = () => {
-      if (dialogIsOpen.current) return;
+      if (isModal(latestState.current)) return;
       if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
       showSettings();
     };
