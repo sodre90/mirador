@@ -73,6 +73,7 @@ import { useTimestampsShown } from "./timestamps.ts";
 import { NAME_FIELD_ATTRIBUTES, setTypingAids, useTypingAids, type TypingAids } from "./typing-aids.ts";
 import { SettingsPageList, settingsPanel } from "./SettingsPages.tsx";
 import { sandboxUnavailableText } from "./problem-text.ts";
+import { BaseImageField } from "./Sandbox.tsx";
 import { SettingsSearchScope, SettingsSection, useSettingRow } from "./SettingsSection.tsx";
 import { setSpellCheck, useDesktopSpellCheckLanguages, useSpellCheck } from "./spell-check.ts";
 import { spellingLanguageChoices, spellingLanguageName } from "./spelling-languages.ts";
@@ -120,6 +121,7 @@ export function SettingsDialog({
   claudeProgram,
   scriptProgram,
   sandboxEngines,
+  sandboxBaseImage,
   editor,
   machineName,
   computerName,
@@ -151,6 +153,7 @@ export function SettingsDialog({
   claudeProgram: ClaudeProgram;
   scriptProgram: string;
   sandboxEngines: SandboxEngines;
+  sandboxBaseImage: string | null;
   editor: EditorState;
   machineName: string | null;
   computerName: string;
@@ -210,7 +213,7 @@ export function SettingsDialog({
       <>
         <AgentSettings claudeProgram={claudeProgram} />
         <KeepAwakeSettings keepAwake={keepAwake} />
-        <SandboxEngineSettings engines={sandboxEngines} />
+        <SandboxEngineSettings engines={sandboxEngines} baseImage={sandboxBaseImage} />
       </>
     ),
     voice: () => <VoiceSettings settings={voiceSettings} engine={voiceEngine} profiles={profiles} />,
@@ -1037,7 +1040,7 @@ function KeepAwakeSettings({ keepAwake }: { keepAwake: KeepAwake }) {
 
 const engineWords = t.rooms.sandbox.engines;
 
-function SandboxEngineSettings({ engines }: { engines: SandboxEngines }) {
+function SandboxEngineSettings({ engines, baseImage }: { engines: SandboxEngines; baseImage: string | null }) {
   const row = useSettingRow();
   useEffect(() => {
     connection.send({ type: "settings.ask-sandbox-engines" });
@@ -1072,6 +1075,18 @@ function SandboxEngineSettings({ engines }: { engines: SandboxEngines }) {
         {setByEnvironment && <p className="hint sandbox-engine-environment">{words.setByEnvironment}</p>}
         {next !== inUse && next !== null && inUse !== null && <p className="hint sandbox-engine-next-start">{words.fromNextStart(engineWords[next], engineWords[inUse])}</p>}
         {next === "docker" && <p className="hint sandbox-engine-docker-read-only">{words.dockerReadOnly}</p>}
+        <div {...row(words.defaultBaseImage, undefined, words.defaultBaseImageHint)}>
+          <BaseImageField
+            id="settings"
+            label={words.defaultBaseImage}
+            baseImage={baseImage}
+            placeholder={t.rooms.sandbox.baseImage.placeholder}
+            kind={inUse ?? next}
+            disabled={false}
+            onUse={(chosen) => connection.send({ type: "settings.set-sandbox-base-image", baseImage: chosen })}
+          />
+          <p className="hint sandbox-base-image-default">{words.defaultBaseImageHint}</p>
+        </div>
       </div>
     </SettingsSection>
   );

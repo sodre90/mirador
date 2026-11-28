@@ -299,6 +299,7 @@ export const rooms: Messages["rooms"] = {
     baseImage: {
       label: "Imagen base",
       placeholder: "La de Mirador: Debian con git",
+      fromSettings: (image) => `Como en Configuración: ${image}`,
       use: "Usar",
       notAName: "Eso no es un nombre de imagen, como ghcr.io/tu/imagen:tag.",
       needs: {

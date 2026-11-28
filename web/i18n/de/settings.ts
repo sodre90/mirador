@@ -119,6 +119,8 @@ export const settings: Messages["settings"] = {
     fromNextStart: (chosen, inUse) => `Mirador wechselt beim Neustart zu ${chosen}. Bis dahin laufen seine Sandboxes mit ${inUse}.`,
     setByEnvironment: "MIRADOR_SANDBOX wählt das beim Start von Mirador.",
     dockerReadOnly: "Mit Docker sehen die Agenten in schreibgeschützt hinzugefügten Ordnern nur, was jeder Benutzer dieses Rechners lesen darf.",
+    defaultBaseImage: "Standard-Basis-Image",
+    defaultBaseImageHint: "Räume und Arbeitsbereiche, deren Sandbox kein eigenes Basis-Image nennt, laufen auf diesem. Nach einer Änderung fangen ihre Agenten neu an, sobald sie ihre Runde beendet haben.",
   },
   sleep: {
     title: "Ruhezustand",

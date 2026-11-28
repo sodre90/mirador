@@ -119,7 +119,7 @@ describe("an export of the settings", () => {
 
   test("has nothing but what moves to another machine", () => {
     expect(Object.keys(exportOf(aStore()))).toEqual(["schemaVersion", "profiles", "promptTemplates", "workspaces", "plugins", "preferences"]);
-    expect(Object.keys(exportOf(aStore()).preferences!)).toEqual(["canvasUse", "keepDeletedCanvas", "keepAwake", "reminderMorning", "olderAfter", "conversationsShown", "sideChatAccess", "roomInvitesConnect", "conversationOrder", "pluginUpdateMode", "voice"]);
+    expect(Object.keys(exportOf(aStore()).preferences!)).toEqual(["canvasUse", "keepDeletedCanvas", "keepAwake", "reminderMorning", "olderAfter", "conversationsShown", "sideChatAccess", "roomInvitesConnect", "conversationOrder", "pluginUpdateMode", "sandboxBaseImage", "voice"]);
   });
 });
 

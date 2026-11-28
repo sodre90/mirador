@@ -331,6 +331,12 @@ describe("importing settings", () => {
     ]);
   });
 
+  test("the sandboxes' default base image comes in from the file", async () => {
+    const store = aStore();
+    await bringInAll(importInto(store), textOf({ preferences: { sandboxBaseImage: "ghcr.io/me/base:1" } }));
+    expect(store.sandboxBaseImageSetting()).toBe("ghcr.io/me/base:1");
+  });
+
   test("voice keeps the API key here for the server the file names, and asks for one it doesn't have", async () => {
     const store = aStore();
     const endpoint = (url: string) => ({ url, model: "m", apiKey: { needsValue: true } as const });

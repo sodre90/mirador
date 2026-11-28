@@ -117,6 +117,8 @@ export const settings: Messages["settings"] = {
     fromNextStart: (chosen, inUse) => `A Mirador újraindításkor átvált erre: ${chosen}. Addig a sandboxai ezzel futnak: ${inUse}.`,
     setByEnvironment: "Ezt a MIRADOR_SANDBOX választja ki a Mirador indulásakor.",
     dockerReadOnly: "Docker alatt az ágensek a csak olvashatóként hozzáadott mappákban csak azt látják, amit a gép bármely felhasználója olvashat.",
+    defaultBaseImage: "Alapértelmezett alap-image",
+    defaultBaseImageHint: "Azoknak a szobáknak és munkaterületeknek a sandboxa, amelyek nem adnak meg saját alap-image-et, ezen fut. Egy változás után az ágenseik a körük végén elölről kezdenek.",
   },
   sleep: {
     title: "Alvás",

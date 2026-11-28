@@ -224,6 +224,8 @@ export type ClientMessage =
   | { type: "settings.set-sandbox-engine"; engine: SandboxKind | null }
   /** Settings shows the engines: each found that can't run sandboxes is asked again, and settings.sandbox-engines tells of any that says otherwise now. */
   | { type: "settings.ask-sandbox-engines" }
+  /** The base image of every sandbox that names none of its own; null for Mirador's. Their agents start afresh on it. */
+  | { type: "settings.set-sandbox-base-image"; baseImage: string | null }
   | { type: "settings.set-editor"; setting: EditorSetting }
   | { type: "settings.set-machine-name"; machineName: string }
   /** Mirador's relay or none forgets a relay of your own and its token; a null token keeps the one set for the same relay. Answered with settings.saved. */
@@ -633,6 +635,8 @@ export type ServerMessage =
       /** The program the host opens scripts in, as text; empty for the system's text editor. */
       scriptProgram: string;
       sandboxEngines: SandboxEngines;
+      /** The base image of every sandbox that names none of its own; null for Mirador's. */
+      sandboxBaseImage: string | null;
       editor: EditorState;
       /** The name Settings gave this machine, which devices show for it; null while it goes by its computer's name. Absent from hosts before names. */
       machineName?: string | null;
@@ -744,6 +748,7 @@ export type ServerMessage =
   | { type: "settings.claude-program"; claudeProgram: ClaudeProgram }
   | { type: "settings.script-program"; scriptProgram: string }
   | { type: "settings.sandbox-engines"; sandboxEngines: SandboxEngines }
+  | { type: "settings.sandbox-base-image"; baseImage: string | null }
   | { type: "settings.editor"; editor: EditorState }
   | { type: "settings.machine-name"; machineName: string | null }
   | { type: "settings.push-relay"; pushRelay: PushRelaySetting }

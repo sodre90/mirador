@@ -103,6 +103,8 @@ export interface FilePreferences {
   roomInvitesConnect?: RoomInviteConnect;
   conversationOrder?: ConversationOrder;
   pluginUpdateMode?: PluginUpdateMode;
+  /** The base image of the sandboxes that name none of their own; null for Mirador's own. */
+  sandboxBaseImage?: string | null;
   voice?: FileVoiceSettings;
 }
 

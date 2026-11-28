@@ -16,6 +16,7 @@ import {
 } from "../../shared/model.ts";
 import { isPluginUpdateMode } from "../../shared/apps.ts";
 import { isMorningMinutes } from "../../shared/reminders.ts";
+import { isImageName } from "../../shared/sandbox.ts";
 import {
   SETTINGS_SCHEMA_VERSION,
   isFileGroup,
@@ -113,6 +114,7 @@ const preferenceFields: Fields<FilePreferences> = {
   roomInvitesConnect: isRoomInviteConnect,
   conversationOrder: isConversationOrder,
   pluginUpdateMode: isPluginUpdateMode,
+  sandboxBaseImage: (value) => value === null || isImageName(value),
   voice: (value) => isObject(value) && [value.recognition, value.voiceModel, value.replyVoice].every(isVoiceSource),
 };
 

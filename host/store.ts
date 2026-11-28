@@ -39,7 +39,7 @@ import { pluginItemOfSavedWalkthrough, type SavedReview, type SavedTour } from "
 import { sidebarIds, sidebarItems } from "../shared/sidebar-order.ts";
 import { DEFAULT_PERMISSION_PRESET, type PermissionPreset } from "../shared/room-permissions.ts";
 import { claudeSetupIn, isVariableName, type ClaudeSetup, type VariablesChosen } from "../shared/room-agent-setup.ts";
-import { isSandboxKind, NO_SANDBOX, roomSandbox, sandboxSettingIn, workspaceSandbox, type SandboxFolder, type SandboxKind, type SandboxOwner, type SandboxSetting } from "../shared/sandbox.ts";
+import { isImageName, isSandboxKind, NO_SANDBOX, roomSandbox, sandboxSettingIn, workspaceSandbox, type SandboxFolder, type SandboxKind, type SandboxOwner, type SandboxSetting } from "../shared/sandbox.ts";
 import { roomPluginsIn, writtenByAgent, type BroughtAgent, type BroughtAnswerEnd, type Room, type RoomAgent, type RoomAgentModel, type RoomAnswerEnd, type RoomAuthorRole, type RoomInvite, type RoomInviteLetsIn, type RoomJoiner, type RoomMessage, type RoomPerson, type RoomRole, type RoomThread, type TaskHeld } from "../shared/rooms.ts";
 import type { BroughtAgentHere } from "../shared/brought-agents.ts";
 import { BROUGHT_STEP_MOST_CHARACTERS, MOST_BROUGHT_STEPS_KEPT, MOST_WORKSPACE_CALLS_KEPT, type BroughtStepKind, type RoomBroughtStep, type RoomWorkspaceAccess, type RoomWorkspaceCall } from "../shared/room-workspace.ts";
@@ -2246,6 +2246,16 @@ export class Store {
 
   setSandboxEngineSetting(engine: SandboxKind | null) {
     this.setSetting("sandbox_engine", engine);
+  }
+
+  /** The base image Settings give every sandbox that names none of its own; null for Mirador's. */
+  sandboxBaseImageSetting(): string | null {
+    const stored = this.setting("sandbox_base_image");
+    return isImageName(stored) ? stored : null;
+  }
+
+  setSandboxBaseImageSetting(baseImage: string | null) {
+    this.setSetting("sandbox_base_image", baseImage);
   }
 
   /** The program Settings name to open scripts in, as text; empty for the system's text editor. */

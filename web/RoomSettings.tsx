@@ -300,6 +300,7 @@ function PermissionsTab({
   sandboxSetup,
   sandboxFolders,
   homeDir,
+  defaultBaseImage,
 }: {
   room: Room;
   profiles: Profile[];
@@ -307,6 +308,7 @@ function PermissionsTab({
   sandboxSetup: SandboxSetup;
   sandboxFolders: SandboxFolders;
   homeDir: string;
+  defaultBaseImage: string | null;
 }) {
   const [permissions, choose] = useSentChoice(room.permissions, (permissions) => connection.send({ type: "room.set-permissions", roomId: room.id, permissions }));
   const setAsideId = useId();
@@ -328,7 +330,7 @@ function PermissionsTab({
         )}
       </RoomSection>
       <RoomSection title={words.sandbox.legend} meaning={words.sandbox.meaning}>
-        <SandboxField room={room} profiles={profiles} roomConversations={roomConversations} setup={sandboxSetup} folders={sandboxFolders} homeDir={homeDir} />
+        <SandboxField room={room} profiles={profiles} roomConversations={roomConversations} setup={sandboxSetup} folders={sandboxFolders} homeDir={homeDir} defaultBaseImage={defaultBaseImage} />
       </RoomSection>
     </>
   );
@@ -452,6 +454,7 @@ export function RoomSettingsDialog({
   sandboxSetup,
   sandboxFolders,
   homeDir,
+  defaultBaseImage,
   onInvite,
   onClose,
 }: {
@@ -470,6 +473,8 @@ export function RoomSettingsDialog({
   /** The folders of this computer the room gave its sandbox. */
   sandboxFolders: SandboxFolders;
   homeDir: string;
+  /** The image Settings give the sandboxes that name none of their own; null for Mirador's own. */
+  defaultBaseImage: string | null;
   onInvite: () => void;
   onClose: () => void;
 }) {
@@ -489,7 +494,7 @@ export function RoomSettingsDialog({
     people: () => <PeopleTab room={room} people={people} ownerId={ownerId} invites={invites} joiners={joiners} onInvite={onInvite} />,
     agents: () => <AgentsTab room={room} profiles={profiles} people={people} roomConversations={roomConversations} openedId={openedAgentId} onOpen={setOpenedAgentId} />,
     plugins: () => <RoomPluginsTab room={room} profiles={profiles} roomConversations={roomConversations} installedApps={installedApps} />,
-    permissions: () => <PermissionsTab room={room} profiles={profiles} roomConversations={roomConversations} sandboxSetup={sandboxSetup} sandboxFolders={sandboxFolders} homeDir={homeDir} />,
+    permissions: () => <PermissionsTab room={room} profiles={profiles} roomConversations={roomConversations} sandboxSetup={sandboxSetup} sandboxFolders={sandboxFolders} homeDir={homeDir} defaultBaseImage={defaultBaseImage} />,
     usage: () => <UsageTab room={room} profiles={profiles} people={people} ownerId={ownerId} />,
   };
   return (

@@ -195,6 +195,8 @@ export interface AppState {
   /** The program the host opens scripts in, as text; empty for the system's text editor. */
   scriptProgram: string;
   sandboxEngines: SandboxEngines;
+  /** The base image of the sandboxes that name none of their own; null for Mirador's own. */
+  sandboxBaseImage: string | null;
   /** The editor the host opens files at a line in, and the ones it finds. */
   editor: EditorState;
   /** The name Settings gave this machine; null while it goes by its computer's name. */
@@ -345,6 +347,7 @@ export const initialState: AppState = {
   claudeProgram: { configured: "", found: null, version: null, installFolders: "", installCommand: "" },
   scriptProgram: "",
   sandboxEngines: NO_SANDBOX_ENGINES,
+  sandboxBaseImage: null,
   editor: UNKNOWN_EDITOR,
   machineName: null,
   computerName: "",
@@ -600,6 +603,7 @@ function applyServerMessage(state: AppState, message: ServerMessage): AppState {
         claudeProgram: message.claudeProgram,
         scriptProgram: message.scriptProgram,
         sandboxEngines: message.sandboxEngines,
+        sandboxBaseImage: message.sandboxBaseImage,
         editor: message.editor ?? UNKNOWN_EDITOR,
         machineName: message.machineName ?? null,
         computerName: message.computerName ?? "",
@@ -754,6 +758,8 @@ function applyServerMessage(state: AppState, message: ServerMessage): AppState {
       return { ...state, scriptProgram: message.scriptProgram };
     case "settings.sandbox-engines":
       return { ...state, sandboxEngines: message.sandboxEngines };
+    case "settings.sandbox-base-image":
+      return { ...state, sandboxBaseImage: message.baseImage };
     case "settings.editor":
       return { ...state, editor: message.editor };
     case "settings.machine-name":

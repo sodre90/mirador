@@ -395,6 +395,23 @@ test("turned on, the workspace's sandbox prepares the image of the profile its n
   expect(preparedFor).toEqual([["builder"], []]);
 });
 
+test("the base image Settings give, changed, starts afresh and prepares only the workspaces whose sandbox is on and names no image of its own, without stopping their turns", async () => {
+  const { store, conversations, workspaceSandboxes, preparedFor } = sandboxedWorkspace();
+  const startedAfresh: [string[], boolean][] = [];
+  conversations.startAfreshUnderNewSetup = (conversationIds, { stopsTurn }) => void startedAfresh.push([conversationIds, stopsTurn]);
+  store.insertWorkspace({ id: "w3", name: "own image", path: repository(), defaultLaunch: BUILDER, createdAt: 1 });
+  store.setWorkspaceSandbox("w3", { ...SANDBOX_ON, baseImage: "team/own:1" });
+  const following = await conversations.start("w1", BUILDER);
+  await conversations.start("w2", BUILDER);
+  await conversations.start("w3", BUILDER);
+
+  workspaceSandboxes.defaultBaseImageChanged();
+
+  expect(startedAfresh).toEqual([[[following.id], false]]);
+  expect(preparedFor).toEqual([["builder"]]);
+  await conversations.shutdown();
+});
+
 test("turned off, or gone with its workspace, the workspace's sandbox tells the sandboxes it left, so it hears of no new held change there", async () => {
   const { workspaceSandboxes, leftBy } = sandboxedWorkspace(NO_SANDBOX);
   await workspaceSandboxes.setSandbox("w1", SANDBOX_ON, true);

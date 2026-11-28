@@ -164,6 +164,7 @@ class SettingsExport {
       roomInvitesConnect: this.store.roomInvitesConnect(),
       conversationOrder: this.store.chosenConversationOrder(),
       pluginUpdateMode: this.store.pluginUpdateMode(),
+      sandboxBaseImage: this.store.sandboxBaseImageSetting(),
       voice: this.voice(this.store.voiceSettings()),
     };
   }

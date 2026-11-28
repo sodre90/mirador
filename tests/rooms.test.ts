@@ -2150,6 +2150,26 @@ describe("what a room's sandbox reaches", () => {
   });
 });
 
+describe("the base image Settings give the sandboxes", () => {
+  const SANDBOX_ON: SandboxSetting = { on: true, workFreely: true, allowsSharedKernel: false, network: "closed", baseImage: null };
+
+  test("changed, starts afresh and prepares only the rooms whose sandbox is on and names no image of its own, without stopping their turns", () => {
+    const { store, rooms, room, ownerId, startedAfresh } = machineWithRooms();
+    const ownImage = rooms.create("Own image", "w1", ["p1"], DEFAULT_PERMISSION_PRESET);
+    const off = rooms.create("Off", "w1", ["p1"], DEFAULT_PERMISSION_PRESET);
+    [room, ownImage, off].forEach(({ id }) => rooms.write(id, ownerId, "@Builder go", ["p1"], null));
+    store.setRoomSandbox(room.id, SANDBOX_ON);
+    store.setRoomSandbox(ownImage.id, { ...SANDBOX_ON, baseImage: "team/own:1" });
+    const prepared: string[] = [];
+    rooms.keepsSandboxesWith({ ...NO_SANDBOX_CONTROL, prepare: (owner, profiles) => void prepared.push(`${ownerKey(owner)} ${profiles.map(({ id }) => id)}`) });
+
+    rooms.defaultBaseImageChanged();
+
+    expect(prepared).toEqual([`${ownerKey(roomSandbox(room.id))} p1,p2`]);
+    expect(startedAfresh).toEqual([{ conversationId: store.findRoom(room.id)!.agents[0]!.conversationId!, stopsTurn: false }]);
+  });
+});
+
 describe("a room's sandbox leaving its workspace", () => {
   const SANDBOX_ON: SandboxSetting = { on: true, workFreely: true, allowsSharedKernel: false, network: "closed", baseImage: null };
 

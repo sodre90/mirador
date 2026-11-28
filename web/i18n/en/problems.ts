@@ -230,6 +230,7 @@ export const problems = {
   unknownWorkspaceColour: (value: string) => `Unknown workspace colour ${value}`,
   unknownSandboxEngine: (value: string) => `No sandbox engine ${value} on this computer`,
   notAMachineAddress: (address: string) => `"${address}" is not a machine's address.`,
+  notAnImageName: (value: string) => `"${value}" isn't an image name, such as ghcr.io/you/image:tag.`,
   machineAlreadyAdded: (origin: string) => `${origin} is already among your machines.`,
   unknownMachineColour: (value: string) => `Unknown machine colour ${value}`,
   answerAllQuestions: (count: number) => `Answer all ${count} questions.`,

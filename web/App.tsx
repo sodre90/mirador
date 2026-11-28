@@ -1136,6 +1136,7 @@ export function App() {
           claudeProgram={state.claudeProgram}
           scriptProgram={state.scriptProgram}
           sandboxEngines={state.sandboxEngines}
+          sandboxBaseImage={state.sandboxBaseImage}
           editor={state.editor}
           machineName={state.machineName}
           computerName={state.computerName}
@@ -1168,6 +1169,7 @@ export function App() {
           holdsTooMany={holdsTooMany(state.sandboxesHoldingTooMany, workspaceSandbox(sandboxWorkspace.id))}
           sandboxFolders={foldersOfSandbox(state.sandboxFolders, workspaceSandbox(sandboxWorkspace.id))}
           homeDir={state.homeDir}
+          defaultBaseImage={state.sandboxBaseImage}
           onClose={closeOverlay}
         />
       )}
@@ -1196,6 +1198,7 @@ export function App() {
           sandboxSetup={setupOf(state.sandboxSetups, roomSandbox(settingsRoom.id))}
           sandboxFolders={foldersOfSandbox(state.sandboxFolders, roomSandbox(settingsRoom.id))}
           homeDir={state.homeDir}
+          defaultBaseImage={state.sandboxBaseImage}
           onInvite={() => dispatch({ type: "open-overlay", overlay: { kind: "room-invite", roomId: settingsRoom.id } })}
           onClose={closeOverlay}
         />

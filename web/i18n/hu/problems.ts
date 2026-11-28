@@ -230,6 +230,7 @@ export const problems: Messages["problems"] = {
   unknownWorkspaceColour: (value) => `Ismeretlen munkaterület-szín: ${value}`,
   unknownSandboxEngine: (value) => `Ezen a gépen nincs ${value} sandbox-motor`,
   notAMachineAddress: (address) => `Ez nem egy gép címe: „${address}”.`,
+  notAnImageName: (value) => `Ez nem image-név, mint például ghcr.io/te/image:tag: „${value}”.`,
   machineAlreadyAdded: (origin) => `Ez már a gépeid között van: ${origin}.`,
   unknownMachineColour: (value) => `Ismeretlen gépszín: ${value}`,
   answerAllQuestions: (count) => `Válaszolj az összes kérdésre (${count}).`,

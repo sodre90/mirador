@@ -25,6 +25,7 @@ const preferenceNames: Record<string, string> = {
   roomInvitesConnect: t.devices.roomInvites.title,
   conversationOrder: t.shell.sidebar.conversationOrder,
   pluginUpdateMode: t.plugins.updateMode,
+  sandboxBaseImage: t.settings.sandboxes.defaultBaseImage,
   voice: t.labels.settingsPage.voice,
 };
 

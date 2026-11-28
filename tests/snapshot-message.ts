@@ -27,6 +27,7 @@ export const snapshotMessage = (fields: Partial<Snapshot> = {}): Snapshot => ({
   claudeProgram: { configured: "", found: null, version: null, installFolders: "", installCommand: "" },
   scriptProgram: "",
   sandboxEngines: NO_SANDBOX_ENGINES,
+  sandboxBaseImage: null,
   editor: { setting: { editor: "first-found" }, found: [], opensIn: null },
   pushRelay: { address: null, tokenSet: false, grantRelay: null, miradorRelay: null },
   avatar: null,

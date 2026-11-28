@@ -56,7 +56,7 @@ import { DesktopAppCheck } from "./desktop-app-check.ts";
 import { switchOf, type PluginUpdate } from "../shared/apps.ts";
 import { englishProblem } from "../shared/host-problems.ts";
 import type { ConfigFileStatus } from "../shared/settings-file.ts";
-import type { SandboxEngines, SandboxOwner } from "../shared/sandbox.ts";
+import { imageSandboxRunsOn, type SandboxEngines, type SandboxOwner } from "../shared/sandbox.ts";
 import { Lookout } from "./lookout.ts";
 import { NewerVersionWatcher, newerVersionLookup, pullCheckout } from "./newer-version.ts";
 import { desktopAppCode } from "../shared/desktop-app-code.ts";
@@ -327,7 +327,7 @@ const sandboxes = new Sandboxes(enginesHere.launcher, {
     };
   },
   setupChanged: (owner, setup) => hub.broadcast({ type: "sandbox.setup", owner, setup }),
-  baseImageOf: (owner) => sandboxSettingOf(owner)?.baseImage ?? null,
+  baseImageOf: (owner) => imageSandboxRunsOn(sandboxSettingOf(owner), store.sandboxBaseImageSetting()),
   heldChanged: (owner, changes, full) => hub.broadcast({ type: "sandbox.held-changes", owner, changes, full }),
   foldersOf: (owner) => store.sandboxFoldersOf(owner),
   networkOf: (owner) => sandboxSettingOf(owner)?.network ?? "closed",

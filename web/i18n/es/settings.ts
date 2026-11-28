@@ -119,6 +119,8 @@ export const settings: Messages["settings"] = {
     fromNextStart: (chosen, inUse) => `Mirador pasa a ${chosen} cuando se reinicia. Hasta entonces, sus sandboxes se ejecutan con ${inUse}.`,
     setByEnvironment: "MIRADOR_SANDBOX lo elige cuando Mirador arranca.",
     dockerReadOnly: "Con Docker, en las carpetas añadidas como solo lectura los agentes solo ven lo que cualquier usuario de este equipo puede leer.",
+    defaultBaseImage: "Imagen base por defecto",
+    defaultBaseImageHint: "Las salas y los espacios de trabajo cuyo sandbox no indica una imagen base propia corren sobre esta. Un cambio hace que sus agentes empiecen de nuevo cuando terminan su turno.",
   },
   sleep: {
     title: "Suspensión",

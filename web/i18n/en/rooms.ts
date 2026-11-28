@@ -309,6 +309,7 @@ export const rooms = {
     baseImage: {
       label: "Base image",
       placeholder: "Mirador's own: Debian with git",
+      fromSettings: (image: string) => `As in Settings: ${image}`,
       use: "Use",
       notAName: "That isn't an image name, such as ghcr.io/you/image:tag.",
       needs: {

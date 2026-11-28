@@ -291,6 +291,7 @@ export const rooms: Messages["rooms"] = {
     baseImage: {
       label: "基础镜像",
       placeholder: "Mirador 自带的：带 git 的 Debian",
+      fromSettings: (image) => `与设置中相同：${image}`,
       use: "使用",
       notAName: "这不是镜像名，例如 ghcr.io/you/image:tag。",
       needs: {

@@ -771,6 +771,19 @@ describe("Store", () => {
     reopened.close();
   });
 
+  test("sandboxes run on Mirador's base until Settings name another image, also after reopening", () => {
+    const path = join(mkdtempSync(join(tmpdir(), "mirador-store-")), "state.sqlite");
+    const store = new Store(path);
+    expect(store.sandboxBaseImageSetting()).toBeNull();
+    store.setSandboxBaseImageSetting("ghcr.io/me/base:1");
+    store.close();
+    const reopened = new Store(path);
+    expect(reopened.sandboxBaseImageSetting()).toBe("ghcr.io/me/base:1");
+    reopened.setSandboxBaseImageSetting(null);
+    expect(reopened.sandboxBaseImageSetting()).toBeNull();
+    reopened.close();
+  });
+
   test("asks before each plugin update until Plugins say otherwise, and keeps the choices for plugins updating by themselves, also after reopening", () => {
     const path = join(mkdtempSync(join(tmpdir(), "mirador-store-")), "state.sqlite");
     const store = new Store(path);

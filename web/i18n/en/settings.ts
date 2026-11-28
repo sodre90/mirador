@@ -119,6 +119,8 @@ export const settings = {
     fromNextStart: (chosen: string, inUse: string) => `Mirador switches to ${chosen} when it restarts. Until then its sandboxes run with ${inUse}.`,
     setByEnvironment: "MIRADOR_SANDBOX chooses this as Mirador starts.",
     dockerReadOnly: "With Docker, agents see only what every user of this computer may read in the folders added read only.",
+    defaultBaseImage: "Default base image",
+    defaultBaseImageHint: "Rooms and workspaces whose sandbox names no base image of its own run on this one. A change starts their agents afresh once they finish their turns.",
   },
   sleep: {
     title: "Sleep",

@@ -79,6 +79,18 @@ export class WorkspaceSandboxes {
     if (sandbox.on) this.sandboxes.prepare(workspaceSandbox(workspaceId), startsOn && workspaceProfileBlocker(startsOn, this.store) === null ? [startsOn] : []);
   }
 
+  /** The sandboxes on, that name no base image of their own, run on the one Settings give from now on: their agents start afresh on it. */
+  defaultBaseImageChanged() {
+    this.store
+      .listWorkspaces()
+      .filter(({ sandbox }) => sandbox.on && sandbox.baseImage === null)
+      .forEach(({ id }) => {
+        this.conversations.startAfreshUnderNewSetup(this.conversationsInSandboxOf(id), { stopsTurn: false });
+        const startsOn = this.startsOnProfile(id);
+        this.sandboxes.prepare(workspaceSandbox(id), startsOn && workspaceProfileBlocker(startsOn, this.store) === null ? [startsOn] : []);
+      });
+  }
+
   /** Each of the workspace's own conversations comes in or stays out as the sandbox turns on; they all are, by their ids. */
   private placeConversationsAsSandboxTurnsOn(workspaceId: string, bringConversationsIn: boolean) {
     const own = this.ownConversationsOf(workspaceId);

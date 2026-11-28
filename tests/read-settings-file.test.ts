@@ -30,7 +30,7 @@ describe("a settings file", () => {
         profiles: [{ name: "work", harness: "claude", model: "opus" }, { name: "odd", harness: "emacs" }, { harness: "pi" }, { name: "loud", harness: "pi", color: "plaid" }],
         promptTemplates: [{ name: "Review", text: "Review {{what}}" }, { name: "Empty", text: " " }],
         plugins: [{ name: "checklist", settings: { size: 3 } }],
-        preferences: { keepAwake: "sometimes", olderAfter: "1-week" },
+        preferences: { keepAwake: "sometimes", olderAfter: "1-week", sandboxBaseImage: "Not An Image" },
       } as never),
     );
     expect(file.profiles).toEqual([{ name: "work", harness: "claude", model: "opus" }]);
@@ -44,6 +44,7 @@ describe("a settings file", () => {
       { code: "settings-entry-invalid", kind: "prompt-template", name: "Empty", field: "text" },
       { code: "settings-entry-invalid", kind: "plugin", name: "checklist", field: "settings" },
       { code: "settings-entry-invalid", kind: "preference", name: "keepAwake", field: "keepAwake" },
+      { code: "settings-entry-invalid", kind: "preference", name: "sandboxBaseImage", field: "sandboxBaseImage" },
     ]);
   });
 

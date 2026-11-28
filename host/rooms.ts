@@ -616,6 +616,18 @@ export class RoomService implements RoomRules, TurnListener {
     if (sandbox.on) this.sandboxes.prepare(roomSandbox(roomId), ownAgents.flatMap(({ profileId }) => this.store.findProfile(profileId) ?? []));
   }
 
+  /** The rooms whose sandbox is on and names no base image of its own run on the one Settings give from now on: their agents start afresh on it. */
+  defaultBaseImageChanged() {
+    this.store
+      .listRooms()
+      .filter(({ sandbox }) => sandbox.on && sandbox.baseImage === null)
+      .forEach((room) => {
+        const ownAgents = room.agents.filter(({ brought }) => !brought);
+        ownAgents.forEach((agent) => this.startAfresh(agent, false));
+        this.sandboxes.prepare(roomSandbox(room.id), ownAgents.flatMap(({ profileId }) => this.store.findProfile(profileId) ?? []));
+      });
+  }
+
   /** What the room's sandbox reaches besides the model and Mirador, while it is on: from now on, in sessions under way too. */
   setSandboxNetwork(roomId: string, network: SandboxNetwork) {
     const room = this.existingRoom(roomId);

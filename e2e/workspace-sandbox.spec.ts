@@ -7,7 +7,7 @@ import { dirname, join } from "node:path";
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { MODEL_KEY_VARIABLES } from "../shared/sandbox.ts";
 import { guardedIn, mountsOfRun } from "../tests/guard-told.ts";
-import { addWorkspace, addWorkspaceFromSidebar, clickWorkspaceButton, createProfile, lastAgentMessage, openProfiles, sendMessage, signIn, waitForTurnToEnd, workspaceCard } from "./helpers.ts";
+import { addWorkspace, addWorkspaceFromSidebar, clickWorkspaceButton, createProfile, lastAgentMessage, openProfiles, openSettings, sendMessage, signIn, waitForTurnToEnd, workspaceCard } from "./helpers.ts";
 import { bunProgramPath, TestHost, writeBunProgram } from "./test-host.ts";
 
 const sandboxesRunHere = process.platform === "darwin" && process.arch === "arm64" && Number(release().split(".")[0]) >= 25;
@@ -145,6 +145,28 @@ const loggedCalls = (name: string): string[][] => {
 const containerCalls = () => loggedCalls("calls.log");
 /** Each throwaway run that installed a tool of the sandbox's. */
 const toolInstalls = () => loggedCalls("installs.log");
+const vmRuns = () => containerCalls().filter(([command]) => command === "run");
+const imageRun = (run: string[]) => run[run.indexOf("--entrypoint") + 2];
+
+/** Names the project's sandbox's own base image, confirming that its conversation starts afresh. */
+async function useBaseImage(page: Page, name: string) {
+  const dialog = await openSandboxOf(page, projectCard(page), "project");
+  await dialog.getByRole("textbox", { name: "Base image" }).fill(name);
+  await dialog.getByRole("button", { name: "Use" }).click();
+  await expect(dialog.getByRole("alert").locator("span")).toHaveText("1 conversation here starts afresh as it goes on: its agent won't remember what was said before.");
+  await dialog.getByRole("button", { name: "Change" }).click();
+  await expect(dialog.getByRole("textbox", { name: "Base image" })).toHaveValue(name);
+  return dialog;
+}
+
+/** Names the base image of every sandbox that names none of its own in Settings › Agents. */
+async function useDefaultBaseImage(page: Page, name: string) {
+  const settings = await openSettings(page, "Agents");
+  await settings.getByRole("textbox", { name: "Default base image" }).fill(name);
+  await settings.getByRole("button", { name: "Use" }).click();
+  await expect(settings.getByRole("button", { name: "Use" })).toBeDisabled();
+  return settings;
+}
 
 test("the workspace's sandbox switch stays off, with the reason under it, where the workspace can't have one", async ({ page }) => {
   await signIn(page, host);
@@ -413,17 +435,6 @@ test("a base image of the owner's own is pulled and checked for what the agents 
   await signIn(page, host);
   const card = projectCard(page);
   await openConversation(page, builderConversation);
-  const runs = () => containerCalls().filter(([command]) => command === "run");
-  const imageRun = (run: string[]) => run[run.indexOf("--entrypoint") + 2];
-  const useBaseImage = async (name: string) => {
-    const dialog = await openSandboxOf(page, card, "project");
-    await dialog.getByRole("textbox", { name: "Base image" }).fill(name);
-    await dialog.getByRole("button", { name: "Use" }).click();
-    await expect(dialog.getByRole("alert").locator("span")).toHaveText("1 conversation here starts afresh as it goes on: its agent won't remember what was said before.");
-    await dialog.getByRole("button", { name: "Change" }).click();
-    await expect(dialog.getByRole("textbox", { name: "Base image" })).toHaveValue(name);
-    return dialog;
-  };
 
   await test.step("the field names Mirador's own until another is used, and won't take what isn't an image's name", async () => {
     const dialog = await openSandboxOf(page, card, "project");
@@ -441,7 +452,7 @@ test("a base image of the owner's own is pulled and checked for what the agents 
   });
 
   await test.step("one without git is set up as far as its check, which says so, and the conversation's next turn fails saying it too", async () => {
-    const dialog = await useBaseImage("team/lacks-git:1");
+    const dialog = await useBaseImage(page, "team/lacks-git:1");
     const lacks = "The sandbox's base image team/lacks-git:1 lacks what the agents need: git.";
     const failedSteps = setupSteps(dialog);
     await expect(failedSteps.locator("strong")).toHaveText("Setting it up failed.");
@@ -450,14 +461,14 @@ test("a base image of the owner's own is pulled and checked for what the agents 
     await expect(stepRow(failedSteps, "Check that team/lacks-git:1 has what the agents need").getByRole("img", { name: "Failed" })).toBeVisible();
     await keepScreenshot(dialog, "base-image-lacks");
     await dialog.getByRole("button", { name: "Done" }).click();
-    const runsBefore = runs().length;
+    const runsBefore = vmRuns().length;
     await sendMessage(page, "SAY On a base without git.");
     await expect(page.locator(".error-line:visible")).toContainText(lacks);
-    expect(runs()).toHaveLength(runsBefore);
+    expect(vmRuns()).toHaveLength(runsBefore);
   });
 
   await test.step("one whose glibc is too old for Claude Code's own program is checked for it once that is installed, which says what it said", async () => {
-    const dialog = await useBaseImage("team/old-glibc:1");
+    const dialog = await useBaseImage(page, "team/old-glibc:1");
     await expect(setupSteps(dialog).locator(".sandbox-setup-problem")).toHaveText(
       /^Claude Code \S+ doesn't run on the sandbox's base image team\/old-glibc:1: claude: \/lib\/aarch64-linux-gnu\/libc\.so\.6: version `GLIBC_2\.38' not found$/,
     );
@@ -465,7 +476,7 @@ test("a base image of the owner's own is pulled and checked for what the agents 
   });
 
   await test.step("one with all they need is pulled with a bar of how far its fetching and then its unpacking got, then runs the VM, by its name as Docker reads it, checked once", async () => {
-    const dialog = await useBaseImage("team/dev:1");
+    const dialog = await useBaseImage(page, "team/dev:1");
     await expect(setupSteps(dialog).getByRole("status")).toHaveText("Step 2 of 8");
     const pulling = stepRow(setupSteps(dialog), "Pull team/dev:1");
     await expect(pulling.locator(".sandbox-setup-detail")).toHaveText("Downloading team/dev:1 40%");
@@ -481,18 +492,67 @@ test("a base image of the owner's own is pulled and checked for what the agents 
     await sendMessage(page, "SAY On the team's base.");
     await waitForTurnToEnd(page);
     await expect(lastAgentMessage(page)).toHaveText("On the team's base.");
-    expect(imageRun(runs().at(-1)!)).toBe("docker.io/team/dev:1");
+    expect(imageRun(vmRuns().at(-1)!)).toBe("docker.io/team/dev:1");
     expect(containerCalls().flatMap(([command, sub, ...rest]) => (command === "image" && sub === "pull" ? [rest.at(-1)!] : [])).filter((image) => image.includes("/team/"))).toEqual(["docker.io/team/lacks-git:1", "docker.io/team/old-glibc:1", "docker.io/team/dev:1"]);
     expect(loggedCalls("checks.log").map(imageRun)).toEqual(["docker.io/team/lacks-git:1", "docker.io/team/old-glibc:1", "docker.io/team/old-glibc:1", "docker.io/team/dev:1", "docker.io/team/dev:1"]);
   });
 
   await test.step("cleared, the sandbox runs on Mirador's base again", async () => {
-    const dialog = await useBaseImage("");
+    const dialog = await useBaseImage(page, "");
     await dialog.getByRole("button", { name: "Done" }).click();
     await sendMessage(page, "SAY On Mirador's base.");
     await waitForTurnToEnd(page);
     await expect(lastAgentMessage(page)).toHaveText("On Mirador's base.");
-    expect(imageRun(runs().at(-1)!)).toMatch(/^mirador-sandbox-base:[0-9a-f]{10}$/);
+    expect(imageRun(vmRuns().at(-1)!)).toMatch(/^mirador-sandbox-base:[0-9a-f]{10}$/);
+  });
+});
+
+test("a base image named in Settings runs every sandbox that names none of its own, which says so in its settings, and one a sandbox names wins", async ({ page }) => {
+  test.skip(!sandboxesRunHere, "Sandboxes run on macOS 26 on Apple silicon only.");
+  await signIn(page, host);
+  await openConversation(page, builderConversation);
+  const runsOn = async (message: string) => {
+    await sendMessage(page, `SAY ${message}`);
+    await waitForTurnToEnd(page);
+    await expect(lastAgentMessage(page)).toHaveText(message);
+    return imageRun(vmRuns().at(-1)!);
+  };
+
+  await test.step("Settings name Mirador's own until another is used, saying which sandboxes run on it", async () => {
+    const settings = await openSettings(page, "Agents");
+    const field = settings.getByRole("textbox", { name: "Default base image" });
+    await expect(field).toHaveValue("");
+    await expect(field).toHaveAttribute("placeholder", "Mirador's own: Debian with git");
+    await expect(settings.locator(".sandbox-base-image-default")).toHaveText(
+      "Rooms and workspaces whose sandbox names no base image of its own run on this one. A change starts their agents afresh once they finish their turns.",
+    );
+    await field.fill("--privileged");
+    await expect(settings.locator(".room-sandbox-base-image-invalid")).toHaveText("That isn't an image name, such as ghcr.io/you/image:tag.");
+    await expect(settings.getByRole("button", { name: "Use" })).toBeDisabled();
+    await settings.getByRole("button", { name: "Close" }).click();
+  });
+
+  await test.step("the workspace's sandbox, naming none, says it follows Settings, and its conversation runs on that image", async () => {
+    await (await useDefaultBaseImage(page, "team/dev:1")).getByRole("button", { name: "Close" }).click();
+    const dialog = await openSandboxOf(page, projectCard(page), "project");
+    const baseImage = dialog.getByRole("textbox", { name: "Base image" });
+    await expect(baseImage).toHaveValue("");
+    await expect(baseImage).toHaveAttribute("placeholder", "As in Settings: team/dev:1");
+    await dialog.getByRole("button", { name: "Done" }).click();
+    expect(await runsOn("On the default base.")).toBe("docker.io/team/dev:1");
+  });
+
+  await test.step("one the sandbox names runs it instead", async () => {
+    await (await useBaseImage(page, "team/own:2")).getByRole("button", { name: "Done" }).click();
+    expect(await runsOn("On the sandbox's own base.")).toBe("docker.io/team/own:2");
+    await (await useBaseImage(page, "")).getByRole("button", { name: "Done" }).click();
+  });
+
+  await test.step("cleared in Settings, the sandbox runs on Mirador's base again", async () => {
+    const settings = await useDefaultBaseImage(page, "");
+    await expect(settings.getByRole("textbox", { name: "Default base image" })).toHaveAttribute("placeholder", "Mirador's own: Debian with git");
+    await settings.getByRole("button", { name: "Close" }).click();
+    expect(await runsOn("Back on Mirador's base.")).toMatch(/^mirador-sandbox-base:[0-9a-f]{10}$/);
   });
 });
 
@@ -500,14 +560,14 @@ test("a sandbox whose next step comes after another sandbox's says what it waits
   test.skip(!sandboxesRunHere, "Sandboxes run on macOS 26 on Apple silicon only.");
   await signIn(page, host);
   const card = projectCard(page);
-  const useBaseImage = async (dialog: Locator, name: string, { startsConversationsAfresh }: { startsConversationsAfresh: boolean }) => {
+  const nameBaseImageIn = async (dialog: Locator, name: string, { startsConversationsAfresh }: { startsConversationsAfresh: boolean }) => {
     await dialog.getByRole("textbox", { name: "Base image" }).fill(name);
     await dialog.getByRole("button", { name: "Use" }).click();
     if (startsConversationsAfresh) await dialog.getByRole("button", { name: "Change" }).click();
     await expect(dialog.getByRole("textbox", { name: "Base image" })).toHaveValue(name);
   };
   const theProjects = await openSandboxOf(page, card, "project");
-  await useBaseImage(theProjects, "team/slow-check:1", { startsConversationsAfresh: true });
+  await nameBaseImageIn(theProjects, "team/slow-check:1", { startsConversationsAfresh: true });
   const checkingTheProjects = stepRow(setupSteps(theProjects), "Check that team/slow-check:1 has what the agents need");
   await expect(checkingTheProjects.getByRole("img", { name: "Under way" })).toBeVisible();
   await theProjects.getByRole("button", { name: "Done" }).click();
@@ -518,7 +578,7 @@ test("a sandbox whose next step comes after another sandbox's says what it waits
   const dialog = await openSandboxOf(page, workspaceCard(page, behind), "behind");
   await sandboxSwitch(dialog).check();
   await expect(dialog.locator(".room-sandbox-setup")).toHaveText("Set up on this Mac.");
-  await useBaseImage(dialog, "acme/tools:1", { startsConversationsAfresh: false });
+  await nameBaseImageIn(dialog, "acme/tools:1", { startsConversationsAfresh: false });
   const steps = setupSteps(dialog);
   const waitsFor = /^Waiting for another sandbox's setup: Check that team\/slow-check:1 has what the agents need · \d+:\d\d$/;
   await expect(steps.locator(".sandbox-setup-waiting")).toHaveText(waitsFor);
@@ -544,7 +604,7 @@ test("a sandbox whose next step comes after another sandbox's says what it waits
   await expect(settled.locator(".room-sandbox-setup")).toHaveText("Set up on this Mac.");
   await settled.getByRole("button", { name: "Done" }).click();
   const cleared = await openSandboxOf(page, card, "project");
-  await useBaseImage(cleared, "", { startsConversationsAfresh: true });
+  await nameBaseImageIn(cleared, "", { startsConversationsAfresh: true });
   await expect(cleared.locator(".room-sandbox-setup")).toHaveText("Set up on this Mac.");
   await cleared.getByRole("button", { name: "Done" }).click();
 });
@@ -814,9 +874,8 @@ test("a repository the owner makes in the workspace while its VM runs, with a ho
   await sendMessage(page, "SAY Ready.");
   await waitForTurnToEnd(page);
 
-  const runs = () => containerCalls().filter(([command]) => command === "run");
-  const runsBefore = runs().length;
-  const run = runs().findLast((each) => JSON.stringify(each).includes(realpathSync(shared)))!;
+  const runsBefore = vmRuns().length;
+  const run = vmRuns().findLast((each) => JSON.stringify(each).includes(realpathSync(shared)))!;
   const vm = run[run.indexOf("--name") + 1]!;
   const vmStopped = () => containerCalls().some(([command, name]) => command === "stop" && name === vm);
   const holdsTheTurn = join(host.root, "holds-the-turn-89");
@@ -834,8 +893,8 @@ test("a repository the owner makes in the workspace while its VM runs, with a ho
   await sendMessage(page, "SAY Guarded.");
   await waitForTurnToEnd(page);
   await expect(lastAgentMessage(page)).toHaveText("Guarded.");
-  expect(runs()).toHaveLength(runsBefore + 1);
-  const [workspaceGuarded] = guardedIn(mountsOfRun(runs().at(-1)!));
+  expect(vmRuns()).toHaveLength(runsBefore + 1);
+  const [workspaceGuarded] = guardedIn(mountsOfRun(vmRuns().at(-1)!));
   expect(workspaceGuarded).toMatchObject({ folder: realpathSync(shared), parts: { folders: ["vendor/lib/githooks"] } });
 });
 

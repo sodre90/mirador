@@ -226,6 +226,7 @@ export const problems: Messages["problems"] = {
   unknownWorkspaceColour: (value) => `未知的工作区颜色：${value}`,
   unknownSandboxEngine: (value) => `这台电脑上没有沙箱引擎 ${value}`,
   notAMachineAddress: (address) => `“${address}”不是机器的地址。`,
+  notAnImageName: (value) => `“${value}”不是镜像名，例如 ghcr.io/you/image:tag。`,
   machineAlreadyAdded: (origin) => `${origin} 已在你的机器中。`,
   unknownMachineColour: (value) => `未知的机器颜色：${value}`,
   answerAllQuestions: (count) => `请回答全部 ${count} 个问题。`,

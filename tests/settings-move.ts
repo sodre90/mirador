@@ -84,6 +84,7 @@ export function importInto(store: Store, manifests: PluginManifest[] = [], { wit
     roomInvitesConnect: (value) => store.setRoomInvitesConnect(value),
     conversationOrder: (value) => store.setChosenConversationOrder(value),
     pluginUpdateMode: (value) => store.setPluginUpdateMode(value),
+    sandboxBaseImage: (value) => store.setSandboxBaseImageSetting(value),
     voice: (settings) => store.setVoiceSettings(settings),
     updatesByItself: async (folder, updatesByItself) => store.setPluginUpdatesByItself(folder, updatesByItself),
   };

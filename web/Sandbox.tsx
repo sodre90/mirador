@@ -103,18 +103,22 @@ const kindOf = (check: SandboxCheck | null): SandboxKind | null =>
 const outsideSelinux = (check: SandboxCheck | null) => check?.availability.available === true && check.availability.kind !== "apple-container" && check.availability.selinuxEnforcing;
 
 /**
- * The image the sandbox's VM runs on: the owner's own, by its name, or Mirador's base where none is named. A name typed
- * is used once the owner says so, and only where it is an image's name.
+ * The image a sandbox's VM runs on: the owner's own, by its name, or, where none is named, the one the placeholder says.
+ * A name typed is used once the owner says so, and only where it is an image's name.
  */
-function BaseImageField({
+export function BaseImageField({
   id,
+  label = words.baseImage.label,
   baseImage,
+  placeholder,
   kind,
   disabled,
   onUse,
 }: {
   id: string;
+  label?: string;
   baseImage: string | null;
+  placeholder: string;
   kind: SandboxKind | null;
   disabled: boolean;
   onUse: (baseImage: string | null) => void;
@@ -134,13 +138,13 @@ function BaseImageField({
   };
   return (
     <div className="room-sandbox-base-image">
-      <label htmlFor={inputId}>{words.baseImage.label}</label>
+      <label htmlFor={inputId}>{label}</label>
       <div className="room-sandbox-base-image-row">
         <input
           {...typingAidAttributes}
           id={inputId}
           value={typed}
-          placeholder={words.baseImage.placeholder}
+          placeholder={placeholder}
           spellCheck={false}
           aria-invalid={!isName}
           aria-describedby={kind === null ? undefined : needsId}
@@ -285,6 +289,7 @@ export function SandboxSwitch({
   startsAfreshText,
   send,
   folders,
+  defaultBaseImage,
   whileOff = null,
 }: {
   id: string;
@@ -298,6 +303,8 @@ export function SandboxSwitch({
   startsAfreshText: (startsAfresh: string[], stopsTurn: boolean) => string;
   send: (sandbox: SandboxSetting) => void;
   folders: ReactNode;
+  /** The image Settings give the sandboxes that name none of their own; null for Mirador's own. */
+  defaultBaseImage: string | null;
   /** What to choose before turning it on, shown under the switch while it is off. */
   whileOff?: ReactNode;
 }) {
@@ -413,6 +420,7 @@ export function SandboxSwitch({
           <BaseImageField
             id={id}
             baseImage={shown.baseImage}
+            placeholder={defaultBaseImage === null ? words.baseImage.placeholder : words.baseImage.fromSettings(defaultBaseImage)}
             kind={kind}
             disabled={pending !== null}
             onUse={(baseImage) => choose({ ...shown, baseImage })}
@@ -446,6 +454,7 @@ export function SandboxField({
   setup,
   folders,
   homeDir,
+  defaultBaseImage,
 }: {
   room: Room;
   profiles: Profile[];
@@ -453,6 +462,7 @@ export function SandboxField({
   setup: SandboxSetup;
   folders: SandboxFolders;
   homeDir: string;
+  defaultBaseImage: string | null;
 }) {
   const check = useRoomSandboxCheck(room, profiles);
   const startsAfresh = room.agents
@@ -472,6 +482,7 @@ export function SandboxField({
         connection.send({ type: "room.set-sandbox", roomId: room.id, sandbox })
       }
       folders={<SandboxFolderList folders={folders} homeDir={homeDir} />}
+      defaultBaseImage={defaultBaseImage}
     />
   );
 }

@@ -121,6 +121,7 @@ export function WorkspaceSandboxDialog({
   holdsTooMany,
   sandboxFolders,
   homeDir,
+  defaultBaseImage,
   onClose,
 }: {
   workspace: Workspace;
@@ -131,6 +132,7 @@ export function WorkspaceSandboxDialog({
   holdsTooMany: boolean;
   sandboxFolders: SandboxFolders;
   homeDir: string;
+  defaultBaseImage: string | null;
   onClose: () => void;
 }) {
   const check = useWorkspaceSandboxCheck(workspace, profiles);
@@ -164,6 +166,7 @@ export function WorkspaceSandboxDialog({
         startsAfreshText={(conversationIds, stopsTurn) => (stopsTurn ? words.stopsAndStartsAfresh(conversationIds.length) : words.startsAfresh(conversationIds.length))}
         send={(sandbox) => connection.send({ type: "workspace.set-sandbox", workspaceId: workspace.id, sandbox, bringConversationsIn: bringingIn })}
         folders={<SandboxFolderList folders={sandboxFolders} homeDir={homeDir} />}
+        defaultBaseImage={defaultBaseImage}
         whileOff={toBringIn > 0 && <BringConversationsIn count={toBringIn} bringing={bringingIn} onChange={setBringingIn} />}
       />
       {outside > 0 && <p className="hint workspace-sandbox-outside">{words.outsideCount(outside)}</p>}

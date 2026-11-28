@@ -117,6 +117,8 @@ export const settings: Messages["settings"] = {
     fromNextStart: (chosen, inUse) => `Mirador 重启后改用 ${chosen}。在那之前，它的沙箱仍用 ${inUse} 运行。`,
     setByEnvironment: "这由 MIRADOR_SANDBOX 在 Mirador 启动时选定。",
     dockerReadOnly: "使用 Docker 时，在以只读方式添加的文件夹里，Agent 只能看到这台电脑的任何用户都能读取的内容。",
+    defaultBaseImage: "默认基础镜像",
+    defaultBaseImageHint: "沙箱没有指定自己基础镜像的房间和工作区都运行在这个镜像上。更改后，它们的 Agent 会在完成当前轮次后重新开始。",
   },
   sleep: {
     title: "睡眠",

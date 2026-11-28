@@ -130,7 +130,7 @@ import { TunnelRefused, type PeerToPeer, type TunnelEnd, type TunnelListener } f
 import { thisMacModelsInUse, voiceSettingsProblem, voiceSettingsWithoutKeys, type VoiceSettings } from "../shared/voice.ts";
 import { described, englishProblem, HostProblemError, problemFieldsOf, problemOf, type DescribedProblem, type HostProblem } from "../shared/host-problems.ts";
 import { conversationCanvasToken } from "./canvas-token.ts";
-import { isSandboxNetwork, isSandboxOwner, type SandboxEngines, type SandboxKind } from "../shared/sandbox.ts";
+import { isImageName, isSandboxNetwork, isSandboxOwner, type SandboxEngines, type SandboxKind } from "../shared/sandbox.ts";
 
 export interface HostServices {
   config: HostConfig;
@@ -1420,6 +1420,15 @@ export function startServer(services: HostServices) {
     tellSandboxEngines();
   }
 
+  function setSandboxBaseImage(baseImage: string | null) {
+    if (baseImage !== null && !isImageName(baseImage)) throw new HostProblemError({ code: "not-an-image-name", value: String(baseImage).slice(0, 300) });
+    if (baseImage === store.sandboxBaseImageSetting()) return;
+    store.setSandboxBaseImageSetting(baseImage);
+    hub.broadcast({ type: "settings.sandbox-base-image", baseImage });
+    workspaceSandboxes.defaultBaseImageChanged();
+    rooms.defaultBaseImageChanged();
+  }
+
   async function askSandboxEnginesAgain() {
     if (await sandboxEngines.askAgain()) tellSandboxEngines();
   }
@@ -1574,6 +1583,7 @@ export function startServer(services: HostServices) {
     roomInvitesConnect: setRoomInvitesConnect,
     conversationOrder: setConversationOrder,
     pluginUpdateMode: setPluginUpdateMode,
+    sandboxBaseImage: setSandboxBaseImage,
     voice: saveVoiceSettings,
     updatesByItself: setUpdatesByItself,
   });
@@ -1729,6 +1739,8 @@ export function startServer(services: HostServices) {
         return setSandboxEngine(message.engine);
       case "settings.ask-sandbox-engines":
         return askSandboxEnginesAgain();
+      case "settings.set-sandbox-base-image":
+        return setSandboxBaseImage(message.baseImage);
       case "settings.set-editor":
         return setEditor(message.setting);
       case "settings.set-machine-name":
@@ -2624,6 +2636,7 @@ export function startServer(services: HostServices) {
       claudeProgram,
       scriptProgram: store.scriptProgramSetting(),
       sandboxEngines: sandboxEnginesNow(),
+      sandboxBaseImage: store.sandboxBaseImageSetting(),
       editor: editorState(store.editorSetting()),
       machineName: store.machineNameSetting(),
       computerName: computerName(),

@@ -89,6 +89,7 @@ const EVERY_CLIENT_MESSAGE: Record<ClientMessage["type"], true> = {
   "settings.set-script-program": true,
   "settings.set-sandbox-engine": true,
   "settings.ask-sandbox-engines": true,
+  "settings.set-sandbox-base-image": true,
   "settings.set-editor": true,
   "settings.set-machine-name": true,
   "settings.set-push-relay": true,

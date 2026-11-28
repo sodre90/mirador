@@ -298,6 +298,7 @@ export const rooms: Messages["rooms"] = {
     baseImage: {
       label: "Alap-image",
       placeholder: "A Miradoré: Debian gittel",
+      fromSettings: (image) => `Ahogy a Beállításokban: ${image}`,
       use: "Beállítás",
       notAName: "Ez nem image-név, mint például ghcr.io/te/image:tag.",
       needs: {

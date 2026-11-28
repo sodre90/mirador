@@ -12,7 +12,7 @@ import { BASE_RECIPE, baseImageOf, BaseNotPulled, buildStepIn, defaultBaseTag, i
 import { GUARD_IN_VM } from "../host/sandbox/tools-folder.ts";
 import { ownBaseIn as podmansOwnBaseIn, PODMAN_READS } from "../host/sandbox/podman.ts";
 import { guardPlanOf, sandboxRefusalOf, type MiradorPlaces, type ProtectedParts } from "../host/sandbox/guarded-workspace.ts";
-import { fullImageName, isImageName, keepingNetworkOf, modelKeyVariableOf, narrowsSandbox, NO_SANDBOX, reachesMoreThan, SANDBOX_NETWORKS, sandboxSettingIn, sameSandbox, sharesKernel, signInElsewhere, type SandboxNetwork, type SandboxSetting } from "../shared/sandbox.ts";
+import { fullImageName, imageSandboxRunsOn, isImageName, keepingNetworkOf, modelKeyVariableOf, narrowsSandbox, NO_SANDBOX, reachesMoreThan, SANDBOX_NETWORKS, sandboxSettingIn, sameSandbox, sharesKernel, signInElsewhere, type SandboxNetwork, type SandboxSetting } from "../shared/sandbox.ts";
 import { RUNS_SANDBOXES } from "./sandbox-computer.ts";
 
 const scratch = realpathSync(mkdtempSync(join(tmpdir(), "sandbox-parts-")));
@@ -521,4 +521,12 @@ test.skipIf(!RUNS_SANDBOXES)("a configured hooksPath through a symlink or at a n
   writeFileSync(join(underFile, "tools"), "not a folder");
   Bun.spawnSync(["git", "-C", underFile, "config", "core.hooksPath", "tools/hooks"]);
   expect(await guardPlanOf(underFile, ELSEWHERE)).toEqual({ refused: { kind: "part-is-link", part: "tools" } });
+});
+
+test("a sandbox runs on its own base image, else on the one Settings give, else on Mirador's", () => {
+  const named = (baseImage: string | null): SandboxSetting => ({ ...NO_SANDBOX, on: true, baseImage });
+  expect(imageSandboxRunsOn(named("ghcr.io/me/own:1"), "ghcr.io/me/default:2")).toBe("ghcr.io/me/own:1");
+  expect(imageSandboxRunsOn(named(null), "ghcr.io/me/default:2")).toBe("ghcr.io/me/default:2");
+  expect(imageSandboxRunsOn(undefined, "ghcr.io/me/default:2")).toBe("ghcr.io/me/default:2");
+  expect(imageSandboxRunsOn(named(null), null)).toBeNull();
 });

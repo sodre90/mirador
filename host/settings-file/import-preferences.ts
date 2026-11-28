@@ -32,6 +32,7 @@ const plainPreferences: { [Key in keyof PlainPreferences]: Preference<PlainPrefe
   roomInvitesConnect: { here: (store) => store.roomInvitesConnect(), fallback: "peer-to-peer" },
   conversationOrder: { here: (store) => store.chosenConversationOrder(), fallback: CUSTOM_ORDER },
   pluginUpdateMode: { here: (store) => store.pluginUpdateMode(), fallback: "ask" },
+  sandboxBaseImage: { here: (store) => store.sandboxBaseImageSetting(), fallback: null },
 };
 
 export function preferenceSteps(preferences: FilePreferences, context: ImportContext, writers: PreferenceWriters): ImportStep[] {

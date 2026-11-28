@@ -75,6 +75,9 @@ export function fullImageName(name: string) {
   return /[:@]/.test(path.at(-1)!) ? full : `${full}:latest`;
 }
 
+/** The image a sandbox's VM runs on, as the owner named it: its own, else the one Settings give every sandbox without one; null for Mirador's base. */
+export const imageSandboxRunsOn = (setting: SandboxSetting | undefined, settingsDefault: string | null) => setting?.baseImage ?? settingsDefault;
+
 /** The sandbox as it is to be, its network left as it is: that one is set by itself, as a change of it starts nothing afresh. */
 export const keepingNetworkOf = (before: SandboxSetting, after: SandboxSetting): SandboxSetting => ({ ...after, network: before.on && after.on ? before.network : "closed" });
 
