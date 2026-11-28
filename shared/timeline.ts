@@ -14,7 +14,7 @@ import type {
 } from "@agentclientprotocol/sdk/unstable";
 import { hookNoticeIn } from "./hook-message.ts";
 import type { HostProblem } from "./host-problems.ts";
-import type { StoredEvent } from "./model.ts";
+import type { ConversationEvent, StoredEvent } from "./model.ts";
 import { englishNoticeText, MODE_NAME_META_KEY, turnRecapOf, type NoticeAbout } from "./notices.ts";
 import type { EditDiff } from "./review.ts";
 import { turnTitle } from "./reverts.ts";
@@ -59,6 +59,8 @@ export interface Subagent {
   turnEnded: StopReason | null;
   /** How it ended, when claude-agent-acp said: one in the background can end before the turn that started it. */
   ended?: Exclude<SubagentState, "running">;
+  /** claude-agent-acp said its task runs, which holds it beyond any turn's end. */
+  taskRunning?: true;
 }
 
 export type SubagentBlock = ToolBlock & { subagent: Subagent };
@@ -92,13 +94,15 @@ const askedForBackground = (rawInput: unknown) => {
 /**
  * A subagent works until its tool call completes; one started in the background, whose call completes at once, works
  * until claude-agent-acp says it ended, or else until the turn that started it ends, since claude-agent-acp holds the
- * turn open for it.
+ * turn open for it. Once claude-agent-acp has said its task runs, though, it works on past the end of any turn, until the
+ * task says it ended, or until the agent's process ends or starts afresh, or a restart cuts the turn short.
  */
 export function subagentState(block: SubagentBlock, conversationBusy: boolean): SubagentState {
   if (block.status === "failed") return "failed";
   if (!runsInBackground(block) && block.status === "completed") return "done";
-  const { ended, turnEnded } = block.subagent;
+  const { ended, turnEnded, taskRunning } = block.subagent;
   if (ended) return ended;
+  if (taskRunning && runsInBackground(block)) return "running";
   if (turnEnded) return turnEnded === "end_turn" ? "done" : "stopped";
   return conversationBusy ? "running" : "stopped";
 }
@@ -313,10 +317,26 @@ const subagentEnds = new Map<string, Exclude<SubagentState, "running">>([
   ["killed", "stopped"],
 ]);
 
+export const isSubagentTaskEnd = (status: string) => subagentEnds.has(status);
+
 function followSubagentTask(subagent: Subagent, status: string) {
+  if (status === "running") {
+    subagent.taskRunning = true;
+    delete subagent.ended;
+    return;
+  }
   const ended = subagentEnds.get(status);
-  if (ended) subagent.ended = ended;
-  else delete subagent.ended;
+  if (ended) {
+    subagent.ended = ended;
+    delete subagent.taskRunning;
+  } else delete subagent.ended;
+}
+
+/** A restart of the agent, or one that cut a turn short, ends the tasks of its subagents with it. */
+function stopSubagentTask(subagent: Subagent) {
+  if (!subagent.taskRunning) return;
+  delete subagent.taskRunning;
+  subagent.ended = "stopped";
 }
 
 interface OpencodeChild {
@@ -405,6 +425,7 @@ class TimelineBuilder {
   private readonly permissionBlocks = new Map<string, PermissionBlock>();
   private currentPlan: PlanBlock | null = null;
   private readonly subagentsOfThisTurn: Subagent[] = [];
+  private readonly subagents: Subagent[] = [];
   private readonly toolsOfThisTurn: ToolBlock[] = [];
   private readonly subagentByOpencodeSession = new Map<string, Subagent>();
   private readonly takenSubagents = new Set<Subagent>();
@@ -428,6 +449,7 @@ class TimelineBuilder {
     const origin = { key: String(seq), at };
     this.commands.apply(event);
     if (leavesFailedTurnBehind(event)) this.leaveFailedTurnBehind();
+    if (startsAgentAfresh(event)) this.stopSubagentTasks();
     switch (event.type) {
       case "user-command":
         return this.push({ kind: "command", ...origin, command: this.commands.get(event.commandId)!, ...(event.authorId && { authorId: event.authorId }) });
@@ -504,6 +526,8 @@ class TimelineBuilder {
         return this.push(noticeBlock(origin, { kind: "context-cleared" }));
       case "agent-reloaded":
         return this.push(noticeBlock(origin, { kind: "agent-reloaded" }));
+      case "agent-process-ended":
+        return;
       case "update-available": {
         const { harness, installed, latest, command } = event;
         return this.push(noticeBlock(origin, { kind: "update-available", harness, installed, latest, command }));
@@ -626,6 +650,10 @@ class TimelineBuilder {
     this.toolsOfThisTurn.splice(0).filter((block) => block.endedAt === undefined).forEach((block) => (block.leftUnfinished = true));
   }
 
+  private stopSubagentTasks() {
+    this.subagents.forEach(stopSubagentTask);
+  }
+
   private dropUserBlocks(seqs: number[]) {
     const keys = new Set(seqs.map(String));
     const kept = this.blocks.filter((block) => block.kind !== "user" || !keys.has(block.key));
@@ -732,6 +760,7 @@ class TimelineBuilder {
     if (!SUBAGENT_TOOLS.has(toolName) || block.subagent) return;
     block.subagent = { blocks: [], lastActivityAt: at, turnEnded: null };
     this.subagentsOfThisTurn.push(block.subagent);
+    this.subagents.push(block.subagent);
   }
 
   private push(block: TimelineBlock, into = this.blocks) {
@@ -773,6 +802,29 @@ export function buildTimeline(events: StoredEvent[]): TimelineBlock[] {
   const builder = new TimelineBuilder(opencodeCallBySession(events));
   events.forEach((event) => builder.add(event));
   return builder.blocks;
+}
+
+const startsAgentAfresh = (event: ConversationEvent) =>
+  event.type === "agent-process-ended" ||
+  event.type === "context-cleared" ||
+  event.type === "agent-reloaded" ||
+  event.type === "profile-changed" ||
+  (event.type === "turn-end" && event.cutShortByRestart === true);
+
+/**
+ * Whether the log shows a subagent's task left running: its last reported status is "running", and no restart of the
+ * agent, nor a turn a restart cut short, has ended it since. One pass over the events, cheaper than buildTimeline.
+ */
+export function subagentTaskLeftRunning(events: StoredEvent[]): boolean {
+  const statusOf = new Map<string, string>();
+  for (const { event } of events) {
+    if (startsAgentAfresh(event)) statusOf.clear();
+    else if (event.type === "acp" && event.update.sessionUpdate === "tool_call_update") {
+      const { subagentTaskStatus } = claudeCodeMeta(event.update);
+      if (subagentTaskStatus === "running" || (subagentTaskStatus && isSubagentTaskEnd(subagentTaskStatus))) statusOf.set(event.update.toolCallId, subagentTaskStatus);
+    }
+  }
+  return [...statusOf.values()].includes("running");
 }
 
 /**
