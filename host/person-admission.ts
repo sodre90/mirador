@@ -278,6 +278,7 @@ const admissions: { [K in ClientMessage["type"]]: K extends PersonMessageType ? 
   "terminal.open": OWNER_ONLY,
   "terminal.replay": OWNER_ONLY,
   "terminal.open-login": OWNER_ONLY,
+  "terminal.open-sandbox-sign-in": OWNER_ONLY,
   "terminal.follow-job": OWNER_ONLY,
   "terminal.open-panel-command": OWNER_ONLY,
   "terminal.input": OWNER_ONLY,

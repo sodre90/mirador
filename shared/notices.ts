@@ -9,6 +9,8 @@ export type NoticeAbout =
   | { kind: "turn-recap"; tookMs: number; filesEdited: number }
   | { kind: "signed-in" }
   | { kind: "sign-in-unfinished" }
+  | { kind: "sandbox-signed-in" }
+  | { kind: "sandbox-sign-in-unfinished" }
   | { kind: "usage-limit-wait-stopped" }
   | { kind: "job-wait-ended"; wait: JobWait; end: JobWaitEnd }
   | { kind: "context-cleared" }
@@ -51,6 +53,10 @@ export function englishNoticeText(about: NoticeAbout) {
       return "Signed in. Send your message again.";
     case "sign-in-unfinished":
       return "Signing in did not finish.";
+    case "sandbox-signed-in":
+      return "Signed in for the sandbox.";
+    case "sandbox-sign-in-unfinished":
+      return "The sandbox sign-in did not finish.";
     case "usage-limit-wait-stopped":
       return "Stopped waiting for the usage limit to reset";
     case "job-wait-ended":

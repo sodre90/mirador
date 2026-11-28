@@ -372,6 +372,7 @@ const addedColumns = [
   { table: "conversations", column: "side_chat_may_change_files", definition: "INTEGER NOT NULL DEFAULT 0" },
   { table: "conversations", column: "side_chat_access", definition: "TEXT" },
   { table: "conversations", column: "outside_sandbox", definition: "INTEGER NOT NULL DEFAULT 0" },
+  { table: "profiles", column: "sandbox_sign_in", definition: "TEXT" },
 ];
 
 /** A turn that ended while nobody looked at its conversation, or the owner's Unread mark, until someone opens it. */
@@ -425,6 +426,7 @@ type ProfileRow = {
   color: string | null;
   plugin_settings: string | null;
   plugins_off: string;
+  sandbox_sign_in: string | null;
   created_at: number;
 };
 
@@ -502,6 +504,7 @@ const toProfile = (row: ProfileRow): Profile => ({
   color: isPastel(row.color) ? row.color : null,
   ...(row.plugin_settings && { pluginSettings: JSON.parse(row.plugin_settings) as Record<string, Record<string, string>> }),
   pluginsOff: JSON.parse(row.plugins_off) as string[],
+  ...(row.sandbox_sign_in !== null && { sandboxSignedIn: true as const }),
   createdAt: row.created_at,
 });
 
@@ -2108,6 +2111,16 @@ export class Store {
         JSON.stringify(profile.pluginsOff),
         profile.createdAt,
       );
+  }
+
+  /** The token of the profile's Claude subscription its agents use in sandboxes; null where it has none. */
+  sandboxSignInOf(profileId: string): string | null {
+    const row = this.db.query("SELECT sandbox_sign_in FROM profiles WHERE id = ?").get(profileId) as { sandbox_sign_in: string | null } | null;
+    return row?.sandbox_sign_in ?? null;
+  }
+
+  setSandboxSignIn(profileId: string, token: string | null) {
+    this.db.query("UPDATE profiles SET sandbox_sign_in = ? WHERE id = ?").run(token, profileId);
   }
 
   deleteProfile(id: string) {

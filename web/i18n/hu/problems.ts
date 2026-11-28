@@ -213,6 +213,7 @@ export const problems: Messages["problems"] = {
     `Egy beszélgetés visszaviteléhez az ágensnek hátra kell hagynia a saját munkamenete egy részét, de erre ez az ágens nem képes: ${agent}.`,
   notASlashCommand: (line) => `Ez nem perjeles parancs: ${line}`,
   agentHasNoSuchCommand: (agent, line) => `Ennek az ágensnek (${agent}) nincs ilyen parancsa: ${line}`,
+  agentHasNoSandboxSignIn: (agent) => `Csak a Claude Code profiljai jelentkeznek be a sandboxokhoz, ennek az ágensnek (${agent}) a profiljai nem.`,
   unknownAgent: (agent) => `Ismeretlen ágens: ${agent}.`,
   profileIsForOtherAgent: (profile, profileAgent, agent) => `Ez a profil (${profile}) ehhez az ágenshez való: ${profileAgent}, nem ehhez: ${agent}.`,
   unknownQuestionsSetting: (value) => `Ismeretlen Kérdések-beállítás: ${value}.`,

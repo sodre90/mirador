@@ -307,6 +307,8 @@ export const hints = {
   terminalCommand:
     "Claude Code shows this one only in its own terminal, so this opens it there: a terminal tab of this conversation, run by the Claude Code this conversation's profile uses. The panel is where the command happens; the agent's answer above is only its refusal.",
   updateAgent: (command: string) => `Runs ${command} here, as a ! command in the message box would. Conversations you start afterwards use the new version.`,
+  signInForSandbox:
+    "Runs claude setup-token in a terminal tab of this conversation. Approve it in the browser with the Claude account this profile should use in sandboxes. Mirador keeps the token it makes for sandboxes alone, hidden from the terminal, and your message goes again.",
   logIn:
     "Opens the agent's own sign-in in a terminal tab of this conversation, with its profile, so a profile with an account of its own signs that one in. Once it says you are signed in, send your message again.",
   queuedGrip: "Drag to change the order queued messages go out in: they leave from the top.",

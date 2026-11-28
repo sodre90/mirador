@@ -45,9 +45,25 @@ function writeFakeContainer() {
     FAKE_ACP_PROMPTS: promptsFile(),
   });
   const claude = join(host.fakeProgramsDir, "claude");
-  writeFileSync(claude, `#!/bin/sh\necho "2.1.330 (Claude Code)"\n`);
+  writeFileSync(claude, fakeClaude);
   chmodSync(claude, 0o755);
 }
+
+const SETUP_TOKEN = "sk-ant-oat01-e2e-sandbox-sign-in-token-2468";
+
+/** Claude Code saying its version, and its `setup-token` as the browser's code pasted into it ends: a token, or none for no code. */
+const fakeClaude = `#!/bin/sh
+if [ "$1" = setup-token ]; then
+  echo "Opening https://claude.ai/oauth/authorize?code=true in your browser"
+  printf "Paste code here if prompted > "
+  read code
+  if [ -z "$code" ]; then echo "No code given"; exit 1; fi
+  printf "\\nYour OAuth token (valid for 1 year):\\n\\n%s\\n\\nPress Enter to finish.\\n" "${SETUP_TOKEN}"
+  read finished
+  exit 0
+fi
+echo "2.1.330 (Claude Code)"
+`;
 
 function makeWorktree() {
   const repository = join(host.root, "repository");
@@ -1051,6 +1067,97 @@ test("a Claude Code profile with CLAUDE_CODE_OAUTH_TOKEN runs in the sandbox wit
     expect(provider.requests.map(({ path, headers }) => ({ path, authorization: headers.authorization, beta: headers["anthropic-beta"], xApiKey: headers["x-api-key"] }))).toEqual([
       { path: "/v1/messages?beta=true", authorization: `Bearer ${OAUTH_TOKEN}`, beta: "claude-code-20250219,oauth-2025-04-20", xApiKey: undefined },
     ]);
+  } finally {
+    provider.close();
+  }
+});
+
+test("a Claude Code profile that signs in with a Claude subscription is signed in for sandboxes from the conversation the sandbox refused it in, its token hidden, kept for the model proxy alone, and the message goes again", async ({ page }) => {
+  test.skip(!sandboxesRunHere, "Sandboxes run on macOS 26 on Apple silicon only.");
+  const subscriptionWorkspace = join(host.root, "subscription-project");
+  const provider = await modelProviderHere();
+  const providerOrigin = new URL(provider.baseUrl).origin;
+  try {
+    mkdirSync(subscriptionWorkspace, { recursive: true });
+    execFileSync("git", ["init", "-q", subscriptionWorkspace]);
+
+    await signIn(page, host);
+    const profiles = await createProfile(page, "Subscriber", `ANTHROPIC_BASE_URL=${providerOrigin}`, "", "Claude Code");
+    await profiles.getByRole("button", { name: "Close" }).click();
+    await addWorkspaceFromSidebar(page, subscriptionWorkspace);
+    const card = workspaceCard(page, subscriptionWorkspace);
+    await card.getByLabel("Agent", { exact: true }).selectOption({ label: "Subscriber · Claude Code" });
+    const dialog = await openSandboxOf(page, card, "subscription-project");
+    await sandboxSwitch(dialog).check();
+    await dialog.getByRole("button", { name: "Done" }).click();
+
+    const previousUrl = page.url();
+    await card.getByRole("button", { name: "+ New conversation" }).click();
+    await expect(page).not.toHaveURL(previousUrl);
+    await expect(chatHeader(page).locator(".conversation-sandboxed")).toHaveText("Sandboxed");
+    const seen = join(host.root, "subscription-seen");
+    await sendMessage(page, `WRITE ${JSON.stringify([{ edit: seen, content: "{{env:CLAUDE_CODE_OAUTH_TOKEN}}\n{{env:ANTHROPIC_BASE_URL}}" }])}`);
+
+    const signInLine = page.locator(".timeline:visible .sandbox-sign-in-line");
+    const signInButton = signInLine.getByRole("button", { name: "Sign in for the sandbox" });
+    const signInTab = page.locator(".terminal-tab", { hasText: "Claude Code sandbox sign-in" });
+    const terminalScreen = page.locator(".terminal-pane .terminal-splits.shown .xterm-rows");
+    const notice = (text: string) => page.locator(".timeline:visible .notice-line", { hasText: text });
+    const typeInTerminal = async (line: string) => {
+      await page.locator(".terminal-pane .terminal-splits.shown .xterm").click();
+      await page.keyboard.type(line);
+      await page.keyboard.press("Enter");
+    };
+
+    await test.step("the sandbox refuses the turn, saying why, and offers the sign-in", async () => {
+      await expect(signInLine).toContainText("Subscriber signs in with a Claude subscription");
+      await expect(signInButton).toBeVisible();
+      await keepScreenshot(signInLine, "sandbox-sign-in-offered");
+    });
+
+    await test.step("a sign-in left without a code keeps its tab open to show why, and says it did not finish", async () => {
+      await signInButton.click();
+      await expect(signInTab).toBeVisible();
+      await expect(terminalScreen).toContainText("Paste code here if prompted >");
+      await typeInTerminal("");
+      await expect(terminalScreen).toContainText("No code given");
+      await typeInTerminal("");
+      await expect(signInTab).toHaveCount(0);
+      await expect(notice("The sandbox sign-in did not finish.")).toBeVisible();
+      await expect(signInButton).toBeVisible();
+    });
+
+    await test.step("a sign-in that makes a token shows it masked, keeps it, retires the button and sends the message again", async () => {
+      await signInButton.click();
+      await expect(terminalScreen).toContainText("Paste code here if prompted >");
+      await typeInTerminal("code-from-the-browser");
+      await expect(terminalScreen).toContainText("Press Enter to finish.");
+      await expect(terminalScreen).toContainText("••••••••");
+      await expect(terminalScreen).not.toContainText("sk-ant-oat01");
+      await expect(notice("Signed in for the sandbox.")).toBeVisible();
+      await expect(signInButton).toHaveCount(0);
+      await typeInTerminal("");
+      await expect(signInTab).toHaveCount(0);
+      await waitForTurnToEnd(page);
+      await expect(page.locator(".timeline:visible .message.user")).toHaveCount(2);
+    });
+
+    const [tokenInVm, baseUrlInVm] = readFileSync(seen, "utf8").split("\n");
+    const calls = containerCalls();
+
+    await test.step("the agent in the VM gets a placeholder for the token, which no call to the VM and no page holds", async () => {
+      expect(tokenInVm).toBe("kept-by-mirador");
+      expect(JSON.stringify(calls)).not.toContain(SETUP_TOKEN);
+      expect(await page.content()).not.toContain(SETUP_TOKEN);
+    });
+
+    await test.step("the model proxy adds the token kept for sandboxes as the Bearer token", async () => {
+      const run = calls.findLast(([command, ...rest]) => command === "run" && rest.some((argument) => argument.startsWith("mirador.owner=workspace:")) && JSON.stringify(rest).includes(realpathSync(subscriptionWorkspace)))!;
+      const socket = run.find((argument) => argument.endsWith(":/run/mirador/model.sock"))!.split(":")[0]!;
+      const routed = new URL(baseUrlInVm!).pathname;
+      expect(await askedThroughModelSocket(socket, `${routed}/v1/messages?beta=true`, { authorization: "Bearer kept-by-mirador" }, "claude-sonnet-5-5")).toBe(`200 {"answered":true}`);
+      expect(provider.requests.map(({ path, headers }) => ({ path, authorization: headers.authorization }))).toEqual([{ path: "/v1/messages?beta=true", authorization: `Bearer ${SETUP_TOKEN}` }]);
+    });
   } finally {
     provider.close();
   }

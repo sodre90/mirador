@@ -58,7 +58,7 @@ import { useOwnMessageSteps } from "./own-messages.ts";
 import { joinDrafts, useDraft } from "./drafts.ts";
 import { onWordsForComposer } from "./tab-handoffs.ts";
 import { useStoppedMessageEdit } from "./edit-stopped.ts";
-import { isLoginCommand, requestLogin } from "./login-request.ts";
+import { isLoginCommand, requestLogin, requestSandboxSignIn } from "./login-request.ts";
 import { requestProgram } from "./program-request.ts";
 import { usePluginCommands } from "./plugin-commands.tsx";
 import { AskToRevert, UndoButton } from "./Revert.tsx";
@@ -1181,6 +1181,16 @@ function TimelineEntry({ block, conversationId, harness, canRewind, endsReply }:
             <span>{errorText(block, t.problems)}</span>
             <button type="button" data-hint={hints.logIn} onClick={() => requestLogin(conversationId)}>
               {words.entry.logIn}
+            </button>
+          </div>
+        );
+      }
+      if (block.wantsSandboxSignIn && !block.sandboxSignedInSince && !onlyReads) {
+        return (
+          <div className="error-line sign-in-line sandbox-sign-in-line">
+            <span>{errorText(block, t.problems)}</span>
+            <button type="button" data-hint={hints.signInForSandbox} onClick={() => requestSandboxSignIn(conversationId)}>
+              {words.entry.signInForSandbox}
             </button>
           </div>
         );

@@ -334,6 +334,8 @@ export const hints: Messages["hints"] = {
   terminalCommand:
     "Claude Code zeigt das nur in seinem eigenen Terminal, deshalb landet es in einem Terminal-Tab dieser Unterhaltung, ausgeführt von dem Claude Code, das das Profil dieser Unterhaltung nutzt. Der Befehl passiert dort im Terminal; die Antwort des Agenten oben ist nur seine Ablehnung.",
   updateAgent: (command) => `Führt ${command} hier aus, wie es ! im Nachrichtenfeld täte. Unterhaltungen, die du danach beginnst, nutzen die neue Version.`,
+  signInForSandbox:
+    "Führt claude setup-token in einem Terminal-Tab dieser Unterhaltung aus. Bestätige es im Browser mit dem Claude-Konto, das dieses Profil in Sandboxes nutzen soll. Mirador behält den Token, den es dabei erzeugt, nur für Sandboxes und blendet ihn im Terminal aus; danach geht deine Nachricht erneut raus.",
   logIn:
     "Öffnet die eigene Anmeldung des Agenten in einem Terminal-Tab dieser Unterhaltung, mit ihrem Profil, sodass ein Profil mit eigenem Konto genau dieses anmeldet. Sobald dort steht, dass du angemeldet bist, sende deine Nachricht erneut.",
   queuedGrip: "Ziehe, um die Reihenfolge zu ändern, in der Nachrichten aus der Warteschlange rausgehen: Sie gehen von oben weg.",

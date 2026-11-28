@@ -101,8 +101,17 @@ export function modelInSandbox(profile: Profile, choices: EnvironmentChoices, en
   return { blocker: { kind: "agent-kind-coming", agent, harness } };
 }
 
+/**
+ * The environment an agent of this profile gets for a sandbox: a Claude Code profile that signs in with a Claude
+ * subscription gets the token of it Mirador keeps for sandboxes, `sandboxSignIn`, which the model proxy adds for it.
+ */
+export function environmentForSandbox(profile: Profile, environment: Record<string, string>, sandboxSignIn: string | null): Record<string, string> {
+  const takesSignIn = profile.harness === "claude" && sandboxSignIn !== null && signInElsewhere(environment) === "subscription";
+  return takesSignIn ? { ...environment, CLAUDE_CODE_OAUTH_TOKEN: sandboxSignIn } : environment;
+}
+
 /** Why an agent of this profile can't run in a sandbox, given what of its environment it gets there; null where it can. */
-export function profileSandboxBlocker(profile: Profile, choices: EnvironmentChoices): SandboxBlocker | null {
+export function profileSandboxBlocker(profile: Profile, choices: EnvironmentChoices, sandboxSignIn: string | null): SandboxBlocker | null {
   const environment = (() => {
     try {
       return profileEnvironmentToCome(profile, (host, set) => environmentInRoom(profile.harness, host, set, choices));
@@ -110,6 +119,6 @@ export function profileSandboxBlocker(profile: Profile, choices: EnvironmentChoi
       return {};
     }
   })();
-  const model = modelInSandbox(profile, choices, environment);
+  const model = modelInSandbox(profile, choices, environmentForSandbox(profile, environment, sandboxSignIn));
   return "blocker" in model ? model.blocker : null;
 }

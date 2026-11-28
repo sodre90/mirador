@@ -71,7 +71,7 @@ import { isRealModel } from "../shared/claude-models.ts";
 import { cutWithEllipsis, firstGraphemes } from "../shared/text-cut.ts";
 import { isInformational } from "../shared/timeline.ts";
 import type { ConversationChoices, ConversationReply, ConversationUsage, ModelRequestSample, RanOn, StartedConversation, WorkspaceConversationStart } from "../shared/canvas-plugins.ts";
-import { canTryAgain } from "../shared/try-again.ts";
+import { canTryAgain, messageLeftForSandboxSignIn } from "../shared/try-again.ts";
 import { currentActivity, isAgentsNextStep, OpenToolCalls } from "./activity.ts";
 import { editDiffsOf } from "./edit-diff.ts";
 import { askedPermissionOf, pendingAsk, pendingPermission } from "./pending-requests.ts";
@@ -121,7 +121,8 @@ import { belongsToSandbox, NO_SANDBOXES, sandboxCanvasAddress, sandboxConfigFold
 import { SandboxNotReady } from "./sandbox/vm-launcher.ts";
 import { agentVersionIn } from "./sandbox/agent-version.ts";
 import { BUN_IN_VM } from "./sandbox/tools-folder.ts";
-import { modelInSandbox } from "./sandbox/sandbox-control.ts";
+import { environmentForSandbox, modelInSandbox } from "./sandbox/sandbox-control.ts";
+import { SANDBOX_SIGN_IN_COLUMNS, SANDBOX_SIGN_IN_KEY, sandboxSignInCommand, setupTokenCaught } from "./sandbox/sandbox-sign-in.ts";
 import { NO_SANDBOX, ownerKey, type SandboxOwner } from "../shared/sandbox.ts";
 import { awaitsItsInput, ToolCallReportsHeard, withReportedToolCall } from "./acp/reported-tool-call.ts";
 import { canvasToolAskedFor, isPreAllowedCanvasTool } from "./canvas/permission.ts";
@@ -3020,6 +3021,41 @@ export class ConversationService {
     if (this.store.hasConversation(conversationId)) this.append(conversationId, { type: "login-ended", signedIn });
   }
 
+  /**
+   * `claude setup-token` with the environment of the conversation's profile, on this computer even where the
+   * conversation is sandboxed: the browser signs a Claude subscription in, and the token it prints goes to `caught`
+   * instead of the terminal, for the profile's agents to use in sandboxes.
+   */
+  async sandboxSignInProgram(conversationId: string, caught: (profile: Profile, token: string) => void): Promise<TerminalProgram> {
+    const profile = this.profileOf(this.get(conversationId));
+    if (profile.harness !== "claude") throw new HostProblemError({ code: "agent-has-no-sandbox-sign-in", agent: harnessLabels[profile.harness] });
+    await profileEnvironmentOnceRead(profile);
+    const environment = launchEnvironment(profile.harness, profile, this.store.claudeProgramSetting());
+    return {
+      tabName: `${harnessLabels[profile.harness]} sandbox sign-in`,
+      command: sandboxSignInCommand(environment),
+      environment,
+      key: SANDBOX_SIGN_IN_KEY,
+      printsSecret: setupTokenCaught((token) => caught(profile, token)),
+      leastColumns: SANDBOX_SIGN_IN_COLUMNS,
+    };
+  }
+
+  /** Once signed in, the conversation goes on in its sandbox: the message that couldn't reach its agent goes again. */
+  sandboxSignInEnded(conversationId: string, signedIn: boolean) {
+    if (!this.store.hasConversation(conversationId)) return;
+    this.append(conversationId, { type: "sandbox-sign-in-ended", signedIn });
+    if (signedIn) this.goOnAfterSandboxSignIn(conversationId);
+  }
+
+  private goOnAfterSandboxSignIn(conversationId: string) {
+    if (this.runtime(conversationId).running || this.stopping) return;
+    const unsent = messageLeftForSandboxSignIn(this.store.listEvents(conversationId));
+    if (!unsent) return void this.ensureSession(conversationId).catch(() => {});
+    const { text, imageIds, authorId } = unsent;
+    this.prompt(conversationId, text, { ...(imageIds && { imageIds }), ...(authorId && { authorId }) }).catch(() => {});
+  }
+
   /** Messages leave the queue from the front, so this changes when one goes out. */
   moveQueuedMessage(conversationId: string, messageId: string, beforeMessageId: string | null) {
     this.replaceQueue(
@@ -4004,7 +4040,8 @@ export class ConversationService {
   }
 
   /** A sandbox sees its workspace's folder alone, so a workspace's conversation that works in a worktree of its own can't start in it. */
-  private async agentInSandbox({ owner, setting }: ConversationSandbox, launch: ProcessLaunch, profile: Profile, { command, environment }: AgentLaunch): Promise<AgentInSandbox> {
+  private async agentInSandbox({ owner, setting }: ConversationSandbox, launch: ProcessLaunch, profile: Profile, { command, environment: here }: AgentLaunch): Promise<AgentInSandbox> {
+    const environment = environmentForSandbox(profile, here, this.store.sandboxSignInOf(profile.id));
     const model = modelInSandbox(profile, launch.roomId ? this.environmentChoicesOf(launch.roomId, profile.id) : NO_ENVIRONMENT_CHOICES, environment);
     if ("blocker" in model) throw new SandboxNotReady({ kind: "blocked", blocker: model.blocker });
     if (owner.kind === "workspace" && launch.id && this.get(launch.id).worktree) throw new SandboxNotReady({ kind: "blocked", blocker: { kind: "conversation-in-worktree" } });

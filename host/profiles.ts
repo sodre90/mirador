@@ -152,6 +152,7 @@ export class ProfileService {
       color: draft.color,
       ...(draft.pluginSettings && { pluginSettings: draft.pluginSettings }),
       pluginsOff: pluginNames(draft.pluginsOff),
+      ...(existing?.sandboxSignedIn && { sandboxSignedIn: true as const }),
       createdAt: existing?.createdAt ?? Date.now(),
     };
     this.store.saveProfile(profile);
@@ -162,6 +163,13 @@ export class ProfileService {
     if (!existing) this.broadcastWorkspaces(giveEveryWorkspaceAProfile(this.store));
     this.profilesChanged();
     return profile;
+  }
+
+  /** Keeps the token of the profile's Claude subscription that its agents use in sandboxes, and tells the pages it has one. */
+  keepSandboxSignIn(profileId: string, token: string) {
+    this.store.setSandboxSignIn(profileId, token);
+    const profile = this.store.findProfile(profileId);
+    if (profile) this.hub.sendEach((socket) => ({ type: "profile.upserted", profile: profileFor(socket, profile, this.secrets) }));
   }
 
   /** Turns one plugin on or off for the profile as stored, saved as any edit is, so running conversations gain or lose it. */

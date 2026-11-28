@@ -1,3 +1,4 @@
+import type { HostProblem } from "./host-problems.ts";
 import { asDisksCompare } from "./disk-names.ts";
 import type { HarnessId } from "./model.ts";
 import { switchedOn } from "./room-agent-setup.ts";
@@ -480,3 +481,10 @@ export function isHeldConfigPath(path: string): boolean {
 
 /** Whether everything in a folder of the workspace is held, as in a held folder, each file of it on its own. */
 export const holdsAllInside = (path: string) => isHeldConfigPath(`${path}/_`);
+
+/** A sandbox refused the agent as its profile signs in with a Claude subscription, which a sandbox sign-in from the conversation lets in. */
+export const wantsSandboxSignIn = (problem: HostProblem | undefined) =>
+  (problem?.code === "sandbox-not-ready" || problem?.code === "workspace-sandbox-not-ready") &&
+  problem.why.kind === "blocked" &&
+  problem.why.blocker.kind === "agent-signs-in-elsewhere" &&
+  problem.why.blocker.how === "subscription";

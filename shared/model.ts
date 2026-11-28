@@ -253,6 +253,11 @@ export interface Profile {
   pluginSettings?: Record<string, Record<string, string>>;
   /** The plugins its conversations go without, by name, sorted: no tools, guidance, statusline or commands of theirs. A plugin installed later is on. */
   pluginsOff: string[];
+  /**
+   * Claude Code only: Mirador keeps a token of its Claude subscription that its agents use in sandboxes alone, from
+   * `claude setup-token`, as its sign-in on this computer stays here. The token itself never leaves the host.
+   */
+  sandboxSignedIn?: true;
   createdAt: number;
 }
 
@@ -882,6 +887,8 @@ export type ConversationEvent =
     } & TurnSpend)
   /** The agent's sign-in, started from the conversation in a terminal tab, ended. */
   | { type: "login-ended"; signedIn: boolean }
+  /** The sandbox sign-in of the conversation's profile, started from it in a terminal tab, ended: `signedIn` where its token is kept. */
+  | { type: "sandbox-sign-in-ended"; signedIn: boolean }
   | { type: "usage-limit-wait-stopped" }
   /** The user put the workspace's files back to how they were before one of its turns. */
   | { type: "revert"; revertId: string; toSeq: number; restored: number; removed: number; submodulesLeft?: number; committed?: CommittedFiles }

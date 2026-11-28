@@ -115,8 +115,11 @@ const powershellKeepOpenOnFailure = (command: string[]) =>
  * A failed sign-in keeps its tab open until Enter, so its output can be read; one that worked closes it. The command
  * comes in as arguments, so nothing in it is quoted for the shell.
  */
-export function loginCommand(harness: HarnessId, environment: Record<string, string>, shell = commandShell(() => "/bin/sh", environment), pageOnHost = true): string[] {
-  const signIn = loginCommandFor[harness](environment, pageOnHost);
+export const loginCommand = (harness: HarnessId, environment: Record<string, string>, shell = commandShell(() => "/bin/sh", environment), pageOnHost = true): string[] =>
+  signInKeptOpenOnFailure(loginCommandFor[harness](environment, pageOnHost), shell);
+
+/** A sign-in run in a terminal tab, which stays open where it fails, so what went wrong stays to read. */
+export function signInKeptOpenOnFailure(signIn: string[], shell: ReturnType<typeof commandShell>): string[] {
   if (shell.kind === "powershell") return [shell.program, "-NoLogo", "-NoProfile", "-Command", powershellKeepOpenOnFailure(signIn)];
   const keepOpenOnFailure = '"$@" && exit 0; status=$?; printf "\\nSigning in ended with status %s. Press Enter to close this tab." "$status"; read -r _; exit "$status"';
   return [shell.program, "-c", keepOpenOnFailure, "mirador-login", ...signIn];

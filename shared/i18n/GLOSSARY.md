@@ -102,6 +102,7 @@ These terms stay the same everywhere:
 | read only (a folder the agents in a sandbox can't change) | csak olvasható | solo lectura | 只读 | schreibgeschützt |
 | read and write (a folder the agents in a sandbox can change, a git repository's own top folder) | olvasható és írható | lectura y escritura | 读写 | les- und schreibbar |
 | access (a folder's in a sandbox: read only, or read and write) | hozzáférés | acceso | 访问权限 | Zugriff |
+| sandbox sign-in (the token of a Claude subscription, from claude setup-token, that a profile's agents use in sandboxes alone) | sandbox-bejelentkezés | inicio de sesión para el sandbox | 沙箱登录 | Anmeldung für die Sandbox (die) |
 | let in (someone a room invite took to the room's door) | beenged / beengedés | dejar entrar | 允许进入 | hereinlassen |
 | turn away (someone waiting at a room's door) | elutasít / elutasítás | rechazar | 拒绝 | abweisen |
 | waiting to join (at a room's door, for its owner's OK) | belépésre vár | esperando para entrar | 等待加入 | Warten auf Einlass |

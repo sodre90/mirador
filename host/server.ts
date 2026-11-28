@@ -2130,7 +2130,20 @@ export function startServer(services: HostServices) {
       case "terminal.open-login": {
         const program = await conversations.loginProgram(message.conversationId, pageOnHost(socket.data));
         const { exited, ...opened } = terminals.openProgram(message.conversationId, message.columns, message.rows, program);
-        void exited.then((exitCode) => conversations.loginEnded(message.conversationId, exitCode === 0));
+        void exited?.then((exitCode) => conversations.loginEnded(message.conversationId, exitCode === 0));
+        return reply({ type: "terminal.opened", requestId: message.requestId, ...opened });
+      }
+      case "terminal.open-sandbox-sign-in": {
+        const { conversationId } = message;
+        let signedIn = false;
+        const program = await conversations.sandboxSignInProgram(conversationId, (profile, token) => {
+          if (signedIn) return;
+          signedIn = true;
+          profiles.keepSandboxSignIn(profile.id, token);
+          conversations.sandboxSignInEnded(conversationId, true);
+        });
+        const { exited, ...opened } = terminals.openProgram(conversationId, message.columns, message.rows, program);
+        void exited?.then(() => signedIn || conversations.sandboxSignInEnded(conversationId, false));
         return reply({ type: "terminal.opened", requestId: message.requestId, ...opened });
       }
       case "terminal.follow-job": {

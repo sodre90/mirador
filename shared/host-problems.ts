@@ -44,6 +44,7 @@ export type HostProblem =
   | { code: "agent-cannot-leave-session-behind"; agent: string }
   | { code: "not-a-slash-command"; line: string }
   | { code: "agent-has-no-such-command"; agent: string; line: string }
+  | { code: "agent-has-no-sandbox-sign-in"; agent: string }
   | { code: "unknown-agent"; agent: string }
   | { code: "profile-is-for-other-agent"; profile: string; profileAgent: string; agent: string }
   | { code: "unknown-questions-setting"; value: string }

@@ -213,6 +213,7 @@ export const problems: Messages["problems"] = {
     `Para retroceder en una conversación, el agente tiene que dejar atrás parte de su propia sesión, y ${agent} no puede hacerlo.`,
   notASlashCommand: (line) => `No es un comando slash: ${line}`,
   agentHasNoSuchCommand: (agent, line) => `${agent} no tiene ningún comando como ${line}.`,
+  agentHasNoSandboxSignIn: (agent) => `Solo los perfiles de Claude Code inician sesión para los sandboxes, no los de ${agent}.`,
   unknownAgent: (agent) => `Agente desconocido: ${agent}.`,
   profileIsForOtherAgent: (profile, profileAgent, agent) => `El perfil “${profile}” es para ${profileAgent}, no para ${agent}.`,
   unknownQuestionsSetting: (value) => `Ajuste de Preguntas desconocido: ${value}.`,

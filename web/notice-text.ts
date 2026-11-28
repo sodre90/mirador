@@ -27,6 +27,10 @@ export function noticeText(about: NoticeAbout) {
       return words.signedIn;
     case "sign-in-unfinished":
       return words.signInUnfinished;
+    case "sandbox-signed-in":
+      return words.sandboxSignedIn;
+    case "sandbox-sign-in-unfinished":
+      return words.sandboxSignInUnfinished;
     case "usage-limit-wait-stopped":
       return words.usageLimitWaitStopped;
     case "job-wait-ended": {

@@ -411,6 +411,8 @@ export type ClientMessage =
   | { type: "terminal.replay"; terminalId: string }
   /** Signs the conversation's agent in again, in a new tab of its terminals. */
   | { type: "terminal.open-login"; requestId: string; conversationId: string; columns: number; rows: number }
+  /** Runs `claude setup-token` for the conversation's profile in a terminal tab, whose token its agents use in sandboxes; answered with terminal.opened. */
+  | { type: "terminal.open-sandbox-sign-in"; requestId: string; conversationId: string; columns: number; rows: number }
   | { type: "terminal.follow-job"; requestId: string; conversationId: string; waitId: string; columns: number; rows: number }
   /** Runs a command Claude Code opens a panel for only in its own terminal, in a new tab of the conversation's terminals. */
   | { type: "terminal.open-panel-command"; requestId: string; conversationId: string; line: string; columns: number; rows: number }

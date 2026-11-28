@@ -209,6 +209,7 @@ export const problems: Messages["problems"] = {
   agentCannotLeaveSessionBehind: (agent) => `让对话回退需要 Agent 舍弃它自己会话的一部分，而 ${agent} 做不到。`,
   notASlashCommand: (line) => `${line} 不是斜杠命令。`,
   agentHasNoSuchCommand: (agent, line) => `${agent} 没有类似 ${line} 的命令。`,
+  agentHasNoSandboxSignIn: (agent) => `只有 Claude Code 的配置能为沙箱登录，${agent} 的配置不能。`,
   unknownAgent: (agent) => `未知 Agent：${agent}。`,
   profileIsForOtherAgent: (profile, profileAgent, agent) => `配置“${profile}”适用于 ${profileAgent}，而不是 ${agent}。`,
   unknownQuestionsSetting: (value) => `未知的“问题”设置：${value}。`,

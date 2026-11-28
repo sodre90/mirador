@@ -213,6 +213,7 @@ export const problems = {
     `Taking a conversation back needs the agent to leave part of its own session behind, which ${agent} can't do.`,
   notASlashCommand: (line: string) => `${line} is not a slash command.`,
   agentHasNoSuchCommand: (agent: string, line: string) => `${agent} has no command like ${line}.`,
+  agentHasNoSandboxSignIn: (agent: string) => `Only Claude Code profiles sign in for sandboxes, not ${agent} ones.`,
   unknownAgent: (agent: string) => `Unknown agent ${agent}.`,
   profileIsForOtherAgent: (profile: string, profileAgent: string, agent: string) => `Profile "${profile}" is for ${profileAgent}, not ${agent}.`,
   unknownQuestionsSetting: (value: string) => `Unknown Questions setting ${value}.`,

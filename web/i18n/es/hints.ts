@@ -332,6 +332,8 @@ export const hints: Messages["hints"] = {
   terminalCommand:
     "Claude Code muestra este comando solo en su propia terminal, así que esto lo abre allí: una pestaña de terminal de esta conversación, ejecutada por el Claude Code que usa el perfil de esta conversación. El panel es donde ocurre el comando; la respuesta del agente de arriba es solo su negativa.",
   updateAgent: (command) => `Ejecuta ${command} aquí, como lo haría ! en el cuadro de mensaje. Las conversaciones que inicies después usan la versión nueva.`,
+  signInForSandbox:
+    "Ejecuta claude setup-token en una pestaña de terminal de esta conversación. Apruébalo en el navegador con la cuenta de Claude que este perfil debe usar en los sandboxes. Mirador guarda el token que crea solo para los sandboxes, oculto en la terminal, y tu mensaje se envía de nuevo.",
   logIn:
     "Abre el inicio de sesión propio del agente en una pestaña de terminal de esta conversación, con su perfil, de modo que un perfil con cuenta propia inicie sesión con esa. Cuando diga que has iniciado sesión, envía tu mensaje de nuevo.",
   queuedGrip: "Arrastra para cambiar el orden en que salen los mensajes en cola: salen desde arriba.",

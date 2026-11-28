@@ -214,6 +214,7 @@ export const problems: Messages["problems"] = {
     `Um eine Unterhaltung zurückzuspulen, muss der Agent einen Teil seiner eigenen Sitzung zurücklassen, und das kann ${agent} nicht.`,
   notASlashCommand: (line) => `Kein Slash-Befehl: ${line}`,
   agentHasNoSuchCommand: (agent, line) => `${agent} hat keinen Befehl wie ${line}.`,
+  agentHasNoSandboxSignIn: (agent) => `Nur Profile von Claude Code melden sich für Sandboxes an, nicht die von ${agent}.`,
   unknownAgent: (agent) => `Unbekannter Agent: ${agent}.`,
   profileIsForOtherAgent: (profile, profileAgent, agent) => `Das Profil „${profile}“ ist für ${profileAgent}, nicht für ${agent}.`,
   unknownQuestionsSetting: (value) => `Unbekannte Einstellung für Fragen: ${value}.`,

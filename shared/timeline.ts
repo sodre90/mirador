@@ -14,6 +14,7 @@ import type {
 } from "@agentclientprotocol/sdk/unstable";
 import { hookNoticeIn } from "./hook-message.ts";
 import type { HostProblem } from "./host-problems.ts";
+import { wantsSandboxSignIn } from "./sandbox.ts";
 import type { StoredEvent } from "./model.ts";
 import { englishNoticeText, MODE_NAME_META_KEY, turnRecapOf, type NoticeAbout } from "./notices.ts";
 import type { EditDiff } from "./review.ts";
@@ -209,10 +210,21 @@ export type TimelineBlock =
   | ErrorBlock;
 
 /**
- * `authRequired` until a sign-in started from the conversation succeeds, then `signedInSince`.
+ * `authRequired` until a sign-in started from the conversation succeeds, then `signedInSince`; `wantsSandboxSignIn`
+ * likewise until a sandbox sign-in succeeds, then `sandboxSignedInSince`.
  * `tryAgainSeq`: the error ended the latest turn, which the user can try again by naming this error.
  */
-type ErrorBlock = Origin & { kind: "error"; message: string; problem?: HostProblem; usageLimit?: true; authRequired?: true; signedInSince?: true; tryAgainSeq?: number };
+type ErrorBlock = Origin & {
+  kind: "error";
+  message: string;
+  problem?: HostProblem;
+  usageLimit?: true;
+  authRequired?: true;
+  signedInSince?: true;
+  wantsSandboxSignIn?: true;
+  sandboxSignedInSince?: true;
+  tryAgainSeq?: number;
+};
 
 /** A person's message or command names them by their id, unless it names nobody, as a message replayed from an agent's session does. */
 export type PersonAuthor = { personId: string | null };
@@ -411,6 +423,7 @@ class TimelineBuilder {
   private readonly callsNamingASession: Set<string>;
   private readonly commands = new UserCommandLog();
   private readonly errorsAwaitingSignIn: ErrorBlock[] = [];
+  private readonly errorsAwaitingSandboxSignIn: ErrorBlock[] = [];
   private failedTurn: ErrorBlock | null = null;
   /** Text after it belongs to a later turn, so it doesn't join it. */
   private lastBlockOfEndedTurn: TimelineBlock | undefined;
@@ -484,8 +497,10 @@ class TimelineBuilder {
           ...(event.problem && { problem: event.problem }),
           ...(event.usageLimit && { usageLimit: true as const }),
           ...(event.authRequired && { authRequired: true as const }),
+          ...(wantsSandboxSignIn(event.problem) && { wantsSandboxSignIn: true as const }),
         };
         if (block.authRequired) this.errorsAwaitingSignIn.push(block);
+        if (block.wantsSandboxSignIn) this.errorsAwaitingSandboxSignIn.push(block);
         if (offersTryAgain(event)) {
           this.leaveFailedTurnBehind();
           block.tryAgainSeq = seq;
@@ -496,6 +511,9 @@ class TimelineBuilder {
       case "login-ended":
         if (event.signedIn) this.errorsAwaitingSignIn.splice(0).forEach((block) => (block.signedInSince = true));
         return this.push(noticeBlock(origin, { kind: event.signedIn ? "signed-in" : "sign-in-unfinished" }));
+      case "sandbox-sign-in-ended":
+        if (event.signedIn) this.errorsAwaitingSandboxSignIn.splice(0).forEach((block) => (block.sandboxSignedInSince = true));
+        return this.push(noticeBlock(origin, { kind: event.signedIn ? "sandbox-signed-in" : "sandbox-sign-in-unfinished" }));
       case "usage-limit-wait-stopped":
         return this.push(noticeBlock(origin, { kind: "usage-limit-wait-stopped" }));
       case "job-wait-ended":

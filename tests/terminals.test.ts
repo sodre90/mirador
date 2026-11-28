@@ -7,7 +7,8 @@ import type { ServerMessage } from "../shared/protocol.ts";
 import { findPowerShell, programName } from "../host/command-shell.ts";
 import { Hub, type BrowserSocket } from "../host/hub.ts";
 import { Store } from "../host/store.ts";
-import { readTitle, RESTARTED_NOTE, TerminalService } from "../host/terminals.ts";
+import { setupTokenCaught } from "../host/sandbox/sandbox-sign-in.ts";
+import { MASKED_SECRET, readTitle, RESTARTED_NOTE, TerminalService } from "../host/terminals.ts";
 import { removeOnceFree } from "./remove-once-free.ts";
 
 let workspaceDir: string;
@@ -474,7 +475,7 @@ test("a program with a key runs once: opening it again while it runs shows its t
   const follow = { tabName: "follow", key: "follow job", command: waitingForALine };
   const first = terminals.openProgram("c1", 80, 24, follow);
   const again = terminals.openProgram("c1", 80, 24, follow);
-  expect({ tabId: again.tabId, terminalId: again.terminalId }).toEqual({ tabId: first.tabId, terminalId: first.terminalId });
+  expect(again).toEqual({ tabId: first.tabId, terminalId: first.terminalId });
   const unkeyed = terminals.openProgram("c1", 80, 24, { tabName: "follow", command: waitingForALine });
   expect(lastTabs(browser.received)?.map(({ id }) => id)).toEqual([first.tabId, unkeyed.tabId]);
 
@@ -482,6 +483,22 @@ test("a program with a key runs once: opening it again while it runs shows its t
   await first.exited;
   const afterEnding = terminals.openProgram("c1", 80, 24, follow);
   expect(afterEnding.terminalId).not.toBe(first.terminalId);
+});
+
+test("a sign-in's token shows masked and is caught whole, where its output cuts it in two and where it ends the output", async () => {
+  const browser = fakeBrowser();
+  terminals.attach(browser.socket, "c1");
+  const caught: string[] = [];
+  const [first, last] = [`sk-ant-oat01-${"A".repeat(30)}`, `sk-ant-oat01-${"B".repeat(30)}`];
+  const printing = `process.stdout.write("Your token: ${first.slice(0, 20)}"); setTimeout(() => { process.stdout.write("${first.slice(20)}\\r\\nAnother: ${last}"); process.exit(0); }, 300)`;
+  const program = terminals.openProgram("c1", 80, 24, { tabName: "sign-in", command: [process.execPath, "-e", printing], printsSecret: setupTokenCaught((token) => caught.push(token)) });
+  await program.exited;
+  await eventually(() => caught.length, (count) => count === 2);
+  expect(caught).toEqual([first, last]);
+  const shown = outputOf(browser.received);
+  expect(shown).toContain(`Your token: ${MASKED_SECRET}`);
+  expect(shown).toContain(`Another: ${MASKED_SECRET}`);
+  expect(shown).not.toContain("sk-ant-oat01");
 });
 
 test("shutting down waits for every shell to exit, so a host that re-executes itself leaves no zombie behind", async () => {
@@ -631,7 +648,7 @@ test.skipIf(process.platform === "win32")("a program that ignores the hangup is 
   const program = terminals.openProgram("c1", 80, 24, { tabName: "stubborn", command });
   const group = Number((await eventually(() => outputOf(browser.received).match(/ignoring-(\d+)/)?.[1], (pid) => pid !== undefined))!);
   terminals.close(program.terminalId);
-  const ended = await Promise.race([program.exited.then(() => "ended"), Bun.sleep(8_000).then(() => "still running")]);
+  const ended = await Promise.race([program.exited!.then(() => "ended"), Bun.sleep(8_000).then(() => "still running")]);
   expect(ended).toBe("ended");
   expect(await eventually(() => isRunning(-group), (running) => !running)).toBe(false);
 }, 15_000);

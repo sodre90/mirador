@@ -305,6 +305,8 @@ export const hints: Messages["hints"] = {
   terminalCommand:
     "Claude Code 只在它自己的终端中显示这个，所以这里会在那里打开它：这个对话的一个终端标签页，由这个对话的配置所用的 Claude Code 运行。面板是命令生效的地方；上面 Agent 的回答只是它的拒绝。",
   updateAgent: (command) => `在这里运行 ${command}，就像在消息框中用 ! 运行一样。之后开始的对话会使用新版本。`,
+  signInForSandbox:
+    "在这个对话的终端标签页中运行 claude setup-token。请在浏览器中用这个配置在沙箱中应使用的 Claude 账号批准。Mirador 只为沙箱保存它生成的令牌，并在终端中隐藏它，然后你的消息会再次发送。",
   logIn:
     "在这个对话的终端标签页中打开 Agent 自己的登录流程，使用它的配置，所以有自己账号的配置会登录那个账号。显示你已登录后，请重新发送你的消息。",
   queuedGrip: "拖动可改变排队消息发出的顺序：它们从最上面开始发出。",

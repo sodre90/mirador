@@ -20,7 +20,7 @@ import { belongsToSandbox } from "./sandbox/sandboxes.ts";
 import type { Store } from "./store.ts";
 
 /** Why an agent of this profile can't run in a workspace's sandbox, where it gets none of a room's choices of its environment; null where it can. */
-const workspaceProfileBlocker = (profile: Profile) => profileSandboxBlocker(profile, NO_ENVIRONMENT_CHOICES);
+const workspaceProfileBlocker = (profile: Profile, store: Pick<Store, "sandboxSignInOf">) => profileSandboxBlocker(profile, NO_ENVIRONMENT_CHOICES, store.sandboxSignInOf(profile.id));
 
 /** What a workspace's sandbox setting needs of its conversations. */
 export interface WorkspaceConversations {
@@ -76,7 +76,7 @@ export class WorkspaceSandboxes {
     this.conversations.republishAll(placed.filter((id) => !changing.includes(id)));
     if (turnsOn) changing.forEach((id) => this.terminals.closeAgentPrograms(id));
     const startsOn = this.startsOnProfile(workspaceId);
-    if (sandbox.on) this.sandboxes.prepare(workspaceSandbox(workspaceId), startsOn && workspaceProfileBlocker(startsOn) === null ? [startsOn] : []);
+    if (sandbox.on) this.sandboxes.prepare(workspaceSandbox(workspaceId), startsOn && workspaceProfileBlocker(startsOn, this.store) === null ? [startsOn] : []);
   }
 
   /** Each of the workspace's own conversations comes in or stays out as the sandbox turns on; they all are, by their ids. */
@@ -143,10 +143,10 @@ export class WorkspaceSandboxes {
     return {
       availability: await this.sandboxes.availabilityNow(),
       blockers: refused ? [refused] : [],
-      startsOn: startsOnProfile ? workspaceProfileBlocker(startsOnProfile) : null,
+      startsOn: startsOnProfile ? workspaceProfileBlocker(startsOnProfile, this.store) : null,
       profilesThatRun: this.store
         .listProfiles()
-        .filter((profile) => workspaceProfileBlocker(profile) === null)
+        .filter((profile) => workspaceProfileBlocker(profile, this.store) === null)
         .map(({ id }) => id),
     };
   }

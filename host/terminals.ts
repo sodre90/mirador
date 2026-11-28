@@ -63,6 +63,9 @@ interface Shell {
   programKey: string | undefined;
   runsTheAgent: boolean;
   saved: boolean;
+  printsSecret: PrintedSecret | undefined;
+  heldOutput: string;
+  leastColumns: number;
 }
 
 /** What reattaching windows are sent, and the store keeps: the scrollback, led by what its trimmed output left it needing. */
@@ -77,7 +80,22 @@ export interface TerminalProgram {
   key?: string;
   /** The conversation's agent itself, as its sign-in and Claude Code's own panels run it, on this computer. */
   runsTheAgent?: boolean;
+  /** What it prints that no page may see, as a sign-in's token: each one is caught, and shown masked. */
+  printsSecret?: PrintedSecret;
+  /** The least width of its terminal, whatever the page's, so a long line it prints, as a token, stays whole. */
+  leastColumns?: number;
 }
+
+export interface PrintedSecret {
+  /**
+   * The output to show, each secret in it caught and masked, and the end of it that waits for the output after it, where
+   * a secret it starts may go on; nothing waits once there is no `more`.
+   */
+  masked(output: string, more: boolean): { shown: string; held: string };
+}
+
+/** What a secret shows as in the terminal instead. */
+export const MASKED_SECRET = "••••••••";
 
 interface Tab {
   id: string;
@@ -182,10 +200,10 @@ export class TerminalService {
     return { tabId: tab.id, terminalId: shell.id };
   }
 
-  /** Runs `program` in a new tab, which closes when it exits, unless the program's key says it already runs. */
-  openProgram(conversationId: string, columns: number, rows: number, program: TerminalProgram) {
+  /** Runs `program` in a new tab, which closes when it exits, unless the program's key says it already runs: only a program it starts gives its exit. */
+  openProgram(conversationId: string, columns: number, rows: number, program: TerminalProgram): { tabId: string; terminalId: string; exited?: Promise<number> } {
     const running = program.key === undefined ? undefined : this.shellsIn(conversationId).find(({ programKey }) => programKey === program.key);
-    if (running) return { tabId: running.tabId, terminalId: running.id, exited: running.child.exited };
+    if (running) return { tabId: running.tabId, terminalId: running.id };
     const cwd = this.existingFolderOf(conversationId);
     this.restartSavedTabs(conversationId);
     const tab = this.newTab(conversationId, program);
@@ -201,7 +219,8 @@ export class TerminalService {
   }
 
   resize(terminalId: string, columns: number, rows: number) {
-    this.shells.get(terminalId)?.child.terminal?.resize(dimension(columns), dimension(rows));
+    const shell = this.shells.get(terminalId);
+    shell?.child.terminal?.resize(dimension(Math.max(columns, shell.leastColumns)), dimension(rows));
   }
 
   /** Forgets the output above the cursor's line, in every window and in what a reload replays, like ⌘K in a macOS terminal. */
@@ -375,12 +394,15 @@ export class TerminalService {
       programKey: program?.key,
       runsTheAgent: program?.runsTheAgent === true,
       saved: tab.saved,
+      printsSecret: program?.printsSecret,
+      heldOutput: "",
+      leastColumns: program?.leastColumns ?? 0,
     };
     shell.child = Bun.spawn(command, {
       cwd,
       env: { ...environment, TERM: "xterm-256color", COLORTERM: "truecolor" },
       terminal: {
-        cols: dimension(columns),
+        cols: dimension(Math.max(columns, shell.leastColumns)),
         rows: dimension(rows),
         data: (_terminal, bytes) => this.received(shell, decoder.decode(bytes, { stream: true })),
       },
@@ -390,7 +412,14 @@ export class TerminalService {
     return shell;
   }
 
-  private received(shell: Shell, text: string) {
+  private received(shell: Shell, printed: string) {
+    if (!shell.printsSecret) return this.show(shell, printed);
+    const { shown, held } = shell.printsSecret.masked(shell.heldOutput + printed, true);
+    shell.heldOutput = held;
+    this.show(shell, shown);
+  }
+
+  private show(shell: Shell, text: string) {
     if (!text) return;
     shell.scrollback.push(text);
     shell.scrollbackLength += text.length;
@@ -415,6 +444,7 @@ export class TerminalService {
   }
 
   private ended(shell: Shell, exitCode: number) {
+    if (shell.printsSecret) this.show(shell, shell.printsSecret.masked(shell.heldOutput, false).shown);
     shell.child.terminal?.close();
     this.shells.delete(shell.id);
     this.unsavedScrollback.delete(shell);

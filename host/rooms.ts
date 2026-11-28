@@ -647,7 +647,7 @@ export class RoomService implements RoomRules, TurnListener {
   private sandboxBlockerOf({ profileId, brought, variables }: RoomAgent): SandboxBlocker | null {
     const profile = this.store.findProfile(profileId);
     if (brought || !profile) return null;
-    return profileSandboxBlocker(profile, { variables, wholeHostEnvironment: false });
+    return profileSandboxBlocker(profile, { variables, wholeHostEnvironment: false }, this.store.sandboxSignInOf(profile.id));
   }
 
   async answerHeldChange(roomId: string, changeId: string, answer: HeldChangeAnswer) {

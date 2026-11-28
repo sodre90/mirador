@@ -157,6 +157,8 @@ export function problemText(problem: HostProblem, words: ProblemWords): string {
       return words.notASlashCommand(problem.line);
     case "agent-has-no-such-command":
       return words.agentHasNoSuchCommand(problem.agent, problem.line);
+    case "agent-has-no-sandbox-sign-in":
+      return words.agentHasNoSandboxSignIn(problem.agent);
     case "unknown-agent":
       return words.unknownAgent(problem.agent);
     case "profile-is-for-other-agent":

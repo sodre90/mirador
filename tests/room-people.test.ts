@@ -188,6 +188,7 @@ const EVERY_CLIENT_MESSAGE: Record<ClientMessage["type"], true> = {
   "terminal.open": true,
   "terminal.replay": true,
   "terminal.open-login": true,
+  "terminal.open-sandbox-sign-in": true,
   "terminal.follow-job": true,
   "terminal.open-panel-command": true,
   "terminal.input": true,

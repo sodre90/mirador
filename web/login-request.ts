@@ -7,3 +7,5 @@ export const loginSlashCommand: SlashCommand = { name: "login", description: "Si
 export const isLoginCommand = (message: string) => message.trim() === `/${loginSlashCommand.name}`;
 
 export const requestLogin = (conversationId: string) => requestProgram({ type: "terminal.open-login", conversationId });
+
+export const requestSandboxSignIn = (conversationId: string) => requestProgram({ type: "terminal.open-sandbox-sign-in", conversationId });
