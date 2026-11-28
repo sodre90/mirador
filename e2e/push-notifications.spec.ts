@@ -1,4 +1,4 @@
-import { expect, test, type Browser, type Page } from "@playwright/test";
+import { expect, test, type Browser, type Locator, type Page } from "@playwright/test";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { openedPushBlob, type ClearMessage, type PushKey, type PushRequest } from "../shared/push.ts";
@@ -98,6 +98,15 @@ async function joinedPhone(page: Page, browser: Browser) {
 
 const askInBackground = (conversationId: string, question: string) =>
   void callCanvasTool(host, conversationId, "ask", { question, options: [{ label: "Yes" }, { label: "No" }] }).catch(() => {});
+
+/** Both picks happen in one task, so the host's answer to the first comes in after the second. */
+const pickBeforeTheHostAnswers = (choice: Locator, first: string, second: string) =>
+  choice.evaluate((select: HTMLSelectElement, picks) => {
+    for (const pick of picks) {
+      select.value = pick;
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+  }, [first, second]);
 
 /** A turn's end, then the 5 s the Mac gives the phone to say it showed the notification before it pushes. */
 const FINISHED_PUSH_TIMEOUT_MS = 30_000;
@@ -221,13 +230,14 @@ test("a phone that doesn't show a notification gets it pushed through the relay 
 test("with no relay of its own set, the Mac pushes through Mirador's relay with the grant the phone holds, and no token", async ({ page, browser }) => {
   await signInWithWorkspace(page, host);
   const settings = await openSettings(page, "Notifications");
-  await settings.locator(".push-relay-choice").selectOption("mirador");
+  const choice = settings.locator(".push-relay-choice");
+  await pickBeforeTheHostAnswers(choice, "mirador", "own");
+  await expect(settings.locator(".push-relay-token"), "Mirador's relay, once saved, forgot the token of your own").toHaveAttribute("placeholder", "");
+  await expect(choice, "the relay of your own, picked while Mirador's was being saved, stays picked").toHaveValue("own");
+  await choice.selectOption("mirador");
   await expect(settings.locator(".push-relay-address")).toBeHidden();
   await expect(settings.locator(".push-relay-choice option:checked")).toHaveText(`Mirador's relay (${new URL(relayOrigin()).host})`);
   await expect(settings.locator(".push-relay-hint")).toHaveText("Each phone gets a grant from Mirador's relay, which lets this machine push to it.");
-  await settings.locator(".push-relay-choice").selectOption("own");
-  await expect(settings.locator(".push-relay-token"), "Mirador's relay forgot the token of your own").toHaveAttribute("placeholder", "");
-  await settings.locator(".push-relay-choice").selectOption("mirador");
   await page.reload();
   const reopened = await openSettings(page, "Notifications");
   await expect(reopened.locator(".push-relay-choice")).toHaveValue("mirador");

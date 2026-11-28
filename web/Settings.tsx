@@ -1339,20 +1339,22 @@ function PushRelaySettings({ pushRelay }: { pushRelay: PushRelaySetting }) {
   const row = useSettingRow();
   const savedChoice = pushRelayChoiceOf(pushRelay);
   const miradorRelay = pushRelayHost(pushRelay.miradorRelay);
-  const [choice, setChoice] = useState<PushRelayChoice>(savedChoice);
+  const [unsavedChoice, setUnsavedChoice] = useState<PushRelayChoice | null>(null);
+  const choice = unsavedChoice ?? savedChoice;
   const [address, setAddress] = useState(pushRelay.address ?? "");
   const [token, setToken] = useState("");
   const [problem, setProblem] = useState<string | null>(null);
-  useEffect(() => setChoice(savedChoice), [savedChoice]);
   useEffect(() => setAddress(pushRelay.address ?? ""), [pushRelay.address]);
   const save = async (relay: PushRelayRequest) => {
     const saved = await saveSetting((requestId) => ({ type: "settings.set-push-relay", requestId, relay }));
     setProblem(saved);
-    if (!saved) setToken("");
+    if (saved) return;
+    setToken("");
+    setUnsavedChoice((unsaved) => (unsaved === relay.choice ? null : unsaved));
   };
   const saveOwnRelay = () => save({ choice: "own", address, token: token.trim() || null });
   const choose = (chosen: PushRelayChoice) => {
-    setChoice(chosen);
+    setUnsavedChoice(chosen);
     setProblem(null);
     if (chosen !== "own") void save({ choice: chosen });
   };
