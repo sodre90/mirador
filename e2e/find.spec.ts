@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
-import { addWorkspace, currentMatch, reloadFromRestartedHost, signIn, startConversation } from "./helpers.ts";
+import { addWorkspace, currentMatch, reloadFromRestartedHost, signIn, signInWithWorkspace, startConversation } from "./helpers.ts";
 import { TestHost } from "./test-host.ts";
 
 const host = new TestHost();
@@ -138,6 +138,36 @@ test("Cmd+F finds text anywhere in the conversation, in entries not loaded yet a
     await expect(input).toHaveValue("");
     await expect(bar.getByRole("button", { name: "Match case" })).toHaveAttribute("aria-pressed", "false");
   });
+});
+
+test("Cmd+F finds a question's text with quotes and line breaks in its tool card, which shows the question as JSON", async ({ page }) => {
+  await signInWithWorkspace(page, host);
+  const conversationId = await startConversation(page);
+  await host.stop();
+  const askTurn = [
+    { type: "user-message", text: "Which rule wins?" },
+    update({
+      sessionUpdate: "tool_call",
+      toolCallId: "toolu_ask",
+      title: "mcp__canvas__ask",
+      kind: "other",
+      status: "completed",
+      rawInput: { question: '"None, pushes off" applies to the gate.\nWhich rule wins?', options: [{ label: "The gate" }, { label: "The fence" }] },
+    }),
+    turnEnd,
+  ];
+  execFileSync("bun", [join(import.meta.dirname, "seed-events.ts"), join(host.dataDir, "state.sqlite"), conversationId, JSON.stringify(askTurn)]);
+  await host.start();
+  await reloadFromRestartedHost(page);
+  const askCard = page.locator(".timeline:visible details.tool", { hasText: "canvas · ask" });
+  await expect(askCard).not.toHaveAttribute("open");
+
+  await page.keyboard.press("Control+KeyF");
+  const bar = page.getByRole("search");
+  await bar.getByLabel("Find in this conversation").fill('"None, pushes off" applies');
+  await expect(bar.locator(".find-tally")).toHaveText("1 of 1");
+  await expect(askCard).toHaveAttribute("open");
+  expect(await currentMatch(page)).toMatchObject({ text: '\\"None, pushes off\\" applies', entry: expect.stringContaining("canvas · ask"), inView: true });
 });
 
 test("keys typed right after opening the find bar stay in its query", async ({ page }) => {

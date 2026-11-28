@@ -77,6 +77,34 @@ describe("a review's find options", () => {
   });
 });
 
+describe("finding the query also as a tool card's raw input shows it, written as JSON", () => {
+  const asInJson = { caseSensitive: false, alsoAsInJson: true };
+  const shownInput = JSON.stringify({ question: '"None, pushes off" applies to the gate.\nWhich rule wins?' }, null, 2);
+  const textAt = (text: string, [[start, end]]: [number, number][]) => text.slice(start, end);
+
+  test("finds a quote written as \\\", taking in the backslash, where the plain query finds nothing", () => {
+    const offsets = matchOffsets(shownInput, '"None, pushes off" applies', asInJson);
+    expect(textAt(shownInput, offsets)).toBe('\\"None, pushes off\\" applies');
+    expect(matchOffsets(shownInput, '"None, pushes off" applies')).toEqual([]);
+  });
+
+  test("finds a backslash written as \\\\", () => {
+    const shownPath = JSON.stringify({ file_path: "C:\\Users\\notes.md" });
+    expect(textAt(shownPath, matchOffsets(shownPath, "C:\\Users", asInJson))).toBe("C:\\\\Users");
+  });
+
+  test("counts each occurrence once, written plainly or as JSON", () => {
+    const text = `She said "hi" and wrote ${JSON.stringify('"hi"')}.`;
+    expect(matchCount(text, '"hi"', asInJson)).toBe(2);
+    expect(matchCount(text, '"HI"', { ...asInJson, caseSensitive: true })).toBe(0);
+  });
+
+  test("a query with nothing JSON escapes finds what it finds without the option", () => {
+    expect(matchOffsets(shownInput, "rule wins", asInJson)).toEqual(matchOffsets(shownInput, "rule wins"));
+    expect(matchOffsets(shownInput, "rule wins", asInJson)).toHaveLength(1);
+  });
+});
+
 describe("occurrencesIn", () => {
   test("counts what a folded tool card holds: its output, its input and what its subagent did", () => {
     const [card] = buildTimeline(

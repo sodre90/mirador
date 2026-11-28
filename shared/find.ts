@@ -4,11 +4,15 @@ export const MIN_SEARCH_LENGTH = 2;
 
 const escapedForRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-/** Finding ignores case unless the find bar's Match case is on; a review's find bar can also match whole words or a regular expression. */
+/**
+ * Finding ignores case unless the find bar's Match case is on; a review's find bar can also match whole words or a regular expression,
+ * and the chat's find bar also finds the query as a tool card's raw input shows it, written as JSON.
+ */
 export interface MatchOptions {
   caseSensitive: boolean;
   wholeWord?: boolean;
   regex?: boolean;
+  alsoAsInJson?: boolean;
 }
 
 export const ignoringCase: MatchOptions = { caseSensitive: false };
@@ -16,9 +20,18 @@ export const ignoringCase: MatchOptions = { caseSensitive: false };
 /** A word is made of letters, digits and _, as in code. */
 const asWholeWord = (source: string) => `(?<!\\w)(?:${source})(?!\\w)`;
 
+/** As JSON.stringify writes the query within a string: `"` as `\"`, `\` as `\\`, a line break as `\n`. */
+const asInJson = (query: string) => JSON.stringify(query).slice(1, -1);
+
+/** The written-as-JSON form comes first, so that a match starting at its backslash takes in the whole of it. */
+function literalSource(query: string, alsoAsInJson: boolean) {
+  const inJson = asInJson(query);
+  return alsoAsInJson && inJson !== query ? `${escapedForRegExp(inJson)}|${escapedForRegExp(query)}` : escapedForRegExp(query);
+}
+
 /** Null for a regular expression that does not compile, which finds nothing. */
-function patternFor(query: string, { caseSensitive, wholeWord = false, regex = false }: MatchOptions) {
-  const source = regex ? query : escapedForRegExp(query);
+function patternFor(query: string, { caseSensitive, wholeWord = false, regex = false, alsoAsInJson = false }: MatchOptions) {
+  const source = regex ? query : literalSource(query, alsoAsInJson);
   try {
     return new RegExp(wholeWord ? asWholeWord(source) : source, caseSensitive ? "g" : "gi");
   } catch {

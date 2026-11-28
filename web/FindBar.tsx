@@ -72,7 +72,12 @@ function textNodesOf(entry: Element) {
   return nodes;
 }
 
-const rangesIn = (entry: Element, query: string, options: MatchOptions, limit: number) => rangesOver(textNodesOf(entry), query, options, limit);
+/** An entry in the page shows a tool call's raw input as JSON, while its stored text, which the host searches, holds the input's words. */
+const asRendered = (options: MatchOptions): MatchOptions => ({ ...options, alsoAsInJson: true });
+
+const rangesIn = (entry: Element, query: string, options: MatchOptions, limit: number) => rangesOver(textNodesOf(entry), query, asRendered(options), limit);
+
+const renderedCount = (entry: Element, query: string, options: MatchOptions) => matchCount(joinedText(textNodesOf(entry)).text, query, asRendered(options));
 
 const rangeAt = (entry: Element, query: string, options: MatchOptions, occurrence: number) => rangesIn(entry, query, options, occurrence + 1)[occurrence] ?? null;
 
@@ -241,7 +246,7 @@ export function useFind({
       ...loadedEntries(element).map((entryElement, offset) => ({
         key: timeline[firstLoaded + offset]!.key,
         entry: firstLoaded + offset,
-        count: matchCount(joinedText(textNodesOf(entryElement)).text, query, options),
+        count: renderedCount(entryElement, query, options),
         element: entryElement,
       })),
     ].filter(({ count }) => count > 0);
