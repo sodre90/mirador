@@ -144,3 +144,22 @@ export function selinuxEnforcingAt(enforce: string) {
 
 /** What the `podman` or `docker` at `program` says of itself, and whether SELinux enforces its rules, as `selinuxEnforce` says. */
 export const askEngine = (program: string, selinuxEnforce: string): EngineHere => ({ info: engineSays(program, ["info", "--format", "json"]), selinuxEnforcing: selinuxEnforcingAt(selinuxEnforce) });
+
+/** Where a Linux engine's program is, to ask it of itself, and the file that says whether SELinux enforces its rules. */
+export interface EngineProgram {
+  program: string;
+  selinuxEnforce: string;
+}
+
+/** A daemon that is up answers within a second; a page waits for the answer. */
+export const ENGINE_ASKED_AGAIN_WITHIN_MS = 5_000;
+
+/** What the engine says of itself, asked again while Mirador runs, as where its daemon had not started with Mirador: the host goes on meanwhile. */
+export async function askEngineAgain(program: string, selinuxEnforce: string, withinMs = ENGINE_ASKED_AGAIN_WITHIN_MS): Promise<EngineHere> {
+  const asked = Bun.spawn([program, "info", "--format", "json"], { stdin: "ignore", stdout: "pipe", stderr: "ignore", timeout: withinMs });
+  const [printed, exitCode] = await Promise.all([new Response(asked.stdout).text(), asked.exited]);
+  return { info: exitCode === 0 ? printed : null, selinuxEnforcing: selinuxEnforcingAt(selinuxEnforce) };
+}
+
+/** Whether two answers of whether sandboxes run here are the same. */
+export const sameAvailability = (one: SandboxAvailability, other: SandboxAvailability) => JSON.stringify(one) === JSON.stringify(other);

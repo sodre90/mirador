@@ -12,6 +12,7 @@ const host = new TestHost({
 const callsOf = (engine: "podman" | "docker") => join(host.root, `${engine}-calls`);
 const callsSoFar = (engine: "podman" | "docker") => (existsSync(callsOf(engine)) ? readFileSync(callsOf(engine), "utf8").trim().split("\n") : []);
 const dockerRunsAsRoot = () => join(host.root, "docker-runs-as-root");
+const dockerDaemonDown = () => join(host.root, "docker-daemon-down");
 
 test.describe.configure({ mode: "serial" });
 test.skip(process.platform !== "linux", "Podman and Docker sandboxes run on Linux only.");
@@ -21,7 +22,7 @@ const writeProgram = (name: string, script: string) => {
   chmodSync(join(host.fakeProgramsDir, name), 0o755);
 };
 
-/** Rootless Podman and Docker on PATH, whose base images are there already and whose installs succeed; Docker runs as root once told to. */
+/** Rootless Podman and Docker on PATH, whose base images are there already and whose installs succeed; Docker runs as root, or its daemon doesn't answer, once told to. */
 function writeFakeEngines() {
   mkdirSync(host.fakeProgramsDir, { recursive: true });
   writeProgram(
@@ -40,7 +41,8 @@ esac
 echo "$*" >> '${callsOf("docker")}'
 case "$1" in
   info)
-    if [ -e '${dockerRunsAsRoot()}' ]; then echo '{"ServerVersion":"29.1.0","SecurityOptions":["name=seccomp,profile=builtin"]}'
+    if [ -e '${dockerDaemonDown()}' ]; then echo 'Cannot connect to the Docker daemon' >&2; exit 1
+    elif [ -e '${dockerRunsAsRoot()}' ]; then echo '{"ServerVersion":"29.1.0","SecurityOptions":["name=seccomp,profile=builtin"]}'
     else echo '{"ServerVersion":"29.1.0","SecurityOptions":["name=seccomp,profile=builtin","name=rootless"]}'; fi ;;
 esac
 `,
@@ -140,4 +142,36 @@ test("a chosen Docker that runs as root stays chosen, and Settings and the room 
   await expect(section.locator(".sandbox-engine-why-not")).toHaveCount(0);
   await settings.getByRole("button", { name: "Close" }).click();
   rmSync(dockerRunsAsRoot());
+});
+
+test("a Docker that runs sandboxes only after Mirador started is noticed as Settings or a room asks again, with no restart", async ({ page }) => {
+  await signIn(page, host);
+  const { settings, section, engine } = await sandboxSettings(page);
+  await expect(engine.locator("option")).toHaveText(["Podman", "Docker"]);
+  await engine.selectOption("docker");
+  await settings.getByRole("button", { name: "Close" }).click();
+
+  writeFileSync(dockerDaemonDown(), "");
+  await host.restart();
+  await signIn(page, host);
+  await sandboxSettings(page);
+  await expect(engine.locator("option")).toHaveText(["Podman", "Docker: can't run sandboxes here"]);
+  const daemonDown = "Docker doesn't work for Mirador's user here: docker info tells why.";
+  await expect(section.locator(".sandbox-engine-why-not")).toHaveText(daemonDown);
+  await settings.getByRole("button", { name: "Close" }).click();
+  const { dialog } = await roomKind(page, "Before Docker starts");
+  await expect(dialog.locator(".room-sandbox-reasons li")).toHaveText([daemonDown]);
+  await dialog.getByRole("button", { name: "Close" }).click();
+
+  rmSync(dockerDaemonDown());
+  const reopened = await openRoomSettings(page, "Before Docker starts", "Permissions");
+  await expect(reopened.locator(".room-sandbox-kind")).toHaveText("Runs in a Docker container, which shares this computer's Linux kernel: weaker than a VM.");
+  await sandboxSwitch(reopened).click();
+  await reopened.locator(".room-sandbox-shared-kernel").getByRole("button", { name: "Turn on anyway" }).click();
+  await expect(reopened.locator(".room-sandbox-setup")).toHaveText("Set up on this computer.");
+  await reopened.getByRole("button", { name: "Close" }).click();
+
+  await sandboxSettings(page);
+  await expect(engine.locator("option")).toHaveText(["Podman", "Docker"]);
+  await expect(section.locator(".sandbox-engine-why-not")).toHaveCount(0);
 });

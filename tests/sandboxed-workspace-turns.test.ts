@@ -96,6 +96,7 @@ function sandboxedWorkspace(sandbox: SandboxSetting = SANDBOX_ON) {
     networkOf: () => "closed" as const,
     otherSandboxes: () => ({ workspaces: [], writableFolders: [], writableFoldersOn: [], foldersLeft: [] }),
     foldersStarted: () => {},
+    runtimeChanged: () => {},
     places: { home: "/nonexistent-home", dataDir: config.dataDir, checkout: "/nonexistent-checkout", computersOwn: [] },
   };
   const sandboxes = new Sandboxes(launcher, host, 60_000);
@@ -107,6 +108,7 @@ function sandboxedWorkspace(sandbox: SandboxSetting = SANDBOX_ON) {
   const control: SandboxControl = {
     ...NO_SANDBOX_CONTROL,
     availability: () => sandboxes.availability(),
+    availabilityNow: () => sandboxes.availabilityNow(),
     prepare: (_, profiles) => void preparedFor.push(profiles.map(({ id }) => id)),
     answerHeldChange: (owner, changeId, answer) => sandboxes.answerHeldChange(owner, changeId, answer),
     workspaceRefusal: (workspace, turningOn) => sandboxes.workspaceRefusal(workspace, turningOn),

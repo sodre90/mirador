@@ -86,6 +86,11 @@ export interface VmLauncher {
   /** Whether VMs run here, and why not where they don't. */
   availability(): SandboxAvailability;
   /**
+   * Where the runtime was found but couldn't run VMs, as where its daemon had not started with Mirador, asks it again, one
+   * ask at a time; whether it says otherwise now.
+   */
+  askAgain(): Promise<boolean>;
+  /**
    * Whose this computer's user's files are in its VMs, as `<uid>:<gid>` there: the agents' user's, where the runtime maps
    * the two, else another's, as whom the guard writes them for the agents.
    */

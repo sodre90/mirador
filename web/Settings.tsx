@@ -1039,6 +1039,9 @@ const engineWords = t.rooms.sandbox.engines;
 
 function SandboxEngineSettings({ engines }: { engines: SandboxEngines }) {
   const row = useSettingRow();
+  useEffect(() => {
+    connection.send({ type: "settings.ask-sandbox-engines" });
+  }, []);
   const words = text.sandboxes;
   const { found, inUse, setByEnvironment } = engines;
   const next = engineFromNextStart(engines);

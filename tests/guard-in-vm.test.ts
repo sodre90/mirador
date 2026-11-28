@@ -77,6 +77,7 @@ function sandboxHere() {
     networkOf: () => "closed",
     otherSandboxes: () => ({ workspaces: [], writableFolders: [], writableFoldersOn: [], foldersLeft: [] }),
     foldersStarted: () => {},
+    runtimeChanged: () => {},
     places: { home: scratch, dataDir: join(scratch, "mirador-data"), checkout: "/nonexistent-checkout", computersOwn: [] },
   };
   const launcher = process.platform === "linux" ? linuxEnginesHere(process.env.MIRADOR_SANDBOX, null, path).launcher : AppleContainer.here(undefined, path);

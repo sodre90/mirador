@@ -18,6 +18,7 @@ import {
   type HeldChangeAnswer,
   type HeldChangeText,
   type OwnedSetup,
+  type SandboxAvailability,
   type SandboxBlocker,
   type SandboxedHarness,
   type SandboxFolder,
@@ -138,6 +139,8 @@ export interface SandboxHost {
   otherSandboxes(owner: SandboxOwner): OtherSandboxes;
   /** The sandbox's VM started, with what of its added folders it mounted and what it left out. */
   foldersStarted(owner: SandboxOwner): void;
+  /** The runtime runs VMs here otherwise than it said before, as one whose daemon started after Mirador. */
+  runtimeChanged(): void;
 }
 
 /**
@@ -376,6 +379,33 @@ export class Sandboxes {
     return this.launcher.availability();
   }
 
+  private askingAgain: Promise<void> | null = null;
+
+  /**
+   * Whether VMs run here now: where the runtime couldn't run them, it is asked again first, as where its daemon had not
+   * started with Mirador, and the host is told where it says otherwise now.
+   */
+  async availabilityNow(): Promise<SandboxAvailability> {
+    if (!this.availability().available) await (this.askingAgain ??= this.askedAgain().finally(() => (this.askingAgain = null)));
+    return this.availability();
+  }
+
+  private async askedAgain() {
+    if (await this.launcher.askAgain()) this.host.runtimeChanged();
+  }
+
+  private leftoversGone: Promise<void> | null = null;
+
+  /**
+   * The VMs a previous run of this host left behind go once, before its first VM starts, as each VM is named after its
+   * owner; never again, where that failed too, as this host's own VMs would go with them.
+   */
+  private removedLeftovers() {
+    return (this.leftoversGone ??= this.launcher
+      .removeLeftovers(this.hostLabel)
+      .catch((error: unknown) => console.error("removing the VMs a previous run of this host left failed:", error)));
+  }
+
   /** Where setting up each sandbox stands, of those set up since the host started. */
   setupStates(): OwnedSetup[] {
     return [...this.setups.values()];
@@ -522,7 +552,10 @@ export class Sandboxes {
 
   /** Sets up what the owner's sandbox needs, and this agent kind at its version, as the owner turns it on, so the first turn need not wait for it. */
   prepareInBackground(owner: SandboxOwner, agent: AgentTools | null) {
-    if (this.availability().available) void this.preparedFor(owner, agent).catch(() => {});
+    const preparing = this.availability().available
+      ? this.preparedFor(owner, agent)
+      : this.availabilityNow().then(({ available }) => (available ? this.preparedFor(owner, agent) : null));
+    void preparing.catch(() => {});
   }
 
   /**
@@ -542,7 +575,7 @@ export class Sandboxes {
   /** The VMs a previous run of this host left behind, from a crash, and the socket folders of any host gone since. */
   async reapLeftovers() {
     await removeLeftSocketFolders(this.socketsParent);
-    if (this.availability().available) await this.launcher.removeLeftovers(this.hostLabel);
+    if (this.availability().available) await this.removedLeftovers();
   }
 
   /**
@@ -551,6 +584,7 @@ export class Sandboxes {
    * the agent on this computer.
    */
   async launch(agent: AgentInSandbox, told: (step: SandboxStartStep) => void = () => {}): Promise<AgentLaunch> {
+    if (!this.availability().available) await this.availabilityNow();
     this.assertMayLaunch(agent, false);
     const { harness } = agent.kind;
     const tools = { harness, version: agent.version };
@@ -572,6 +606,7 @@ export class Sandboxes {
    * throws SandboxNotReady as `launch` does.
    */
   async launchForBrought(agent: BroughtAgentInSandbox): Promise<AgentLaunch> {
+    if (!this.availability().available) await this.availabilityNow();
     this.assertMayLaunch(agent, true);
     const vm = await this.oneLaunchAtATime(agent.owner, () => this.startedBroughtVm(agent));
     return this.launchedIn(vm, { workingDirectory: agent.workingDirectory, environment: withAnyFolderSafe(vmEnvironment(vm.base, null)), command: agent.command });
@@ -932,6 +967,7 @@ export class Sandboxes {
 
   private async startedNew(given: Pick<SandboxVm, "key" | "owner" | "broughtAgent" | "base" | "folders">): Promise<SandboxVm> {
     await this.untilNoneStops(given.owner);
+    await this.removedLeftovers();
     const vm: SandboxVm = {
       ...given,
       name: `mirador-${this.hostLabel}-${shortHash(given.key, 8)}`,

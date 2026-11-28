@@ -1,5 +1,5 @@
 import { basename } from "node:path";
-import type { SandboxEngines, SandboxKind } from "../../shared/sandbox.ts";
+import { engineInUse, type SandboxEngines, type SandboxKind } from "../../shared/sandbox.ts";
 import { AppleContainer } from "./apple-container.ts";
 import { askEngine, engineOfInfo, linuxEngineProgram, SELINUX_ENFORCE } from "./availability.ts";
 import { Docker } from "./docker.ts";
@@ -19,7 +19,8 @@ interface FoundEngine {
 function engineAt(program: string, named: LinuxEngine, selinuxEnforce: string): FoundEngine {
   const here = askEngine(program, selinuxEnforce);
   const kind = (here.info === null ? null : engineOfInfo(here.info)) ?? named;
-  return { kind, launcher: kind === "docker" ? Docker.of(program, here) : Podman.of(program, here) };
+  const asked = { program, selinuxEnforce };
+  return { kind, launcher: kind === "docker" ? Docker.of(asked, here) : Podman.of(asked, here) };
 }
 
 /** Podman and Docker where installed, once each: the `docker` of podman-docker is Podman, found as `podman` already. */
@@ -31,21 +32,18 @@ function installedHere(path: string, selinuxEnforce: string): FoundEngine[] {
   return LINUX_ENGINES.flatMap((kind) => found.find((engine) => engine.kind === kind) ?? []);
 }
 
-/**
- * The engine Mirador uses: the one chosen, where it is here, whether it runs sandboxes or not, so what keeps it from them
- * shows; else the first here that runs them; else the first here.
- */
-export function engineInUse(found: { kind: LinuxEngine; runs: boolean }[], chosen: SandboxKind | null): LinuxEngine | null {
-  return (found.find(({ kind }) => kind === chosen) ?? found.find(({ runs }) => runs) ?? found[0])?.kind ?? null;
-}
-
-/** The engines of this computer, the launcher of the one in use, and where all of them keep their images. */
+/** The engines of this computer as they say now, the launcher of the one in use, and where all of them keep their images. */
 export interface EnginesHere {
   launcher: VmLauncher;
-  engines: SandboxEngines;
+  /** The engines found as Mirador started, each as it says now, and the one in use since; `chosen` as it was then. */
+  engines(): SandboxEngines;
   /** Where each engine here keeps its images and containers, which other containers run, whichever runs sandboxes. */
-  storage: string[];
+  storage(): string[];
+  /** Asks each engine found that can't run sandboxes again, as where its daemon had not started with Mirador; whether any says otherwise now. */
+  askAgain(): Promise<boolean>;
 }
+
+const anyChanged = async (asked: Promise<boolean>[]) => (await Promise.all(asked)).some(Boolean);
 
 /**
  * The engines of this Linux computer: the program MIRADOR_SANDBOX names, as the engine it says it is, and none where it
@@ -62,15 +60,20 @@ export function linuxEnginesHere(setting: string | undefined, chosen: SandboxKin
   const launcher = found.find(({ kind }) => kind === inUse)?.launcher ?? new Podman(null, { available: false, why: setting === "off" ? "turned-off" : "no-linux-engine" });
   return {
     launcher,
-    engines: { found: found.map(({ kind, launcher }) => ({ kind, availability: launcher.availability() })), chosen, inUse, setByEnvironment },
-    storage: found.flatMap(({ launcher }) => launcher.storage),
+    engines: () => ({ found: found.map(({ kind, launcher }) => ({ kind, availability: launcher.availability() })), chosen, inUse, setByEnvironment }),
+    storage: () => found.flatMap(({ launcher }) => launcher.storage),
+    askAgain: () => anyChanged(found.map(({ launcher }) => launcher.askAgain())),
   };
 }
 
 /** On a Mac, Apple's `container`, the only engine there; elsewhere none. */
 export function appleEnginesHere(setting: string | undefined, path: string): EnginesHere {
   const launcher = AppleContainer.here(setting, path);
-  const availability = launcher.availability();
-  const found = process.platform === "darwin" && !(setting === "off") ? [{ kind: "apple-container" as const, availability }] : [];
-  return { launcher, engines: { found, chosen: null, inUse: found.length > 0 ? "apple-container" : null, setByEnvironment: Boolean(setting) }, storage: [] };
+  const here = process.platform === "darwin" && setting !== "off";
+  return {
+    launcher,
+    engines: () => ({ found: here ? [{ kind: "apple-container", availability: launcher.availability() }] : [], chosen: null, inUse: here ? "apple-container" : null, setByEnvironment: Boolean(setting) }),
+    storage: () => [],
+    askAgain: () => launcher.askAgain(),
+  };
 }

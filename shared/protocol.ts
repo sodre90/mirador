@@ -220,6 +220,8 @@ export type ClientMessage =
   | { type: "settings.set-script-program"; program: string }
   /** The engine of sandboxes Mirador uses from its next start; null for its own pick. */
   | { type: "settings.set-sandbox-engine"; engine: SandboxKind | null }
+  /** Settings shows the engines: each found that can't run sandboxes is asked again, and settings.sandbox-engines tells of any that says otherwise now. */
+  | { type: "settings.ask-sandbox-engines" }
   | { type: "settings.set-editor"; setting: EditorSetting }
   | { type: "settings.set-machine-name"; machineName: string }
   /** Mirador's relay or none forgets a relay of your own and its token; a null token keeps the one set for the same relay. Answered with settings.saved. */

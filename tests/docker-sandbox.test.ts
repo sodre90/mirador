@@ -44,6 +44,7 @@ function hostFor(workspace: string, baseImage: string | null = null) {
     networkOf: () => "closed" as const,
     otherSandboxes: () => ({ workspaces: [], writableFolders: [], writableFoldersOn: [], foldersLeft: [] }),
     foldersStarted: () => {},
+    runtimeChanged: () => {},
     places: { home: "/nonexistent-home", dataDir: join(scratch, "mirador-data"), checkout: "/nonexistent-checkout", computersOwn: [] },
   };
   return { host, setups };

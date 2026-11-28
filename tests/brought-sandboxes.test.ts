@@ -48,6 +48,7 @@ function hostFor(workspaces: { current: string }) {
     networkOf: () => reached.now,
     otherSandboxes: () => ({ workspaces: [], writableFolders: [], writableFoldersOn: [], foldersLeft: [] }),
     foldersStarted: () => {},
+    runtimeChanged: () => {},
     places: { home: "/nonexistent-home", dataDir: join(scratch, "mirador-data"), checkout: "/nonexistent-checkout", computersOwn: [] },
   };
   return { host, held, folders, reached };

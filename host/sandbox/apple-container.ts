@@ -154,6 +154,11 @@ export class AppleContainer implements VmLauncher {
     return this.available;
   }
 
+  /** Whether `container` runs here is told by this Mac and the program alone, which stay as Mirador found them; its service starts as a sandbox does. */
+  async askAgain() {
+    return false;
+  }
+
   async prepare(progress: (setup: SandboxSetup) => void) {
     await startService(this.usable(), progress);
   }

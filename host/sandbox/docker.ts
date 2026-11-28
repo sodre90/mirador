@@ -2,7 +2,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { SandboxAvailability, SandboxSetup } from "../../shared/sandbox.ts";
-import { dockerAvailability, dockerStorageIn, type EngineHere } from "./availability.ts";
+import { askEngineAgain, dockerAvailability, dockerStorageIn, sameAvailability, type EngineHere, type EngineProgram } from "./availability.ts";
 import { containerCli, lastLineOf, type ContainerCli } from "./container-cli.ts";
 import { droppedTo, environmentFlags, execProcessEnvironment, readByTool } from "./exec-environment.ts";
 import { BASE_RECIPE, baseImageOf, BUILD_TIMEOUT_MS, buildProgress, DEFAULT_BASE_PATH, defaultBaseTag, isMiradorsBase, mustRun, pulledOrHere, PULL_TIMEOUT_MS } from "./image.ts";
@@ -151,16 +151,39 @@ async function buildImage(cli: ContainerCli, tag: string, progress: (setup: Sand
  */
 export class Docker implements VmLauncher {
   constructor(
-    private readonly cli: ContainerCli | null,
-    private readonly available: SandboxAvailability,
+    private cli: ContainerCli | null,
+    private available: SandboxAvailability,
     /** Where Docker keeps its images and containers. */
-    readonly storage: string[] = [],
+    public storage: string[] = [],
+    /** The program to ask again where Docker couldn't run sandboxes; none for one that is never asked. */
+    private readonly asked: EngineProgram | null = null,
   ) {}
 
-  /** The `docker` at `program`, as it says it runs here: none where it can't run sandboxes. */
-  static of(program: string, here: EngineHere) {
+  /** The `docker` of `asked`, as it says it runs here: none where it can't run sandboxes. */
+  static of(asked: EngineProgram, here: EngineHere) {
+    const docker = new Docker(null, dockerAvailability(here), [], asked);
+    docker.took(here);
+    return docker;
+  }
+
+  private asking: Promise<boolean> | null = null;
+
+  askAgain() {
+    const asked = this.asked;
+    if (this.available.available || asked === null) return Promise.resolve(false);
+    return (this.asking ??= askEngineAgain(asked.program, asked.selinuxEnforce)
+      .then((here) => this.took(here))
+      .finally(() => (this.asking = null)));
+  }
+
+  /** Takes what Docker says of itself: whether it runs sandboxes, and where it keeps its images; whether it runs them otherwise than before. */
+  private took(here: EngineHere) {
     const availability = dockerAvailability(here);
-    return new Docker(availability.available ? containerCli(program) : null, availability, here.info === null ? [] : dockerStorageIn(here.info));
+    const changed = !sameAvailability(availability, this.available);
+    this.available = availability;
+    this.cli = availability.available && this.asked ? containerCli(this.asked.program) : null;
+    if (here.info !== null) this.storage = dockerStorageIn(here.info);
+    return changed;
   }
 
   readonly filesOwner = ROOT_OF_THE_CONTAINER;

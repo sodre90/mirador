@@ -44,6 +44,7 @@ function hostFor(workspace: string, baseImage: string | null = null) {
     networkOf: () => "closed" as const,
     otherSandboxes: () => ({ workspaces: [], writableFolders: [], writableFoldersOn: [], foldersLeft: [] }),
     foldersStarted: () => {},
+    runtimeChanged: () => {},
     places: { home: "/nonexistent-home", dataDir: join(scratch, "mirador-data"), checkout: "/nonexistent-checkout", computersOwn: [] },
   };
   return { host, setups };
@@ -311,8 +312,8 @@ describe("a room's sandbox on rootless Podman", () => {
     const podman = linuxEnginesHere(fakePodman, null, "/usr/bin");
     expect(podman.launcher.availability()).toMatchObject({ available: true, kind: "podman" });
     expect(podman.launcher.filesOwner).toBe("1000:1000");
-    expect(podman.storage).toEqual(["/home/someone/.local/share/containers/storage", "/run/user/1000/containers"]);
-    expect(computersOwnOnLinux("/home/someone", podman.storage)).toEqual(["/home/someone/.config", "/home/someone/.local", "/home/someone/.local/share/containers/storage", "/run/user/1000/containers"]);
+    expect(podman.storage()).toEqual(["/home/someone/.local/share/containers/storage", "/run/user/1000/containers"]);
+    expect(computersOwnOnLinux("/home/someone", podman.storage())).toEqual(["/home/someone/.config", "/home/someone/.local", "/home/someone/.local/share/containers/storage", "/run/user/1000/containers"]);
     const enforce = join(scratch, "selinux-enforce");
     writeFileSync(enforce, "1\n");
     expect(linuxEnginesHere(fakePodman, null, "/usr/bin", enforce).launcher.availability()).toEqual({ available: true, kind: "podman", selinuxEnforcing: true });

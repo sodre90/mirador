@@ -245,6 +245,7 @@ describe("the sandbox's VM", () => {
       networkOf: () => "closed" as const,
       otherSandboxes: () => others,
       foldersStarted: (owner) => void started.push(owner),
+      runtimeChanged: () => {},
       places: surroundings.places,
     };
     Bun.spawnSync(["git", "init", "-q", surroundings.workspace!]);

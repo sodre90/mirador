@@ -56,7 +56,7 @@ import { DesktopAppCheck } from "./desktop-app-check.ts";
 import { switchOf, type PluginUpdate } from "../shared/apps.ts";
 import { englishProblem } from "../shared/host-problems.ts";
 import type { ConfigFileStatus } from "../shared/settings-file.ts";
-import type { SandboxOwner } from "../shared/sandbox.ts";
+import type { SandboxEngines, SandboxOwner } from "../shared/sandbox.ts";
 import { Lookout } from "./lookout.ts";
 import { NewerVersionWatcher, newerVersionLookup, pullCheckout } from "./newer-version.ts";
 import { desktopAppCode } from "../shared/desktop-app-code.ts";
@@ -296,9 +296,17 @@ const onLinux = process.platform === "linux";
 const enginesHere = onLinux
   ? linuxEnginesHere(config.sandboxContainer, store.sandboxEngineSetting(), currentPath() ?? "", config.selinuxEnforceFile)
   : appleEnginesHere(config.sandboxContainer, currentPath() ?? "");
+const sandboxEnginesNow = (): SandboxEngines => ({ ...enginesHere.engines(), chosen: store.sandboxEngineSetting() });
 const sandboxes = new Sandboxes(enginesHere.launcher, {
   dataDir: config.dataDir,
-  places: { home: homedir(), dataDir: config.dataDir, checkout: sourceDir, computersOwn: onLinux ? computersOwnOnLinux(homedir(), enginesHere.storage) : [] },
+  places: {
+    home: homedir(),
+    dataDir: config.dataDir,
+    checkout: sourceDir,
+    get computersOwn() {
+      return onLinux ? computersOwnOnLinux(homedir(), enginesHere.storage()) : [];
+    },
+  },
   workspaceOf: (owner) => store.findWorkspace(owner.kind === "room" ? (store.findRoom(owner.id)?.workspaceId ?? "") : owner.id)?.path ?? null,
   canvasOf: (owner) => ({
     belongs: (conversationId) => {
@@ -325,11 +333,13 @@ const sandboxes = new Sandboxes(enginesHere.launcher, {
   networkOf: (owner) => sandboxSettingOf(owner)?.network ?? "closed",
   otherSandboxes: (owner) => otherSandboxesOf(store, owner),
   foldersStarted: (owner) => sandboxFolders.vmStarted(owner),
+  runtimeChanged: () => hub.broadcast({ type: "settings.sandbox-engines", sandboxEngines: sandboxEnginesNow() }),
 });
 const sandboxFolders = new SandboxFolderService(store, hub, conversations, sandboxes);
 conversations.startsSandboxedAgentsIn(sandboxes);
 const sandboxControl: SandboxControl = {
   availability: () => sandboxes.availability(),
+  availabilityNow: () => sandboxes.availabilityNow(),
   prepare: (owner, profiles) =>
     void agentToolsOf(profiles, store.claudeProgramSetting()).then((agents) => (agents.length > 0 ? agents : [null]).forEach((agent) => sandboxes.prepareInBackground(owner, agent))),
   answerHeldChange: (owner, changeId, answer) => sandboxes.answerHeldChange(owner, changeId, answer),
@@ -469,7 +479,7 @@ hub.whenRunningTurnsCounted((count) => keepAwake.setRunningTurns(count));
 const settingsImport = new SettingsImport({ dataDir: config.dataDir, store, hub, profiles, conversations, workspaceSandboxes, plugins, pluginSettings });
 const configFile = config.userConfigFile === null ? null : await applyConfigFile(config.userConfigFile, settingsImport, store);
 if (configFile) reportConfigFile(configFile);
-const server = startServer({ config, store, hub, conversations, sandboxes, sandboxEngines: enginesHere.engines, canvas, mcp, apps, plugins, canvasPlugins, pluginSettings, pluginLooks, catalog, profiles, statusline, terminals, images, droppedFiles, voice, voiceEngine, restart, desktopApp, newerVersion, pullNewerVersion: () => pullCheckout(sourceDir), pluginUpdates, readyPluginUpdates, revokedPluginsRunning, devices, ownerKey: ownersKey, joinRequests, signInCodes, search, relays, watch, tunnels, certificate, keepAwake, p2p, pushes, notifications, rooms, workspaceSandboxes, sandboxFolders, roomQuestions, roomReading, broughtAgents, settingsImport, configFile });
+const server = startServer({ config, store, hub, conversations, sandboxes, sandboxEngines: { now: sandboxEnginesNow, askAgain: () => enginesHere.askAgain() }, canvas, mcp, apps, plugins, canvasPlugins, pluginSettings, pluginLooks, catalog, profiles, statusline, terminals, images, droppedFiles, voice, voiceEngine, restart, desktopApp, newerVersion, pullNewerVersion: () => pullCheckout(sourceDir), pluginUpdates, readyPluginUpdates, revokedPluginsRunning, devices, ownerKey: ownersKey, joinRequests, signInCodes, search, relays, watch, tunnels, certificate, keepAwake, p2p, pushes, notifications, rooms, workspaceSandboxes, sandboxFolders, roomQuestions, roomReading, broughtAgents, settingsImport, configFile });
 const sourceWatcher = new SourceWatcher(sourceDir, {
   uiEdited: (edited) => {
     console.log(`${edited} changed, so the page is built again`);

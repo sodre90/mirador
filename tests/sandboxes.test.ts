@@ -55,6 +55,7 @@ function hostFor(workspace: string, baseImageOf: (owner: SandboxOwner) => string
     networkOf: () => network,
     otherSandboxes: () => ({ workspaces: [], writableFolders: [], writableFoldersOn: [], foldersLeft: [] }),
     foldersStarted: () => {},
+    runtimeChanged: () => {},
     places: { home: "/nonexistent-home", dataDir: join(scratch, "mirador-data"), checkout: "/nonexistent-checkout", computersOwn: [] },
   };
   return { host, setups, owned, toldWithSteps, held, reaches: (now: SandboxNetwork) => (network = now) };
@@ -265,6 +266,40 @@ describe("a room's sandbox", () => {
     expect(beside.told).toEqual([]);
     expect(again.told).toEqual(["starting-sandbox"]);
     again.launched.gone!();
+    await sandboxes.stopAll();
+  });
+
+  test.skipIf(!RUNS_SANDBOXES)("asks the runtime again where it couldn't run VMs, as one whose daemon started after Mirador, and once it can, removes this host's leftovers before its first VM starts", async () => {
+    const workspace = repository();
+    const launcher = new FakeVmLauncher();
+    launcher.available = { available: false, why: "docker-fails" };
+    const { host } = hostFor(workspace);
+    let changesTold = 0;
+    host.runtimeChanged = () => void (changesTold += 1);
+    const sandboxes = new Sandboxes(launcher, host, IDLE_STOP_MS);
+    await sandboxes.reapLeftovers();
+
+    await expect(sandboxes.launch(agentIn(workspace))).rejects.toMatchObject(notReady({ kind: "unavailable", why: "docker-fails" }));
+    expect([launcher.timesAskedAgain, changesTold, launcher.leftoversRemoved]).toEqual([1, 0, []]);
+
+    launcher.saysOnceAskedAgain = { available: true, kind: "apple-container" };
+    const launched = await sandboxes.launch(agentIn(workspace));
+    expect([launcher.timesAskedAgain, changesTold, launcher.leftoversRemoved, launcher.started.length]).toEqual([2, 1, [0], 1]);
+    launched.gone!();
+    (await sandboxes.launch(agentIn(workspace, { profileId: "reviewer" }))).gone!();
+    expect([launcher.timesAskedAgain, launcher.leftoversRemoved]).toEqual([2, [0]]);
+    await sandboxes.stopAll();
+  });
+
+  test.skipIf(!RUNS_SANDBOXES)("starts VMs where the leftovers of a previous run couldn't be removed, and never tries again, as this host's own running VMs would go with them", async () => {
+    const workspace = repository();
+    const launcher = new FakeVmLauncher();
+    launcher.leftoversStay = true;
+    const sandboxes = new Sandboxes(launcher, hostFor(workspace).host, IDLE_STOP_MS);
+
+    (await sandboxes.launch(agentIn(workspace))).gone!();
+    (await sandboxes.launch(agentIn(workspace, { owner: roomSandbox("room-2") }))).gone!();
+    expect([launcher.started.length, launcher.leftoversRemoved]).toEqual([2, [0]]);
     await sandboxes.stopAll();
   });
 

@@ -141,7 +141,7 @@ export class WorkspaceSandboxes {
     const refused = await this.sandboxes.workspaceRefusal(workspace.path, workspace.sandbox.on ? undefined : workspaceSandbox(workspaceId));
     const startsOnProfile = this.startsOnProfile(workspaceId);
     return {
-      availability: this.sandboxes.availability(),
+      availability: await this.sandboxes.availabilityNow(),
       blockers: refused ? [refused] : [],
       startsOn: startsOnProfile ? workspaceProfileBlocker(startsOnProfile) : null,
       profilesThatRun: this.store

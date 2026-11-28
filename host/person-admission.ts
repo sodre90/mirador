@@ -116,6 +116,7 @@ const admissions: { [K in ClientMessage["type"]]: K extends PersonMessageType ? 
   "settings.import": OWNER_ONLY,
   "settings.set-claude-program": OWNER_ONLY,
   "settings.set-sandbox-engine": OWNER_ONLY,
+  "settings.ask-sandbox-engines": OWNER_ONLY,
   "newer-version.check": OWNER_ONLY,
   "newer-version.pull": OWNER_ONLY,
   "settings.set-script-program": OWNER_ONLY,

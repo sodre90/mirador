@@ -138,8 +138,8 @@ export interface HostServices {
   hub: Hub;
   conversations: ConversationService;
   sandboxes: Pick<Sandboxes, "setupStates" | "heldChanges" | "holdingTooMany" | "heldChangeText">;
-  /** The engines of sandboxes as Mirador found them when it started, and the one it uses since. */
-  sandboxEngines: SandboxEngines;
+  /** The engines of sandboxes Mirador found as it started, each as it says now, the one it uses since, and the one chosen. */
+  sandboxEngines: { now(): SandboxEngines; askAgain(): Promise<boolean> };
   canvas: CanvasService;
   mcp: CanvasMcpEndpoints;
   apps: AppDocuments;
@@ -1411,12 +1411,17 @@ export function startServer(services: HostServices) {
     hub.broadcast({ type: "settings.editor", editor: editorState(store.editorSetting()) });
   }
 
-  const sandboxEnginesNow = (): SandboxEngines => ({ ...sandboxEngines, chosen: store.sandboxEngineSetting() });
+  const sandboxEnginesNow = () => sandboxEngines.now();
+  const tellSandboxEngines = () => hub.broadcast({ type: "settings.sandbox-engines", sandboxEngines: sandboxEnginesNow() });
 
   function setSandboxEngine(engine: SandboxKind | null) {
-    if (engine !== null && !sandboxEngines.found.some(({ kind }) => kind === engine)) throw new HostProblemError({ code: "unknown-sandbox-engine", value: String(engine) });
+    if (engine !== null && !sandboxEnginesNow().found.some(({ kind }) => kind === engine)) throw new HostProblemError({ code: "unknown-sandbox-engine", value: String(engine) });
     store.setSandboxEngineSetting(engine);
-    hub.broadcast({ type: "settings.sandbox-engines", sandboxEngines: sandboxEnginesNow() });
+    tellSandboxEngines();
+  }
+
+  async function askSandboxEnginesAgain() {
+    if (await sandboxEngines.askAgain()) tellSandboxEngines();
   }
 
   function setScriptProgram(program: string) {
@@ -1722,6 +1727,8 @@ export function startServer(services: HostServices) {
         return setScriptProgram(message.program);
       case "settings.set-sandbox-engine":
         return setSandboxEngine(message.engine);
+      case "settings.ask-sandbox-engines":
+        return askSandboxEnginesAgain();
       case "settings.set-editor":
         return setEditor(message.setting);
       case "settings.set-machine-name":

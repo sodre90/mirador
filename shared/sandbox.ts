@@ -160,11 +160,19 @@ export interface SandboxEngines {
 }
 
 /**
+ * The engine Mirador uses as it starts: the one chosen, where it is here, whether it runs sandboxes or not, so what keeps
+ * it from them shows; else the first here that runs them; else the first here.
+ */
+export function engineInUse<Kind extends SandboxKind>(found: { kind: Kind; runs: boolean }[], chosen: SandboxKind | null): Kind | null {
+  return (found.find(({ kind }) => kind === chosen) ?? found.find(({ runs }) => runs) ?? found[0])?.kind ?? null;
+}
+
+/**
  * The engine Mirador runs sandboxes with from its next start, as far as it can tell now: the one MIRADOR_SANDBOX sets;
- * else the one chosen, where it is here; else the one it uses now.
+ * else the one it would take of those here, as they say now.
  */
 export const engineFromNextStart = ({ found, chosen, inUse, setByEnvironment }: SandboxEngines): SandboxKind | null =>
-  !setByEnvironment && found.some(({ kind }) => kind === chosen) ? chosen : inUse;
+  setByEnvironment ? inUse : engineInUse(found.map(({ kind, availability }) => ({ kind, runs: availability.available })), chosen);
 
 /** What a page that sees no sandbox of this computer's is told of its engines. */
 export const NO_SANDBOX_ENGINES: SandboxEngines = { found: [], chosen: null, inUse: null, setByEnvironment: false };

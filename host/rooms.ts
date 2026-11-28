@@ -639,7 +639,7 @@ export class RoomService implements RoomRules, TurnListener {
     const workspace = this.store.findWorkspace(room.workspaceId);
     const workspaceRefused = workspace ? await this.sandboxes.workspaceRefusal(workspace.path, room.sandbox.on ? undefined : roomSandbox(roomId)) : null;
     const agentsRefused = room.agents.flatMap((agent) => this.sandboxBlockerOf(agent) ?? []);
-    return { availability: this.sandboxes.availability(), blockers: [...agentsRefused, ...(workspaceRefused ? [workspaceRefused] : [])] };
+    return { availability: await this.sandboxes.availabilityNow(), blockers: [...agentsRefused, ...(workspaceRefused ? [workspaceRefused] : [])] };
   }
 
   /** An agent someone brought runs on their own computer, so no sandbox here is its business; in one, no agent gets this computer's whole environment. */

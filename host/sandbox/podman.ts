@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { SandboxAvailability, SandboxSetup } from "../../shared/sandbox.ts";
 import { AGENT_USER } from "./agent-environment.ts";
-import { podmanAvailability, podmanStorageIn, type EngineHere } from "./availability.ts";
+import { askEngineAgain, podmanAvailability, podmanStorageIn, sameAvailability, type EngineHere, type EngineProgram } from "./availability.ts";
 import { containerCli, lastLineOf, type ContainerCli } from "./container-cli.ts";
 import { droppedTo, environmentFlags, execProcessEnvironment, readByTool } from "./exec-environment.ts";
 import { BASE_RECIPE, baseImageOf, BUILD_TIMEOUT_MS, buildProgress, DEFAULT_BASE_PATH, defaultBaseTag, isMiradorsBase, mustRun, pulledOrHere, PULL_TIMEOUT_MS } from "./image.ts";
@@ -205,16 +205,39 @@ async function removeOtherBases(cli: ContainerCli, kept: string) {
  */
 export class Podman implements VmLauncher {
   constructor(
-    private readonly cli: ContainerCli | null,
-    private readonly available: SandboxAvailability,
+    private cli: ContainerCli | null,
+    private available: SandboxAvailability,
     /** Where Podman keeps its images and containers, and their state while they run. */
-    readonly storage: string[] = [],
+    public storage: string[] = [],
+    /** The program to ask again where Podman couldn't run sandboxes; none for one that is never asked. */
+    private readonly asked: EngineProgram | null = null,
   ) {}
 
-  /** The `podman` at `program`, as it says it runs here: none where it can't run sandboxes. */
-  static of(program: string, here: EngineHere) {
+  /** The `podman` of `asked`, as it says it runs here: none where it can't run sandboxes. */
+  static of(asked: EngineProgram, here: EngineHere) {
+    const podman = new Podman(null, podmanAvailability(here), [], asked);
+    podman.took(here);
+    return podman;
+  }
+
+  private asking: Promise<boolean> | null = null;
+
+  askAgain() {
+    const asked = this.asked;
+    if (this.available.available || asked === null) return Promise.resolve(false);
+    return (this.asking ??= askEngineAgain(asked.program, asked.selinuxEnforce)
+      .then((here) => this.took(here))
+      .finally(() => (this.asking = null)));
+  }
+
+  /** Takes what Podman says of itself: whether it runs sandboxes, and where it keeps its images; whether it runs them otherwise than before. */
+  private took(here: EngineHere) {
     const availability = podmanAvailability(here);
-    return new Podman(availability.available ? containerCli(program) : null, availability, here.info === null ? [] : podmanStorageIn(here.info));
+    const changed = !sameAvailability(availability, this.available);
+    this.available = availability;
+    this.cli = availability.available && this.asked ? containerCli(this.asked.program) : null;
+    if (here.info !== null) this.storage = podmanStorageIn(here.info);
+    return changed;
   }
 
   /** Podman maps this computer's user to the agents' user, as Mirador runs it. */

@@ -23,6 +23,18 @@ export class FakeVmLauncher implements VmLauncher {
     return this.available;
   }
 
+  /** What the runtime says once asked again, as one whose daemon started after Mirador; null where it says what it said. */
+  saysOnceAskedAgain: SandboxAvailability | null = null;
+  timesAskedAgain = 0;
+
+  async askAgain() {
+    this.timesAskedAgain += 1;
+    if (this.saysOnceAskedAgain === null) return false;
+    this.available = this.saysOnceAskedAgain;
+    this.saysOnceAskedAgain = null;
+    return true;
+  }
+
   /** The base image built, each time it was. */
   readonly basesBuilt: string[] = [];
   /** The throwaway containers run, the installers of tools among them. */
@@ -155,7 +167,14 @@ export class FakeVmLauncher implements VmLauncher {
     return this.otherMiradorsWrite(this.askedForOtherMiradors++);
   }
 
-  async removeLeftovers() {}
+  /** Each removal of this host's leftover VMs, by how many VMs had started before it. */
+  readonly leftoversRemoved: number[] = [];
+  leftoversStay = false;
+
+  async removeLeftovers() {
+    this.leftoversRemoved.push(this.started.length);
+    if (this.leftoversStay) throw new Error("the runtime refused to remove them");
+  }
 }
 
 const isCheck = ({ args }: ThrowawayRun) => args.join(" ").includes("mirador-base-check");

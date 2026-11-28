@@ -26,6 +26,8 @@ export type BroughtCallInSandbox = BroughtAgentInSandbox;
 /** What a room's or workspace's settings need of the sandboxes. */
 export interface SandboxControl {
   availability(): SandboxAvailability;
+  /** Whether sandboxes run here now, the runtime asked again where it couldn't run them, as one whose daemon started after Mirador. */
+  availabilityNow(): Promise<SandboxAvailability>;
   /** Sets up what the owner's sandbox needs, and the tools of these profiles' agents, so the first turn need not wait for it. */
   prepare(owner: SandboxOwner, profiles: Profile[]): void;
   answerHeldChange(owner: SandboxOwner, changeId: string, answer: HeldChangeAnswer): Promise<void>;
@@ -47,6 +49,10 @@ export interface SandboxControl {
 
 export const NO_SANDBOX_CONTROL: SandboxControl = {
   availability: () => ({ available: false, why: "turned-off" }),
+  /** What `availability` says, of a copy that gives its own. */
+  async availabilityNow() {
+    return this.availability();
+  },
   prepare: () => {},
   answerHeldChange: async () => {},
   ownerGone: async () => {},
