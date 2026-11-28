@@ -844,10 +844,29 @@ describe("a sandbox's setup steps", () => {
     expect(await until(() => lastOf(toldWithSteps, ROOM)?.stage === "ready")).toBe(true);
     const underWay = toldWithSteps.flatMap(({ setup }) => (setup.steps ? [setup] : []));
     expect(underWay[0]!.steps![0]!.piece).toEqual({ kind: "service", runtime: "apple-container" });
-    expect(underWay.map(nowOf)).toEqual([["base-build"], ["tool:guard"], ["tool:bun"], ["tool:node"], ["tool:claude"]]);
+    expect(underWay.map(nowOf)).toEqual([["service"], ["base-build"], ["tool:guard"], ["tool:bun"], ["tool:node"], ["tool:claude"]]);
     expect(statesOf(underWay.at(-1)!)).toEqual(["service done", "base-build done", "tool:guard done", "tool:bun done", "tool:node done", "tool:claude now"]);
     expect(underWay.every(({ startedAt, stepStartedAt }) => startedAt! <= stepStartedAt!)).toBe(true);
     expect(lastOf(toldWithSteps, ROOM)).toEqual({ stage: "ready" });
+  });
+
+  test("after the host starts again, with every piece already here, still shows each step under way in turn, from the first, before it is ready", async () => {
+    const { host, toldWithSteps } = hostFor(repository());
+    const launcher = new FakeVmLauncher();
+    new Sandboxes(launcher, host, IDLE_STOP_MS).prepareInBackground(ROOM, CLAUDE);
+    expect(await until(() => lastOf(toldWithSteps, ROOM)?.stage === "ready")).toBe(true);
+    toldWithSteps.length = 0;
+    const serviceStarting = Promise.withResolvers<void>();
+    launcher.prepare = () => serviceStarting.promise;
+
+    new Sandboxes(launcher, host, IDLE_STOP_MS).prepareInBackground(ROOM, CLAUDE);
+
+    expect(await until(() => toldWithSteps.length > 0)).toBe(true);
+    expect(toldWithSteps.map(({ setup }) => nowOf(setup))).toEqual([["service"]]);
+    serviceStarting.resolve();
+    expect(await until(() => lastOf(toldWithSteps, ROOM)?.stage === "ready")).toBe(true);
+    const underWay = toldWithSteps.flatMap(({ setup }) => (setup.steps ? [setup] : []));
+    expect(underWay.map(nowOf)).toEqual([["service"], ["base-build"], ["tool:guard"], ["tool:bun"], ["tool:node"], ["tool:claude"]]);
   });
 
   test("says which step of another sandbox's it waits behind, as steps are taken one at a time, and takes its own once that one is over", async () => {

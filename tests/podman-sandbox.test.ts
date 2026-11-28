@@ -128,7 +128,7 @@ describe("a room's sandbox on rootless Podman", () => {
     expect(launched.environment).toMatchObject({ ANTHROPIC_API_KEY: KEY_PLACEHOLDER, DEPLOY_TARGET: "staging", HOME: process.env.HOME });
     expect(JSON.stringify([cli.calls, launched.command, launched.environment])).not.toContain(KEY);
 
-    expect(setups.map(({ stage }) => stage)).toEqual(["building-image", ...Array.from({ length: 8 }, () => "building-image" as const), "installing-tool", "installing-tool", "installing-tool", "installing-tool", "ready"]);
+    expect(setups.map(({ stage }) => stage)).toEqual(["starting-service", "building-image", ...Array.from({ length: 8 }, () => "building-image" as const), "installing-tool", "installing-tool", "installing-tool", "installing-tool", "ready"]);
     expect(setups.flatMap(({ step }) => (step ? [`${step.at}/${step.of}`] : []))).toEqual(["1/8", "2/8", "3/8", "4/8", "5/8", "6/8", "7/8", "8/8"]);
     expect(cli.callsOf("build")[0]).toContain("--layers=false");
     expect(cli.callsOf("build")[0]).not.toContain("--platform");

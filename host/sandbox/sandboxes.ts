@@ -1411,6 +1411,7 @@ export class Sandboxes {
 
   private tell(owner: SandboxOwner, given: SandboxSetup) {
     const setup = this.withSteps(owner, given);
+    if (Bun.deepEquals(this.setups.get(ownerKey(owner))?.setup, setup)) return;
     this.setups.set(ownerKey(owner), { owner, setup });
     this.host.setupChanged(owner, setup);
   }
@@ -1423,7 +1424,12 @@ export class Sandboxes {
 
   /** A sandbox hears of the piece being made, where one is: how far it got, as it told every sandbox, or which it is, where it told only its own, as a check does. */
   private tellOfPieceUnderWay(owner: SandboxOwner) {
-    if (this.making) this.tellOfPieceMade(owner, this.toldEveryOne ?? { stage: STAGE_OF_PIECE[this.making.piece.kind] });
+    if (this.making) this.tellOfPieceMade(owner, this.toldEveryOne ?? setupStarting(this.making.piece));
+  }
+
+  /** Each sandbox being set up hears of a piece as it starts being made, however soon it turns out to be there, but those that wait for their own image's pull. */
+  private tellEachOfPieceUnderWay() {
+    [...this.preparing.values()].filter(({ pulling }) => pulling === 0).forEach(({ owner }) => this.tellOfPieceUnderWay(owner));
   }
 
   /** How the piece being made moves on, to a sandbox that takes it; one that doesn't hears only that it waits behind it. */
@@ -1439,6 +1445,7 @@ export class Sandboxes {
     return this.setupStep(async () => {
       if (this.ready.has(key)) return this.ready.get(key) as T;
       this.making = { key, piece, startedAt: Date.now() };
+      this.tellEachOfPieceUnderWay();
       try {
         const made = await make();
         this.ready.set(key, made);
@@ -1538,6 +1545,13 @@ const STAGE_OF_PIECE: Record<SetupPiece["kind"], SandboxSetupStage> = {
   tool: "installing-tool",
   "agent-check": "checking-image",
 };
+
+/** What a sandbox hears of a piece as it starts being made, before the piece tells more of itself. */
+const setupStarting = (piece: SetupPiece): SandboxSetup => ({
+  stage: STAGE_OF_PIECE[piece.kind],
+  ...(piece.kind === "tool" && { tool: piece.tool }),
+  ...((piece.kind === "base-pull" || piece.kind === "base-check" || piece.kind === "agent-check") && { image: piece.image }),
+});
 
 /** A sandbox being set up: how many of its launches wait for it, how many of those for its own image's pull, the agents they are for, and since when. */
 interface Preparing {
