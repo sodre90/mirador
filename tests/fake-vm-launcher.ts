@@ -1,4 +1,5 @@
 import type { SandboxAvailability, SandboxSetup } from "../shared/sandbox.ts";
+import { AGENT_USER } from "../host/sandbox/agent-environment.ts";
 import { pulledOrHere } from "../host/sandbox/image.ts";
 import { SandboxNotReady, type AgentInVm, type ThrowawayRun, type VmPlan, type VmLauncher } from "../host/sandbox/vm-launcher.ts";
 import { runHere } from "./in-vm-here.ts";
@@ -16,6 +17,7 @@ export class FakeVmLauncher implements VmLauncher {
   /** A start waits for this before it has started its VM. */
   starting: Promise<void> = Promise.resolve();
   available: SandboxAvailability = { available: true, kind: "apple-container" };
+  filesOwner = AGENT_USER;
 
   availability() {
     return this.available;

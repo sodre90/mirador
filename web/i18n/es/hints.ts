@@ -321,6 +321,8 @@ export const hints: Messages["hints"] = {
   delegatedWorking: "Trabajando: una tarea delegada sigue en marcha. Su respuesta llega como el siguiente mensaje de este agente.",
   claudeProgram: (installFolders) =>
     `El programa claude con el que Mirador ejecuta Claude Code, en el equipo del host. Vacío: el claude del PATH o, si no, el de estas carpetas: ${installFolders}.\n\nUn perfil puede ejecutar otro mediante CLAUDE_CODE_EXECUTABLE en su entorno.`,
+  sandboxEngine:
+    "Podman y Docker ejecutan cada sandbox en un contenedor propio, que comparte el kernel de Linux de este equipo; Docker, solo en modo rootless. Si no eliges ninguno, Mirador usa Podman y, si no, Docker.\n\nEl cambio se aplica cuando Mirador se reinicia.",
   keepAwake:
     "Evita que el equipo en el que se ejecuta Mirador se suspenda mientras está inactivo.\n\nMientras trabajan los agentes: hasta que termina cada turno en curso, para que los trabajos largos acaben.\n\nSiempre: mientras Mirador se ejecuta, para que tu teléfono y otros dispositivos puedan llegar a él en cualquier momento.\n\nEn macOS y Linux.",
   canvasUse:

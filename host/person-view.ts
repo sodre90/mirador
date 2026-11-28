@@ -4,7 +4,7 @@ import type { CanvasItem, Conversation, ConversationEvent, Profile, StoredEvent 
 import { DEFAULT_CONVERSATIONS_SHOWN, DEFAULT_OLDER_AFTER, DEFAULT_SIDE_CHAT_ACCESS } from "../shared/model.ts";
 import type { ServerMessage } from "../shared/protocol.ts";
 import { ALL_OF_CLAUDE_SETUP } from "../shared/room-agent-setup.ts";
-import { NO_SANDBOX } from "../shared/sandbox.ts";
+import { NO_SANDBOX, NO_SANDBOX_ENGINES } from "../shared/sandbox.ts";
 import type { RoomWorkspaceApproval } from "../shared/room-workspace.ts";
 import type { RoomApproval, RoomPresence, RoomTaskApproval } from "../shared/rooms.ts";
 import { agentStandIn, broughtAgentName, PROFILES_MODEL, seesAgentsWorkIn, shownOnRoomCanvas, type Room } from "../shared/rooms.ts";
@@ -389,6 +389,7 @@ export function personView(
       canvasUse: "as-needed",
       claudeProgram: { configured: "", found: null, version: null, installFolders: "", installCommand: "" },
       scriptProgram: "",
+      sandboxEngines: NO_SANDBOX_ENGINES,
       editor: { setting: { editor: "first-found" }, found: [], opensIn: null },
       pushRelay: { address: null, tokenSet: false, grantRelay: null, miradorRelay: null },
       avatar: null,
@@ -459,6 +460,7 @@ export function personView(
     "settings.imported": HIDDEN,
     "settings.claude-program": HIDDEN,
     "settings.script-program": HIDDEN,
+    "settings.sandbox-engines": HIDDEN,
     "settings.editor": HIDDEN,
     "settings.machine-name": HIDDEN,
     "settings.push-relay": HIDDEN,

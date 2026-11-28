@@ -240,10 +240,12 @@ export const rooms = {
     kinds: {
       "apple-container": "Runs in a light VM of its own on this Mac, made with Apple's container tool.",
       podman: "Runs in a Podman container, which shares this computer's Linux kernel: weaker than a VM.",
+      docker: "Runs in a Docker container, which shares this computer's Linux kernel: weaker than a VM.",
     } satisfies Record<SandboxKind, string>,
+    engines: { "apple-container": "Apple's container", podman: "Podman", docker: "Docker" } satisfies Record<SandboxKind, string>,
     sharedKernel: {
-      warning:
-        "On this computer the sandbox is a Podman container, not a VM. It still sees only the workspace and reaches only what you choose, but it shares this computer's Linux kernel, so a flaw in the kernel could let the agents out.",
+      warning: (engine: string) =>
+        `On this computer the sandbox is a ${engine} container, not a VM. It still sees only the workspace and reaches only what you choose, but it shares this computer's Linux kernel, so a flaw in the kernel could let the agents out.`,
       turnOn: "Turn on anyway",
       keepOff: "Keep it off",
       turnsFailUntilAllowed: "The agents' turns fail until you allow it.",
@@ -272,6 +274,16 @@ export const rooms = {
         ready: "Set up on this computer.",
         failed: "Setting it up failed.",
       },
+      docker: {
+        "not-started": "It is set up on this computer on first use: Docker builds the sandbox's base image, then the agents' programs are installed.",
+        "starting-service": "Starting Docker…",
+        "building-image": "Building the sandbox's base image on this computer…",
+        "pulling-image": "Pulling the sandbox's base image onto this computer…",
+        "installing-tool": "Installing the agents' programs on this computer…",
+        "checking-image": "Checking that the base image has what the agents need…",
+        ready: "Set up on this computer.",
+        failed: "Setting it up failed.",
+      },
     } satisfies Record<SandboxKind, Record<SandboxSetupStage, string>>,
     steps: {
       title: "Setting up the sandbox",
@@ -280,7 +292,7 @@ export const rooms = {
       stepOf: (at: number, of: number) => `Step ${at} of ${of}`,
       stepsDone: "Steps done",
       howFar: "How far this step got",
-      service: { "apple-container": "Start Apple's container service", podman: "Start Podman" } satisfies Record<SandboxKind, string>,
+      service: { "apple-container": "Start Apple's container service", podman: "Start Podman", docker: "Start Docker" } satisfies Record<SandboxKind, string>,
       firstKernel: "The first time, it downloads a Linux kernel.",
       baseBuild: "Build Mirador's base image",
       buildPart: (at: number, of: number) => `Part ${at} of ${of} of the build`,
@@ -302,12 +314,13 @@ export const rooms = {
       needs: {
         "apple-container": "Any image with a Linux build for Arm (arm64) that has glibc, /bin/sh, /bin/bash and git; Mirador's own programs come in beside it. It is pulled again each time Mirador starts, unless you name its digest.",
         podman: "Any image for this computer's processor that has glibc, /bin/sh, /bin/bash and git; Mirador's own programs come in beside it. It is pulled again each time Mirador starts, unless you name its digest.",
+        docker: "Any image for this computer's processor that has glibc, /bin/sh, /bin/bash and git; Mirador's own programs come in beside it. It is pulled again each time Mirador starts, unless you name its digest.",
       } satisfies Record<SandboxKind, string>,
     },
     setupFailed: (problem: string) => `Setting it up failed: ${problem}`,
     wholeEnvironmentIgnored: "Ignored while the room is sandboxed: only the values chosen here go into its sandbox.",
     meaning: [
-      "The room's Claude Code and pi agents run in a sandbox of their own on this computer: on a Mac a light VM, made with Apple's container tool; on Linux a Podman container, which shares the computer's kernel and so keeps the agents in less well than a VM, used only once you allow it. The sandbox sees the workspace, a folder of the room's for the agents' settings and sessions, and the folders from this computer you add, read only or read and write; nothing else of this computer. The agents reach their model through Mirador, which adds the profile's key so the key never enters the sandbox, and Mirador's canvas.",
+      "The room's Claude Code and pi agents run in a sandbox of their own on this computer: on a Mac a light VM, made with Apple's container tool; on Linux a Podman or Docker container, which shares the computer's kernel and so keeps the agents in less well than a VM, used only once you allow it. The sandbox sees the workspace, a folder of the room's for the agents' settings and sessions, and the folders from this computer you add, read only or read and write; nothing else of this computer. The agents reach their model through Mirador, which adds the profile's key so the key never enters the sandbox, and Mirador's canvas.",
       "Besides those, the sandbox reaches what you choose under Network, through a web proxy of Mirador's, as it has no network of its own: SSH, ping and programs that use no proxy get nowhere. A change holds at once, in turns under way too, and ends the connections it no longer allows. Turned off and on again, the sandbox reaches only the model and Mirador.",
       "Working freely, the agents ask for nothing, as the sandbox keeps them in. Otherwise the room's permission preset applies as it does on this computer.",
       "The files agents load their settings, instructions and MCP servers from are held, and so are the files that run by themselves: .claude, .mcp.json, CLAUDE.md, AGENTS.md, .codex, opencode.json, .opencode, .pi, .husky, .githooks, .vscode, .pre-commit-config.yaml, lefthook.yml and .envrc. Those there as the sandbox starts are read-only in it; a new one is put back at once, and you allow or discard it in the room.",

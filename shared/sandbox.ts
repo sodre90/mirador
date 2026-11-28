@@ -111,25 +111,65 @@ export function isSandboxOwner(value: unknown): value is SandboxOwner {
 }
 
 /**
- * What rooms' sandboxes are on this computer: a light VM of Apple's `container` on a Mac; on Linux a rootless Podman
- * container, which shares this computer's kernel.
+ * What rooms' sandboxes are on this computer: a light VM of Apple's `container` on a Mac; on Linux a container of rootless
+ * Podman or rootless Docker, which shares this computer's kernel.
  */
-export type SandboxKind = "apple-container" | "podman";
+export type SandboxKind = "apple-container" | "podman" | "docker";
 
 /** Whether a sandbox of this kind shares this computer's kernel, which keeps the agents in less than a VM does. */
-export const sharesKernel = (kind: SandboxKind) => kind === "podman";
+export const sharesKernel = (kind: SandboxKind) => kind !== "apple-container";
 
 /** Why this computer can't run sandboxes at all. */
-export type SandboxUnavailable = "unsupported-system" | "not-apple-silicon" | "macos-too-old" | "no-container-tool" | "no-podman" | "podman-fails" | "podman-not-rootless" | "turned-off";
+export type SandboxUnavailable =
+  | "unsupported-system"
+  | "not-apple-silicon"
+  | "macos-too-old"
+  | "no-container-tool"
+  | "no-linux-engine"
+  | "podman-fails"
+  | "podman-not-rootless"
+  | "docker-fails"
+  | "docker-not-rootless"
+  | "turned-off";
 
 /**
- * Whether this computer runs sandboxes, of which kind, and why not where it doesn't. A Podman container runs outside
- * SELinux's confinement, which Linux may enforce here: in it, Podman would have to relabel the owner's workspace.
+ * Whether this computer runs sandboxes, of which kind, and why not where it doesn't. A Podman or Docker container runs
+ * outside SELinux's confinement, which Linux may enforce here: in it, the engine would have to relabel the owner's workspace.
  */
 export type SandboxAvailability =
   | { available: true; kind: "apple-container" }
-  | { available: true; kind: "podman"; selinuxEnforcing: boolean }
+  | { available: true; kind: "podman" | "docker"; selinuxEnforcing: boolean }
   | { available: false; why: SandboxUnavailable };
+
+/** An engine of sandboxes found on this computer, and whether it runs them here. */
+export interface SandboxEngineFound {
+  kind: SandboxKind;
+  availability: SandboxAvailability;
+}
+
+/**
+ * The engines of sandboxes on this computer, Podman's before Docker's, each as Mirador found it when it started; the one
+ * chosen in Settings, which Mirador uses from its next start, none for its own pick; the one it uses since it started; and
+ * whether MIRADOR_SANDBOX set that one instead, or turned sandboxes off.
+ */
+export interface SandboxEngines {
+  found: SandboxEngineFound[];
+  chosen: SandboxKind | null;
+  inUse: SandboxKind | null;
+  setByEnvironment: boolean;
+}
+
+/**
+ * The engine Mirador runs sandboxes with from its next start, as far as it can tell now: the one MIRADOR_SANDBOX sets;
+ * else the one chosen, where it is here; else the one it uses now.
+ */
+export const engineFromNextStart = ({ found, chosen, inUse, setByEnvironment }: SandboxEngines): SandboxKind | null =>
+  !setByEnvironment && found.some(({ kind }) => kind === chosen) ? chosen : inUse;
+
+/** What a page that sees no sandbox of this computer's is told of its engines. */
+export const NO_SANDBOX_ENGINES: SandboxEngines = { found: [], chosen: null, inUse: null, setByEnvironment: false };
+
+export const isSandboxKind = (value: unknown): value is SandboxKind => value === "apple-container" || value === "podman" || value === "docker";
 
 /** Why a room or workspace can't have its sandbox, as it is set up now; each one is said at the switch. */
 export type SandboxBlocker =

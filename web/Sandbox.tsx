@@ -100,10 +100,7 @@ const kindOf = (check: SandboxCheck | null): SandboxKind | null =>
   check?.availability.available ? check.availability.kind : null;
 
 /** Whether this computer's sandbox runs outside the SELinux confinement Linux enforces here. */
-const outsideSelinux = (check: SandboxCheck | null) =>
-  check?.availability.available === true &&
-  check.availability.kind === "podman" &&
-  check.availability.selinuxEnforcing;
+const outsideSelinux = (check: SandboxCheck | null) => check?.availability.available === true && check.availability.kind !== "apple-container" && check.availability.selinuxEnforcing;
 
 /**
  * The image the sandbox's VM runs on: the owner's own, by its name, or Mirador's base where none is named. A name typed
@@ -179,11 +176,13 @@ function BaseImageField({
 
 /** What a sandbox sharing this computer's kernel keeps the agents from, and what not, said before it is turned on. */
 function SharedKernelWarning({
+  kind,
   withoutSelinux,
   confirmation,
   onConfirm,
   onKeepOff,
 }: {
+  kind: SandboxKind;
   withoutSelinux: boolean;
   confirmation: string;
   onConfirm: () => void;
@@ -191,7 +190,7 @@ function SharedKernelWarning({
 }) {
   return (
     <div className="room-sandbox-shared-kernel" role="alert">
-      <p>{words.sharedKernel.warning}</p>
+      <p>{words.sharedKernel.warning(words.engines[kind])}</p>
       {withoutSelinux && (
         <p className="room-sandbox-without-selinux">
           {words.sharedKernel.withoutSelinux}
@@ -350,8 +349,9 @@ export function SandboxSwitch({
         </p>
       )}
       {shown.on && kind !== null && <SetupSteps setup={setup} kind={kind} />}
-      {askingToShareKernel && (
+      {askingToShareKernel && kind !== null && (
         <SharedKernelWarning
+          kind={kind}
           withoutSelinux={withoutSelinux}
           confirmation={words.sharedKernel.turnOn}
           onConfirm={turnOnSharingKernel}
@@ -360,9 +360,11 @@ export function SandboxSwitch({
       )}
       {shown.on &&
         kernelShared &&
+        kind !== null &&
         !shown.allowsSharedKernel &&
         pending === null && (
           <SharedKernelWarning
+            kind={kind}
             withoutSelinux={withoutSelinux}
             confirmation={words.sharedKernel.allow}
             onConfirm={() => choose({ ...shown, allowsSharedKernel: true })}

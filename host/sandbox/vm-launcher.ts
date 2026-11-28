@@ -85,6 +85,11 @@ export interface AgentInVm {
 export interface VmLauncher {
   /** Whether VMs run here, and why not where they don't. */
   availability(): SandboxAvailability;
+  /**
+   * Whose this computer's user's files are in its VMs, as `<uid>:<gid>` there: the agents' user's, where the runtime maps
+   * the two, else another's, as whom the guard writes them for the agents.
+   */
+  readonly filesOwner: string;
   /** The runtime runs, started where it was not, its progress told. */
   prepare(progress: (setup: SandboxSetup) => void): Promise<void>;
   /** Mirador's own base image, built from its recipe where it is not here yet, its progress told. */

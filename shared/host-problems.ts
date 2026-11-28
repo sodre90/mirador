@@ -58,6 +58,7 @@ export type HostProblem =
   | { code: "unknown-conversation-order"; value: string }
   | { code: "unknown-plugin-update-mode"; value: string }
   | { code: "unknown-workspace-colour"; value: string }
+  | { code: "unknown-sandbox-engine"; value: string }
   | { code: "not-a-machine-address"; address: string }
   | { code: "machine-already-added"; origin: string }
   | { code: "unknown-machine-colour"; value: string }

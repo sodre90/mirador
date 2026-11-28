@@ -229,10 +229,12 @@ export const rooms: Messages["rooms"] = {
     kinds: {
       "apple-container": "Saját, könnyű virtuális gépen fut ezen a Macen, az Apple container eszközével.",
       podman: "Podman-konténerben fut, amely osztozik a gép Linux-kernelén: gyengébb, mint egy virtuális gép.",
+      docker: "Docker-konténerben fut, amely osztozik a gép Linux-kernelén: gyengébb, mint egy virtuális gép.",
     },
+    engines: { "apple-container": "Apple container", podman: "Podman", docker: "Docker" },
     sharedKernel: {
-      warning:
-        "Ezen a gépen a sandbox egy Podman-konténer, nem virtuális gép. Így is csak a munkaterületet látja, és csak azt éri el, amit kiválasztasz, de osztozik a gép Linux-kernelén, így a kernel egy hibáján át az ágensek kijuthatnak belőle.",
+      warning: (engine) =>
+        `Ezen a gépen a sandbox egy ${engine}-konténer, nem virtuális gép. Így is csak a munkaterületet látja, és csak azt éri el, amit kiválasztasz, de osztozik a gép Linux-kernelén, így a kernel egy hibáján át az ágensek kijuthatnak belőle.`,
       turnOn: "Bekapcsolás mégis",
       keepOff: "Maradjon kikapcsolva",
       turnsFailUntilAllowed: "Az ágensek körei sikertelenek, amíg nem engedélyezed.",
@@ -261,6 +263,16 @@ export const rooms: Messages["rooms"] = {
         ready: "Beállítva ezen a gépen.",
         failed: "A beállítás nem sikerült.",
       },
+      docker: {
+        "not-started": "Első használatkor beállítódik ezen a gépen: a Docker megépíti a sandbox alap-image-ét, majd telepíti az ágensek programjait.",
+        "starting-service": "A Docker indítása…",
+        "building-image": "A sandbox alap-image-ének építése ezen a gépen…",
+        "pulling-image": "A sandbox alap-image-ének letöltése erre a gépre…",
+        "installing-tool": "Az ágensek programjainak telepítése ezen a gépen…",
+        "checking-image": "Annak ellenőrzése, hogy az alap-image-ben megvan-e, ami az ágenseknek kell…",
+        ready: "Beállítva ezen a gépen.",
+        failed: "A beállítás nem sikerült.",
+      },
     },
     steps: {
       title: "A sandbox előkészítése",
@@ -269,7 +281,7 @@ export const rooms: Messages["rooms"] = {
       stepOf: (at: number, of: number) => `${of} lépésből a(z) ${at}.`,
       stepsDone: "Kész lépések",
       howFar: "Hol tart ez a lépés",
-      service: { "apple-container": "Az Apple container szolgáltatásának indítása", podman: "A Podman indítása" },
+      service: { "apple-container": "Az Apple container szolgáltatásának indítása", podman: "A Podman indítása", docker: "A Docker indítása" },
       firstKernel: "Első alkalommal letölt egy Linux-kernelt.",
       baseBuild: "A Mirador alap-image-ének építése",
       buildPart: (at: number, of: number) => `Az építés ${of} részéből a(z) ${at}.`,
@@ -291,12 +303,13 @@ export const rooms: Messages["rooms"] = {
       needs: {
         "apple-container": "Bármely image, amelynek van Armra (arm64) készült Linux-változata, és van benne glibc, /bin/sh, /bin/bash és git; a Mirador saját programjai mellé kerülnek. Minden Mirador-indításkor újra letöltődik, hacsak nem adod meg a digestjét.",
         podman: "Bármely image ennek a gépnek a processzorára, amelyben van glibc, /bin/sh, /bin/bash és git; a Mirador saját programjai mellé kerülnek. Minden Mirador-indításkor újra letöltődik, hacsak nem adod meg a digestjét.",
+        docker: "Bármely image ennek a gépnek a processzorára, amelyben van glibc, /bin/sh, /bin/bash és git; a Mirador saját programjai mellé kerülnek. Minden Mirador-indításkor újra letöltődik, hacsak nem adod meg a digestjét.",
       },
     },
     setupFailed: (problem: string) => `A beállítás nem sikerült: ${problem}`,
     wholeEnvironmentIgnored: "Amíg a szoba sandboxolt, ez nem számít: a sandboxába csak az itt kiválasztott értékek kerülnek.",
     meaning: [
-      "A szoba Claude Code- és pi-ágensei egy saját sandboxban futnak ezen a gépen: Macen egy könnyű virtuális gépen, az Apple container eszközével; Linuxon egy Podman-konténerben, amely osztozik a gép kernelén, így kevésbé tartja bent az ágenseket, mint egy virtuális gép, és csak akkor kapja a szoba, ha engedélyezed. A sandbox a munkaterületet, a szoba egy mappáját az ágensek beállításainak és munkameneteinek, valamint az erről a gépről hozzáadott mappákat látja, csak olvashatóan vagy olvashatóan és írhatóan; a gépből semmi mást. Az ágensek a Miradoron keresztül érik el a modelljüket, amely hozzáadja a profil kulcsát, így a kulcs sosem kerül a sandboxba, és elérik a Mirador vásznát.",
+      "A szoba Claude Code- és pi-ágensei egy saját sandboxban futnak ezen a gépen: Macen egy könnyű virtuális gépen, az Apple container eszközével; Linuxon egy Podman- vagy Docker-konténerben, amely osztozik a gép kernelén, így kevésbé tartja bent az ágenseket, mint egy virtuális gép, és csak akkor kapja a szoba, ha engedélyezed. A sandbox a munkaterületet, a szoba egy mappáját az ágensek beállításainak és munkameneteinek, valamint az erről a gépről hozzáadott mappákat látja, csak olvashatóan vagy olvashatóan és írhatóan; a gépből semmi mást. Az ágensek a Miradoron keresztül érik el a modelljüket, amely hozzáadja a profil kulcsát, így a kulcs sosem kerül a sandboxba, és elérik a Mirador vásznát.",
       "Ezeken túl a sandbox azt éri el, amit a Hálózat alatt kiválasztasz, a Mirador webproxyján át, mert saját hálózata nincs: az SSH, a ping és a proxyt nem használó programok nem jutnak ki. Egy változtatás azonnal érvényes, a folyamatban lévő körökben is, és megszakítja a már nem engedett kapcsolatokat. Kikapcsolás és újbóli bekapcsolás után a sandbox csak a modellt és a Miradort éri el.",
       "Ha szabadon dolgoznak, az ágensek semmire sem kérnek engedélyt, mert a sandbox bent tartja őket. Különben a szoba engedélybeállítása érvényes, mint ezen a gépen.",
       "Az ágensek beállításait, utasításait és MCP-szervereit adó fájlok visszatartva vannak, és azok is, amelyek maguktól futnak: .claude, .mcp.json, CLAUDE.md, AGENTS.md, .codex, opencode.json, .opencode, .pi, .husky, .githooks, .vscode, .pre-commit-config.yaml, lefthook.yml és .envrc. Amelyek a sandbox indulásakor megvannak, azok benne csak olvashatók; egy újat azonnal visszaállít, te pedig a szobában engedélyezed vagy elveted.",

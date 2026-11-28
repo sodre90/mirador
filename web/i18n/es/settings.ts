@@ -110,6 +110,16 @@ export const settings: Messages["settings"] = {
     hint: "Lo que puede hacer un chat lateral nuevo, salvo que su espacio de trabajo elija otra cosa en Dónde trabajan las conversaciones, o hayas cambiado un chat lateral de su conversación. Claude Code, Codex y Antigravity pueden limitar un chat lateral a leer; otros agentes no, así que sus chats laterales siempre pueden cambiar archivos. Los chats laterales de las conversaciones de una sala siguen siendo de solo lectura.",
     access: "Chats laterales nuevos",
   },
+  sandboxes: {
+    title: "Sandboxes",
+    hint: "Qué ejecuta los sandboxes de las salas y los espacios de trabajo en el equipo del host.",
+    engine: "Ejecutar los sandboxes con",
+    cantRun: (engine) => `${engine}: aquí no puede ejecutar sandboxes`,
+    noEngine: "No se ha encontrado ninguno: en un Mac, la herramienta container de Apple; en Linux, Podman o Docker Engine en modo rootless.",
+    fromNextStart: (chosen, inUse) => `Mirador pasa a ${chosen} cuando se reinicia. Hasta entonces, sus sandboxes se ejecutan con ${inUse}.`,
+    setByEnvironment: "MIRADOR_SANDBOX lo elige cuando Mirador arranca.",
+    dockerReadOnly: "Con Docker, en las carpetas añadidas como solo lectura los agentes solo ven lo que cualquier usuario de este equipo puede leer.",
+  },
   sleep: {
     title: "Suspensión",
     hint: "Lo guarda el host. Su equipo aún puede suspenderse al cerrar la tapa de un portátil, y su pantalla se apaga igualmente.",

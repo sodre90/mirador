@@ -1,7 +1,9 @@
 // The guard of a sandbox's folders: the only way its agents reach them. Each folder Mirador mounts read and write lies
 // under a place only root enters, and is shown at its own path through here, where a write is refused by name
 // (rules.hpp), whatever is replaced on the owner's computer meanwhile. Everything else goes on to the folder as the
-// agents' user. usage: mirador-guard <manifest> <uid>:<gid> <sockets folder> -- <command>...
+// owner of its files, as the VM sees them, whose files the agents see as theirs: a rootless Docker shows the owner's
+// files as root's, where Podman shows them as the agents'.
+// usage: mirador-guard <manifest> <agents' uid>:<gid> <owner's uid>:<gid> <sockets folder> -- <command>...
 // Opens the sockets to the agents' user, runs the command as nobody once each folder is guarded, and ends when it does,
 // or when a folder is no longer guarded. `mirador-guard as <uid>:<gid> -- <command>...` runs a command as that user
 // alone. It is linked statically and called by its whole path, so nothing of the VM's image runs as root.
@@ -41,14 +43,18 @@
 #include <vector>
 
 #include "manifest.hpp"
+#include "owners.hpp"
 
 namespace {
 
 using guard::Area;
 using guard::Making;
 using guard::Named;
+using guard::NOBODY;
+using guard::Owners;
 using guard::Paths;
 using guard::Place;
+using guard::User;
 
 /** How long the kernel takes what it was told of a name or a file as still so: the owner's own changes show within it. */
 constexpr double KEPT_FOR_S = 1.0;
@@ -168,7 +174,7 @@ class Node {
 
 class GuardedFolder {
  public:
-  GuardedFolder(const std::string& raw, const Paths& paths) {
+  GuardedFolder(const std::string& raw, const Paths& paths, const Owners& owners) : owners(owners) {
     auto fd = std::make_shared<const Descriptor>(open(raw.c_str(), O_PATH | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC));
     struct stat stats {};
     if (!*fd || fstat(fd->get(), &stats) != 0) throw std::runtime_error("no folder at " + raw + ": " + std::strerror(errno));
@@ -177,9 +183,11 @@ class GuardedFolder {
     top_->foundAs({Area::Tree, &paths});
   }
 
+  const Owners owners;
+
   Node& node(fuse_ino_t ino) { return ino == FUSE_ROOT_ID ? *top_ : *reinterpret_cast<Node*>(ino); }
 
-  /** What stands at a name of a folder, the kernel knowing of it once more; an errno where nothing does. */
+  /** What stands at a name of a folder, the kernel knowing of it once more, as the agents see it; an errno where nothing does. */
   int lookUp(Node& parent, const char* name, fuse_entry_param& entry) {
     entry = {};
     const auto folder = parent.reached();
@@ -204,6 +212,7 @@ class GuardedFolder {
     known->lookups += 1;
     entry.ino = reinterpret_cast<fuse_ino_t>(known.get());
     entry.attr_timeout = entry.entry_timeout = KEPT_FOR_S;
+    owners.showToAgents(entry.attr);
     return 0;
   }
 
@@ -308,18 +317,19 @@ void replyWithEntry(fuse_req_t req, Node& parent, const char* name) {
 void onGetattr(fuse_req_t req, fuse_ino_t ino, fuse_file_info*) {
   struct stat stats {};
   const int error = nodeOf(req, ino).attributes(stats);
-  if (error) fuse_reply_err(req, error);
-  else fuse_reply_attr(req, &stats, KEPT_FOR_S);
+  if (error) return answer(req, error);
+  folderOf(req).owners.showToAgents(stats);
+  fuse_reply_attr(req, &stats, KEPT_FOR_S);
 }
 
-int changed(Node& node, const struct stat& to, int what, fuse_file_info* file) {
+int changed(Node& node, const Owners& owners, const struct stat& to, int what, fuse_file_info* file) {
   const auto reached = node.reached();
   if (!reached) return errno;
   const auto path = pathOf(reached->get());
   if ((what & FUSE_SET_ATTR_MODE) && chmod(path.c_str(), to.st_mode) != 0) return errno;
   if (what & (FUSE_SET_ATTR_UID | FUSE_SET_ATTR_GID)) {
-    const uid_t uid = (what & FUSE_SET_ATTR_UID) ? to.st_uid : static_cast<uid_t>(-1);
-    const gid_t gid = (what & FUSE_SET_ATTR_GID) ? to.st_gid : static_cast<gid_t>(-1);
+    const uid_t uid = (what & FUSE_SET_ATTR_UID) ? owners.uidOnDisk(to.st_uid) : static_cast<uid_t>(-1);
+    const gid_t gid = (what & FUSE_SET_ATTR_GID) ? owners.gidOnDisk(to.st_gid) : static_cast<gid_t>(-1);
     if (fchownat(reached->get(), "", uid, gid, AT_EMPTY_PATH | AT_SYMLINK_NOFOLLOW) != 0) return errno;
   }
   if (what & FUSE_SET_ATTR_SIZE) {
@@ -341,7 +351,7 @@ int changed(Node& node, const struct stat& to, int what, fuse_file_info* file) {
 void onSetattr(fuse_req_t req, fuse_ino_t ino, struct stat* to, int what, fuse_file_info* file) {
   Node& node = nodeOf(req, ino);
   if (node.isProtected()) return answer(req, REFUSED);
-  const int error = changed(node, *to, what, file);
+  const int error = changed(node, folderOf(req).owners, *to, what, file);
   if (error) fuse_reply_err(req, error);
   else onGetattr(req, ino, file);
 }
@@ -637,12 +647,7 @@ fuse_lowlevel_ops operations() {
   return ops;
 }
 
-struct Agent {
-  uid_t uid;
-  gid_t gid;
-};
-
-Agent agentIn(const std::string& given) {
+User userIn(const std::string& given) {
   const auto colon = given.find(':');
   if (colon == std::string::npos) throw std::runtime_error("no <uid>:<gid> in " + given);
   return {static_cast<uid_t>(std::stoul(given.substr(0, colon))), static_cast<gid_t>(std::stoul(given.substr(colon + 1)))};
@@ -665,13 +670,13 @@ void giveUpEveryCapability() {
   mustNotFail(prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0), "never gaining any");
 }
 
-/** From here on, everything is done as the agents' user, and nothing they do can reach this process or be done by it as root. */
-void actOnlyAs(const Agent& agent) {
+/** From here on, everything is done as the owner of the folders' files, and nothing the agents do can reach this process or be done by it as root. */
+void actOnlyAs(const User& owner) {
   mustNotFail(setgroups(0, nullptr), "leaving every group");
-  setfsgid(agent.gid);
-  setfsuid(agent.uid);
-  if (static_cast<uid_t>(setfsuid(static_cast<uid_t>(-1))) != agent.uid) throw std::runtime_error("could not act as the agents' user");
-  if (static_cast<gid_t>(setfsgid(static_cast<gid_t>(-1))) != agent.gid) throw std::runtime_error("could not act as the agents' group");
+  setfsgid(owner.gid);
+  setfsuid(owner.uid);
+  if (static_cast<uid_t>(setfsuid(static_cast<uid_t>(-1))) != owner.uid) throw std::runtime_error("could not act as the files' owner");
+  if (static_cast<gid_t>(setfsgid(static_cast<gid_t>(-1))) != owner.gid) throw std::runtime_error("could not act as the files' group");
   giveUpWhatItCouldGain();
   giveUpEveryCapability();
   mustNotFail(prctl(PR_SET_DUMPABLE, 0), "keeping others out");
@@ -679,15 +684,13 @@ void actOnlyAs(const Agent& agent) {
 }
 
 /** Becomes this user for good, in no group, with no capability, none to gain and no way back to root. */
-void becomeOnly(const Agent& user) {
+void becomeOnly(const User& user) {
   mustNotFail(setgroups(0, nullptr), "leaving every group");
   giveUpWhatItCouldGain();
   mustNotFail(setresgid(user.gid, user.gid, user.gid), "becoming the group");
   mustNotFail(setresuid(user.uid, user.uid, user.uid), "becoming the user");
   giveUpEveryCapability();
 }
-
-const Agent NOBODY{65534, 65534};
 
 /** Lets the agents' user reach each socket Mirador forwarded into the folder; nothing else there changes, and no link is followed. */
 void openSocketsIn(const std::string& folder) {
@@ -709,8 +712,8 @@ struct Served {
   fuse_session* session;
 };
 
-Served guarded(const guard::Root& root, const fuse_lowlevel_ops& ops) {
-  auto folder = std::make_unique<GuardedFolder>(root.raw, *root.paths);
+Served guarded(const guard::Root& root, const fuse_lowlevel_ops& ops, const Owners& owners) {
+  auto folder = std::make_unique<GuardedFolder>(root.raw, *root.paths, owners);
   std::filesystem::create_directories(root.target);
   std::string options = "allow_other,nosuid,nodev,fsname=mirador,subtype=mirador";
   std::string program = "mirador-guard", flag = "-o";
@@ -754,21 +757,21 @@ pid_t startedAsNobody(char** command) {
 }
 
 const char* const USAGE =
-    "usage: mirador-guard <manifest> <uid>:<gid> <sockets folder> -- <command>...\n"
+    "usage: mirador-guard <manifest> <agents' uid>:<gid> <owner's uid>:<gid> <sockets folder> -- <command>...\n"
     "       mirador-guard as <uid>:<gid> -- <command>...";
 
 int guardAndRun(int argc, char** argv) {
-  if (argc < 6 || std::string(argv[4]) != "--") throw std::runtime_error(USAGE);
+  if (argc < 7 || std::string(argv[5]) != "--") throw std::runtime_error(USAGE);
   const auto roots = guard::readManifest(argv[1]);
-  const auto agent = agentIn(argv[2]);
+  const Owners owners{userIn(argv[3]), userIn(argv[2])};
   allowManyOpenFiles();
   for (const auto& root : roots) mustNotFail(chmod(std::filesystem::path(root.raw).parent_path().c_str(), 0700), "keeping the agents out of " + root.raw);
-  openSocketsIn(argv[3]);
+  openSocketsIn(argv[4]);
   const auto ops = operations();
   std::vector<Served> served;
-  for (const auto& root : roots) served.push_back(guarded(root, ops));
-  const pid_t command = startedAsNobody(argv + 5);
-  actOnlyAs(agent);
+  for (const auto& root : roots) served.push_back(guarded(root, ops, owners));
+  const pid_t command = startedAsNobody(argv + 6);
+  actOnlyAs(owners.owner);
   for (const auto& each : served) std::thread(serve, each.session).detach();
   int status = 0;
   while (waitpid(command, &status, 0) == -1)
@@ -803,7 +806,7 @@ std::vector<char*> lastOfEachName(char** given) {
   if (argc < 5 || std::string(argv[3]) != "--") throw std::runtime_error(USAGE);
   auto environment = lastOfEachName(environ);
   environ = environment.data();
-  becomeOnly(agentIn(argv[2]));
+  becomeOnly(userIn(argv[2]));
   makeHome();
   execvp(argv[4], argv + 4);
   couldNotRun(argv[4]);

@@ -5,13 +5,14 @@ import { dirname, join } from "node:path";
 import { roomSandbox, type SandboxFolder } from "../shared/sandbox.ts";
 import { AppleContainer } from "../host/sandbox/apple-container.ts";
 import { ANTHROPIC_API } from "../host/sandbox/model-proxy.ts";
-import { Podman } from "../host/sandbox/podman.ts";
+import { linuxEnginesHere } from "../host/sandbox/engines.ts";
 import { Sandboxes, type SandboxHost } from "../host/sandbox/sandboxes.ts";
 import { agentProgramsInVm, GUARD_IN_VM } from "../host/sandbox/tools-folder.ts";
 
 /**
- * A sandbox's guard in a real VM, started as Mirador starts one: with Apple's `container` on a Mac, in a rootless Podman
- * container on Linux. Opted into, as it sets the sandbox up on this computer first, its base image and tools:
+ * A sandbox's guard in a real VM, started as Mirador starts one: with Apple's `container` on a Mac, in a container of
+ * rootless Podman on Linux, or of the engine MIRADOR_SANDBOX names there, such as `docker`. Opted into, as it sets the
+ * sandbox up on this computer first, its base image and tools:
  * `MIRADOR_SANDBOX_VM_E2E=1 bun test tests/guard-in-vm.test.ts --timeout 60000`.
  */
 const optedIn = process.env.MIRADOR_SANDBOX_VM_E2E === "1";
@@ -78,7 +79,8 @@ function sandboxHere() {
     foldersStarted: () => {},
     places: { home: scratch, dataDir: join(scratch, "mirador-data"), checkout: "/nonexistent-checkout", computersOwn: [] },
   };
-  const sandboxes = new Sandboxes(process.platform === "linux" ? Podman.here(undefined, path) : AppleContainer.here(undefined, path), host, 10 * 60_000);
+  const launcher = process.platform === "linux" ? linuxEnginesHere(process.env.MIRADOR_SANDBOX, null, path).launcher : AppleContainer.here(undefined, path);
+  const sandboxes = new Sandboxes(launcher, host, 10 * 60_000);
   const launch = (agent: string[]) =>
     sandboxes.launch({
       owner: roomSandbox("room-1"),
@@ -96,6 +98,7 @@ function sandboxHere() {
     return ran(launched.command, launched.environment, input).finally(() => launched.gone!());
   };
   return {
+    filesOwner: launcher.filesOwner,
     workspace,
     library,
     at: (inWorkspace: string) => join(workspace, inWorkspace),
@@ -159,7 +162,8 @@ describe.skipIf(!optedIn)("a sandbox's guard, in a real VM", () => {
     const [agent, ...otherAgents] = processes.filter(({ name, command }) => name === "bun" && command.includes(" -e "));
     expect([otherGuards, otherRelays, otherAgents]).toEqual([[], [], []]);
     expect(guard!.threads.length).toBeGreaterThan(1);
-    expect(new Set(guard!.threads.map(({ Uid }) => Uid))).toEqual(new Set(["0\t0\t0\t1000"]));
+    const ownersUid = sandbox.filesOwner.split(":")[0];
+    expect(new Set(guard!.threads.map(({ Uid }) => Uid))).toEqual(new Set([`0\t0\t0\t${ownersUid}`]));
     for (const { Uid, Gid, Groups } of relays!.threads) expect({ Uid, Gid, Groups }).toEqual({ Uid: "65534\t65534\t65534\t65534", Gid: "65534\t65534\t65534\t65534", Groups: "" });
     for (const { Uid, Gid, Groups } of agent!.threads) expect({ Uid, Gid, Groups }).toEqual({ Uid: "1000\t1000\t1000\t1000", Gid: "1000\t1000\t1000\t1000", Groups: "" });
     for (const { Uid, Gid, Groups, ...privileges } of [...guard!.threads, ...relays!.threads, ...agent!.threads]) expect(privileges, Uid).toEqual(NO_CAPABILITY);

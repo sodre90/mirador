@@ -110,6 +110,16 @@ export const settings = {
     hint: "What a new side chat may do, unless its workspace chooses otherwise under Where conversations work, or you switched a side chat of its conversation. Claude Code, Codex and Antigravity can hold a side chat to reading; other agents can't, so their side chats can always change files. Side chats of a room's conversations stay read-only.",
     access: "New side chats",
   },
+  sandboxes: {
+    title: "Sandboxes",
+    hint: "What runs the sandboxes of rooms and workspaces on the host's computer.",
+    engine: "Run sandboxes with",
+    cantRun: (engine: string) => `${engine}: can't run sandboxes here`,
+    noEngine: "None found here: on a Mac, Apple's container tool; on Linux, Podman or Docker Engine run rootless.",
+    fromNextStart: (chosen: string, inUse: string) => `Mirador switches to ${chosen} when it restarts. Until then its sandboxes run with ${inUse}.`,
+    setByEnvironment: "MIRADOR_SANDBOX chooses this as Mirador starts.",
+    dockerReadOnly: "With Docker, agents see only what every user of this computer may read in the folders added read only.",
+  },
   sleep: {
     title: "Sleep",
     hint: "Kept by the host. Its computer can still sleep when you close a laptop's lid, and its display still turns off.",

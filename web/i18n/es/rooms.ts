@@ -230,10 +230,12 @@ export const rooms: Messages["rooms"] = {
     kinds: {
       "apple-container": "Se ejecuta en una máquina virtual ligera propia en este Mac, creada con la herramienta container de Apple.",
       podman: "Se ejecuta en un contenedor de Podman, que comparte el kernel de Linux de este equipo: más débil que una máquina virtual.",
+      docker: "Se ejecuta en un contenedor de Docker, que comparte el kernel de Linux de este equipo: más débil que una máquina virtual.",
     },
+    engines: { "apple-container": "container de Apple", podman: "Podman", docker: "Docker" },
     sharedKernel: {
-      warning:
-        "En este equipo el sandbox es un contenedor de Podman, no una máquina virtual. Aun así solo ve el espacio de trabajo y solo llega a lo que elijas, pero comparte el kernel de Linux de este equipo, así que un fallo del kernel podría dejar salir a los agentes.",
+      warning: (engine) =>
+        `En este equipo el sandbox es un contenedor de ${engine}, no una máquina virtual. Aun así solo ve el espacio de trabajo y solo llega a lo que elijas, pero comparte el kernel de Linux de este equipo, así que un fallo del kernel podría dejar salir a los agentes.`,
       turnOn: "Activarlo igualmente",
       keepOff: "Dejarlo desactivado",
       turnsFailUntilAllowed: "Los turnos de los agentes fallan hasta que lo permitas.",
@@ -262,6 +264,16 @@ export const rooms: Messages["rooms"] = {
         ready: "Preparado en este equipo.",
         failed: "No se pudo preparar.",
       },
+      docker: {
+        "not-started": "Se prepara en este equipo la primera vez que se usa: Docker construye la imagen base del sandbox y luego se instalan los programas de los agentes.",
+        "starting-service": "Iniciando Docker…",
+        "building-image": "Construyendo la imagen base del sandbox en este equipo…",
+        "pulling-image": "Descargando la imagen base del sandbox en este equipo…",
+        "installing-tool": "Instalando los programas de los agentes en este equipo…",
+        "checking-image": "Comprobando que la imagen base tiene lo que necesitan los agentes…",
+        ready: "Preparado en este equipo.",
+        failed: "No se pudo preparar.",
+      },
     },
     steps: {
       title: "Preparando el sandbox",
@@ -270,7 +282,7 @@ export const rooms: Messages["rooms"] = {
       stepOf: (at: number, of: number) => `Paso ${at} de ${of}`,
       stepsDone: "Pasos hechos",
       howFar: "Cuánto lleva este paso",
-      service: { "apple-container": "Iniciar el servicio container de Apple", podman: "Iniciar Podman" },
+      service: { "apple-container": "Iniciar el servicio container de Apple", podman: "Iniciar Podman", docker: "Iniciar Docker" },
       firstKernel: "La primera vez descarga un kernel de Linux.",
       baseBuild: "Construir la imagen base de Mirador",
       buildPart: (at: number, of: number) => `Parte ${at} de ${of} de la construcción`,
@@ -292,12 +304,13 @@ export const rooms: Messages["rooms"] = {
       needs: {
         "apple-container": "Cualquier imagen con una versión de Linux para Arm (arm64) que tenga glibc, /bin/sh, /bin/bash y git; los programas de Mirador se añaden a su lado. Se vuelve a descargar cada vez que Mirador arranca, salvo que indiques su digest.",
         podman: "Cualquier imagen para el procesador de este equipo que tenga glibc, /bin/sh, /bin/bash y git; los programas de Mirador se añaden a su lado. Se vuelve a descargar cada vez que Mirador arranca, salvo que indiques su digest.",
+        docker: "Cualquier imagen para el procesador de este equipo que tenga glibc, /bin/sh, /bin/bash y git; los programas de Mirador se añaden a su lado. Se vuelve a descargar cada vez que Mirador arranca, salvo que indiques su digest.",
       },
     },
     setupFailed: (problem: string) => `No se pudo preparar: ${problem}`,
     wholeEnvironmentIgnored: "Se ignora mientras la sala tenga sandbox: en su sandbox solo entran los valores elegidos aquí.",
     meaning: [
-      "Los agentes de Claude Code y de pi de la sala se ejecutan en un sandbox propio en este equipo: en un Mac, una máquina virtual ligera, creada con la herramienta container de Apple; en Linux, un contenedor de Podman, que comparte el kernel del equipo y por eso retiene peor a los agentes que una máquina virtual, y que solo se usa cuando lo permites. El sandbox ve el espacio de trabajo, una carpeta de la sala para la configuración y las sesiones de los agentes y las carpetas de este equipo que añadas, en solo lectura o en lectura y escritura; nada más de este equipo. Los agentes llegan a su modelo a través de Mirador, que añade la clave del perfil para que la clave nunca entre en el sandbox, y al lienzo de Mirador.",
+      "Los agentes de Claude Code y de pi de la sala se ejecutan en un sandbox propio en este equipo: en un Mac, una máquina virtual ligera, creada con la herramienta container de Apple; en Linux, un contenedor de Podman o de Docker, que comparte el kernel del equipo y por eso retiene peor a los agentes que una máquina virtual, y que solo se usa cuando lo permites. El sandbox ve el espacio de trabajo, una carpeta de la sala para la configuración y las sesiones de los agentes y las carpetas de este equipo que añadas, en solo lectura o en lectura y escritura; nada más de este equipo. Los agentes llegan a su modelo a través de Mirador, que añade la clave del perfil para que la clave nunca entre en el sandbox, y al lienzo de Mirador.",
       "Además de eso, el sandbox llega a lo que elijas en Red, a través de un proxy web de Mirador, porque no tiene red propia: SSH, ping y los programas que no usan un proxy no salen. Un cambio vale al instante, también en los turnos en curso, y corta las conexiones que ya no permite. Si lo desactivas y lo vuelves a activar, el sandbox solo llega al modelo y a Mirador.",
       "Trabajando libremente, los agentes no piden nada, porque el sandbox los mantiene dentro. Si no, se aplica el permiso predefinido de la sala, igual que en este equipo.",
       "Los archivos de los que los agentes cargan su configuración, instrucciones y servidores MCP quedan retenidos, y también los que se ejecutan solos: .claude, .mcp.json, CLAUDE.md, AGENTS.md, .codex, opencode.json, .opencode, .pi, .husky, .githooks, .vscode, .pre-commit-config.yaml, lefthook.yml y .envrc. Los que ya están cuando arranca el sandbox son de solo lectura en él; uno nuevo se deshace al instante, y tú lo apruebas o lo descartas en la sala.",

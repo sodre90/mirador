@@ -87,6 +87,7 @@ const EVERY_CLIENT_MESSAGE: Record<ClientMessage["type"], true> = {
   "newer-version.check": true,
   "newer-version.pull": true,
   "settings.set-script-program": true,
+  "settings.set-sandbox-engine": true,
   "settings.set-editor": true,
   "settings.set-machine-name": true,
   "settings.set-push-relay": true,

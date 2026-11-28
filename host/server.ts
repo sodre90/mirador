@@ -130,7 +130,7 @@ import { TunnelRefused, type PeerToPeer, type TunnelEnd, type TunnelListener } f
 import { thisMacModelsInUse, voiceSettingsProblem, voiceSettingsWithoutKeys, type VoiceSettings } from "../shared/voice.ts";
 import { described, englishProblem, HostProblemError, problemFieldsOf, problemOf, type DescribedProblem, type HostProblem } from "../shared/host-problems.ts";
 import { conversationCanvasToken } from "./canvas-token.ts";
-import { isSandboxNetwork, isSandboxOwner } from "../shared/sandbox.ts";
+import { isSandboxNetwork, isSandboxOwner, type SandboxEngines, type SandboxKind } from "../shared/sandbox.ts";
 
 export interface HostServices {
   config: HostConfig;
@@ -138,6 +138,8 @@ export interface HostServices {
   hub: Hub;
   conversations: ConversationService;
   sandboxes: Pick<Sandboxes, "setupStates" | "heldChanges" | "holdingTooMany" | "heldChangeText">;
+  /** The engines of sandboxes as Mirador found them when it started, and the one it uses since. */
+  sandboxEngines: SandboxEngines;
   canvas: CanvasService;
   mcp: CanvasMcpEndpoints;
   apps: AppDocuments;
@@ -248,6 +250,7 @@ export function startServer(services: HostServices) {
     hub,
     conversations,
     sandboxes,
+    sandboxEngines,
     canvas,
     mcp,
     apps,
@@ -1408,6 +1411,14 @@ export function startServer(services: HostServices) {
     hub.broadcast({ type: "settings.editor", editor: editorState(store.editorSetting()) });
   }
 
+  const sandboxEnginesNow = (): SandboxEngines => ({ ...sandboxEngines, chosen: store.sandboxEngineSetting() });
+
+  function setSandboxEngine(engine: SandboxKind | null) {
+    if (engine !== null && !sandboxEngines.found.some(({ kind }) => kind === engine)) throw new HostProblemError({ code: "unknown-sandbox-engine", value: String(engine) });
+    store.setSandboxEngineSetting(engine);
+    hub.broadcast({ type: "settings.sandbox-engines", sandboxEngines: sandboxEnginesNow() });
+  }
+
   function setScriptProgram(program: string) {
     store.setScriptProgramSetting(program.trim());
     hub.broadcast({ type: "settings.script-program", scriptProgram: store.scriptProgramSetting() });
@@ -1709,6 +1720,8 @@ export function startServer(services: HostServices) {
         });
       case "settings.set-script-program":
         return setScriptProgram(message.program);
+      case "settings.set-sandbox-engine":
+        return setSandboxEngine(message.engine);
       case "settings.set-editor":
         return setEditor(message.setting);
       case "settings.set-machine-name":
@@ -2590,6 +2603,7 @@ export function startServer(services: HostServices) {
       pushKinds: [...NOTIFICATION_KINDS],
       claudeProgram,
       scriptProgram: store.scriptProgramSetting(),
+      sandboxEngines: sandboxEnginesNow(),
       editor: editorState(store.editorSetting()),
       machineName: store.machineNameSetting(),
       computerName: computerName(),

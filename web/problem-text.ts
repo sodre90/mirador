@@ -185,6 +185,8 @@ export function problemText(problem: HostProblem, words: ProblemWords): string {
       return words.unknownKeepDeletedCanvas(problem.value);
     case "unknown-workspace-colour":
       return words.unknownWorkspaceColour(problem.value);
+    case "unknown-sandbox-engine":
+      return words.unknownSandboxEngine(problem.value);
     case "not-a-machine-address":
       return words.notAMachineAddress(problem.address);
     case "machine-already-added":

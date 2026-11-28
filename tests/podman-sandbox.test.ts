@@ -6,6 +6,7 @@ import { roomSandbox, type SandboxAvailability, type SandboxNotReadyWhy, type Sa
 import { KEY_PLACEHOLDER } from "../host/sandbox/agent-environment.ts";
 import { BASE_IMAGE_NAME } from "../host/sandbox/image.ts";
 import { ANTHROPIC_API } from "../host/sandbox/model-proxy.ts";
+import { linuxEnginesHere } from "../host/sandbox/engines.ts";
 import { computersOwnOnLinux, containersLabelled, imageNamesIn, othersContainersIn, Podman, writableSourcesIn } from "../host/sandbox/podman.ts";
 import { Sandboxes, type AgentInSandbox, type SandboxHost } from "../host/sandbox/sandboxes.ts";
 import { BUN_IN_VM, GUARD_IN_VM, toolsFolderOf } from "../host/sandbox/tools-folder.ts";
@@ -100,6 +101,7 @@ describe("a room's sandbox on rootless Podman", () => {
       JSON.stringify([GUARD_IN_VM]),
       expect.stringMatching(new RegExp(`^${BASE_IMAGE_NAME}:[0-9a-f]{10}$`)),
       "/mirador/guard/folders",
+      "1000:1000",
       "1000:1000",
       "/run/mirador",
       "--",
@@ -292,8 +294,8 @@ describe("a room's sandbox on rootless Podman", () => {
     await expect(podman.prepare()).rejects.toMatchObject(notReady({ kind: "unavailable", why: "podman-not-rootless" }));
     await podman.removeLeftovers("abc");
     expect(cli.calls).toEqual([]);
-    expect(Podman.here("off", "/usr/bin").availability()).toEqual({ available: false, why: "turned-off" });
-    expect(Podman.here(join(scratch, "no-such-podman"), "/usr/bin").availability()).toEqual({ available: false, why: "no-podman" });
+    expect(linuxEnginesHere("off", null, "/usr/bin").launcher.availability()).toEqual({ available: false, why: "turned-off" });
+    expect(linuxEnginesHere(join(scratch, "no-such-podman"), null, "/usr/bin").launcher.availability()).toEqual({ available: false, why: "no-linux-engine" });
   });
 
   test.skipIf(!runsShellScripts)("asks Podman only for its info, never for another runtime, and runs a plain container wherever Podman is rootless; Podman's storage is this computer's own", () => {
@@ -306,15 +308,16 @@ describe("a room's sandbox on rootless Podman", () => {
       );
     says(true);
     chmodSync(fakePodman, 0o755);
-    const podman = Podman.here(fakePodman, "/usr/bin");
-    expect(podman.availability()).toMatchObject({ available: true, kind: "podman" });
+    const podman = linuxEnginesHere(fakePodman, null, "/usr/bin");
+    expect(podman.launcher.availability()).toMatchObject({ available: true, kind: "podman" });
+    expect(podman.launcher.filesOwner).toBe("1000:1000");
     expect(podman.storage).toEqual(["/home/someone/.local/share/containers/storage", "/run/user/1000/containers"]);
-    expect(computersOwnOnLinux("/home/someone", podman)).toEqual(["/home/someone/.config", "/home/someone/.local", "/home/someone/.local/share/containers/storage", "/run/user/1000/containers"]);
+    expect(computersOwnOnLinux("/home/someone", podman.storage)).toEqual(["/home/someone/.config", "/home/someone/.local", "/home/someone/.local/share/containers/storage", "/run/user/1000/containers"]);
     const enforce = join(scratch, "selinux-enforce");
     writeFileSync(enforce, "1\n");
-    expect(Podman.here(fakePodman, "/usr/bin", enforce).availability()).toEqual({ available: true, kind: "podman", selinuxEnforcing: true });
+    expect(linuxEnginesHere(fakePodman, null, "/usr/bin", enforce).launcher.availability()).toEqual({ available: true, kind: "podman", selinuxEnforcing: true });
     says(false);
-    expect(Podman.here(fakePodman, "/usr/bin").availability()).toEqual({ available: false, why: "podman-not-rootless" });
+    expect(linuxEnginesHere(fakePodman, null, "/usr/bin").launcher.availability()).toEqual({ available: false, why: "podman-not-rootless" });
     expect(readFileSync(asked, "utf8").trim().split("\n")).toEqual(["info --format json", "info --format json", "info --format json"]);
   });
 });

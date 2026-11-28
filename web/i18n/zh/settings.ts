@@ -108,6 +108,16 @@ export const settings: Messages["settings"] = {
     hint: "新旁聊可以做什么，除非它的工作区在“对话在哪里工作”中另作选择，或者你切换过它所属对话的某个旁聊。Claude Code、Codex 和 Antigravity 能把旁聊限制为只读；其他 Agent 不能，所以它们的旁聊总是可以更改文件。房间里对话的旁聊始终只读。",
     access: "新旁聊",
   },
+  sandboxes: {
+    title: "沙箱",
+    hint: "在主机的电脑上用什么运行房间和工作区的沙箱。",
+    engine: "运行沙箱所用",
+    cantRun: (engine) => `${engine}：无法在这里运行沙箱`,
+    noEngine: "这里没有找到：在 Mac 上需要 Apple 的 container 工具，在 Linux 上需要以 rootless 模式运行的 Podman 或 Docker Engine。",
+    fromNextStart: (chosen, inUse) => `Mirador 重启后改用 ${chosen}。在那之前，它的沙箱仍用 ${inUse} 运行。`,
+    setByEnvironment: "这由 MIRADOR_SANDBOX 在 Mirador 启动时选定。",
+    dockerReadOnly: "使用 Docker 时，在以只读方式添加的文件夹里，Agent 只能看到这台电脑的任何用户都能读取的内容。",
+  },
   sleep: {
     title: "睡眠",
     hint: "由 host 保存。合上笔记本盖子时，它所在的电脑仍可能休眠，显示器也仍会关闭。",

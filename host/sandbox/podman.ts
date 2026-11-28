@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { SandboxAvailability, SandboxSetup } from "../../shared/sandbox.ts";
 import { AGENT_USER } from "./agent-environment.ts";
-import { askPodman, podmanAvailability, podmanProgram, podmanStorageIn, SELINUX_ENFORCE } from "./availability.ts";
+import { podmanAvailability, podmanStorageIn, type EngineHere } from "./availability.ts";
 import { containerCli, lastLineOf, type ContainerCli } from "./container-cli.ts";
 import { droppedTo, environmentFlags, execProcessEnvironment, readByTool } from "./exec-environment.ts";
 import { BASE_RECIPE, baseImageOf, BUILD_TIMEOUT_MS, buildProgress, DEFAULT_BASE_PATH, defaultBaseTag, isMiradorsBase, mustRun, pulledOrHere, PULL_TIMEOUT_MS } from "./image.ts";
@@ -11,20 +11,20 @@ import { HOST_LABEL, isAnotherMiradors, SandboxNotReady, VM_READY_LINE, withoutT
 
 const READY_WITHIN_S = 30;
 /** The first start of an image as the agent user's own may copy its files for that user, which takes a while. */
-const RUN_TIMEOUT_MS = 10 * 60_000;
+export const RUN_TIMEOUT_MS = 10 * 60_000;
 
 /** As many CPUs as Apple's `container` gives a VM, and room for the processes of a few agents at work and their builds. */
-const CPUS = "4";
-const MOST_PROCESSES = "4096";
+export const CPUS = "4";
+export const MOST_PROCESSES = "4096";
 
 /**
  * What the container's first process may do as its root, who is nobody on this computer: mount the folders it guards and
  * keep the agents out of what it mounts them from, let the relays reach Mirador's sockets, and then give all of it up.
  */
-const FIRST_PROCESS_MAY = ["SYS_ADMIN", "DAC_OVERRIDE", "FOWNER", "SETUID", "SETGID", "SETPCAP"];
+export const FIRST_PROCESS_MAY = ["SYS_ADMIN", "DAC_OVERRIDE", "FOWNER", "SETUID", "SETGID", "SETPCAP"];
 
 /** The most of the container's log Podman keeps: its relays say a few lines. */
-const LOG_MOST = "1mb";
+export const LOG_MOST = "1mb";
 
 /**
  * What the `podman` process itself reads of this computer's environment to find its storage, runtime, config and the
@@ -35,7 +35,7 @@ export const PODMAN_READS = readByTool(
   ["CONTAINER_", "CONTAINERS_", "_CONTAINERS_", "STORAGE_", "PODMAN_"],
 );
 
-const mountFlags = ({ source, target, readOnly }: Mount) => ["-v", `${source}:${target}${readOnly ? ":ro" : ""}`];
+export const mountFlags = ({ source, target, readOnly }: Mount) => ["-v", `${source}:${target}${readOnly ? ":ro" : ""}`];
 
 /**
  * `podman run` of a room's sandbox, a plain container: detached, removed once stopped, its first process under an init
@@ -121,11 +121,11 @@ export const execArguments = ({ vm, user, workingDirectory, environment, command
 ];
 
 /** The most a command run as the agent user may print: what a put-back of held files tells, with room to spare. */
-const AGENT_RUN_MOST_BYTES = 16 * 1024 * 1024;
+export const AGENT_RUN_MOST_BYTES = 16 * 1024 * 1024;
 
 type ListedContainer = { Names?: unknown; Labels?: Record<string, unknown> | null };
 
-function arrayIn<T>(json: string): T[] | null {
+export function arrayIn<T>(json: string): T[] | null {
   try {
     const parsed = JSON.parse(json);
     return Array.isArray(parsed) ? parsed : null;
@@ -211,15 +211,14 @@ export class Podman implements VmLauncher {
     readonly storage: string[] = [],
   ) {}
 
-  /** The `podman` the setting names, else the one installed, as it says it runs here; none where the setting is off or it can't run sandboxes. */
-  static here(setting: string | undefined, path: string, selinuxEnforce = SELINUX_ENFORCE) {
-    const program = podmanProgram(setting, path);
-    if (program === "off") return new Podman(null, { available: false, why: "turned-off" });
-    if (program === null) return new Podman(null, { available: false, why: "no-podman" });
-    const here = askPodman(program, selinuxEnforce);
+  /** The `podman` at `program`, as it says it runs here: none where it can't run sandboxes. */
+  static of(program: string, here: EngineHere) {
     const availability = podmanAvailability(here);
     return new Podman(availability.available ? containerCli(program) : null, availability, here.info === null ? [] : podmanStorageIn(here.info));
   }
+
+  /** Podman maps this computer's user to the agents' user, as Mirador runs it. */
+  readonly filesOwner = AGENT_USER;
 
   availability() {
     return this.available;
@@ -311,23 +310,27 @@ export class Podman implements VmLauncher {
     return this.cli;
   }
 
-  /** Ready once its first process says so; one that ended before, and so was removed, did not start, as the last it said tells. */
   private async ready(vm: string) {
-    const giveUpAt = Date.now() + READY_WITHIN_S * 1000;
-    let said = "";
-    while (Date.now() < giveUpAt) {
-      const logs = await this.usable().run(["logs", vm]);
-      if (logs.output.includes(VM_READY_LINE)) return;
-      if (logs.exitCode !== 0) throw new SandboxNotReady({ kind: "could-not-start", cause: lastLineOf(said) || lastLineOf(logs.output) || `exit ${logs.exitCode}` });
-      said = logs.output;
-      await Bun.sleep(150);
-    }
-    throw new SandboxNotReady({ kind: "not-ready-in-time", seconds: READY_WITHIN_S });
+    await readyOnceItSays(this.usable(), vm);
   }
+}
+
+/** Ready once the VM's first process says so; one that ended before, and so was removed, did not start, as the last it said tells. */
+export async function readyOnceItSays(cli: ContainerCli, vm: string) {
+  const giveUpAt = Date.now() + READY_WITHIN_S * 1000;
+  let said = "";
+  while (Date.now() < giveUpAt) {
+    const logs = await cli.run(["logs", vm]);
+    if (logs.output.includes(VM_READY_LINE)) return;
+    if (logs.exitCode !== 0) throw new SandboxNotReady({ kind: "could-not-start", cause: lastLineOf(said) || lastLineOf(logs.output) || `exit ${logs.exitCode}` });
+    said = logs.output;
+    await Bun.sleep(150);
+  }
+  throw new SandboxNotReady({ kind: "not-ready-in-time", seconds: READY_WITHIN_S });
 }
 
 /**
  * What of this Linux computer it runs programs from by itself, which no sandbox may hold: the user's config and local
- * programs, and Podman's storage, whose images other containers run.
+ * programs, and where the engines here keep their images, which other containers run.
  */
-export const computersOwnOnLinux = (home: string, podman: Podman) => [join(home, ".config"), join(home, ".local"), ...podman.storage];
+export const computersOwnOnLinux = (home: string, enginesStorage: string[]) => [join(home, ".config"), join(home, ".local"), ...enginesStorage];

@@ -19,6 +19,9 @@ export interface GuardedFolder {
   parts: ProtectedParts;
 }
 
+/** A folder only Mirador's agents write, which the guard keeps nothing of: it shows it to them as theirs, as it does every folder it guards. */
+export const unprotected = (folder: string): GuardedFolder => ({ folder, parts: { files: [], folders: [], onTheWay: [], gitFolders: [] } });
+
 const rawFolderInVm = (index: number) => `${RAW_FOLDERS_IN_VM}/${index}`;
 
 /** What the guard is told, as guard/manifest.hpp reads it. */
@@ -44,9 +47,10 @@ export async function guardMounts(guarded: GuardedFolder[], manifestFolder: stri
 
 /**
  * The VM's first process: the guard, which opens the sockets in their folder to the agents, runs the command as nobody
- * once the folders are guarded, and ends with it.
+ * once the folders are guarded, and ends with it. It reaches the folders as `filesOwner`, whose this computer's files are
+ * in the VM, and shows that owner's files to the agents as theirs.
  */
-export const behindGuard = (socketsFolder: string, command: string[]): Pick<VmPlan, "entrypoint" | "args"> => ({
+export const behindGuard = (socketsFolder: string, filesOwner: string, command: string[]): Pick<VmPlan, "entrypoint" | "args"> => ({
   entrypoint: GUARD_IN_VM,
-  args: [`${MANIFEST_FOLDER_IN_VM}/${MANIFEST}`, AGENT_USER, socketsFolder, "--", ...command],
+  args: [`${MANIFEST_FOLDER_IN_VM}/${MANIFEST}`, AGENT_USER, filesOwner, socketsFolder, "--", ...command],
 });

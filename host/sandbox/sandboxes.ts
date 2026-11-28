@@ -40,7 +40,7 @@ import type { Store } from "../store.ts";
 import { addedFolderRefusal, foldersMounted, repositoryRefusal, type FolderSurroundings, type FoldersMounted, type LeftOutFolder, type MountedFolder, type OtherSandboxes } from "./added-folders.ts";
 import { AGENT_USER, environmentInVm, NETWORK_RELAY_PORT, SCRIPTS_IN_VM, vmEnvironment, withAnyFolderSafe, type SandboxedKind } from "./agent-environment.ts";
 import { startCanvasSocket, type SandboxCanvas } from "./canvas-socket.ts";
-import { behindGuard, guardMounts, MANIFEST_FOLDER_IN_VM, RAW_FOLDERS_IN_VM, type GuardedFolder } from "./guard.ts";
+import { behindGuard, guardMounts, MANIFEST_FOLDER_IN_VM, RAW_FOLDERS_IN_VM, unprotected, type GuardedFolder } from "./guard.ts";
 import { guardPlanOf, partsNamedFrom, sandboxRefusalOf, withMoreParts, type GuardPlan, type MiradorPlaces, type NamedByGit } from "./guarded-workspace.ts";
 import { HeldFiles, HeldFilesRefused, type HeldSandbox } from "./held-files.ts";
 import type { PlacesPutBack, PlacesRequest } from "./in-vm/held-places.ts";
@@ -227,14 +227,18 @@ interface Relay {
   socket: string;
 }
 
-/** What a VM sees of its agents' besides the workspace and Mirador's scripts, and what leads to their canvases and models. */
+/**
+ * What a VM sees of its agents' besides the workspace and Mirador's scripts, mounted as it is or through the guard, and
+ * what leads to their canvases and models.
+ */
 interface SeenInVm {
   mounts: Mount[];
+  guarded: GuardedFolder[];
   relays: Relay[];
 }
 
 /** The VM of an agent someone brought sees none of it. */
-const NOTHING_OF_THE_AGENTS: SeenInVm = { mounts: [], relays: [] };
+const NOTHING_OF_THE_AGENTS: SeenInVm = { mounts: [], guarded: [], relays: [] };
 
 /** What a sandbox's VM mounted of its added folders and left out as it last started, and the folders it started with. */
 interface FolderStart extends FoldersMounted {
@@ -973,9 +977,10 @@ export class Sandboxes {
     // Unix socket paths hold about a hundred bytes on macOS, so each VM's sockets live in a short private folder.
     vm.socketsFolder = await mkdtemp(join(this.socketsParent, SOCKETS_FOLDER_PREFIX));
     const mounted = [guardedWorkspace, ...(folders?.guarded ?? [])];
-    const guarded = await guardMounts(await guardedTogether(mounted, await this.namedInSandbox(vm.owner, mounted)), manifestFolder(this.host.dataDir, vm));
+    const guardedFolders = await guardedTogether(mounted, await this.namedInSandbox(vm.owner, mounted));
     const wayOut = await this.wayOut(vm, vm.socketsFolder);
     const seen = vm.broughtAgent === null ? await this.agentsOwn(vm, vm.socketsFolder) : NOTHING_OF_THE_AGENTS;
+    const guarded = await guardMounts([...guardedFolders, ...seen.guarded], manifestFolder(this.host.dataDir, vm));
     const relays = [...seen.relays, wayOut];
     const inVm = (socket: string) => `${SOCKETS_IN_VM}/${basename(socket)}`;
     this.assertNotStopped(vm);
@@ -993,7 +998,7 @@ export class Sandboxes {
         { source: IN_VM_SCRIPTS, target: SCRIPTS_IN_VM, readOnly: true },
         ...relays.map(({ socket }) => ({ source: socket, target: inVm(socket), readOnly: false })),
       ],
-      ...behindGuard(SOCKETS_IN_VM, [BUN_IN_VM, `${SCRIPTS_IN_VM}/relays.mjs`, ...relays.map(({ port, socket }) => `${port}=${inVm(socket)}`)]),
+      ...behindGuard(SOCKETS_IN_VM, this.launcher.filesOwner, [BUN_IN_VM, `${SCRIPTS_IN_VM}/relays.mjs`, ...relays.map(({ port, socket }) => `${port}=${inVm(socket)}`)]),
     });
     await vm.launching;
     this.assertNotStopped(vm);
@@ -1020,15 +1025,20 @@ export class Sandboxes {
     return [...mounted.map(({ folder, named }) => ({ folder, named })), ...planned.flat()];
   }
 
-  /** What the sandbox's own agents have in their VM: their kinds' folders, the packages they run, and the canvas and model sockets. */
+  /**
+   * What the sandbox's own agents have in their VM: their kinds' folders, which they write, through the guard where the
+   * runtime shows this computer's files as another's than theirs; the packages they run; and the canvas and model sockets.
+   */
   private async agentsOwn(vm: SandboxVm, socketsFolder: string): Promise<SeenInVm> {
     const configFolders = sandboxConfigFolders(this.host.dataDir, vm.owner);
     await Promise.all(configFolders.map((folder) => mkdir(folder, { recursive: true, mode: 0o700 })));
     const [canvas, model] = [join(socketsFolder, "canvas.sock"), join(socketsFolder, "model.sock")];
     vm.sockets.push(await startCanvasSocket(canvas, CANVAS_RELAY_PORT, this.host.canvasOf(vm.owner)));
     vm.sockets.push(await startModelProxy(model, MODEL_RELAY_PORT, (profileId) => vm.routes.get(profileId) ?? null));
+    const writtenThroughGuard = this.launcher.filesOwner !== AGENT_USER;
     return {
-      mounts: [...configFolders.map((folder) => atItsOwnPath(folder, false)), atItsOwnPath(agentPackages(), true)],
+      mounts: [...(writtenThroughGuard ? [] : configFolders.map((folder) => atItsOwnPath(folder, false))), atItsOwnPath(agentPackages(), true)],
+      guarded: writtenThroughGuard ? configFolders.map(unprotected) : [],
       relays: [
         { port: CANVAS_RELAY_PORT, socket: canvas },
         { port: MODEL_RELAY_PORT, socket: model },

@@ -26,9 +26,12 @@ export async function defaultBaseTag() {
 /** Whether an image of this name, as a runtime lists it, `localhost/…` on Podman, is a base Mirador built, of any recipe. */
 export const isMiradorsBase = (name: string) => name.split("/").at(-1)!.startsWith(`${BASE_IMAGE_NAME}:`);
 
-/** The step a build is on, as `container build --progress plain` says it, `#7 [stage 3/6] RUN …`, or `podman build`, `[1/2] STEP 3/6: RUN …`. */
+/**
+ * The step a build is on, as BuildKit says it, `#7 [stage 3/6] RUN …`, for `container build --progress plain` and
+ * `docker build`; or `podman build`, `[1/2] STEP 3/6: RUN …`; or Docker's legacy builder, `Step 3/6 : RUN …`.
+ */
 export function buildStepIn(line: string): SandboxSetup["step"] | null {
-  const match = /^#\d+ \[(?:[^\]\s]+ )?(\d+)\/(\d+)\]/.exec(line) ?? /^(?:\[\d+\/\d+\] )?STEP (\d+)\/(\d+): /.exec(line);
+  const match = /^#\d+ \[(?:[^\]\s]+ )?(\d+)\/(\d+)\]/.exec(line) ?? /^(?:\[\d+\/\d+\] )?STEP (\d+)\/(\d+): /.exec(line) ?? /^Step (\d+)\/(\d+) : /.exec(line);
   return match ? { at: Number(match[1]), of: Number(match[2]) } : null;
 }
 

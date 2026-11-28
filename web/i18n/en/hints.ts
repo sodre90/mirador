@@ -296,6 +296,8 @@ export const hints = {
   delegatedWorking: "Working: a delegated task is still running. Its reply comes as this agent's next message.",
   claudeProgram: (installFolders: string) =>
     `The claude program Mirador runs Claude Code with, on the host's computer. Empty: the claude on PATH, else in ${installFolders}.\n\nA profile can run another one through CLAUDE_CODE_EXECUTABLE in its environment.`,
+  sandboxEngine:
+    "Podman and Docker run each sandbox in a container of its own, which shares this computer's Linux kernel; Docker only rootless. Where you choose neither, Mirador takes Podman, else Docker.\n\nA change applies when Mirador restarts.",
   keepAwake:
     "Stops the computer Mirador runs on from going to sleep while it is idle.\n\nWhile agents work: until every running turn ends, so long jobs finish.\n\nAlways: while Mirador runs, so your phone and other devices can reach it at any time.\n\nOn macOS and Linux.",
   canvasUse:

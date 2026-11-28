@@ -25,15 +25,15 @@ test("the guard is told of each folder where it is mounted, where agents see it 
   ]);
   const told = readFileSync(join(folder, "folders"), "utf8");
   expect(told).toBe(["R/mirador/raw/0", "T/home/me/app", "FCLAUDE.md", "D.claude", "Wconfig", "G.git", "R/mirador/raw/1", "T/home/me/lib", "G.git", "G.git/modules/sub", ""].join("\0"));
-  expect(behindGuard("/run/mirador", ["/opt/mirador/bun-1.4.4/bin/bun", "relays.mjs"])).toEqual({
+  expect(behindGuard("/run/mirador", "0:0", ["/opt/mirador/bun-1.4.4/bin/bun", "relays.mjs"])).toEqual({
     entrypoint: GUARD_IN_VM,
-    args: ["/mirador/guard/folders", "1000:1000", "/run/mirador", "--", "/opt/mirador/bun-1.4.4/bin/bun", "relays.mjs"],
+    args: ["/mirador/guard/folders", "1000:1000", "0:0", "/run/mirador", "--", "/opt/mirador/bun-1.4.4/bin/bun", "relays.mjs"],
   });
   if (RUNS_SANDBOXES) expect([statSync(folder).mode & 0o777, statSync(join(folder, "folders")).mode & 0o777]).toEqual([0o700, 0o600]);
 });
 
 test("the guard runs from a folder of the tools named by its source and how it is built, so a change to either is a guard of its own", () => {
-  expect(Object.keys(guardSource())).toEqual(["build.sh", "guard.cpp", "manifest.hpp", "rules.hpp"]);
+  expect(Object.keys(guardSource())).toEqual(["build.sh", "guard.cpp", "manifest.hpp", "owners.hpp", "rules.hpp"]);
   expect(GUARD_IN_VM).toMatch(/^\/opt\/mirador\/guard-[0-9a-f]{10}\/mirador-guard$/);
 });
 
@@ -145,5 +145,32 @@ describe.skipIf(CXX === null)("what the guard lets agents do, by the rules it is
       await Bun.write(manifest, told);
       expect(Bun.spawnSync([probe, manifest]).exitCode).not.toBe(0);
     }
+  });
+});
+
+describe.skipIf(CXX === null)("whose the guard shows the files to be, and makes them on disk", () => {
+  const probe = join(scratch, "owners");
+  const compiled = CXX === null ? null : Bun.spawnSync([CXX, "-std=c++17", "-Wall", "-Wextra", join(import.meta.dir, "guard/owners.cpp"), "-o", probe]);
+  const onDisk = ["0:0", "1000:1000", "1000:0", "65534:65534", "501:20"];
+  const shown = (owner: string, agents: string) =>
+    Object.fromEntries(Bun.spawnSync([probe, owner, agents], { stdin: Buffer.from(onDisk.map((ids) => `${ids}\n`).join("")) }).stdout.toString().trimEnd().split("\n").map((line, index) => [onDisk[index], line]));
+
+  test("compiles", () => {
+    expect(compiled!.stderr.toString()).toBe("");
+    expect(compiled!.exitCode).toBe(0);
+  });
+
+  test("where the owner's ids are the agents', as under Podman and Apple's container, it shows every file as it is and changes no chown", () => {
+    expect(shown("1000:1000", "1000:1000")).toEqual(Object.fromEntries(onDisk.map((ids) => [ids, `${ids} ${ids}`])));
+  });
+
+  test("where the owner is the VM's root, as under rootless Docker, the owner's files are the agents', a file of the agents' own ids nobody's, and a chown to the agents' ids gives the owner's", () => {
+    expect(shown("0:0", "1000:1000")).toEqual({
+      "0:0": "1000:1000 0:0",
+      "1000:1000": "65534:65534 0:0",
+      "1000:0": "65534:1000 0:0",
+      "65534:65534": "65534:65534 65534:65534",
+      "501:20": "501:20 501:20",
+    });
   });
 });

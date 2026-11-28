@@ -1,4 +1,5 @@
 import type { ServerMessage } from "../shared/protocol.ts";
+import { NO_SANDBOX_ENGINES } from "../shared/sandbox.ts";
 
 export type Snapshot = Extract<ServerMessage, { type: "snapshot" }>;
 
@@ -25,6 +26,7 @@ export const snapshotMessage = (fields: Partial<Snapshot> = {}): Snapshot => ({
   canvasUse: "often",
   claudeProgram: { configured: "", found: null, version: null, installFolders: "", installCommand: "" },
   scriptProgram: "",
+  sandboxEngines: NO_SANDBOX_ENGINES,
   editor: { setting: { editor: "first-found" }, found: [], opensIn: null },
   pushRelay: { address: null, tokenSet: false, grantRelay: null, miradorRelay: null },
   avatar: null,

@@ -1,4 +1,5 @@
 import type { SandboxAvailability, SandboxSetup } from "../../shared/sandbox.ts";
+import { AGENT_USER } from "./agent-environment.ts";
 import { appleContainerRuntime } from "./availability.ts";
 import { containerCli, lastLineOf, type ContainerCli } from "./container-cli.ts";
 import { droppedTo, environmentFlags, execProcessEnvironment, readByTool } from "./exec-environment.ts";
@@ -145,6 +146,9 @@ export class AppleContainer implements VmLauncher {
     const { program, availability } = appleContainerRuntime(setting, path);
     return new AppleContainer(program ? containerCli(program) : null, availability);
   }
+
+  /** The files of this Mac that the VM mounts are its agents' to them. */
+  readonly filesOwner = AGENT_USER;
 
   availability() {
     return this.available;

@@ -130,7 +130,8 @@ refused "echo $(git rev-parse HEAD) > .git/info/grafts"
 refused "mv .git/info .git/info-aside"
 works "echo planted.txt >> .git/info/exclude"
 refused "mkdir .git/remotes"
-refused "echo 'URL: /elsewhere' > .git/branches"
+# The templates of older gits, as Ubuntu 24.04's, make .git/branches a folder.
+if [ -d .git/branches ]; then refused "echo 'URL: /elsewhere' > .git/branches/origin"; else refused "echo 'URL: /elsewhere' > .git/branches"; fi
 works "git $as_someone commit -q --allow-empty -m 'objects of its own' && git commit-graph write --reachable && test -f .git/objects/info/commit-graph"
 works "mkdir .git/foo && echo x > .git/foo/config"
 refused "mv .git/modules .git/modules-aside"

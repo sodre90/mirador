@@ -3,8 +3,8 @@ import { agentCheckFinding, checkFinding, imageOfRun, isAgentCheck, isBaseCheck 
 import { runHere } from "./in-vm-here.ts";
 import { mountsOfRun } from "./guard-told.ts";
 
-const done = (output = ""): ContainerRun => ({ exitCode: 0, output, stdout: output });
-const failed = (output: string, exitCode = 125): ContainerRun => ({ exitCode, output, stdout: "" });
+export const done = (output = ""): ContainerRun => ({ exitCode: 0, output, stdout: output });
+export const failed = (output: string, exitCode = 125): ContainerRun => ({ exitCode, output, stdout: "" });
 
 const valueAfter = (args: string[], flag: string) => args[args.indexOf(flag) + 1]!;
 
@@ -19,7 +19,7 @@ const localName = (tag: string) => (tag.includes("/") ? tag : `localhost/${tag}`
 
 /** Rootless `podman`, as far as the sandboxes use it: images and containers, all in memory. */
 export class FakePodmanCli implements ContainerCli {
-  readonly program = "/fake/bin/podman";
+  readonly program: string = "/fake/bin/podman";
   readonly calls: string[][] = [];
   readonly images = new Set<string>(["docker.io/library/postgres:16", "docker.io/library/node:22-bookworm-slim", "docker.io/library/alpine:3.22"]);
   readonly containers = new Map<string, Record<string, string>>();
@@ -35,7 +35,7 @@ export class FakePodmanCli implements ContainerCli {
   /** What the registry has, by full name: each image's ID once pulled. */
   readonly registry = new Map<string, string>();
   /** The ID of each image pulled here, by its name. */
-  private readonly ids = new Map<string, string>();
+  protected readonly ids = new Map<string, string>();
   /** What a check of an owner's base image says, by the image it runs. */
   checkSays: (image: string) => ContainerRun = () => checkFinding("/own/bin:/usr/bin:/bin");
   /** What a check of an agent's program on an owner's base image says, by the image it runs. */
@@ -54,6 +54,11 @@ export class FakePodmanCli implements ContainerCli {
     this.calls.push(args);
     const failure = this.failing(args);
     if (failure !== null) return failed(failure);
+    return this.answer(args, options);
+  }
+
+  /** What Podman answers a call that is not a throwaway run, nor one set to fail. */
+  protected async answer(args: string[], options: ContainerRunOptions): Promise<ContainerRun> {
     const [command, sub] = args;
     if (command === "build") return this.build(args, options);
     if (command === "pull") return this.pull(args.at(-1)!);

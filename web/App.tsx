@@ -1144,6 +1144,7 @@ export function App() {
           sideChatAccess={state.sideChatAccess}
           claudeProgram={state.claudeProgram}
           scriptProgram={state.scriptProgram}
+          sandboxEngines={state.sandboxEngines}
           editor={state.editor}
           machineName={state.machineName}
           computerName={state.computerName}

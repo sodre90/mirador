@@ -105,6 +105,7 @@ describe("a room's sandbox", () => {
       expect.stringMatching(new RegExp(`^${BASE_IMAGE_NAME}:[0-9a-f]{10}$`)),
       "/mirador/guard/folders",
       "1000:1000",
+      "1000:1000",
       "/run/mirador",
       "--",
       BUN_IN_VM,

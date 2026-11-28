@@ -110,6 +110,16 @@ export const settings: Messages["settings"] = {
     hint: "Was ein neuer Nebenchat darf, sofern sein Arbeitsbereich unter „Wo Unterhaltungen arbeiten“ nichts anderes wählt und du keinen Nebenchat seiner Unterhaltung umgestellt hast. Claude Code, Codex und Antigravity können einen Nebenchat aufs Lesen beschränken; andere Agenten nicht, daher können deren Nebenchats immer Dateien ändern. Nebenchats der Unterhaltungen eines Raums dürfen immer nur lesen.",
     access: "Neue Nebenchats",
   },
+  sandboxes: {
+    title: "Sandboxes",
+    hint: "Womit die Sandboxes der Räume und Arbeitsbereiche auf dem Rechner des Hosts laufen.",
+    engine: "Sandboxes ausführen mit",
+    cantRun: (engine) => `${engine}: kann hier keine Sandboxes ausführen`,
+    noEngine: "Hier nichts gefunden: auf einem Mac Apples container-Tool, unter Linux Podman oder Docker Engine im Rootless-Modus.",
+    fromNextStart: (chosen, inUse) => `Mirador wechselt beim Neustart zu ${chosen}. Bis dahin laufen seine Sandboxes mit ${inUse}.`,
+    setByEnvironment: "MIRADOR_SANDBOX wählt das beim Start von Mirador.",
+    dockerReadOnly: "Mit Docker sehen die Agenten in schreibgeschützt hinzugefügten Ordnern nur, was jeder Benutzer dieses Rechners lesen darf.",
+  },
   sleep: {
     title: "Ruhezustand",
     hint: "Vom Host gespeichert. Sein Computer kann trotzdem schlafen, wenn du den Deckel eines Laptops schließt, und sein Bildschirm schaltet sich trotzdem aus.",

@@ -294,6 +294,8 @@ export const hints: Messages["hints"] = {
   delegatedWorking: "工作中：一个委派任务仍在运行。它的回复会作为此 Agent 的下一条消息到达。",
   claudeProgram: (installFolders: string) =>
     `Mirador 用来运行 Claude Code 的 claude 程序，位于 host 所在的电脑上。留空：使用 PATH 中的 claude，否则使用 ${installFolders} 中的。\n\n配置可以通过其环境中的 CLAUDE_CODE_EXECUTABLE 运行另一个程序。`,
+  sandboxEngine:
+    "Podman 和 Docker 都把每个沙箱放在各自的容器里运行，它与这台电脑共用 Linux 内核；Docker 只能以 rootless 模式运行。你都不选时，Mirador 用 Podman，否则用 Docker。\n\n更改在 Mirador 重启后生效。",
   keepAwake:
     "在 Mirador 所在的电脑空闲时，阻止它进入睡眠。\n\nAgent 工作时：直到每个正在运行的轮次结束，让长时间的作业能够完成。\n\n始终：只要 Mirador 在运行，这样你的手机和其他设备随时可以连上它。\n\n适用于 macOS 和 Linux。",
   canvasUse:

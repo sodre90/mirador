@@ -72,7 +72,7 @@ export interface HostConfig {
   developmentMode: boolean;
   /** Runs the statusline command from the user's Claude Code settings; test hosts turn it off with MIRADOR_STATUSLINE=off. */
   runsUserStatusLine: boolean;
-  /** The program rooms' sandboxes run in, `container` on a Mac and `podman` on Linux, else the one installed; MIRADOR_SANDBOX=off, as test hosts have it unless a spec gives one, runs none. */
+  /** The program rooms' sandboxes run in, `container` on a Mac and `podman` or `docker` on Linux, else the one installed and chosen; MIRADOR_SANDBOX=off, as test hosts have it unless a spec gives one, runs none. */
   sandboxContainer: string | undefined;
   /** The file that says whether SELinux enforces its rules, the kernel's own unless MIRADOR_SELINUX_ENFORCE names another, as specs do. */
   selinuxEnforceFile: string | undefined;

@@ -8,6 +8,7 @@ import type { VoiceSettings as VoiceSettingsValue } from "../shared/voice.ts";
 import type { VoiceEngineStatus } from "../shared/voice-engine.ts";
 import type { NewerVersion } from "../shared/newer-version.ts";
 import type { ConfigFileStatus } from "../shared/settings-file.ts";
+import { engineFromNextStart, type SandboxEngines, type SandboxKind } from "../shared/sandbox.ts";
 import { FontSizePreview, MachineColorPreview, ShellLookPreview, ShellOutputPreview, ThemePreview, WaitingPreview, WorkspaceColorPreview } from "./appearance-previews.tsx";
 import { enterWhileBusyLabels, setEnterWhileBusy, useEnterWhileBusy, type EnterWhileBusy } from "./busy-sending.ts";
 import { formatBarLabels, messageBoxLabels, setFormatBar, setMessageBox, useFormatBar, useMessageBox, type FormatBarChoice, type MessageBox } from "./message-box.ts";
@@ -71,6 +72,7 @@ import { VoiceSettings } from "./VoiceSettings.tsx";
 import { useTimestampsShown } from "./timestamps.ts";
 import { NAME_FIELD_ATTRIBUTES, setTypingAids, useTypingAids, type TypingAids } from "./typing-aids.ts";
 import { SettingsPageList, settingsPanel } from "./SettingsPages.tsx";
+import { sandboxUnavailableText } from "./problem-text.ts";
 import { SettingsSearchScope, SettingsSection, useSettingRow } from "./SettingsSection.tsx";
 import { setSpellCheck, useDesktopSpellCheckLanguages, useSpellCheck } from "./spell-check.ts";
 import { spellingLanguageChoices, spellingLanguageName } from "./spelling-languages.ts";
@@ -117,6 +119,7 @@ export function SettingsDialog({
   sideChatAccess,
   claudeProgram,
   scriptProgram,
+  sandboxEngines,
   editor,
   machineName,
   computerName,
@@ -147,6 +150,7 @@ export function SettingsDialog({
   sideChatAccess: SideChatAccess;
   claudeProgram: ClaudeProgram;
   scriptProgram: string;
+  sandboxEngines: SandboxEngines;
   editor: EditorState;
   machineName: string | null;
   computerName: string;
@@ -206,6 +210,7 @@ export function SettingsDialog({
       <>
         <AgentSettings claudeProgram={claudeProgram} />
         <KeepAwakeSettings keepAwake={keepAwake} />
+        <SandboxEngineSettings engines={sandboxEngines} />
       </>
     ),
     voice: () => <VoiceSettings settings={voiceSettings} engine={voiceEngine} profiles={profiles} />,
@@ -1025,6 +1030,45 @@ function KeepAwakeSettings({ keepAwake }: { keepAwake: KeepAwake }) {
             ))}
           </select>
         </label>
+      </div>
+    </SettingsSection>
+  );
+}
+
+const engineWords = t.rooms.sandbox.engines;
+
+function SandboxEngineSettings({ engines }: { engines: SandboxEngines }) {
+  const row = useSettingRow();
+  const words = text.sandboxes;
+  const { found, inUse, setByEnvironment } = engines;
+  const next = engineFromNextStart(engines);
+  const nextFound = found.find(({ kind }) => kind === next);
+  const whyNot = nextFound && !nextFound.availability.available ? sandboxUnavailableText(nextFound.availability.why, t.problems) : null;
+  return (
+    <SettingsSection title={words.title} hint={words.hint} className="sandbox-engine-settings">
+      <div className="sending-settings">
+        {found.length === 0 ? (
+          !setByEnvironment && <p className="hint sandbox-engine-none">{words.noEngine}</p>
+        ) : (
+          <label {...row(words.engine, hints.sandboxEngine)}>
+            {words.engine}
+            <select
+              value={next ?? ""}
+              disabled={setByEnvironment}
+              onChange={(event) => connection.send({ type: "settings.set-sandbox-engine", engine: event.target.value as SandboxKind })}
+            >
+              {found.map(({ kind, availability }) => (
+                <option key={kind} value={kind} disabled={!availability.available && kind !== next}>
+                  {availability.available ? engineWords[kind] : words.cantRun(engineWords[kind])}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        {whyNot && <p className="hint sandbox-engine-why-not">{whyNot}</p>}
+        {setByEnvironment && <p className="hint sandbox-engine-environment">{words.setByEnvironment}</p>}
+        {next !== inUse && next !== null && inUse !== null && <p className="hint sandbox-engine-next-start">{words.fromNextStart(engineWords[next], engineWords[inUse])}</p>}
+        {next === "docker" && <p className="hint sandbox-engine-docker-read-only">{words.dockerReadOnly}</p>}
       </div>
     </SettingsSection>
   );

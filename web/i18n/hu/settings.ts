@@ -108,6 +108,16 @@ export const settings: Messages["settings"] = {
     hint: "Mit tehet egy új mellékszál, hacsak a munkaterülete másként nem dönt a „Hol dolgoznak a beszélgetések” ablakban, vagy át nem állítottad a beszélgetése egyik mellékszálát. A Claude Code, a Codex és az Antigravity csak olvasásra tudja korlátozni a mellékszálat; más ágensek nem, így az ő mellékszálaik mindig módosíthatnak fájlokat. Egy szoba beszélgetéseinek mellékszálai mindig csak olvashatnak.",
     access: "Új mellékszálak",
   },
+  sandboxes: {
+    title: "Sandboxok",
+    hint: "Mi futtatja a szobák és munkaterületek sandboxait a host gépén.",
+    engine: "Sandboxok futtatása ezzel",
+    cantRun: (engine) => `${engine}: itt nem tud sandboxot futtatni`,
+    noEngine: "Itt nincs ilyen: Macen az Apple container eszköze kell, Linuxon rootless módban futó Podman vagy Docker Engine.",
+    fromNextStart: (chosen, inUse) => `A Mirador újraindításkor átvált erre: ${chosen}. Addig a sandboxai ezzel futnak: ${inUse}.`,
+    setByEnvironment: "Ezt a MIRADOR_SANDBOX választja ki a Mirador indulásakor.",
+    dockerReadOnly: "Docker alatt az ágensek a csak olvashatóként hozzáadott mappákban csak azt látják, amit a gép bármely felhasználója olvashat.",
+  },
   sleep: {
     title: "Alvás",
     hint: "A host őrzi meg. A gépe így is elalszik, ha lecsukod a laptop fedelét, és a kijelzője is kikapcsol.",

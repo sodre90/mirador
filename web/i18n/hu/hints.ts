@@ -313,6 +313,8 @@ export const hints: Messages["hints"] = {
   delegatedWorking: "Dolgozik: egy átadott feladat még fut. A válasza ennek az ágensnek a következő üzeneteként érkezik.",
   claudeProgram: (installFolders) =>
     `A claude program, amellyel a Mirador a Claude Code-ot futtatja a host gépén. Üresen: a PATH-on lévő claude, különben ezekben: ${installFolders}.\n\nEgy profil a környezetében a CLAUDE_CODE_EXECUTABLE-lel másikat is futtathat.`,
+  sandboxEngine:
+    "A Podman és a Docker minden sandboxot saját konténerben futtat, amely osztozik a gép Linux-kernelén; a Docker csak rootless módban. Ha egyiket sem választod, a Mirador a Podmant használja, különben a Dockert.\n\nA változás a Mirador újraindításakor lép életbe.",
   keepAwake:
     "Megakadályozza, hogy a gép, amelyen a Mirador fut, tétlenül elaludjon.\n\nAmíg az ágensek dolgoznak: amíg minden futó kör véget nem ér, hogy a hosszú feladatok befejeződjenek.\n\nMindig: amíg a Mirador fut, hogy a telefonod és a többi készüléked bármikor elérje.\n\nmacOS-en és Linuxon.",
   canvasUse:

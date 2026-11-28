@@ -224,6 +224,8 @@ test("the base image is told apart by its recipe, which builds on Debian, and it
   expect(buildStepIn("#5 [2/4] RUN apt-get update")).toEqual({ at: 2, of: 4 });
   expect(buildStepIn("#7 DONE 12.3s")).toBeNull();
   expect(buildStepIn("STEP 5/8: RUN npm install -g bun@1.4.4 @anthropic-ai/claude-code@2.1.330")).toEqual({ at: 5, of: 8 });
+  expect(buildStepIn("Step 3/8 : RUN apt-get update")).toEqual({ at: 3, of: 8 });
+  expect(buildStepIn(" ---> Running in 0123456789ab")).toBeNull();
   expect(buildStepIn("[1/2] STEP 2/5: RUN apt-get update")).toEqual({ at: 2, of: 5 });
   expect(buildStepIn("--> 3f2a1b")).toBeNull();
   expect(baseImageOf(await Bun.file(BASE_RECIPE).text())).toBe("docker.io/library/debian:bookworm-slim");

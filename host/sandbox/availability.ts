@@ -22,20 +22,23 @@ export function appleContainerAvailability(computer: ThisComputer, program: stri
   return { available: true, kind: "apple-container" };
 }
 
-/** Where the installers put `container` and `podman`, for a host started without a login shell's PATH. */
+/** Where the installers put `container`, `podman` and `docker`, for a host started without a login shell's PATH. */
 const CONTAINER_INSTALL_FOLDERS = ["/usr/local/bin", "/opt/homebrew/bin"];
-const PODMAN_INSTALL_FOLDERS = ["/usr/bin", "/usr/local/bin"];
+const LINUX_INSTALL_FOLDERS = ["/usr/bin", "/usr/local/bin"];
+
+const installedProgram = (name: string, path: string, installFolders: string[]) => Bun.which(name, { PATH: path }) ?? Bun.which(name, { PATH: installFolders.join(":") });
 
 /** The program the setting names: off on test hosts unless a spec gives one, else the one installed. */
 function sandboxProgram(setting: string | undefined, path: string, name: string, installFolders: string[]): string | null | "off" {
   if (setting === "off") return "off";
   if (setting) return Bun.which(setting);
-  return Bun.which(name, { PATH: path }) ?? Bun.which(name, { PATH: installFolders.join(":") });
+  return installedProgram(name, path, installFolders);
 }
 
 export const containerProgram = (setting: string | undefined, path: string) => sandboxProgram(setting, path, "container", CONTAINER_INSTALL_FOLDERS);
 
-export const podmanProgram = (setting: string | undefined, path: string) => sandboxProgram(setting, path, "podman", PODMAN_INSTALL_FOLDERS);
+/** The `podman` or `docker` installed on this Linux computer, where one is. */
+export const linuxEngineProgram = (name: "podman" | "docker", path: string) => installedProgram(name, path, LINUX_INSTALL_FOLDERS);
 
 /** The `container` program sandboxes run with on a Mac, where they run at all, and why not where they don't. */
 export function appleContainerRuntime(setting: string | undefined, path: string, computer = thisComputer()): { program: string | null; availability: SandboxAvailability } {
@@ -45,11 +48,31 @@ export function appleContainerRuntime(setting: string | undefined, path: string,
   return { program: availability.available ? program : null, availability };
 }
 
-/** What Podman says of itself on this computer, and whether SELinux enforces its rules here, as sandboxes need them. */
-export interface PodmanHere {
-  /** What `podman info --format json` printed; null where it failed. */
+/** What Podman or Docker says of itself on this computer, and whether SELinux enforces its rules here, as sandboxes need them. */
+export interface EngineHere {
+  /** What `<program> info --format json` printed; null where it failed. */
   info: string | null;
   selinuxEnforcing: boolean;
+}
+
+const objectIn = (json: string): Record<string, unknown> | null => {
+  try {
+    const parsed: unknown = JSON.parse(json);
+    return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : null;
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * Which engine a program is, by what its `info --format json` printed: Podman tells of its host, Docker of its server.
+ * The `docker` of podman-docker is Podman, and says so.
+ */
+export function engineOfInfo(info: string): "podman" | "docker" | null {
+  const said = objectIn(info);
+  if (said === null) return null;
+  if ("host" in said) return "podman";
+  return "ServerVersion" in said ? "docker" : null;
 }
 
 /** Whether `podman info --format json` says it runs containers as this user, without root; null where it says neither. */
@@ -73,18 +96,38 @@ export function podmanStorageIn(info: string): string[] {
 }
 
 /** Whether Podman runs rooms' agents here, in a plain container: rootless only. */
-export function podmanAvailability({ info, selinuxEnforcing }: PodmanHere): SandboxAvailability {
+export function podmanAvailability({ info, selinuxEnforcing }: EngineHere): SandboxAvailability {
   const rootless = info === null ? null : rootlessIn(info);
   if (rootless === null) return { available: false, why: "podman-fails" };
   if (!rootless) return { available: false, why: "podman-not-rootless" };
   return { available: true, kind: "podman", selinuxEnforcing };
 }
 
-const PODMAN_ASKED_WITHIN_MS = 20_000;
+/** Whether `docker info --format json` says its daemon runs as this user, without root; null where it says neither. */
+export function dockerRootlessIn(info: string): boolean | null {
+  const options = objectIn(info)?.SecurityOptions;
+  return Array.isArray(options) ? options.includes("name=rootless") : null;
+}
 
-/** What a run of `podman` printed, where it succeeded in time; asked once, as the host starts, so it waits for it. */
-function podmanSays(program: string, args: string[]): string | null {
-  const ran = Bun.spawnSync([program, ...args], { stdin: "ignore", stdout: "pipe", stderr: "ignore", timeout: PODMAN_ASKED_WITHIN_MS });
+/** Where `docker info --format json` says Docker keeps its images and containers. */
+export function dockerStorageIn(info: string): string[] {
+  const root = objectIn(info)?.DockerRootDir;
+  return typeof root === "string" && root !== "" ? [root] : [];
+}
+
+/** Whether Docker runs rooms' agents here, in a plain container: rootless only, as the root of a rootful one is this computer's. */
+export function dockerAvailability({ info, selinuxEnforcing }: EngineHere): SandboxAvailability {
+  const rootless = info === null ? null : dockerRootlessIn(info);
+  if (rootless === null) return { available: false, why: "docker-fails" };
+  if (!rootless) return { available: false, why: "docker-not-rootless" };
+  return { available: true, kind: "docker", selinuxEnforcing };
+}
+
+const ENGINE_ASKED_WITHIN_MS = 20_000;
+
+/** What a run of the engine's program printed, where it succeeded in time; asked once, as the host starts, so it waits for it. */
+function engineSays(program: string, args: string[]): string | null {
+  const ran = Bun.spawnSync([program, ...args], { stdin: "ignore", stdout: "pipe", stderr: "ignore", timeout: ENGINE_ASKED_WITHIN_MS });
   return ran.exitCode === 0 ? ran.stdout.toString() : null;
 }
 
@@ -99,5 +142,5 @@ export function selinuxEnforcingAt(enforce: string) {
   }
 }
 
-/** What the `podman` at `program` says of itself, and whether SELinux enforces its rules, as `selinuxEnforce` says. */
-export const askPodman = (program: string, selinuxEnforce: string): PodmanHere => ({ info: podmanSays(program, ["info", "--format", "json"]), selinuxEnforcing: selinuxEnforcingAt(selinuxEnforce) });
+/** What the `podman` or `docker` at `program` says of itself, and whether SELinux enforces its rules, as `selinuxEnforce` says. */
+export const askEngine = (program: string, selinuxEnforce: string): EngineHere => ({ info: engineSays(program, ["info", "--format", "json"]), selinuxEnforcing: selinuxEnforcingAt(selinuxEnforce) });

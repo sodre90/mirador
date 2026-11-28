@@ -84,13 +84,15 @@ These terms stay the same everywhere:
 | member's agent (the role of an agent a member brought) | tag ágense | agente de un miembro | 成员的 Agent | Agent eines Mitglieds |
 | collaborator (a room role: asks the agents as a member does, and sees their work in its threads) | munkatárs | colaborador | 协作者 | Mitwirkender |
 | approver (a room role: asks the agents as a member does, and approves their requests and people's tasks) | jóváhagyó | aprobador | 批准人 | Genehmiger |
-| sandbox (a light VM a room's agents run in on a Mac, a Podman container on Linux) | sandbox | sandbox | 沙箱 | Sandbox (die) |
+| sandbox (a light VM a room's agents run in on a Mac, a Podman or Docker container on Linux) | sandbox | sandbox | 沙箱 | Sandbox (die) |
 | Podman container (the sandbox on Linux, which shares this computer's kernel, weaker than a VM) | Podman-konténer | contenedor de Podman | Podman 容器 | Podman-Container (der) |
+| Docker container (the sandbox on Linux under Docker, which shares this computer's kernel too) | Docker-konténer | contenedor de Docker | Docker 容器 | Docker-Container (der) |
+| rootless (Podman or Docker run as the user's own, not as root; the term stays English) | rootless | rootless | rootless | rootless |
 | base image (the system a sandbox runs on, the agents' programs installed beside it) | alap-image | imagen base | 基础镜像 | Basis-Image (das) |
 | pull (an image, from its registry onto this computer) | letölt | descargar | 拉取 | laden |
 | unpack (a pulled image's layers, before it can run) | kicsomagol | desempaquetar | 解包 | entpacken |
 | digest (the hash naming one image's content, sha256:…) | digest | digest | digest | Digest (der) |
-| kernel (the Linux kernel a Podman container shares) | kernel | kernel | 内核 | Kernel (der) |
+| kernel (the Linux kernel a Podman or Docker container shares) | kernel | kernel | 内核 | Kernel (der) |
 | SELinux confinement (what SELinux keeps a container to, which the sandbox runs without) | SELinux korlátai | confinamiento de SELinux | SELinux 的约束 | Einschränkungen von SELinux (die) |
 | network (what a sandbox reaches besides the model and Mirador) | hálózat | red | 网络 | Netzwerk (das) |
 | web proxy (through which a sandbox reaches it) | webproxy | proxy web | Web 代理 | Webproxy (der) |

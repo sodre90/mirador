@@ -323,6 +323,8 @@ export const hints: Messages["hints"] = {
   delegatedWorking: "Arbeitet: Eine delegierte Aufgabe läuft noch. Ihre Antwort kommt als nächste Nachricht dieses Agenten.",
   claudeProgram: (installFolders) =>
     `Das claude-Programm, mit dem Mirador Claude Code ausführt, auf dem Computer des Hosts. Leer: das claude im PATH, sonst das in diesen Ordnern: ${installFolders}.\n\nEin Profil kann über CLAUDE_CODE_EXECUTABLE in seiner Umgebung ein anderes ausführen.`,
+  sandboxEngine:
+    "Podman und Docker führen jede Sandbox in einem eigenen Container aus, der sich den Linux-Kernel dieses Rechners teilt; Docker nur rootless. Wählst du keine, nimmt Mirador Podman, sonst Docker.\n\nEine Änderung gilt, wenn Mirador neu startet.",
   keepAwake:
     "Verhindert, dass der Computer, auf dem Mirador läuft, im Leerlauf in den Ruhezustand geht.\n\nWährend Agenten arbeiten: bis jede laufende Runde endet, damit lange Jobs fertig werden.\n\nImmer: solange Mirador läuft, damit dein Handy und andere Geräte es jederzeit erreichen.\n\nUnter macOS und Linux.",
   canvasUse:

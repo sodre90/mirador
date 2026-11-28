@@ -78,9 +78,9 @@ import { askFormOnCanvas } from "./acp/elicitation.ts";
 import { conversationCanvasToken } from "./canvas-token.ts";
 import { currentPath } from "./current-path.ts";
 import { homedir } from "node:os";
-import { AppleContainer } from "./sandbox/apple-container.ts";
 import { agentToolsOf } from "./sandbox/agent-version.ts";
-import { computersOwnOnLinux, Podman } from "./sandbox/podman.ts";
+import { computersOwnOnLinux } from "./sandbox/podman.ts";
+import { appleEnginesHere, linuxEnginesHere } from "./sandbox/engines.ts";
 import { belongsToSandbox, Sandboxes } from "./sandbox/sandboxes.ts";
 import type { SandboxControl } from "./sandbox/sandbox-control.ts";
 import { WorkspaceSandboxes } from "./workspace-sandbox.ts";
@@ -292,10 +292,13 @@ rooms.hearPluginsChangedWith((roomId, removed) => {
   mcp.toolsChangedForRoom(roomId);
 });
 const sandboxSettingOf = (owner: SandboxOwner) => (owner.kind === "room" ? store.findRoom(owner.id) : store.findWorkspace(owner.id))?.sandbox;
-const podman = process.platform === "linux" ? Podman.here(config.sandboxContainer, currentPath() ?? "", config.selinuxEnforceFile) : null;
-const sandboxes = new Sandboxes(podman ?? AppleContainer.here(config.sandboxContainer, currentPath() ?? ""), {
+const onLinux = process.platform === "linux";
+const enginesHere = onLinux
+  ? linuxEnginesHere(config.sandboxContainer, store.sandboxEngineSetting(), currentPath() ?? "", config.selinuxEnforceFile)
+  : appleEnginesHere(config.sandboxContainer, currentPath() ?? "");
+const sandboxes = new Sandboxes(enginesHere.launcher, {
   dataDir: config.dataDir,
-  places: { home: homedir(), dataDir: config.dataDir, checkout: sourceDir, computersOwn: podman ? computersOwnOnLinux(homedir(), podman) : [] },
+  places: { home: homedir(), dataDir: config.dataDir, checkout: sourceDir, computersOwn: onLinux ? computersOwnOnLinux(homedir(), enginesHere.storage) : [] },
   workspaceOf: (owner) => store.findWorkspace(owner.kind === "room" ? (store.findRoom(owner.id)?.workspaceId ?? "") : owner.id)?.path ?? null,
   canvasOf: (owner) => ({
     belongs: (conversationId) => {
@@ -466,7 +469,7 @@ hub.whenRunningTurnsCounted((count) => keepAwake.setRunningTurns(count));
 const settingsImport = new SettingsImport({ dataDir: config.dataDir, store, hub, profiles, conversations, workspaceSandboxes, plugins, pluginSettings });
 const configFile = config.userConfigFile === null ? null : await applyConfigFile(config.userConfigFile, settingsImport, store);
 if (configFile) reportConfigFile(configFile);
-const server = startServer({ config, store, hub, conversations, sandboxes, canvas, mcp, apps, plugins, canvasPlugins, pluginSettings, pluginLooks, catalog, profiles, statusline, terminals, images, droppedFiles, voice, voiceEngine, restart, desktopApp, newerVersion, pullNewerVersion: () => pullCheckout(sourceDir), pluginUpdates, readyPluginUpdates, revokedPluginsRunning, devices, ownerKey: ownersKey, joinRequests, signInCodes, search, relays, watch, tunnels, certificate, keepAwake, p2p, pushes, notifications, rooms, workspaceSandboxes, sandboxFolders, roomQuestions, roomReading, broughtAgents, settingsImport, configFile });
+const server = startServer({ config, store, hub, conversations, sandboxes, sandboxEngines: enginesHere.engines, canvas, mcp, apps, plugins, canvasPlugins, pluginSettings, pluginLooks, catalog, profiles, statusline, terminals, images, droppedFiles, voice, voiceEngine, restart, desktopApp, newerVersion, pullNewerVersion: () => pullCheckout(sourceDir), pluginUpdates, readyPluginUpdates, revokedPluginsRunning, devices, ownerKey: ownersKey, joinRequests, signInCodes, search, relays, watch, tunnels, certificate, keepAwake, p2p, pushes, notifications, rooms, workspaceSandboxes, sandboxFolders, roomQuestions, roomReading, broughtAgents, settingsImport, configFile });
 const sourceWatcher = new SourceWatcher(sourceDir, {
   uiEdited: (edited) => {
     console.log(`${edited} changed, so the page is built again`);

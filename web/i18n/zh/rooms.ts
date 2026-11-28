@@ -222,10 +222,12 @@ export const rooms: Messages["rooms"] = {
     kinds: {
       "apple-container": "在这台 Mac 上自己的轻量虚拟机里运行，由 Apple 的 container 工具创建。",
       podman: "在 Podman 容器里运行，它与这台电脑共用 Linux 内核：比虚拟机弱。",
+      docker: "在 Docker 容器里运行，它与这台电脑共用 Linux 内核：比虚拟机弱。",
     },
+    engines: { "apple-container": "Apple 的 container", podman: "Podman", docker: "Docker" },
     sharedKernel: {
-      warning:
-        "在这台电脑上，沙箱是一个 Podman 容器，而不是虚拟机。它仍然只能看到工作区，也只能访问你选择的范围，但它与这台电脑共用 Linux 内核，内核中的漏洞可能让 Agent 逃出来。",
+      warning: (engine) =>
+        `在这台电脑上，沙箱是一个 ${engine} 容器，而不是虚拟机。它仍然只能看到工作区，也只能访问你选择的范围，但它与这台电脑共用 Linux 内核，内核中的漏洞可能让 Agent 逃出来。`,
       turnOn: "仍然开启",
       keepOff: "保持关闭",
       turnsFailUntilAllowed: "在你允许之前，Agent 的轮次都会失败。",
@@ -254,6 +256,16 @@ export const rooms: Messages["rooms"] = {
         ready: "已在这台电脑上设置好。",
         failed: "设置失败。",
       },
+      docker: {
+        "not-started": "首次使用时在这台电脑上设置：由 Docker 构建沙箱的基础镜像，然后安装 Agent 的程序。",
+        "starting-service": "正在启动 Docker…",
+        "building-image": "正在这台电脑上构建沙箱的基础镜像…",
+        "pulling-image": "正在把沙箱的基础镜像拉取到这台电脑上…",
+        "installing-tool": "正在这台电脑上安装 Agent 的程序…",
+        "checking-image": "正在检查基础镜像是否具备 Agent 所需的一切…",
+        ready: "已在这台电脑上设置好。",
+        failed: "设置失败。",
+      },
     },
     steps: {
       title: "正在准备沙箱",
@@ -262,7 +274,7 @@ export const rooms: Messages["rooms"] = {
       stepOf: (at: number, of: number) => `第 ${at} 步，共 ${of} 步`,
       stepsDone: "已完成的步骤",
       howFar: "这一步的进度",
-      service: { "apple-container": "启动 Apple 的 container 服务", podman: "启动 Podman" },
+      service: { "apple-container": "启动 Apple 的 container 服务", podman: "启动 Podman", docker: "启动 Docker" },
       firstKernel: "第一次会下载一个 Linux 内核。",
       baseBuild: "构建 Mirador 的基础镜像",
       buildPart: (at: number, of: number) => `构建的第 ${at} 部分，共 ${of} 部分`,
@@ -284,12 +296,13 @@ export const rooms: Messages["rooms"] = {
       needs: {
         "apple-container": "任何有 Arm (arm64) Linux 版本、并带有 glibc、/bin/sh、/bin/bash 和 git 的镜像；Mirador 自己的程序会放在它旁边。每次 Mirador 启动时都会重新拉取，除非你写明它的 digest。",
         podman: "任何适用于这台电脑处理器、并带有 glibc、/bin/sh、/bin/bash 和 git 的镜像；Mirador 自己的程序会放在它旁边。每次 Mirador 启动时都会重新拉取，除非你写明它的 digest。",
+        docker: "任何适用于这台电脑处理器、并带有 glibc、/bin/sh、/bin/bash 和 git 的镜像；Mirador 自己的程序会放在它旁边。每次 Mirador 启动时都会重新拉取，除非你写明它的 digest。",
       },
     },
     setupFailed: (problem: string) => `设置失败：${problem}`,
     wholeEnvironmentIgnored: "房间开着沙箱时此项无效：只有这里选中的值会进入它的沙箱。",
     meaning: [
-      "房间的 Claude Code 和 pi Agent 在这台电脑上自己的沙箱里运行：在 Mac 上是一个轻量虚拟机，由 Apple 的 container 工具创建；在 Linux 上是一个 Podman 容器，它与这台电脑共用内核，因此对 Agent 的约束比虚拟机更弱，只有在你允许后才会使用。沙箱能看到工作区、房间的一个文件夹（存放 Agent 的设置和会话），以及你从这台电脑添加的文件夹（只读或读写），看不到这台电脑的其他内容。Agent 通过 Mirador 访问模型，Mirador 会加上配置的密钥，所以密钥从不进入沙箱；它们还能访问 Mirador 的画布。",
+      "房间的 Claude Code 和 pi Agent 在这台电脑上自己的沙箱里运行：在 Mac 上是一个轻量虚拟机，由 Apple 的 container 工具创建；在 Linux 上是一个 Podman 或 Docker 容器，它与这台电脑共用内核，因此对 Agent 的约束比虚拟机更弱，只有在你允许后才会使用。沙箱能看到工作区、房间的一个文件夹（存放 Agent 的设置和会话），以及你从这台电脑添加的文件夹（只读或读写），看不到这台电脑的其他内容。Agent 通过 Mirador 访问模型，Mirador 会加上配置的密钥，所以密钥从不进入沙箱；它们还能访问 Mirador 的画布。",
       "除此之外，沙箱能访问你在“网络”下选择的范围，经由 Mirador 的 Web 代理，因为它没有自己的网络：SSH、ping 和不使用代理的程序都访问不到外部。更改立即生效，进行中的轮次也不例外，并会断开不再允许的连接。关闭后再开启，沙箱只能访问模型和 Mirador。",
       "自由工作时，Agent 什么都不用请求批准，因为沙箱把它们关在里面。否则房间的权限预设照常适用，和在这台电脑上一样。",
       "Agent 读取设置、指令和 MCP 服务器的文件会被暂扣，会自行运行的文件也一样：.claude、.mcp.json、CLAUDE.md、AGENTS.md、.codex、opencode.json、.opencode、.pi、.husky、.githooks、.vscode、.pre-commit-config.yaml、lefthook.yml 和 .envrc。沙箱启动时已有的这些文件在其中是只读的；新出现的会立即被撤回，由你在房间里批准或丢弃。",

@@ -230,10 +230,12 @@ export const rooms: Messages["rooms"] = {
     kinds: {
       "apple-container": "Läuft in einer eigenen leichten VM auf diesem Mac, erstellt mit Apples container-Tool.",
       podman: "Läuft in einem Podman-Container, der sich den Linux-Kernel dieses Rechners teilt: schwächer als eine VM.",
+      docker: "Läuft in einem Docker-Container, der sich den Linux-Kernel dieses Rechners teilt: schwächer als eine VM.",
     },
+    engines: { "apple-container": "Apples container", podman: "Podman", docker: "Docker" },
     sharedKernel: {
-      warning:
-        "Auf diesem Rechner ist die Sandbox ein Podman-Container, keine VM. Sie sieht trotzdem nur den Arbeitsbereich und erreicht nur, was du auswählst, teilt sich aber den Linux-Kernel dieses Rechners, sodass ein Fehler im Kernel die Agenten herauslassen könnte.",
+      warning: (engine) =>
+        `Auf diesem Rechner ist die Sandbox ein ${engine}-Container, keine VM. Sie sieht trotzdem nur den Arbeitsbereich und erreicht nur, was du auswählst, teilt sich aber den Linux-Kernel dieses Rechners, sodass ein Fehler im Kernel die Agenten herauslassen könnte.`,
       turnOn: "Trotzdem einschalten",
       keepOff: "Ausgeschaltet lassen",
       turnsFailUntilAllowed: "Die Runden der Agenten schlagen fehl, bis du es erlaubst.",
@@ -262,6 +264,16 @@ export const rooms: Messages["rooms"] = {
         ready: "Auf diesem Rechner eingerichtet.",
         failed: "Das Einrichten ist fehlgeschlagen.",
       },
+      docker: {
+        "not-started": "Sie wird bei der ersten Nutzung auf diesem Rechner eingerichtet: Docker baut das Basis-Image der Sandbox, dann werden die Programme der Agenten installiert.",
+        "starting-service": "Docker startet…",
+        "building-image": "Das Basis-Image der Sandbox wird auf diesem Rechner gebaut…",
+        "pulling-image": "Das Basis-Image der Sandbox wird auf diesen Rechner geladen…",
+        "installing-tool": "Die Programme der Agenten werden auf diesem Rechner installiert…",
+        "checking-image": "Es wird geprüft, ob das Basis-Image hat, was die Agenten brauchen…",
+        ready: "Auf diesem Rechner eingerichtet.",
+        failed: "Das Einrichten ist fehlgeschlagen.",
+      },
     },
     steps: {
       title: "Die Sandbox wird eingerichtet",
@@ -270,7 +282,7 @@ export const rooms: Messages["rooms"] = {
       stepOf: (at: number, of: number) => `Schritt ${at} von ${of}`,
       stepsDone: "Erledigte Schritte",
       howFar: "Wie weit dieser Schritt ist",
-      service: { "apple-container": "Apples container-Dienst starten", podman: "Podman starten" },
+      service: { "apple-container": "Apples container-Dienst starten", podman: "Podman starten", docker: "Docker starten" },
       firstKernel: "Beim ersten Mal lädt er einen Linux-Kernel herunter.",
       baseBuild: "Miradors Basis-Image bauen",
       buildPart: (at: number, of: number) => `Teil ${at} von ${of} des Baus`,
@@ -292,12 +304,13 @@ export const rooms: Messages["rooms"] = {
       needs: {
         "apple-container": "Jedes Image mit einer Linux-Variante für Arm (arm64), das glibc, /bin/sh, /bin/bash und git hat; Miradors eigene Programme kommen daneben. Es wird bei jedem Start von Mirador neu geladen, außer du gibst seinen Digest an.",
         podman: "Jedes Image für den Prozessor dieses Rechners, das glibc, /bin/sh, /bin/bash und git hat; Miradors eigene Programme kommen daneben. Es wird bei jedem Start von Mirador neu geladen, außer du gibst seinen Digest an.",
+        docker: "Jedes Image für den Prozessor dieses Rechners, das glibc, /bin/sh, /bin/bash und git hat; Miradors eigene Programme kommen daneben. Es wird bei jedem Start von Mirador neu geladen, außer du gibst seinen Digest an.",
       },
     },
     setupFailed: (problem: string) => `Das Einrichten ist fehlgeschlagen: ${problem}`,
     wholeEnvironmentIgnored: "Wird ignoriert, solange der Raum eine Sandbox hat: In seine Sandbox kommen nur die hier gewählten Werte.",
     meaning: [
-      "Die Claude-Code- und pi-Agenten des Raums laufen in einer eigenen Sandbox auf diesem Rechner: auf einem Mac in einer leichten VM, erstellt mit Apples container-Tool; unter Linux in einem Podman-Container, der sich den Kernel des Rechners teilt und die Agenten daher weniger gut einschließt als eine VM; er wird erst genutzt, wenn du es erlaubst. Die Sandbox sieht den Arbeitsbereich, einen Ordner des Raums für die Einstellungen und Sitzungen der Agenten und die Ordner dieses Rechners, die du hinzufügst, schreibgeschützt oder les- und schreibbar; sonst nichts von diesem Rechner. Die Agenten erreichen ihr Modell über Mirador, das den Schlüssel des Profils hinzufügt, sodass er nie in die Sandbox gelangt, und Miradors Canvas.",
+      "Die Claude-Code- und pi-Agenten des Raums laufen in einer eigenen Sandbox auf diesem Rechner: auf einem Mac in einer leichten VM, erstellt mit Apples container-Tool; unter Linux in einem Podman- oder Docker-Container, der sich den Kernel des Rechners teilt und die Agenten daher weniger gut einschließt als eine VM; er wird erst genutzt, wenn du es erlaubst. Die Sandbox sieht den Arbeitsbereich, einen Ordner des Raums für die Einstellungen und Sitzungen der Agenten und die Ordner dieses Rechners, die du hinzufügst, schreibgeschützt oder les- und schreibbar; sonst nichts von diesem Rechner. Die Agenten erreichen ihr Modell über Mirador, das den Schlüssel des Profils hinzufügt, sodass er nie in die Sandbox gelangt, und Miradors Canvas.",
       "Darüber hinaus erreicht die Sandbox, was du unter Netzwerk auswählst, über einen Webproxy von Mirador, da sie kein eigenes Netzwerk hat: SSH, Ping und Programme, die keinen Proxy nutzen, kommen nicht hinaus. Eine Änderung gilt sofort, auch in laufenden Runden, und beendet die Verbindungen, die sie nicht mehr erlaubt. Nach dem Aus- und Wiedereinschalten erreicht die Sandbox nur das Modell und Mirador.",
       "Arbeiten sie frei, fragen die Agenten nach nichts, da die Sandbox sie einschließt. Sonst gilt die Berechtigungsvorgabe des Raums wie auf diesem Rechner.",
       "Die Dateien, aus denen Agenten ihre Einstellungen, Anweisungen und MCP-Server laden, werden zurückgehalten, ebenso die Dateien, die von selbst laufen: .claude, .mcp.json, CLAUDE.md, AGENTS.md, .codex, opencode.json, .opencode, .pi, .husky, .githooks, .vscode, .pre-commit-config.yaml, lefthook.yml und .envrc. Die beim Start der Sandbox vorhandenen sind darin schreibgeschützt; eine neue wird sofort zurückgesetzt, und du erlaubst oder verwirfst sie im Raum.",

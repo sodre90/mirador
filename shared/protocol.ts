@@ -1,7 +1,7 @@
 import type { EditorSetting, EditorState } from "./editors.ts";
 import type { Reminder } from "./reminders.ts";
 import type { ClaudeSetup } from "./room-agent-setup.ts";
-import type { HeldChange, HeldChangeAnswer, HeldChangeText, OwnedSetup, SandboxCheck, SandboxFolderRefusal, SandboxFolders, SandboxNetwork, SandboxOwner, SandboxSetting, SandboxSetup, WorkspaceSandboxCheck } from "./sandbox.ts";
+import type { HeldChange, HeldChangeAnswer, HeldChangeText, OwnedSetup, SandboxCheck, SandboxEngines, SandboxFolderRefusal, SandboxFolders, SandboxKind, SandboxNetwork, SandboxOwner, SandboxSetting, SandboxSetup, WorkspaceSandboxCheck } from "./sandbox.ts";
 import type { PermissionPreset, RoomApprovalAnswer } from "./room-permissions.ts";
 import type { RoomUsage } from "./room-usage.ts";
 import type {
@@ -218,6 +218,8 @@ export type ClientMessage =
   | { type: "newer-version.pull"; requestId: string }
   /** Empty for the system's text editor. */
   | { type: "settings.set-script-program"; program: string }
+  /** The engine of sandboxes Mirador uses from its next start; null for its own pick. */
+  | { type: "settings.set-sandbox-engine"; engine: SandboxKind | null }
   | { type: "settings.set-editor"; setting: EditorSetting }
   | { type: "settings.set-machine-name"; machineName: string }
   /** Mirador's relay or none forgets a relay of your own and its token; a null token keeps the one set for the same relay. Answered with settings.saved. */
@@ -624,6 +626,7 @@ export type ServerMessage =
       claudeProgram: ClaudeProgram;
       /** The program the host opens scripts in, as text; empty for the system's text editor. */
       scriptProgram: string;
+      sandboxEngines: SandboxEngines;
       editor: EditorState;
       /** The name Settings gave this machine, which devices show for it; null while it goes by its computer's name. Absent from hosts before names. */
       machineName?: string | null;
@@ -734,6 +737,7 @@ export type ServerMessage =
   | { type: "settings.side-chat-access"; sideChatAccess: SideChatAccess }
   | { type: "settings.claude-program"; claudeProgram: ClaudeProgram }
   | { type: "settings.script-program"; scriptProgram: string }
+  | { type: "settings.sandbox-engines"; sandboxEngines: SandboxEngines }
   | { type: "settings.editor"; editor: EditorState }
   | { type: "settings.machine-name"; machineName: string | null }
   | { type: "settings.push-relay"; pushRelay: PushRelaySetting }
