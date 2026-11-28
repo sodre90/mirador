@@ -21,10 +21,11 @@ const unusedOwnerKey: OwnerKey = { publicKey: "", sign: () => "" };
 const THIS_HOSTS_PAGES = ["http://127.0.0.1:4600", "http://localhost:4600"];
 
 describe("forwardedHeaders", () => {
-  test("signs in with the device token instead of this host's cookie, and says the page is the machine's own", () => {
+  test("signs in with the device token instead of this host's cookie or token header, and says the page is the machine's own", () => {
     const incoming = new Headers({
       host: "127.0.0.1:4620",
       cookie: "mirador_token=this-hosts-own",
+      "mirador-token": "this-hosts-phone",
       origin: "http://127.0.0.1:4620",
       referer: "http://127.0.0.1:4620/",
       "sec-websocket-key": "abc",

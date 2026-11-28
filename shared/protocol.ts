@@ -101,6 +101,8 @@ export interface TerminalSplit {
 
 /** The cookie a signed-in page carries; the desktop app sends it too when it listens for system notifications. */
 export const TOKEN_COOKIE = "mirador_token";
+/** The header the phone sends its token in, as no page it shows can set a header on the phone's own requests. */
+export const TOKEN_HEADER = "mirador-token";
 /** How the host closes the sockets of a person it took out of the last room they were in, whose devices it revoked with that. */
 export const OUT_OF_ROOMS_CLOSE_CODE = 4410;
 /**

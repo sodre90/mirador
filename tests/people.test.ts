@@ -8,7 +8,7 @@ import { signedInWith } from "../host/sign-in.ts";
 import { Store } from "../host/store.ts";
 import { comparableName, namelessPerson, NAMES_KEPT_BY_MIRADOR, nameRefused, nameTaken, personGoesBy, readsAsMiradorsWords } from "../shared/people.ts";
 import { LONGEST_PERSON_NAME, personName } from "../shared/person-names.ts";
-import { TOKEN_COOKIE } from "../shared/protocol.ts";
+import { TOKEN_COOKIE, TOKEN_HEADER } from "../shared/protocol.ts";
 
 const scratch = mkdtempSync(join(tmpdir(), "mirador-people-"));
 afterAll(() => rmSync(scratch, { recursive: true, force: true }));
@@ -195,6 +195,22 @@ test("a request with two token cookies signs in the owner when one is the host's
   expect(signedIn(withCookies(`${TOKEN_COOKIE}=${phone}; ${TOKEN_COOKIE}=${token}`))).toBeNull();
   expect(signedIn(withCookies(`${TOKEN_COOKIE}=${token}; ${TOKEN_COOKIE}=tossed`))).toBeNull();
   expect(signedIn(withCookies(`${TOKEN_COOKIE}=browser-tokenX; ${TOKEN_COOKIE}=${token}`))).toBeNull();
+});
+
+test("the phone's token header signs it in by itself, so token cookies a page shown on the phone planted beside it count for nothing", () => {
+  const store = new Store(":memory:");
+  const devices = new DeviceService(store);
+  store.insertPerson({ id: "mia", name: "Mia", color: null });
+  const { token: mias } = devices.admit("Mia's laptop", "mia");
+  const { device, token } = devices.join(devices.invite().code, "Phone")!;
+  const fromThePhone = (cookie: string, header = token) =>
+    signedInWith("browser-token", devices, store.ownerId())(new Request("https://box.example.ts.net/", { headers: { [TOKEN_HEADER]: header, cookie } }), false);
+  const phone = { deviceId: device.id, personId: store.ownerId(), isOwner: true };
+
+  expect(fromThePhone("")).toEqual(phone);
+  expect(fromThePhone(`${TOKEN_COOKIE}=planted; ${TOKEN_COOKIE}=${mias}`)).toEqual(phone);
+  expect(fromThePhone(`${TOKEN_COOKIE}=${token}`, "planted"), "nor does a cookie stand in for a header that signs in nobody").toBeNull();
+  expect(fromThePhone("", "browser-token"), "the host's own token signs in nobody from another computer, in a header as in a cookie").toBeNull();
 });
 
 test("a device of another person signs in as that person, who is not the owner", () => {

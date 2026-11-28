@@ -3,7 +3,7 @@ import { isIP } from "node:net";
 import { askToJoin as askToJoinThere } from "../shared/join-requests.ts";
 import { isRoomId, SOMEONE_ELSES_MACHINE_SANDBOX } from "../shared/machines.ts";
 import type { Machine } from "../shared/model.ts";
-import { CANVAS_ASSETS_ORIGIN_HEADER, TOKEN_COOKIE } from "../shared/protocol.ts";
+import { CANVAS_ASSETS_ORIGIN_HEADER, TOKEN_COOKIE, TOKEN_HEADER } from "../shared/protocol.ts";
 import { namesThisComputer } from "../shared/this-computer.ts";
 import { HERE_PATH } from "./addresses.ts";
 import { authorityFingerprint } from "./certificates.ts";
@@ -31,7 +31,7 @@ const CANVAS_ORIGIN_ASK_TIMEOUT_MS = 4000;
 const FORWARD_ANSWER_TIMEOUT_MS = 15_000;
 const FORWARD_UPLOAD_ANSWER_TIMEOUT_MS = 120_000;
 /** About the hop to the relay, or this host's own sign-in, rather than what the page asks the machine for. */
-const UNFORWARDED_REQUEST_HEADERS = new Set(["host", "cookie", "origin", "referer", "connection", "upgrade", "keep-alive", "transfer-encoding", "content-length"]);
+const UNFORWARDED_REQUEST_HEADERS = new Set(["host", "cookie", TOKEN_HEADER, "origin", "referer", "connection", "upgrade", "keep-alive", "transfer-encoding", "content-length"]);
 /**
  * Cookies and site data ignore ports, so a cookie the machine set would land on this host's own address and replace its
  * sign-in, and Clear-Site-Data would sign this computer out of it. fetch has already decoded the body, so its encoding

@@ -365,13 +365,13 @@ export function startServer(services: HostServices) {
 
   const refusedFromAfar = (request: Request) => (madeOnThisComputer.has(request) ? null : new Response(BROWSER_TOKEN_ONLY_HERE, { status: 403 }));
 
-  const cookieSignIn = signedInWith(config.browserToken, devices, store.ownerId());
-  const signedInWithCookie = (request: Request) => cookieSignIn(request, madeOnThisComputer.has(request));
+  const tokenSignIn = signedInWith(config.browserToken, devices, store.ownerId());
+  const signedInWithToken = (request: Request) => tokenSignIn(request, madeOnThisComputer.has(request));
   /** Through the tunnel, only the device whose socket a request arrived on signs in, and never with this machine's own token. */
   const signedInAs = (request: Request) => {
     const end = tunnelEnds.get(request);
-    if (!end) return signedInWithCookie(request);
-    const signedIn = "deviceId" in end ? signedInWithCookie(request) : null;
+    if (!end) return signedInWithToken(request);
+    const signedIn = "deviceId" in end ? signedInWithToken(request) : null;
     return signedIn?.deviceId && "deviceId" in end && signedIn.deviceId === end.deviceId ? signedIn : null;
   };
 

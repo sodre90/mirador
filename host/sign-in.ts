@@ -1,5 +1,5 @@
 import { timingSafeEqual } from "node:crypto";
-import { TOKEN_COOKIE } from "../shared/protocol.ts";
+import { TOKEN_COOKIE, TOKEN_HEADER } from "../shared/protocol.ts";
 import type { DeviceService } from "./devices.ts";
 import type { SignedIn } from "./hub.ts";
 
@@ -25,7 +25,16 @@ const cookieValues = (request: Request, name: string) =>
     .map(([, value]) => value);
 
 /**
- * Whom a request's cookie signs in: the owner through the host's own link (no device), a joined device's person, or
+ * The phone's token header alone where it sent one: Android adds the cookies the pages it shows set for the machine's
+ * hostname beside it, which cookies share across ports. Else the token cookies.
+ */
+const tokensSent = (request: Request) => {
+  const fromHeader = request.headers.get(TOKEN_HEADER);
+  return fromHeader === null ? cookieValues(request, TOKEN_COOKIE) : [fromHeader];
+};
+
+/**
+ * Whom a request's token signs in: the owner through the host's own link (no device), a joined device's person, or
  * nobody. A page of another port of this computer, such as a dev server, can set a token cookie of its own beside this
  * host's, even one of a device let in here. The host's own token is secret, so beside it the other is ignored; two
  * cookies without it sign in nobody, as either may be the one set by that page. The host's own token signs in only a
@@ -34,7 +43,7 @@ const cookieValues = (request: Request, name: string) =>
 export const signedInWith =
   (browserToken: string, devices: DeviceService, ownerId: string) =>
   (request: Request, fromThisComputer: boolean): SignedIn | null => {
-    const tokens = cookieValues(request, TOKEN_COOKIE);
+    const tokens = tokensSent(request);
     if (tokens.some((token) => sameSecret(token, browserToken))) return fromThisComputer ? { deviceId: null, personId: ownerId, isOwner: true } : null;
     if (tokens.length !== 1) return null;
     const [token] = tokens;
