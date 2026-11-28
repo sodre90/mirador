@@ -1,8 +1,8 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
-import { basename, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { FakeClaudeApi, fakeClaudeEnvironment } from "./fake-claude-api.ts";
-import { addWorkspace, conversationSettings, createProfile, createRoom, inviteIntoRoom, joinRoom, nameMachine, nameOwnProfile, openRoomSettings, reachedAtOwnPort, roomCard, signIn, whatItMeans } from "./helpers.ts";
+import { addWorkspace, bashPath, conversationSettings, createProfile, createRoom, inviteIntoRoom, joinRoom, nameMachine, nameOwnProfile, openRoomSettings, reachedAtOwnPort, roomCard, signIn, whatItMeans } from "./helpers.ts";
 import { TestHost, writeBunProgram } from "./test-host.ts";
 
 test.describe.configure({ mode: "serial" });
@@ -17,6 +17,8 @@ const screenshotsDir = process.env.ROOMS_BROUGHT_SCREENSHOTS;
 
 const MIAS_SECRET = "SECRET-ON-MIAS-COMPUTER";
 const inRoomsWorkspace = (...path: string[]) => join(owners.projectDir, ...path);
+/** The end of a folder's path, which `pwd` prints alike everywhere: Git Bash on Windows starts it /c/Users/runneradmin, not C:\Users\RUNNER~1. */
+const folderAsTheShellEndsIt = (folder: string) => `${basename(dirname(folder))}/${basename(folder)}`;
 const coderFolders = () => readdirSync(join(mias.dataDir, "brought-agents"));
 
 let ann: Page;
@@ -213,7 +215,7 @@ test("Ann lets it in, and it reads the room's workspace, changes a file and runs
   });
 
   await test.step("a command shows whole, with what it runs as, and runs in the room's workspace once she allows it", async () => {
-    const copyTheNotes = { command: `cat notes.txt > copy.txt\npwd\ncat ${join(mias.projectDir, "nothing-here.txt")} || true` };
+    const copyTheNotes = { command: `cat notes.txt > copy.txt\npwd\ncat ${bashPath(join(mias.projectDir, "nothing-here.txt"))} || true` };
     await giveTask("COPY THE NOTES", `CALL mcp__canvas__room_run ${JSON.stringify(copyTheNotes)}\nTHEN Copied.`);
     await expect(callCard(ann)).toContainText("Coder (Mia) asks to run a command", { timeout: 60_000 });
     await expect(callCard(ann).locator(".workspace-call-text")).toContainText("cat notes.txt > copy.txt");
@@ -265,7 +267,7 @@ test("a task's thread shows what it did there and who allowed it; Ann takes the 
     await expect(ran).toHaveClass(/\bshell\b/);
     await expect(summaryOf(ran).locator(".shell-typed .token.function").first()).toHaveText("cat");
     await expect(ran).toContainText("It exited with 0.");
-    await expect(ran.locator(".shell-output")).toContainText(owners.projectDir);
+    await expect(ran.locator(".shell-output")).toContainText(folderAsTheShellEndsIt(owners.projectDir));
     await screenshot(ann, "workspace-thread");
     const denied = await shownFor("DROP THE NOTES");
     await expect(summaryOf(denied)).toContainText("denied");
