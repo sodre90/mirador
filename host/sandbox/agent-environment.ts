@@ -1,7 +1,7 @@
 import { isModelProviderVariable } from "../../shared/room-agent-setup.ts";
 import { MODEL_KEY_VARIABLES, type ModelKeyVariable } from "../../shared/sandbox.ts";
 import type { PiModelInVm } from "./pi-setup.ts";
-import { agentProgramsInVm, BUN_FOLDER_IN_VM, NODE_FOLDER_IN_VM, type AgentTools } from "./tools-folder.ts";
+import { agentProgramsInVm, BUN_FOLDER_IN_VM, NODE_FOLDER_IN_VM, NODE_IN_VM, type AgentTools } from "./tools-folder.ts";
 import type { BaseImage } from "./vm-launcher.ts";
 
 /** What the agent's key variable holds in the VM: the model proxy on this computer puts the real key on each request. */
@@ -46,11 +46,11 @@ export const SHELL_IN_VM = "/bin/bash";
 const AS_INSTALLED = { DISABLE_AUTOUPDATER: "1", CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1", PI_OFFLINE: "1" } as const;
 
 /**
- * Where the agent runs in the VM: its kind's programs, Bun and Node.js from the tools folder before the base image's own,
- * the agent user's home, and its way out.
+ * Where the agent runs in the VM: its kind's programs, then the base image's own, so a project gets the Node.js and Bun
+ * its image has, then Bun and Node.js from the tools folder where the image has none; the agent user's home, and its way out.
  */
 export const vmEnvironment = (base: BaseImage, agent: AgentTools | null): Record<string, string> => ({
-  PATH: [...(agent ? [agentProgramsInVm(agent)] : []), BUN_FOLDER_IN_VM, NODE_FOLDER_IN_VM, base.path ?? DEFAULT_PATH].join(":"),
+  PATH: [...(agent ? [agentProgramsInVm(agent)] : []), base.path ?? DEFAULT_PATH, BUN_FOLDER_IN_VM, NODE_FOLDER_IN_VM].join(":"),
   HOME: HOME_IN_VM,
   SHELL: SHELL_IN_VM,
   USER: AGENT_NAME,
@@ -70,7 +70,7 @@ const SET_BY_THE_VM = [...Object.keys(vmEnvironment({ image: "", path: null }, n
 /** Where Mirador's scripts are in the VM: host/sandbox/in-vm, mounted read-only. */
 export const SCRIPTS_IN_VM = "/mirador/sandbox";
 
-/** What pi-acp starts for pi in the VM: pi from the tools folder, on the model setup Mirador gives it. */
+/** What pi-acp starts for pi in the VM: pi from the tools folder, on the tools folder's Node.js and the model setup Mirador gives it. */
 export const PI_IN_VM = `${SCRIPTS_IN_VM}/pi.sh`;
 
 /** The agent user in the VM, never root: root could lift what the VM is held to. */
@@ -125,6 +125,7 @@ function ownValuesInVm(kind: SandboxedKind, version: string, { modelBaseUrl, con
     PI_ACP_PI_COMMAND: PI_IN_VM,
     MIRADOR_PI_MODELS: JSON.stringify(piModelsIn(kind.model, modelBaseUrl)),
     MIRADOR_PI_SETTINGS: JSON.stringify(kind.model.settings),
+    MIRADOR_PI_NODE: NODE_IN_VM,
   };
 }
 

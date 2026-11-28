@@ -120,7 +120,7 @@ describe("a room's sandbox", () => {
     expect(program).toBe(cli.program);
     expect(exec.slice(0, 6)).toEqual(["exec", "-i", "--user", "0:0", "-w", workspace]);
     expect(exec.slice(-6)).toEqual([GUARD_IN_VM, "as", "1000:1000", "--", ...agentIn(workspace).agent]);
-    expect(exec).toContain(`PATH=/opt/mirador/claude-2.1.330/bin:${dirname(BUN_IN_VM)}:${NODE_FOLDER_IN_VM}:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin`);
+    expect(exec).toContain(`PATH=/opt/mirador/claude-2.1.330/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:${dirname(BUN_IN_VM)}:${NODE_FOLDER_IN_VM}`);
     expect(JSON.stringify([run, launched.command, launched.environment])).not.toContain(KEY);
     expect(launched.environment).toMatchObject({ ANTHROPIC_API_KEY: KEY_PLACEHOLDER, ANTHROPIC_BASE_URL: "http://127.0.0.1:7702/p/builder", DEPLOY_TARGET: "staging", HTTPS_PROXY: "http://127.0.0.1:7703", NO_PROXY: "localhost,127.0.0.1,::1" });
     expect(launched.environment.ECHOED).toBeUndefined();
@@ -595,7 +595,7 @@ describe("a sandbox on its owner's own base image", () => {
     expect(check![check!.indexOf("--network") + 1]).toBe("none");
     expect(check![check!.indexOf("--entrypoint") + 1]).toBe("/bin/sh");
     expect(mountsOfRun(check!)).toEqual([{ source: toolsFolderOf(host.dataDir), target: "/opt/mirador", readOnly: true }]);
-    expect(launched.command).toContain(`PATH=/opt/mirador/claude-2.1.330/bin:${dirname(BUN_IN_VM)}:${NODE_FOLDER_IN_VM}:/team/bin:/usr/bin:/bin`);
+    expect(launched.command).toContain(`PATH=/opt/mirador/claude-2.1.330/bin:/team/bin:/usr/bin:/bin:${dirname(BUN_IN_VM)}:${NODE_FOLDER_IN_VM}`);
     expect(setups.map(({ stage }) => stage).filter((stage, at, stages) => stage !== stages[at - 1])).toEqual(["starting-service", "pulling-image", "installing-tool", "checking-image", "installing-tool", "checking-image", "ready"]);
     expect(setups.filter(({ stage }) => stage === "pulling-image")).toEqual([
       { stage: "pulling-image", image: "team/dev" },
@@ -611,7 +611,7 @@ describe("a sandbox on its owner's own base image", () => {
     const brought = await sandboxes.launchForBrought({ owner: ROOM, agentId: "visitor", allowsSharedKernel: false, workingDirectory: workspace, command: ["git", "status"] });
     const broughtRun = cli.callsOf("run").at(-1)!;
     expect(broughtRun[broughtRun.indexOf("--entrypoint") + 2]).toBe(TEAM_IMAGE);
-    expect(brought.command).toContain(`PATH=${dirname(BUN_IN_VM)}:${NODE_FOLDER_IN_VM}:/team/bin:/usr/bin:/bin`);
+    expect(brought.command).toContain(`PATH=/team/bin:/usr/bin:/bin:${dirname(BUN_IN_VM)}:${NODE_FOLDER_IN_VM}`);
 
     launched.gone!();
     brought.gone!();

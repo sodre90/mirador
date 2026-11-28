@@ -141,7 +141,7 @@ describe("the VM of an agent someone brought into a sandboxed room", () => {
     expect(Object.keys(launched.environment).filter((name) => /^(ANTHROPIC|CLAUDE|DEPLOY)/.test(name))).toEqual([]);
     const setByTheVm = Object.keys(withAnyFolderSafe(vmEnvironment({ image: "", path: null }, null)));
     expect(exec.flatMap((arg, index) => (exec[index - 1] === "-e" ? [arg.split("=")[0]!] : [])).toSorted()).toEqual(setByTheVm.toSorted());
-    expect(exec).toContain(`PATH=${BUN_FOLDER_IN_VM}:${NODE_FOLDER_IN_VM}:${DEFAULT_BASE_PATH}`);
+    expect(exec).toContain(`PATH=${DEFAULT_BASE_PATH}:${BUN_FOLDER_IN_VM}:${NODE_FOLDER_IN_VM}`);
     own.gone!();
     launched.gone!();
     await sandboxes.stopAll();

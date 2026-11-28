@@ -48,6 +48,9 @@ export const BUN_FOLDER_IN_VM = `${TOOLS_IN_VM}/${BUN_FOLDER}/bin`;
 
 export const NODE_FOLDER_IN_VM = `${TOOLS_IN_VM}/${NODE_FOLDER}/bin`;
 
+/** The Node.js pi runs on in the VM, whatever Node.js the base image has. */
+export const NODE_IN_VM = `${NODE_FOLDER_IN_VM}/node`;
+
 const agentFolder = ({ harness, version }: AgentTools) => `${harness}-${version}`;
 
 /** Where an agent kind's programs are in the VM, at its version. */

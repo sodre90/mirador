@@ -1,7 +1,10 @@
 import { describe, expect, test } from "bun:test";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { environmentInVm, KEY_PLACEHOLDER, PI_IN_VM } from "../host/sandbox/agent-environment.ts";
 import { secretsOf } from "../host/sandbox/model-proxy.ts";
-import { BUN_FOLDER_IN_VM, NODE_FOLDER_IN_VM } from "../host/sandbox/tools-folder.ts";
+import { BUN_FOLDER_IN_VM, NODE_FOLDER_IN_VM, NODE_IN_VM } from "../host/sandbox/tools-folder.ts";
 import { piConfigValue, piSandboxSetupOf, type PiAgentFiles, type PiThroughProxy } from "../host/sandbox/pi-setup.ts";
 
 const GATEWAY_KEY = "gw-key-of-the-gateway-4321";
@@ -161,11 +164,37 @@ describe("pi's environment in the VM", () => {
     expect(JSON.stringify(inVm)).not.toContain(TEAM);
     expect(["LLM_GATEWAY_KEY", "GATEWAY_TEAM", "OPENAI_API_KEY", "ANTHROPIC_BASE_URL", "ECHOED", "PI_CODING_AGENT_SESSION_DIR"].filter((name) => Object.hasOwn(inVm, name))).toEqual([]);
     expect(inVm).toMatchObject({ PI_CODING_AGENT_DIR: "/data/sandbox/workspaces/w1/pi", PI_ACP_PI_COMMAND: PI_IN_VM, PI_OFFLINE: "1", PI_ACP_QUIET_STARTUP: "true", HOME: "/tmp/mirador-home", DEPLOY: "staging" });
-    expect(inVm.PATH).toBe(`/opt/mirador/pi-1.6.0/bin:${BUN_FOLDER_IN_VM}:${NODE_FOLDER_IN_VM}:/usr/bin:/bin`);
+    expect(inVm.PATH).toBe(`/opt/mirador/pi-1.6.0/bin:/usr/bin:/bin:${BUN_FOLDER_IN_VM}:${NODE_FOLDER_IN_VM}`);
   });
 
   test("gives pi its default provider alone, at the proxy's relay, with a key that is none, and only the settings that choose its model", () => {
     expect(JSON.parse(inVm.MIRADOR_PI_MODELS!)).toEqual({ providers: { gateway: { api: "openai-responses", models: [gatewayModel], baseUrl: "http://127.0.0.1:7702/p/pier", apiKey: KEY_PLACEHOLDER } } });
     expect(JSON.parse(inVm.MIRADOR_PI_SETTINGS!)).toEqual({ defaultProvider: "gateway", defaultModel: "gpt-6.1", defaultThinkingLevel: "high" });
   });
+  test("runs pi on the tools folder's Node.js, which the image's own, first on the PATH its commands get, doesn't replace", () => {
+    expect(inVm.MIRADOR_PI_NODE).toBe(NODE_IN_VM);
+  });
+});
+
+test("pi.sh writes pi's model setup, then runs pi on the Node.js it is given, leaving the PATH, and none of its own variables, to pi", () => {
+  const scratch = mkdtempSync(join(tmpdir(), "pi-sh-"));
+  try {
+    const [imageBin, piBin, config] = ["image-bin", "pi-bin", "config"].map((name) => join(scratch, name));
+    mkdirSync(imageBin);
+    mkdirSync(piBin);
+    const program = (path: string, body: string) => {
+      writeFileSync(path, `#!/bin/sh\n${body}\n`);
+      chmodSync(path, 0o755);
+    };
+    program(join(imageBin, "node"), "echo image-node");
+    program(join(piBin, "pi"), "echo pi-without-node");
+    program(join(scratch, "mirador-node"), `printf '%s\\n' "$@" "$PATH" "\${MIRADOR_PI_MODELS-unset}" "\${MIRADOR_PI_NODE-unset}"`);
+    const ran = Bun.spawnSync(["/bin/sh", join(import.meta.dir, "../host/sandbox/in-vm/pi.sh"), "--mode", "rpc"], {
+      env: { PATH: `${piBin}:${imageBin}:/usr/bin:/bin`, PI_CODING_AGENT_DIR: config, MIRADOR_PI_MODELS: '{"providers":{}}', MIRADOR_PI_SETTINGS: '{"defaultModel":"m"}', MIRADOR_PI_NODE: join(scratch, "mirador-node") },
+    });
+    expect(ran.stdout.toString().trim().split("\n")).toEqual([join(piBin, "pi"), "--mode", "rpc", `${piBin}:${imageBin}:/usr/bin:/bin`, "unset", "unset"]);
+    expect([readFileSync(join(config, "models.json"), "utf8"), readFileSync(join(config, "settings.json"), "utf8")]).toEqual(['{"providers":{}}', '{"defaultModel":"m"}']);
+  } finally {
+    rmSync(scratch, { recursive: true, force: true });
+  }
 });
