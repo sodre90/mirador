@@ -13,6 +13,15 @@ export const NETWORK_RELAY_PORT = 7703;
 const WEB_PROXY = `http://127.0.0.1:${NETWORK_RELAY_PORT}`;
 const THE_VMS_OWN = "localhost,127.0.0.1,::1";
 
+/**
+ * What has every JVM in the VM, Gradle and its wrapper among them, go through the web proxy: Java reads no proxy from
+ * the environment, only from its own properties. Its own default keeps the VM's loopback direct.
+ */
+const JAVA_THROUGH_THE_PROXY = ["http", "https"].flatMap((scheme) => [`-D${scheme}.proxyHost=127.0.0.1`, `-D${scheme}.proxyPort=${NETWORK_RELAY_PORT}`]).join(" ");
+
+/** The JVM options a room or workspace gives, followed by the proxy's, as the last of a property wins. */
+const javaOptionsThroughTheProxy = (given: string | undefined) => (given ? `${given} ${JAVA_THROUGH_THE_PROXY}` : JAVA_THROUGH_THE_PROXY);
+
 /** What has the VM's programs go through the web proxy, as each of them reads it, for anywhere but the VM itself. */
 const THROUGH_THE_PROXY = {
   HTTP_PROXY: WEB_PROXY,
@@ -21,6 +30,7 @@ const THROUGH_THE_PROXY = {
   https_proxy: WEB_PROXY,
   NO_PROXY: THE_VMS_OWN,
   no_proxy: THE_VMS_OWN,
+  JAVA_TOOL_OPTIONS: JAVA_THROUGH_THE_PROXY,
 } as const;
 
 /** The agent user's home, in the VM's own /tmp: made by that user as its commands start, so no image need have it. */
@@ -139,6 +149,8 @@ export function environmentInVm(given: Record<string, string>, { kind, version, 
   const kept = keptFrom(kind);
   const holdsOne = holdsASecret(secrets);
   const passedOn = Object.entries(given).filter(([name, value]) => !KEPT_ON_THIS_COMPUTER.includes(name) && !loadsCode(name) && !SET_BY_THE_VM.includes(name) && !kept(name) && !holdsOne(value));
-  const inVm = vmEnvironment(base, { harness: kind.harness, version });
+  const javaOptionsGiven = given.JAVA_TOOL_OPTIONS;
+  const javaOptionsKept = javaOptionsGiven && !holdsOne(javaOptionsGiven) ? javaOptionsGiven : undefined;
+  const inVm = { ...vmEnvironment(base, { harness: kind.harness, version }), JAVA_TOOL_OPTIONS: javaOptionsThroughTheProxy(javaOptionsKept) };
   return withAnyFolderSafe({ ...Object.fromEntries(passedOn), ...inVm, ...AS_INSTALLED, ...ownValuesInVm(kind, version, places) });
 }

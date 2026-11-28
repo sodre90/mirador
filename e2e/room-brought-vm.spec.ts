@@ -171,7 +171,7 @@ test("the VM sees the workspace alone, reaches nothing but a web proxy that lets
   const { uid, noNewPrivs, capabilities, variables, folders: found, reached, processes } = JSON.parse(textThere("looked-around.json")!) as LookedAround;
 
   expect([uid, noNewPrivs, capabilities]).toEqual([1000, "1", "0000000000000000"]);
-  const throughTheProxy = ["HTTPS_PROXY", "HTTP_PROXY", "NO_PROXY", "http_proxy", "https_proxy", "no_proxy"];
+  const throughTheProxy = ["HTTPS_PROXY", "HTTP_PROXY", "NO_PROXY", "http_proxy", "https_proxy", "no_proxy", "JAVA_TOOL_OPTIONS"];
   const anyFolderSafeForGit = ["GIT_CONFIG_COUNT", "GIT_CONFIG_KEY_0", "GIT_CONFIG_VALUE_0"];
   expect(variables.filter((name) => !["PATH", "HOME", "SHELL", "USER", "LOGNAME", "TMPDIR", "PWD", "OLDPWD", "SHLVL", "_"].includes(name)).toSorted()).toEqual([...anyFolderSafeForGit, ...throughTheProxy].toSorted());
   expect(found).toEqual({ "/Users": "ENOENT", "/run/mirador": ["network.sock"], [folders[2]!]: "ENOENT", [folders[3]!]: "ENOENT", "/mirador": ["guard", "raw", "sandbox"], "/mirador/raw": "EACCES", "/mirador/guard": ["folders"] });

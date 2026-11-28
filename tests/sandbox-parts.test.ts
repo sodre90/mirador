@@ -2,7 +2,7 @@ import { afterAll, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { environmentInVm, KEY_PLACEHOLDER } from "../host/sandbox/agent-environment.ts";
+import { environmentInVm, KEY_PLACEHOLDER, vmEnvironment } from "../host/sandbox/agent-environment.ts";
 import { CONTAINER_READS, execArguments, ownBaseIn, pullArguments, pullProgressIn, vmIdsLabelled, writtenByOthersIn } from "../host/sandbox/apple-container.ts";
 import { agentCheck, agentVerdictIn, baseCheck, verdictIn } from "../host/sandbox/base-check.ts";
 import { appleContainerAvailability, appleContainerRuntime, podmanAvailability, podmanStorageIn, selinuxEnforcingAt } from "../host/sandbox/availability.ts";
@@ -529,4 +529,14 @@ test("a sandbox runs on its own base image, else on the one Settings give, else 
   expect(imageSandboxRunsOn(named(null), "ghcr.io/me/default:2")).toBe("ghcr.io/me/default:2");
   expect(imageSandboxRunsOn(undefined, "ghcr.io/me/default:2")).toBe("ghcr.io/me/default:2");
   expect(imageSandboxRunsOn(named(null), null)).toBeNull();
+});
+
+test("every JVM in the VM goes through the web proxy, after any options the room or workspace gives, which a secret keeps out", () => {
+  const throughTheProxy = "-Dhttp.proxyHost=127.0.0.1 -Dhttp.proxyPort=7703 -Dhttps.proxyHost=127.0.0.1 -Dhttps.proxyPort=7703";
+  const inVm = (given: Record<string, string>) =>
+    environmentInVm(given, { kind: { harness: "claude", keyVariable: "ANTHROPIC_API_KEY" }, version: "2.1.330", base: { image: "b", path: null } }, { configFolder: "/data/c", modelBaseUrl: "http://127.0.0.1:7702/p/p1" }, ["sk-secret"]).JAVA_TOOL_OPTIONS;
+  expect(inVm({})).toBe(throughTheProxy);
+  expect(inVm({ JAVA_TOOL_OPTIONS: "-Xmx2g -Dhttps.proxyHost=elsewhere" })).toBe(`-Xmx2g -Dhttps.proxyHost=elsewhere ${throughTheProxy}`);
+  expect(inVm({ JAVA_TOOL_OPTIONS: "-Dtoken=sk-secret" })).toBe(throughTheProxy);
+  expect(vmEnvironment({ image: "b", path: null }, null).JAVA_TOOL_OPTIONS).toBe(throughTheProxy);
 });
