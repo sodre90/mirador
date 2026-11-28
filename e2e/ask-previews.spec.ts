@@ -592,6 +592,34 @@ test("a scaled page about as tall as the panel keeps its size, where the panel's
   await browser.close();
 });
 
+test("a scaled page whose height takes its own column's width away, as a scrollbar that comes and goes would, leaves the page working", async ({ playwright, browserName, channel, launchOptions, locale }) => {
+  const browser = await playwright[browserName].launch({ ...launchOptions, channel, ignoreDefaultArgs: ["--hide-scrollbars"] });
+  const page = await browser.newPage({ locale, viewport: { width: 1700, height: 1000 } });
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  page.on("console", (message) => {
+    if (/Maximum update depth|errors\/185/.test(message.text())) errors.push(message.text());
+  });
+  await signIn(page, host);
+  await page.addStyleTag({ content: "::-webkit-scrollbar { width: 15px } .canvas-body:has(> .ask) { overflow-y: auto !important }" });
+  const conversationId = await startConversation(page);
+  const text = "<p>Every check runs on the calling thread, in dependency order, so nothing runs after one that failed, and no work is wasted on the ones behind it.</p>".repeat(15);
+  askInBackground(conversationId, { question: "Which page that comes and goes?", html: text + codeInACentredColumn(90), options: [{ label: "This one" }, { label: "Another" }] });
+  const frame = page.locator(".ask-context:visible iframe");
+  await expect(frame).toHaveAttribute("style", /scale/);
+  const heightThatFits = 1000 + (await page.evaluate(() => document.querySelector<HTMLElement>(".ask")!.offsetHeight - document.querySelector(".canvas-body")!.clientHeight));
+
+  for (let height = heightThatFits + 30; height > heightThatFits - 30; height -= 3) {
+    await page.setViewportSize({ width: 1700, height });
+    await page.waitForTimeout(150);
+    await expect(page.getByText("Something went wrong on this page"), `in a window ${height} tall`).toHaveCount(0);
+    await expect(page.locator(".ask h3")).toHaveText("Which page that comes and goes?");
+  }
+  expect(errors).toEqual([]);
+  await answerCanvasQuestion(page, "This one");
+  await browser.close();
+});
+
 test("a preview at rest does no work, also when Mirador recolours its text to keep it readable", async ({ page }) => {
   await page.setViewportSize({ width: 1100, height: 1000 });
   await signIn(page, host);

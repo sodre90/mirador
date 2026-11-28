@@ -54,11 +54,23 @@ function MarkBatchIcon() {
 
 function useElementWidth(element: RefObject<HTMLElement | null>) {
   const [width, setWidth] = useState(0);
+  const renderedForOwnMeasure = useRef(false);
 
+  // Measured after each render, so a column that a render moved is drawn at its new width in the same frame. After the
+  // render its own measuring caused, a further change waits a frame: a width that depends on the height drawn in it (a
+  // scrollbar that comes with that height takes room) then changes once a frame, rather than without end, ending the page.
   useLayoutEffect(() => {
     const target = element.current;
     if (!target) return;
-    if (target.clientWidth !== width) setWidth(target.clientWidth);
+    const measureCausedThisRender = renderedForOwnMeasure.current;
+    renderedForOwnMeasure.current = false;
+    if (target.clientWidth === width) return;
+    if (measureCausedThisRender) {
+      const nextFrame = requestAnimationFrame(() => setWidth(target.clientWidth));
+      return () => cancelAnimationFrame(nextFrame);
+    }
+    renderedForOwnMeasure.current = true;
+    setWidth(target.clientWidth);
   });
 
   useEffect(() => {
