@@ -156,8 +156,14 @@ test.skipIf(process.platform === "win32")("a check of an agent kind's own progra
     mounts: [{ source: "/data/sandbox-tools", target: "/opt/mirador", readOnly: true }],
   });
   const ranHere = (program: string) => Bun.spawnSync(["/bin/sh", "-c", agentCheck("image", "/tools", program).args[1]!]).stdout.toString();
+  const failsSaying = (said: string) => {
+    const program = join(scratch, said ? "fails-saying-why" : "fails-silently");
+    writeFileSync(program, `#!/bin/sh\n${said ? `echo '${said}'\n` : ""}exit 3\n`, { mode: 0o755 });
+    return program;
+  };
   expect(agentVerdictIn(ranHere("/usr/bin/true"))).toEqual({ runs: true });
-  expect(agentVerdictIn(ranHere("/usr/bin/false"))).toEqual({ fails: "exit 1" });
+  expect(agentVerdictIn(ranHere(failsSaying("")))).toEqual({ fails: "exit 3" });
+  expect(agentVerdictIn(ranHere(failsSaying("Error: missing libstdc++")))).toEqual({ fails: "Error: missing libstdc++" });
   expect(agentVerdictIn(ranHere("/nonexistent/claude"))).toEqual({ fails: expect.stringContaining("/nonexistent/claude") });
   expect(agentVerdictIn("mirador-agent-check\n")).toBeNull();
   expect(agentVerdictIn("Error: failed to find target executable /bin/sh")).toBeNull();
