@@ -275,7 +275,7 @@ export function DeleteTogetherPrompt({
       <h2>{title}</h2>
       <ul>
         {going.map((conversation) => (
-          <li key={conversation.id}>{shownTitle(conversation)}</li>
+          <li key={conversation.id}><span>{shownTitle(conversation)}</span></li>
         ))}
       </ul>
       {staying > 0 && <p>{promptWords.staying(staying)}</p>}

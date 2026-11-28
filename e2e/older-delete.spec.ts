@@ -38,10 +38,14 @@ test("the Older line's trash asks with a list of every conversation under it, th
     await expect(deleteOlder).not.toHaveClass(/danger|armed/);
   });
 
-  await test.step("it asks listing them, and Escape deletes nothing and gives the focus back to the Older line", async () => {
+  await test.step("it asks listing them with bullets, and Escape deletes nothing and gives the focus back to the Older line", async () => {
     await deleteOlder.click();
     await expect(prompt).toBeVisible();
     await expect(prompt.locator("li")).toHaveCount(2);
+    const listed = prompt.getByRole("listitem").first();
+    await expect(listed).toHaveCSS("list-style-type", "disc");
+    await expect(listed).toHaveCSS("overflow-x", "visible");
+    await expect(listed.locator("span")).toHaveCSS("text-overflow", "ellipsis");
     await expect(prompt.getByRole("button", { name: "Cancel" })).toBeFocused();
     await page.keyboard.press("Escape");
     await expect(prompt).toHaveCount(0);
