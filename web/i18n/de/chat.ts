@@ -86,11 +86,8 @@ export const chat: Messages["chat"] = {
     "preparing-sandbox": "Die Sandbox wird eingerichtet; beim ersten Mal dauert das einige Minuten…",
     "starting-sandbox": "Die Sandbox wird gestartet…",
   },
-  sandboxImageStep: (at: number, of: number) => `Die Sandbox wird eingerichtet: Ihr Basis-Image wird gebaut, Schritt ${at} von ${of}…`,
-  sandboxInstalling: (tool: string) => `Die Sandbox wird eingerichtet: ${tool} wird installiert…`,
-  sandboxPulling: (image: string) => `Die Sandbox wird eingerichtet: ${image} wird geladen…`,
-  sandboxUnpacking: (image: string) => `Die Sandbox wird eingerichtet: ${image} wird entpackt…`,
-  sandboxChecking: (image: string) => `Die Sandbox wird eingerichtet: ${image} wird geprüft…`,
+  sandboxSetupStep: (at: number, of: number, step: string) => `Die Sandbox wird eingerichtet, Schritt ${at} von ${of}: ${step}`,
+  sandboxSetupWaiting: "Die Sandbox wird eingerichtet: Sie wartet auf die Einrichtung einer anderen Sandbox…",
   notice: {
     lines: (count) => plural(count, "1 Zeile", `${count} Zeilen`),
     error: "Fehler",

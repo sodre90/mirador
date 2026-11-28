@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { readdirSync, readFileSync } from "node:fs";
 import { chmod, mkdir, mkdtemp, readdir, rename, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
-import type { SandboxedHarness, SandboxTool } from "../../shared/sandbox.ts";
+import type { SandboxedHarness, SandboxSetup, SandboxTool } from "../../shared/sandbox.ts";
 import { lastLineOf } from "./container-cli.ts";
 import type { Mount, ThrowawayRun, VmLauncher } from "./vm-launcher.ts";
 
@@ -103,6 +103,12 @@ export const toolOfAgent = ({ harness, version }: AgentTools): SandboxTool => ({
 
 export class ToolInstallFailed extends Error {}
 
+/** How far fetching an installer's image got, as a tool's install tells it: nothing once it is fetched. */
+export type InstallerFetch = Pick<SandboxSetup, "fetching" | "percent" | "unpacking">;
+
+/** An image by the name its owner would write: Docker Hub's official images without their registry and `library/`. */
+const shortImageName = (image: string) => image.replace(/^docker\.io\/library\//, "");
+
 const INSTALL_TIMEOUT_MS = 20 * 60_000;
 const STAGING = ".staging-";
 /** Each VM's nobody, who runs the relays, and its agents' user reach every tool; only this computer's user changes them. */
@@ -118,7 +124,7 @@ export class ToolsFolder {
 
   constructor(
     dataDir: string,
-    private readonly launcher: Pick<VmLauncher, "runOnce">,
+    private readonly launcher: Pick<VmLauncher, "installerImage" | "runOnce">,
   ) {
     this.root = toolsFolderOf(dataDir);
   }
@@ -127,10 +133,14 @@ export class ToolsFolder {
     return (await stat(join(this.root, installOf(tool).folder)).catch(() => null))?.isDirectory() === true;
   }
 
-  /** Installs the tool where it is not here yet; throws ToolInstallFailed, with what the installer said last, where it fails. */
-  async install(tool: SandboxTool) {
+  /**
+   * Installs the tool where it is not here yet, its installer's image fetched first where it is not here, how far that
+   * got told; throws ToolInstallFailed, with what the fetch or the installer said last, where it fails.
+   */
+  async install(tool: SandboxTool, told: (fetch: InstallerFetch) => void = () => {}) {
     if (await this.has(tool)) return;
     const { folder, run } = installOf(tool);
+    await this.fetchInstaller(run.image, told);
     await mkdir(this.root, { recursive: true, mode: READ_BY_EVERY_USER_OF_THE_VM });
     const staging = await mkdtemp(join(this.root, STAGING));
     try {
@@ -141,6 +151,22 @@ export class ToolsFolder {
     } finally {
       await rm(staging, { recursive: true, force: true });
     }
+  }
+
+  /** The installer's image is here, fetched where it was not, each move of the fetch told once, then that it is over. */
+  private async fetchInstaller(image: string, told: (fetch: InstallerFetch) => void) {
+    let last: InstallerFetch | null = null;
+    const moved = ({ percent, unpacking }: SandboxSetup) => {
+      if (last && last.percent === percent && last.unpacking === unpacking) return;
+      last = { fetching: shortImageName(image), ...(percent === undefined ? {} : { percent }), ...(unpacking ? { unpacking } : {}) };
+      told(last);
+    };
+    try {
+      await this.launcher.installerImage(image, moved);
+    } catch (error) {
+      throw new ToolInstallFailed(`fetching ${shortImageName(image)}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    if (last) told({});
   }
 
   /** Removes every tool but these, and what an install cut short left; no VM may be running. */

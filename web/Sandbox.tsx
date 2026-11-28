@@ -2,7 +2,6 @@ import { useEffect, useState, type ReactNode } from "react";
 import type { Conversation, Profile } from "../shared/model.ts";
 import type { Room } from "../shared/rooms.ts";
 import {
-  toolNameOf,
   HELD_CHANGES_MOST,
   isImageName,
   narrowsSandbox,
@@ -20,12 +19,12 @@ import {
   type SandboxSetup,
 } from "../shared/sandbox.ts";
 import { DiffView } from "./Chat.tsx";
+import { SetupSteps } from "./SandboxSetupSteps.tsx";
 import { connection } from "./connection.ts";
 import { t } from "./i18n/index.ts";
 import {
   sandboxBlockerText,
   sandboxUnavailableText,
-  unusableBaseText,
 } from "./problem-text.ts";
 import { SandboxFolderList } from "./SandboxFolders.tsx";
 import { withHomeAsTilde } from "./workspace-folder.ts";
@@ -105,53 +104,6 @@ const outsideSelinux = (check: SandboxCheck | null) =>
   check?.availability.available === true &&
   check.availability.kind === "podman" &&
   check.availability.selinuxEnforcing;
-
-function setupText(
-  { stage, step, tool, image, unpacking, problem, unusableBase }: SandboxSetup,
-  kind: SandboxKind,
-) {
-  if (stage === "failed" && unusableBase)
-    return words.setupFailed(unusableBaseText(unusableBase, t.problems));
-  if (stage === "failed" && problem) return words.setupFailed(problem);
-  if (stage === "building-image" && step)
-    return words.buildingStep[kind](step.at, step.of);
-  if (stage === "installing-tool" && tool)
-    return words.installingTool(toolNameOf(tool));
-  if (stage === "pulling-image" && image) return unpacking ? words.unpackingImage(image) : words.pullingImage(image);
-  if (stage === "checking-image" && image) return words.checkingImage(image);
-  return words.setup[kind][stage];
-}
-
-function SetupProgress({
-  setup,
-  kind,
-}: {
-  setup: SandboxSetup;
-  kind: SandboxKind;
-}) {
-  const { stage, step, percent } = setup;
-  const stages = words.setup[kind];
-  return (
-    <div className="room-sandbox-setup" role="status">
-      <span>{setupText(setup, kind)}</span>
-      {stage === "building-image" && (
-        <progress
-          value={step?.at}
-          max={step?.of}
-          aria-label={stages["building-image"]}
-        />
-      )}
-      {stage === "pulling-image" && (
-        <progress
-          key={percent === undefined ? "how-far-unknown" : "how-far-known"}
-          value={percent}
-          max={100}
-          aria-label={stages["pulling-image"]}
-        />
-      )}
-    </div>
-  );
-}
 
 /**
  * The image the sandbox's VM runs on: the owner's own, by its name, or Mirador's base where none is named. A name typed
@@ -397,6 +349,7 @@ export function SandboxSwitch({
           {words.kinds[kind]}
         </p>
       )}
+      {shown.on && kind !== null && <SetupSteps setup={setup} kind={kind} />}
       {askingToShareKernel && (
         <SharedKernelWarning
           withoutSelinux={withoutSelinux}
@@ -462,7 +415,6 @@ export function SandboxSwitch({
             disabled={pending !== null}
             onUse={(baseImage) => choose({ ...shown, baseImage })}
           />
-          {kind !== null && <SetupProgress setup={setup} kind={kind} />}
           {folders}
         </>
       )}

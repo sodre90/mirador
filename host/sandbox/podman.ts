@@ -245,6 +245,14 @@ export class Podman implements VmLauncher {
     return pulledOrHere(name, () => cli.run(["pull", "--quiet", name], { timeoutMs: PULL_TIMEOUT_MS }), here);
   }
 
+  /** Podman's pull says nothing of how far it got that is read here: only that it started. */
+  async installerImage(image: string, progress: (pulled: SandboxSetup) => void) {
+    const cli = this.usable();
+    if (await imageExists(cli, image)) return;
+    progress({ stage: "pulling-image" });
+    await mustRun(cli, ["pull", "--quiet", image], { timeoutMs: PULL_TIMEOUT_MS });
+  }
+
   async runOnce(run: ThrowawayRun, timeoutMs: number) {
     const ran = await this.usable().run(runOnceArguments(run), { timeoutMs });
     return { exitCode: ran.exitCode, output: ran.output };

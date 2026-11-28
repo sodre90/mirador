@@ -8,7 +8,8 @@
  * stops after its second step until that file exists; with FAKE_CONTAINER_INSTALL_HELD_BY, so does Claude Code's install.
  * A pull gets any image but one whose name has /missing in it, saying how far it got as `--progress plain` does; with
  * FAKE_CONTAINER_PULL_HELD_BY, one whose name has /dev: in it stops at 40% until that file exists, and with
- * FAKE_CONTAINER_UNPACK_HELD_BY, at 60% of its unpacking. The check of an owner's base image, noted in checks.log, finds
+ * FAKE_CONTAINER_UNPACK_HELD_BY, at 60% of its unpacking; with FAKE_CONTAINER_INSTALLER_PULL_HELD_BY, the pull of the
+ * Node.js image tools are installed with stops at 40% too. The check of an owner's base image, noted in checks.log, finds
  * all the agents need but in one whose name has lacks-git in it.
  */
 import { appendFileSync, existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
@@ -75,6 +76,7 @@ async function pull(name: string) {
   }
   sayPlainly("[1/2] Fetching image 40% (3 of 7 blobs, 16,4 MB/41,3 MB, 8,2 MB/s) [2s]");
   if (name.includes("/dev:")) await waitForFile(process.env.FAKE_CONTAINER_PULL_HELD_BY);
+  if (name.includes("/library/node:")) await waitForFile(process.env.FAKE_CONTAINER_INSTALLER_PULL_HELD_BY);
   sayPlainly("[2/2] Unpacking image for platform linux/arm64/v8 60% (3 424 entries, 82,1 MB) [3s]");
   if (name.includes("/dev:")) await waitForFile(process.env.FAKE_CONTAINER_UNPACK_HELD_BY);
   sayPlainly("[2/2] Unpacking image for platform linux/arm64/v8 100% (5 706 entries, 136,9 MB) [4s]");

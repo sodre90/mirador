@@ -314,6 +314,25 @@ export const toolNameOf = (tool: SandboxTool) => ("version" in tool ? `${TOOL_PR
  */
 export type SandboxSetupStage = "not-started" | "starting-service" | "building-image" | "pulling-image" | "installing-tool" | "checking-image" | "ready" | "failed";
 
+/**
+ * A step of setting a sandbox up, which every sandbox that needs it shares: the runtime's service, Mirador's base image
+ * built or the owner's pulled, a tool installed, or the owner's image checked for what the agents need.
+ */
+export type SetupPiece =
+  | { kind: "service"; runtime: SandboxKind }
+  | { kind: "base-build" }
+  | { kind: "base-pull"; image: string }
+  | { kind: "base-check"; image: string }
+  | { kind: "tool"; tool: SandboxTool }
+  | { kind: "agent-check"; image: string; tool: SandboxTool };
+
+export type SetupStepState = "done" | "now" | "waiting" | "failed";
+
+export interface SetupStep {
+  piece: SetupPiece;
+  state: SetupStepState;
+}
+
 export interface SandboxSetup {
   stage: SandboxSetupStage;
   /** While the image builds: the step it is on, of how many, as the build says. */
@@ -322,14 +341,24 @@ export interface SandboxSetup {
   tool?: SandboxTool;
   /** While the owner's base image is pulled or checked: which, as they named it. */
   image?: string;
-  /** While the owner's base image is pulled: how much of it is fetched, or unpacked once fetched, out of 100, where the runtime says. */
+  /** While an image is pulled: how much of it is fetched, or unpacked once fetched, out of 100, where the runtime says. */
   percent?: number;
-  /** While the owner's base image is pulled: that it is fetched, and now unpacked. */
+  /** While an image is pulled: that it is fetched, and now unpacked. */
   unpacking?: boolean;
+  /** While a tool's install first fetches the image its installer runs on: which. */
+  fetching?: string;
   /** Only when it failed for another reason than the owner's base image: what went wrong, in a line. */
   problem?: string;
   /** Only when it failed as the owner's base image is no use. */
   unusableBase?: UnusableBase;
+  /** While it is set up, and where it failed: every step it takes, in their order, and how far each got. */
+  steps?: SetupStep[];
+  /** While it is set up: when it started, by the host's clock. */
+  startedAt?: number;
+  /** While it is set up: when the step under way, or the one it waits behind, started, by the host's clock. */
+  stepStartedAt?: number;
+  /** While a step of another sandbox's holds up this one's next: that step, as steps are taken one at a time. */
+  waitingBehind?: SetupPiece;
 }
 
 export const SETUP_NOT_STARTED: SandboxSetup = { stage: "not-started" };

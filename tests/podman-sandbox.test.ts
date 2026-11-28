@@ -175,6 +175,21 @@ describe("a room's sandbox on rootless Podman", () => {
     await sandboxes.stopAll();
   });
 
+  test("pulls an installer's image only where it isn't here, saying it fetches it, as Podman says nothing of how far", async () => {
+    const workspace = repository();
+    const { host, setups } = hostFor(workspace);
+    const cli = new FakePodmanCli();
+    cli.images.delete("docker.io/library/alpine:3.22");
+    cli.registry.set("docker.io/library/alpine:3.22", "alpine-id");
+    const sandboxes = new Sandboxes(new Podman(cli, PLAIN), host, IDLE_STOP_MS);
+
+    (await sandboxes.launch(agentIn(workspace))).gone!();
+
+    expect(cli.callsOf("pull")).toEqual([["pull", "--quiet", "docker.io/library/alpine:3.22"]]);
+    expect(setups.filter(({ fetching }) => fetching).map(({ tool, fetching, percent }) => [tool, fetching, percent])).toEqual([[{ kind: "guard" }, "alpine:3.22", undefined]]);
+    await sandboxes.stopAll();
+  });
+
   test("builds the base image once, removes the image it builds on where the build pulled it and the bases of other recipes, and leaves every other image", async () => {
     const workspace = repository();
     const cli = new FakePodmanCli();
@@ -186,7 +201,7 @@ describe("a room's sandbox on rootless Podman", () => {
     (await sandboxes.launch(agentIn(workspace))).gone!();
 
     expect(cli.callsOf("build")).toHaveLength(1);
-    expect([...cli.images].filter((name) => !name.startsWith(`localhost/${BASE_IMAGE_NAME}:`))).toEqual(["docker.io/library/postgres:16"]);
+    expect([...cli.images].filter((name) => !name.startsWith(`localhost/${BASE_IMAGE_NAME}:`))).toEqual(["docker.io/library/postgres:16", "docker.io/library/node:22-bookworm-slim", "docker.io/library/alpine:3.22"]);
     expect(cli.callsOf("image").filter(([, sub]) => sub === "rm")).toEqual([
       ["image", "rm", DEBIAN_IMAGE],
       ["image", "rm", `localhost/${BASE_IMAGE_NAME}:0123456789`],

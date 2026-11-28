@@ -78,8 +78,8 @@ test("a workspace's sandbox on the owner's own image: one without bash and glibc
 
   await test.step("Alpine's git image is pulled and checked, and found to lack bash and a glibc", async () => {
     await useBaseImage(page, LACKING);
-    await expect(dialog.locator(".room-sandbox-setup")).toHaveText(
-      `Setting it up failed: The sandbox's base image ${LACKING} lacks what the agents need: bash, a glibc for this computer's processor, which Bun and Node.js run on.`,
+    await expect(dialog.locator(".sandbox-setup-problem")).toHaveText(
+      `The sandbox's base image ${LACKING} lacks what the agents need: bash, a glibc for this computer's processor, which Bun and Node.js run on.`,
       { timeout: 10 * 60_000 },
     );
     expect(imagesHere()).toContain(PULLED[0]);

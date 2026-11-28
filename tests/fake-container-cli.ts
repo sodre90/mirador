@@ -44,7 +44,7 @@ export class FakeContainerCli implements ContainerCli {
   readonly calls: string[][] = [];
   serviceRunning = false;
   builderRunning = false;
-  readonly images = new Set<string>(["docker.io/library/node:22-bookworm-slim"]);
+  readonly images = new Set<string>(["docker.io/library/node:22-bookworm-slim", "docker.io/library/alpine:3.22"]);
   readonly vms = new Map<string, Record<string, string>>();
   /** What each VM mounts, as `container list` tells it. */
   private readonly mounts = new Map<string, { source: string; options: string[] }[]>();

@@ -26,8 +26,12 @@ import {
   type SandboxNetwork,
   type SandboxOwner,
   type SandboxSetting,
+  type SandboxKind,
   type SandboxSetup,
+  type SandboxSetupStage,
   type SandboxTool,
+  type SetupPiece,
+  type SetupStep,
   type UnusableBase,
 } from "../../shared/sandbox.ts";
 import type { BusyWith, Conversation } from "../../shared/model.ts";
@@ -330,8 +334,8 @@ const hostLabelOf = (dataDir: string) => shortHash(dataDir);
 export class Sandboxes {
   /** Where setting up each sandbox stands, of those set up since the host started. */
   private readonly setups = new Map<string, OwnedSetup>();
-  /** The sandboxes being set up now, each with how many of its launches wait for it, and how many of those for its own image's pull. */
-  private readonly preparing = new Map<string, { owner: SandboxOwner; launches: number; pulling: number }>();
+  /** The sandboxes being set up now. */
+  private readonly preparing = new Map<string, Preparing>();
   /** The pulls of owners' base images under way, by piece: each beside the other pieces, as one may take long. */
   private readonly pulls = new Map<string, BasePull>();
   /** What the piece of setup under way told every sandbox being set up, which one whose pull ended meanwhile is told too. */
@@ -340,6 +344,8 @@ export class Sandboxes {
   private readonly ready = new Map<string, unknown>();
   /** The last piece of setup asked for: each is set up once the one before is over, one at a time. */
   private settingUp: Promise<unknown> = Promise.resolve();
+  /** The piece of setup being made now, whichever sandbox asked for it first, and since when. */
+  private making: (TakenStep & { startedAt: number }) | null = null;
   private readonly tools: ToolsFolder;
   /** The VMs by their keys. */
   private readonly vms = new Map<string, SandboxVm>();
@@ -1192,15 +1198,15 @@ export class Sandboxes {
    * one at a time, its progress told to the sandboxes it is for as it goes. The base image, to run on.
    */
   private async preparedFor(owner: SandboxOwner, agent: AgentTools | null): Promise<BaseImage> {
-    const preparing = this.startPreparing(owner);
+    const preparing = this.startPreparing(owner, agent);
     try {
-      await this.piece(RUNTIME, () => this.launcher.prepare(this.toEveryOnePreparing));
+      await this.piece(serviceStep(this.runtimeKind()), () => this.launcher.prepare(this.toEveryOnePreparing));
       const name = this.host.baseImageOf(owner);
       const own = name === null ? null : await this.ownBaseHere(owner, name);
-      const defaultBase = own ? null : await this.piece(DEFAULT_BASE, () => this.launcher.defaultBase(this.toEveryOnePreparing));
-      for (const tool of TOOLS_OF_EVERY_VM) await this.piece(toolKey(tool), () => this.installed(tool));
+      const defaultBase = own ? null : await this.piece(BASE_BUILD_STEP, () => this.launcher.defaultBase(this.toEveryOnePreparing));
+      for (const tool of TOOLS_OF_EVERY_VM) await this.piece(toolStep(tool), () => this.installed(tool));
       const base = own ? await this.checked(owner, name!, own) : defaultBase!;
-      if (agent) await this.piece(toolKey(toolOfAgent(agent)), () => this.installed(toolOfAgent(agent)));
+      if (agent) await this.piece(toolStep(toolOfAgent(agent)), () => this.installed(toolOfAgent(agent)));
       if (own && agent) await this.runsAgent(owner, name!, own, agent);
       if (preparing.launches === 1 && this.setupOf(owner).stage !== "ready") this.tell(owner, { stage: "ready" });
       return base;
@@ -1210,8 +1216,67 @@ export class Sandboxes {
       this.tell(owner, unusableBase ? { stage: "failed", unusableBase } : { stage: "failed", problem });
       throw new SandboxNotReady(unusableBase ? { kind: "base-image-unusable", ...unusableBase } : { kind: "setup-failed", cause: problem });
     } finally {
-      this.stopPreparing(owner);
+      this.stopPreparing(owner, agent);
     }
+  }
+
+  /**
+   * Each step a VM of the owner's agents takes, as preparedFor takes them: the service, its base image, the tools of every
+   * VM, the owner's image checked, then each agent's own program, checked on the owner's image where it runs by itself. A
+   * check's step is known by the content of the owner's image, so it has no key before the image is pulled.
+   */
+  private stepsOf(owner: SandboxOwner, agents: (AgentTools | null)[]): PlannedStep[] {
+    const name = this.host.baseImageOf(owner);
+    const own = name === null ? undefined : (this.ready.get(ownBaseKey(name)) as OwnBase | undefined);
+    const ofAgents = [...new Map(agents.flatMap((agent) => (agent ? [[toolKey(toolOfAgent(agent)), agent] as const] : []))).values()];
+    const checkedOnOwn = (agent: AgentTools): PlannedStep[] =>
+      name === null || nativeProgramInVm(agent) === null ? [] : [own ? agentCheckStep(own, name, toolOfAgent(agent)) : { key: null, piece: { kind: "agent-check", image: name, tool: toolOfAgent(agent) } }];
+    return [
+      serviceStep(this.runtimeKind()),
+      ...(name === null ? [BASE_BUILD_STEP] : [{ key: ownBaseKey(name), piece: { kind: "base-pull", image: name } } satisfies PlannedStep]),
+      ...TOOLS_OF_EVERY_VM.map(toolStep),
+      ...(name === null ? [] : [own ? baseCheckStep(own, name) : { key: null, piece: { kind: "base-check", image: name } } satisfies PlannedStep]),
+      ...ofAgents.flatMap((agent) => [toolStep(toolOfAgent(agent)), ...checkedOnOwn(agent)]),
+    ];
+  }
+
+  private runtimeKind(): SandboxKind {
+    const availability = this.launcher.availability();
+    return availability.available ? availability.kind : "apple-container";
+  }
+
+  /**
+   * What the owner's setup tells, with every step it takes and where each stands while it is set up or failed: those
+   * made done, the one being made now, and the first not made failed where it failed. Where none of its steps is being
+   * made, another sandbox's is, which this one waits behind.
+   */
+  private withSteps(owner: SandboxOwner, setup: SandboxSetup): SandboxSetup {
+    const preparing = this.preparing.get(ownerKey(owner));
+    if (!preparing || setup.stage === "ready" || setup.stage === "not-started") return setup;
+    const planned = this.stepsOf(owner, preparing.agents);
+    const isDone = ({ key }: PlannedStep) => key !== null && this.ready.has(key) && !foundUnusable(this.ready.get(key));
+    const failed = setup.stage === "failed" ? planned.find((step) => !isDone(step)) : undefined;
+    const now = setup.stage === "failed" ? undefined : planned.find((step) => this.isUnderWay(step, preparing));
+    const behind = setup.stage === "failed" || now ? null : this.making;
+    const stateOf = (step: PlannedStep): SetupStep["state"] => (isDone(step) ? "done" : step === now ? "now" : step === failed ? "failed" : "waiting");
+    const stepStartedAt = now ? this.startOf(now) : behind?.startedAt;
+    return {
+      ...setup,
+      steps: planned.map((step) => ({ piece: step.piece, state: stateOf(step) })),
+      startedAt: preparing.startedAt,
+      ...(stepStartedAt === undefined ? {} : { stepStartedAt }),
+      ...(behind ? { waitingBehind: behind.piece } : {}),
+    };
+  }
+
+  /** Whether this step of the owner's is taken now: its piece being made, or the owner's own image being pulled for it. */
+  private isUnderWay({ key, piece }: PlannedStep, preparing: Preparing) {
+    if (key === null) return false;
+    return piece.kind === "base-pull" ? preparing.pulling > 0 && this.pulls.has(key) : key === this.making?.key;
+  }
+
+  private startOf({ key, piece }: PlannedStep) {
+    return piece.kind === "base-pull" && key !== null ? this.pulls.get(key)?.startedAt : this.making?.startedAt;
   }
 
   /**
@@ -1231,7 +1296,7 @@ export class Sandboxes {
       throw error instanceof BaseNotPulled ? new BaseUnusable({ image: name, problem: { kind: "pull-failed", cause: error.message } }) : error;
     } finally {
       pull.leave(owner);
-      if (preparing && --preparing.pulling === 0 && this.toldEveryOne) this.tell(owner, this.toldEveryOne);
+      if (preparing && --preparing.pulling === 0 && this.toldEveryOne) this.tellOfPieceMade(owner, this.toldEveryOne);
     }
   }
 
@@ -1256,7 +1321,7 @@ export class Sandboxes {
    * each content, whatever it found, as that never changes; a check that didn't get to its end is tried again.
    */
   private async checked(owner: SandboxOwner, name: string, own: OwnBase): Promise<BaseImage> {
-    const verdict = await this.checkOnce(checkKey(own), owner, name, baseCheck(own.image, this.tools.root), verdictIn);
+    const verdict = await this.checkOnce(baseCheckStep(own, name), owner, name, baseCheck(own.image, this.tools.root), verdictIn);
     if ("lacks" in verdict) throw new BaseUnusable({ image: name, problem: { kind: "lacks", needs: verdict.lacks } });
     return { image: own.image, path: verdict.path };
   }
@@ -1265,13 +1330,13 @@ export class Sandboxes {
   private async runsAgent(owner: SandboxOwner, name: string, own: OwnBase, agent: AgentTools) {
     const program = nativeProgramInVm(agent);
     if (program === null) return;
-    const verdict = await this.checkOnce(`${checkKey(own)}:${toolKey(toolOfAgent(agent))}`, owner, name, agentCheck(own.image, this.tools.root, program), agentVerdictIn);
+    const verdict = await this.checkOnce(agentCheckStep(own, name, toolOfAgent(agent)), owner, name, agentCheck(own.image, this.tools.root, program), agentVerdictIn);
     if ("fails" in verdict) throw new BaseUnusable({ image: name, problem: { kind: "agent-fails", harness: agent.harness, version: agent.version, cause: verdict.fails } });
   }
 
   /** A check of the owner's base image, run once for each content, whatever it found; one that didn't get to its end is tried again. */
-  private checkOnce<T>(key: string, owner: SandboxOwner, name: string, check: ThrowawayRun, verdictIn: (output: string) => T | null): Promise<T> {
-    return this.piece(key, async () => {
+  private checkOnce<T>(step: TakenStep, owner: SandboxOwner, name: string, check: ThrowawayRun, verdictIn: (output: string) => T | null): Promise<T> {
+    return this.piece(step, async () => {
       this.tell(owner, { stage: "checking-image", image: name });
       const ran = await this.launcher.runOnce(check, CHECK_TIMEOUT_MS);
       const found = verdictIn(ran.output);
@@ -1280,39 +1345,55 @@ export class Sandboxes {
     });
   }
 
-  private startPreparing(owner: SandboxOwner) {
-    const preparing = this.preparing.get(ownerKey(owner)) ?? { owner, launches: 0, pulling: 0 };
+  /** A sandbox that starts being set up while a piece is made hears of it at once: it takes it, or waits behind it. */
+  private startPreparing(owner: SandboxOwner, agent: AgentTools | null) {
+    const before = this.preparing.get(ownerKey(owner));
+    const preparing = before ?? { owner, launches: 0, pulling: 0, agents: [], startedAt: Date.now() };
     preparing.launches += 1;
+    preparing.agents.push(agent);
     this.preparing.set(ownerKey(owner), preparing);
+    if (!before && this.making) this.tellOfPieceMade(owner, this.toldEveryOne ?? { stage: STAGE_OF_PIECE[this.making.piece.kind] });
     return preparing;
   }
 
-  private stopPreparing(owner: SandboxOwner) {
+  private stopPreparing(owner: SandboxOwner, agent: AgentTools | null) {
     const preparing = this.preparing.get(ownerKey(owner));
-    if (preparing && --preparing.launches === 0) this.preparing.delete(ownerKey(owner));
+    if (!preparing) return;
+    preparing.agents.splice(preparing.agents.indexOf(agent), 1);
+    if (--preparing.launches === 0) this.preparing.delete(ownerKey(owner));
   }
 
-  private tell(owner: SandboxOwner, setup: SandboxSetup) {
+  private tell(owner: SandboxOwner, given: SandboxSetup) {
+    const setup = this.withSteps(owner, given);
     this.setups.set(ownerKey(owner), { owner, setup });
     this.host.setupChanged(owner, setup);
   }
 
-  /** What every sandbox needs moves on: each of those being set up now waits for it, but those that wait for their own image's pull. */
+  /** What every sandbox needs moves on: each of those being set up now hears of it, but those that wait for their own image's pull. */
   private readonly toEveryOnePreparing = (setup: SandboxSetup) => {
     this.toldEveryOne = setup;
-    [...this.preparing.values()].filter(({ pulling }) => pulling === 0).forEach(({ owner }) => this.tell(owner, setup));
+    [...this.preparing.values()].filter(({ pulling }) => pulling === 0).forEach(({ owner }) => this.tellOfPieceMade(owner, setup));
   };
 
+  /** How the piece being made moves on, to a sandbox that takes it; one that doesn't hears only that it waits behind it. */
+  private tellOfPieceMade(owner: SandboxOwner, setup: SandboxSetup) {
+    const agents = this.preparing.get(ownerKey(owner))?.agents ?? [];
+    const takesIt = this.making === null || this.stepsOf(owner, agents).some(({ key }) => key === this.making!.key);
+    this.tell(owner, takesIt ? setup : { stage: setup.stage });
+  }
+
   /** A piece of setup, made once: its result where it is ready, else made after the pieces asked for before. */
-  private async piece<T>(key: string, make: () => Promise<T>): Promise<T> {
+  private async piece<T>({ key, piece }: TakenStep, make: () => Promise<T>): Promise<T> {
     if (this.ready.has(key)) return this.ready.get(key) as T;
     return this.setupStep(async () => {
       if (this.ready.has(key)) return this.ready.get(key) as T;
+      this.making = { key, piece, startedAt: Date.now() };
       try {
         const made = await make();
         this.ready.set(key, made);
         return made;
       } finally {
+        this.making = null;
         this.toldEveryOne = null;
       }
     });
@@ -1326,9 +1407,10 @@ export class Sandboxes {
 
   private async installed(tool: SandboxTool) {
     if (await this.tools.has(tool)) return;
-    this.toEveryOnePreparing({ stage: "installing-tool", tool });
+    const installing: SandboxSetup = { stage: "installing-tool", tool };
+    this.toEveryOnePreparing(installing);
     try {
-      await this.tools.install(tool);
+      await this.tools.install(tool, (fetch) => this.toEveryOnePreparing({ ...installing, ...fetch }));
     } catch (error) {
       throw error instanceof ToolInstallFailed ? new SetupFailed(`installing ${toolNameOf(tool)}: ${error.message}`) : error;
     }
@@ -1339,6 +1421,7 @@ export class Sandboxes {
 class BasePull {
   private readonly waiting = new Map<string, { owner: SandboxOwner; name: string }>();
   private got: SandboxSetup = { stage: "pulling-image" };
+  readonly startedAt = Date.now();
   readonly done: Promise<OwnBase>;
 
   constructor(
@@ -1364,6 +1447,9 @@ class BasePull {
   }
 }
 
+/** A check of the owner's image that ran to its end, kept as it is, which found what the agents need missing there, or their program not running. */
+const foundUnusable = (made: unknown) => typeof made === "object" && made !== null && ("lacks" in made || "fails" in made);
+
 /** The owner's base image is no use to its agents: which, and why. */
 class BaseUnusable extends Error {
   constructor(readonly unusable: UnusableBase) {
@@ -1378,6 +1464,38 @@ const checkKey = ({ content }: OwnBase) => `checked:${content}`;
 const TOOL_KEY = "tool:";
 const toolKey = (tool: SandboxTool) => `${TOOL_KEY}${tool.kind}${"version" in tool ? `-${tool.version}` : ""}`;
 const isToolKey = (key: string) => key.startsWith(TOOL_KEY);
+
+/** A step of a sandbox's setup by the key of the piece it makes, which every sandbox that takes it shares; none yet where that waits for a pull. */
+interface PlannedStep {
+  key: string | null;
+  piece: SetupPiece;
+}
+
+type TakenStep = PlannedStep & { key: string };
+
+const serviceStep = (runtime: SandboxKind): TakenStep => ({ key: RUNTIME, piece: { kind: "service", runtime } });
+const BASE_BUILD_STEP: TakenStep = { key: DEFAULT_BASE, piece: { kind: "base-build" } };
+const toolStep = (tool: SandboxTool): TakenStep => ({ key: toolKey(tool), piece: { kind: "tool", tool } });
+const baseCheckStep = (own: OwnBase, name: string): TakenStep => ({ key: checkKey(own), piece: { kind: "base-check", image: name } });
+const agentCheckStep = (own: OwnBase, name: string, tool: SandboxTool): TakenStep => ({ key: `${checkKey(own)}:${toolKey(tool)}`, piece: { kind: "agent-check", image: name, tool } });
+
+const STAGE_OF_PIECE: Record<SetupPiece["kind"], SandboxSetupStage> = {
+  service: "starting-service",
+  "base-build": "building-image",
+  "base-pull": "pulling-image",
+  "base-check": "checking-image",
+  tool: "installing-tool",
+  "agent-check": "checking-image",
+};
+
+/** A sandbox being set up: how many of its launches wait for it, how many of those for its own image's pull, the agents they are for, and since when. */
+interface Preparing {
+  owner: SandboxOwner;
+  launches: number;
+  pulling: number;
+  agents: (AgentTools | null)[];
+  startedAt: number;
+}
 
 /** The tools a VM of this agent runs on: those of every VM, and its kind's at its version. */
 const toolsOf = (agent: AgentTools | null): SandboxTool[] => [...TOOLS_OF_EVERY_VM, ...(agent ? [toolOfAgent(agent)] : [])];

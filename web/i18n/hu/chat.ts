@@ -84,11 +84,8 @@ export const chat: Messages["chat"] = {
     "preparing-sandbox": "A sandbox előkészítése; először ez néhány percig tart…",
     "starting-sandbox": "A sandbox indítása…",
   },
-  sandboxImageStep: (at: number, of: number) => `A sandbox előkészítése: az alap-image építése, ${of} lépésből a(z) ${at}.…`,
-  sandboxInstalling: (tool: string) => `A sandbox előkészítése: ${tool} telepítése…`,
-  sandboxPulling: (image: string) => `A sandbox előkészítése: ${image} letöltése…`,
-  sandboxUnpacking: (image: string) => `A sandbox előkészítése: ${image} kicsomagolása…`,
-  sandboxChecking: (image: string) => `A sandbox előkészítése: ${image} ellenőrzése…`,
+  sandboxSetupStep: (at: number, of: number, step: string) => `A sandbox előkészítése (${at}/${of}): ${step}`,
+  sandboxSetupWaiting: "A sandbox előkészítése: egy másik sandbox előkészítésére vár…",
   notice: {
     lines: (count) => `${count} sor`,
     error: "Hiba",

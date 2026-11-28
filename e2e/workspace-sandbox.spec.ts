@@ -19,6 +19,7 @@ const buildHeldBy = () => join(host.root, "build-may-go-on");
 const installHeldBy = () => join(host.root, "install-may-go-on");
 const pullHeldBy = () => join(host.root, "pull-may-go-on");
 const unpackHeldBy = () => join(host.root, "unpack-may-go-on");
+const installerPullHeldBy = () => join(host.root, "installer-pull-may-go-on");
 const worktree = () => join(host.root, "worktree");
 const promptsFile = () => join(host.root, "prompts");
 const promptsSoFar = () => (existsSync(promptsFile()) ? readFileSync(promptsFile(), "utf8") : "");
@@ -35,6 +36,7 @@ function writeFakeContainer() {
     FAKE_CONTAINER_INSTALL_HELD_BY: installHeldBy(),
     FAKE_CONTAINER_PULL_HELD_BY: pullHeldBy(),
     FAKE_CONTAINER_UNPACK_HELD_BY: unpackHeldBy(),
+    FAKE_CONTAINER_INSTALLER_PULL_HELD_BY: installerPullHeldBy(),
     FAKE_ACP_PROMPTS: promptsFile(),
   });
   const claude = join(host.fakeProgramsDir, "claude");
@@ -89,6 +91,12 @@ const reasons = (dialog: Locator) => dialog.locator(".room-sandbox-reasons");
 const startOnPicker = (dialog: Locator) => dialog.getByRole("combobox", { name: "Start new conversations on" });
 const heldCard = (scope: Page | Locator) => scope.getByRole("region", { name: "Agent config change held for you" });
 const chatHeader = (page: Page) => page.locator(".chat-header:visible");
+
+/** The steps the first sandbox here takes for Claude Code, in the order it takes them. */
+const STEPS_OF_CLAUDE_CODE = ["Start Apple's container service", "Build Mirador's base image", "Build Mirador's guard", /^Install Bun \d+\.\d+\.\d+$/, "Install Node.js 22", "Install Claude Code 2.1.330"];
+
+const setupSteps = (dialog: Locator) => dialog.getByRole("group", { name: "Setting up the sandbox" });
+const stepRow = (steps: Locator, name: string) => steps.getByRole("listitem").filter({ has: steps.page().locator(".sandbox-setup-name", { hasText: name }) });
 
 async function openSandboxOf(page: Page, card: Locator, workspace: string) {
   await clickWorkspaceButton(card, "Sandbox…");
@@ -213,8 +221,15 @@ test("turned on, the workspace's sandbox is set up with its progress shown, in a
   await sandboxSwitch(dialog).check();
   await expect(dialog.getByRole("radio", { name: "Agents work freely inside" })).toBeChecked();
   await expect(dialog.getByRole("radio", { name: "Their profile's permission mode still applies" })).not.toBeChecked();
-  const setup = dialog.locator(".room-sandbox-setup");
-  await expect(setup).toHaveText("Building the sandbox's base image on this Mac: step 2 of 3…");
+  const steps = setupSteps(dialog);
+  await expect(steps.locator(".sandbox-setup-name")).toHaveText(STEPS_OF_CLAUDE_CODE);
+  await expect(steps.getByRole("status")).toHaveText("Step 2 of 6");
+  await expect(steps.getByRole("img", { name: "Done" })).toHaveCount(1);
+  const building = stepRow(steps, "Build Mirador's base image");
+  await expect(building.getByRole("img", { name: "Under way" })).toBeVisible();
+  await expect(building.locator(".sandbox-setup-detail")).toHaveText("Part 2 of 3 of the build");
+  await expect(building.getByRole("progressbar", { name: "How far this step got" })).toHaveAttribute("aria-valuenow", "2");
+  await expect(steps.getByRole("progressbar", { name: "Steps done" })).toHaveAttribute("aria-valuenow", "1");
   await keepScreenshot(dialog, "setup-progress");
   await expect(networkChoice(dialog, "Only the model and Mirador")).toBeChecked();
   await dialog.getByRole("button", { name: "Done" }).click();
@@ -229,18 +244,38 @@ test("turned on, the workspace's sandbox is set up with its progress shown, in a
   const headerMark = chatHeader(page).locator(".conversation-sandboxed");
   await expect(headerMark).toHaveText("Sandboxed");
 
-  await test.step("while the sandbox is set up, the conversation says how far it got, until its agent has started", async () => {
+  await test.step("while the sandbox is set up, the conversation says how far it got, in its header and a card that opens every step, until its agent has started", async () => {
     const waitingFor = chatHeader(page).locator(".status-detail");
-    await expect(waitingFor).toHaveText("Setting up the sandbox: building its base image, step 2 of 3…");
+    await expect(waitingFor).toHaveText("Setting up the sandbox, step 2 of 6: Build Mirador's base image");
+    await expect(waitingFor).toHaveClass(/\bbusy\b/);
     await keepScreenshot(chatHeader(page), "header-setting-up");
+    const setupCard = page.locator(".sandbox-setup-card:visible");
+    await expect(setupCard.locator("strong")).toHaveText("Setting up the sandbox before its agent starts");
+    await expect(setupCard.locator(".sandbox-setup-doing")).toHaveText("Step 2 of 6: Build Mirador's base image");
+    await expect(setupCard.getByRole("progressbar", { name: "Steps done" })).toHaveAttribute("aria-valuenow", "1");
+    await expect(setupCard).toHaveAttribute("data-hint", "Click for every step, in the sandbox's settings.");
+    await keepScreenshot(setupCard, "conversation-setting-up");
     writeFileSync(buildHeldBy(), "");
-    await expect(waitingFor).toHaveText("Setting up the sandbox: installing Claude Code 2.1.330…");
-    const installing = await openSandboxOf(page, card, "project");
-    await expect(installing.locator(".room-sandbox-setup")).toHaveText("Installing Claude Code 2.1.330 for the sandbox…");
+    await expect(waitingFor).toHaveText(/^Setting up the sandbox, step 4 of 6: Install Bun \d+\.\d+\.\d+$/);
+    await expect(setupCard.locator(".sandbox-setup-doing")).toHaveText(/^Step 4 of 6: Install Bun /);
+    await setupCard.click();
+    const installing = sandboxDialog(page, "project");
+    const installingSteps = setupSteps(installing);
+    const bun = stepRow(installingSteps, "Install Bun");
+    await expect(bun.locator(".sandbox-setup-detail")).toHaveText("Downloading node:22-bookworm-slim 40%");
+    await expect(bun.getByRole("progressbar", { name: "How far this step got" })).toHaveAttribute("aria-valuenow", "40");
+    await keepScreenshot(installing, "installer-downloading");
+    writeFileSync(installerPullHeldBy(), "");
+    await expect(installingSteps.getByRole("status")).toHaveText("Step 6 of 6");
+    await expect(installingSteps.getByRole("img", { name: "Done" })).toHaveCount(5);
+    await expect(stepRow(installingSteps, "Install Claude Code 2.1.330").getByRole("img", { name: "Under way" })).toBeVisible();
     await installing.getByRole("button", { name: "Done" }).click();
     await expect(installing).toBeHidden();
+    await expect(waitingFor).toHaveText("Setting up the sandbox, step 6 of 6: Install Claude Code 2.1.330");
+    await expect(setupCard.locator(".sandbox-setup-doing")).toHaveText("Step 6 of 6: Install Claude Code 2.1.330");
     writeFileSync(installHeldBy(), "");
     await expect(waitingFor).toHaveCount(0);
+    await expect(setupCard).toHaveCount(0);
     await keepScreenshot(chatHeader(page), "header-mark");
     const settings = await openSandboxOf(page, card, "project");
     await expect(settings.locator(".room-sandbox-setup")).toHaveText("Set up on this Mac.");
@@ -387,7 +422,11 @@ test("a base image of the owner's own is pulled and checked for what the agents 
   await test.step("one without git is set up as far as its check, which says so, and the conversation's next turn fails saying it too", async () => {
     const dialog = await useBaseImage("team/lacks-git:1");
     const lacks = "The sandbox's base image team/lacks-git:1 lacks what the agents need: git.";
-    await expect(dialog.locator(".room-sandbox-setup")).toHaveText(`Setting it up failed: ${lacks}`);
+    const failedSteps = setupSteps(dialog);
+    await expect(failedSteps.locator("strong")).toHaveText("Setting it up failed.");
+    await expect(failedSteps.getByRole("status")).toHaveText("Step 6 of 8");
+    await expect(failedSteps.locator(".sandbox-setup-problem")).toHaveText(lacks);
+    await expect(stepRow(failedSteps, "Check that team/lacks-git:1 has what the agents need").getByRole("img", { name: "Failed" })).toBeVisible();
     await keepScreenshot(dialog, "base-image-lacks");
     await dialog.getByRole("button", { name: "Done" }).click();
     const runsBefore = runs().length;
@@ -398,21 +437,23 @@ test("a base image of the owner's own is pulled and checked for what the agents 
 
   await test.step("one whose glibc is too old for Claude Code's own program is checked for it once that is installed, which says what it said", async () => {
     const dialog = await useBaseImage("team/old-glibc:1");
-    await expect(dialog.locator(".room-sandbox-setup")).toHaveText(
-      /^Setting it up failed: Claude Code \S+ doesn't run on the sandbox's base image team\/old-glibc:1: claude: \/lib\/aarch64-linux-gnu\/libc\.so\.6: version `GLIBC_2\.38' not found$/,
+    await expect(setupSteps(dialog).locator(".sandbox-setup-problem")).toHaveText(
+      /^Claude Code \S+ doesn't run on the sandbox's base image team\/old-glibc:1: claude: \/lib\/aarch64-linux-gnu\/libc\.so\.6: version `GLIBC_2\.38' not found$/,
     );
     await dialog.getByRole("button", { name: "Done" }).click();
   });
 
   await test.step("one with all they need is pulled with a bar of how far its fetching and then its unpacking got, then runs the VM, by its name as Docker reads it, checked once", async () => {
     const dialog = await useBaseImage("team/dev:1");
-    await expect(dialog.locator(".room-sandbox-setup")).toHaveText("Pulling team/dev:1 for the sandbox…");
-    const howFar = dialog.getByRole("progressbar", { name: "Pulling the sandbox's base image onto this Mac…" });
-    await expect(howFar).toHaveJSProperty("value", 40);
+    await expect(setupSteps(dialog).getByRole("status")).toHaveText("Step 2 of 8");
+    const pulling = stepRow(setupSteps(dialog), "Pull team/dev:1");
+    await expect(pulling.locator(".sandbox-setup-detail")).toHaveText("Downloading team/dev:1 40%");
+    const howFar = pulling.getByRole("progressbar", { name: "How far this step got" });
+    await expect(howFar).toHaveAttribute("aria-valuenow", "40");
     await keepScreenshot(dialog, "base-image-pulling");
     writeFileSync(pullHeldBy(), "");
-    await expect(dialog.locator(".room-sandbox-setup")).toHaveText("Unpacking team/dev:1 for the sandbox…");
-    await expect(howFar).toHaveJSProperty("value", 60);
+    await expect(pulling.locator(".sandbox-setup-detail")).toHaveText("Unpacking team/dev:1 60%");
+    await expect(howFar).toHaveAttribute("aria-valuenow", "60");
     writeFileSync(unpackHeldBy(), "");
     await expect(dialog.locator(".room-sandbox-setup")).toHaveText("Set up on this Mac.");
     await dialog.getByRole("button", { name: "Done" }).click();
@@ -420,7 +461,7 @@ test("a base image of the owner's own is pulled and checked for what the agents 
     await waitForTurnToEnd(page);
     await expect(lastAgentMessage(page)).toHaveText("On the team's base.");
     expect(imageRun(runs().at(-1)!)).toBe("docker.io/team/dev:1");
-    expect(containerCalls().flatMap(([command, sub, ...rest]) => (command === "image" && sub === "pull" ? [rest.at(-1)] : []))).toEqual(["docker.io/team/lacks-git:1", "docker.io/team/old-glibc:1", "docker.io/team/dev:1"]);
+    expect(containerCalls().flatMap(([command, sub, ...rest]) => (command === "image" && sub === "pull" ? [rest.at(-1)!] : [])).filter((image) => image.includes("/team/"))).toEqual(["docker.io/team/lacks-git:1", "docker.io/team/old-glibc:1", "docker.io/team/dev:1"]);
     expect(loggedCalls("checks.log").map(imageRun)).toEqual(["docker.io/team/lacks-git:1", "docker.io/team/old-glibc:1", "docker.io/team/old-glibc:1", "docker.io/team/dev:1", "docker.io/team/dev:1"]);
   });
 

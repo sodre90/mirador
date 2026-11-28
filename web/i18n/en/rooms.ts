@@ -3,7 +3,7 @@ import type { RoomUsagePeriod } from "../../../shared/room-usage.ts";
 import type { RoomInviteConnect } from "../../../shared/machines.ts";
 import type { RoomAuthorRole, RoomInviteLetsIn, RoomInviteLifetime, RoomRole } from "../../../shared/rooms.ts";
 import type { ClaudeSetupChoice, ClaudeSetupPart } from "../../../shared/room-agent-setup.ts";
-import type { SandboxFolderRefusal, SandboxFolderState, SandboxKind, SandboxNetwork, SandboxSetupStage } from "../../../shared/sandbox.ts";
+import type { SandboxFolderRefusal, SandboxFolderState, SandboxKind, SandboxNetwork, SandboxSetupStage, SetupStepState } from "../../../shared/sandbox.ts";
 import type { OthersTasks } from "../../../shared/brought-agents.ts";
 import type { RoomWorkspaceAccess, WorkspaceCallKind, WorkspaceCallState } from "../../../shared/room-workspace.ts";
 
@@ -273,14 +273,27 @@ export const rooms = {
         failed: "Setting it up failed.",
       },
     } satisfies Record<SandboxKind, Record<SandboxSetupStage, string>>,
-    buildingStep: {
-      "apple-container": (at: number, of: number) => `Building the sandbox's base image on this Mac: step ${at} of ${of}…`,
-      podman: (at: number, of: number) => `Building the sandbox's base image on this computer: step ${at} of ${of}…`,
-    } satisfies Record<SandboxKind, (at: number, of: number) => string>,
-    installingTool: (tool: string) => `Installing ${tool} for the sandbox…`,
-    pullingImage: (image: string) => `Pulling ${image} for the sandbox…`,
-    unpackingImage: (image: string) => `Unpacking ${image} for the sandbox…`,
-    checkingImage: (image: string) => `Checking ${image} for what the agents need…`,
+    steps: {
+      title: "Setting up the sandbox",
+      waitsForIt: "Setting up the sandbox before its agent starts",
+      openSettings: "Click for every step, in the sandbox's settings.",
+      stepOf: (at: number, of: number) => `Step ${at} of ${of}`,
+      stepsDone: "Steps done",
+      howFar: "How far this step got",
+      service: { "apple-container": "Start Apple's container service", podman: "Start Podman" } satisfies Record<SandboxKind, string>,
+      firstKernel: "The first time, it downloads a Linux kernel.",
+      baseBuild: "Build Mirador's base image",
+      buildPart: (at: number, of: number) => `Part ${at} of ${of} of the build`,
+      basePull: (image: string) => `Pull ${image}`,
+      baseCheck: (image: string) => `Check that ${image} has what the agents need`,
+      guard: "Build Mirador's guard",
+      tool: (tool: string) => `Install ${tool}`,
+      agentCheck: (tool: string, image: string) => `Check that ${tool} runs on ${image}`,
+      downloading: (image: string) => `Downloading ${image}`,
+      unpacking: (image: string) => `Unpacking ${image}`,
+      waitingBehind: (step: string) => `Waiting for another sandbox's setup: ${step}`,
+      states: { done: "Done", now: "Under way", waiting: "Still to come", failed: "Failed" } satisfies Record<SetupStepState, string>,
+    },
     baseImage: {
       label: "Base image",
       placeholder: "Mirador's own: Debian with git",

@@ -2,7 +2,7 @@ import type { SandboxAvailability, SandboxSetup } from "../../shared/sandbox.ts"
 import { appleContainerRuntime } from "./availability.ts";
 import { containerCli, lastLineOf, type ContainerCli } from "./container-cli.ts";
 import { droppedTo, environmentFlags, execProcessEnvironment, readByTool } from "./exec-environment.ts";
-import { buildImage, DEFAULT_BASE_PATH, defaultBaseTag, imageExists, pulledOrHere, PULL_TIMEOUT_MS, serviceRuns, startService } from "./image.ts";
+import { buildImage, DEFAULT_BASE_PATH, defaultBaseTag, imageExists, mustRun, pulledOrHere, PULL_TIMEOUT_MS, serviceRuns, startService } from "./image.ts";
 import { HOST_LABEL, isAnotherMiradors, SandboxNotReady, VM_READY_LINE, withoutTrailingSlash, type AgentInVm, type Mount, type OwnBase, type ThrowawayRun, type VmPlan, type VmLauncher } from "./vm-launcher.ts";
 
 const READY_WITHIN_S = 30;
@@ -172,6 +172,17 @@ export class AppleContainer implements VmLauncher {
       if (pulled) progress(pulled);
     };
     return pulledOrHere(name, () => cli.run(pullArguments(name), { timeoutMs: PULL_TIMEOUT_MS, onLine: told }), here);
+  }
+
+  async installerImage(image: string, progress: (pulled: SandboxSetup) => void) {
+    const cli = this.usable();
+    if (await imageExists(cli, image)) return;
+    progress({ stage: "pulling-image" });
+    const told = (line: string) => {
+      const pulled = pullProgressIn(line);
+      if (pulled) progress(pulled);
+    };
+    await mustRun(cli, pullArguments(image), { timeoutMs: PULL_TIMEOUT_MS, onLine: told });
   }
 
   async runOnce(run: ThrowawayRun, timeoutMs: number) {

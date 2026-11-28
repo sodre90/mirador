@@ -129,9 +129,14 @@ import { FullscreenToggle, PaneGrip } from "./Workspace.tsx";
 import { LayoutToggles } from "./LayoutToggles.tsx";
 import { ConversationSettingsPopover, ConversationSettingsToggle, useConversationSettings } from "./ConversationSettings.tsx";
 import { HeldChangeCard } from "./Sandbox.tsx";
+import { SetupCard } from "./SandboxSetupSteps.tsx";
 import { ConversationSandboxMenu, openWorkspaceSandbox, type ConversationSandbox } from "./WorkspaceSandbox.tsx";
 
 const words = t.chat;
+
+/** The settings of the sandbox the conversation's agent runs in: its room's, where it works for one, else its workspace's. */
+const openSandboxOf = (dispatch: Dispatch<AppAction>, { roomId, workspaceId }: Conversation) =>
+  roomId === undefined ? openWorkspaceSandbox(dispatch, workspaceId) : dispatch({ type: "open-overlay", overlay: { kind: "room", roomId, tab: "permissions" } });
 
 /** A command Claude Code opens a panel for only in its own terminal gets one there, on the conversation's profile. */
 const requestPanelCommand = (conversationId: string, line: string) => requestProgram({ type: "terminal.open-panel-command", conversationId, line });
@@ -258,7 +263,7 @@ function ChatHeader({
           </span>
         </div>
       </div>
-      {statusDetail && <div className="status-detail">{statusDetail}</div>}
+      {statusDetail && <div className={conversation.busyWith ? "status-detail busy" : "status-detail"}>{statusDetail}</div>}
       <ConversationSettingsPopover conversation={conversation} profiles={profiles} begun={begun} settings={settings} />
     </header>
   );
@@ -2559,6 +2564,7 @@ export function ChatPanel({
                     {broughtTasks.map((task) => (
                       <BroughtTaskCard key={task.id} task={task} />
                     ))}
+                    {conversation.busyWith === "preparing-sandbox" && <SetupCard setup={sandbox.setup} onOpen={() => openSandboxOf(dispatch, conversation)} />}
                     <HeldChangeCard
                       changes={sandbox.heldChanges}
                       holdsTooMany={sandbox.holdsTooMany}

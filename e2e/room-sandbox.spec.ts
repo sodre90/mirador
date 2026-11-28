@@ -153,16 +153,19 @@ test("turned on, the sandbox is set up on this Mac with its progress shown, and 
   await expect(dialog.getByRole("radio", { name: "Agents work freely inside" })).toBeChecked();
   await expect(presets(dialog)).toHaveAccessibleDescription(PRESETS_ASIDE);
   await expect(dialog.getByText(PRESETS_ASIDE)).toBeVisible();
-  const setup = dialog.locator(".room-sandbox-setup");
-  await expect(setup).toHaveText("Building the sandbox's base image on this Mac: step 2 of 3…");
-  await expect(setup.getByRole("progressbar")).toHaveAttribute("value", "2");
+  const steps = dialog.getByRole("group", { name: "Setting up the sandbox" });
+  await expect(steps.getByRole("status")).toHaveText("Step 2 of 6");
+  const building = steps.getByRole("listitem").filter({ hasText: "Build Mirador's base image" });
+  await expect(building.locator(".sandbox-setup-detail")).toHaveText("Part 2 of 3 of the build");
+  await expect(building.getByRole("progressbar", { name: "How far this step got" })).toHaveAttribute("aria-valuenow", "2");
   await keepScreenshot(dialog, "setup-progress");
+  const setup = dialog.locator(".room-sandbox-setup");
   writeFileSync(buildHeldBy(), "");
   await expect(setup).toHaveText("Set up on this Mac.");
   const optionsStart = (await dialog.getByRole("radio", { name: "Agents work freely inside" }).boundingBox())!.x;
   for (const underTheSwitch of [network(dialog).getByText("Network", { exact: true }), setup]) expect(Math.abs((await textStart(underTheSwitch)) - optionsStart)).toBeLessThan(2);
   await keepScreenshot(dialog, "switch-on");
-  expect(containerStateNow()).toMatchObject({ builderRunning: false, images: [expect.stringMatching(/^mirador-sandbox-base:[0-9a-f]{10}$/)] });
+  expect(containerStateNow()).toMatchObject({ builderRunning: false, images: [expect.stringMatching(/^mirador-sandbox-base:[0-9a-f]{10}$/), "docker.io/library/alpine:3.22", "docker.io/library/node:22-bookworm-slim"] });
   await dialog.getByRole("button", { name: "Close" }).click();
 
   await test.step("the room's bar says it is sandboxed, and opens the sandbox's settings", async () => {

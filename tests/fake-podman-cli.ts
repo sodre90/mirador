@@ -21,7 +21,7 @@ const localName = (tag: string) => (tag.includes("/") ? tag : `localhost/${tag}`
 export class FakePodmanCli implements ContainerCli {
   readonly program = "/fake/bin/podman";
   readonly calls: string[][] = [];
-  readonly images = new Set<string>(["docker.io/library/postgres:16"]);
+  readonly images = new Set<string>(["docker.io/library/postgres:16", "docker.io/library/node:22-bookworm-slim", "docker.io/library/alpine:3.22"]);
   readonly containers = new Map<string, Record<string, string>>();
   /** What each container mounts, as `podman inspect` tells it. */
   private readonly mounts = new Map<string, { Source: string; RW: boolean }[]>();

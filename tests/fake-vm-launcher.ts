@@ -68,6 +68,20 @@ export class FakeVmLauncher implements VmLauncher {
     return pulledOrHere(name, pull, here);
   }
 
+  /** The installers' images not here, which a tool's install pulls first, telling how far it got. */
+  readonly installersMissing = new Set<string>();
+  /** The installers' images pulled, each time one was. */
+  readonly installersPulled: string[] = [];
+
+  async installerImage(image: string, progress: (pulled: SandboxSetup) => void) {
+    if (!this.installersMissing.has(image)) return;
+    progress({ stage: "pulling-image" });
+    progress({ stage: "pulling-image", percent: 40 });
+    progress({ stage: "pulling-image", percent: 100, unpacking: true });
+    this.installersPulled.push(image);
+    this.installersMissing.delete(image);
+  }
+
   /** What a check of a base image says, by the image it runs: usable, with a PATH, where it isn't given. */
   checkSays = (_image: string) => ({ exitCode: 0, output: "mirador-base-check\nPATH=/own/bin:/usr/bin:/bin" });
 

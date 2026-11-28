@@ -2,7 +2,7 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, realpathSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { HELD_CHANGES_MOST, roomSandbox, sameOwner, workspaceSandbox, type HeldChange, type OwnedSetup, type SandboxAvailability, type SandboxNetwork, type SandboxNotReadyWhy, type SandboxOwner, type SandboxSetup } from "../shared/sandbox.ts";
+import { HELD_CHANGES_MOST, roomSandbox, sameOwner, workspaceSandbox, type HeldChange, type OwnedSetup, type SandboxAvailability, type SandboxNetwork, type SandboxNotReadyWhy, type SandboxOwner, type SandboxSetup, type SetupStep } from "../shared/sandbox.ts";
 import { englishProblem } from "../shared/host-problems.ts";
 import { KEY_PLACEHOLDER } from "../host/sandbox/agent-environment.ts";
 import { BASE_IMAGE_NAME } from "../host/sandbox/image.ts";
@@ -30,9 +30,13 @@ function repository() {
   return realpathSync(folder);
 }
 
+/** What a setup told of the piece under way, without the steps it takes, which only the tests of its steps read. */
+const withoutSteps = ({ steps: _steps, startedAt: _startedAt, stepStartedAt: _stepStartedAt, waitingBehind: _waitingBehind, ...told }: SandboxSetup): SandboxSetup => told;
+
 function hostFor(workspace: string, baseImageOf: (owner: SandboxOwner) => string | null = () => null) {
   const setups: SandboxSetup[] = [];
   const owned: OwnedSetup[] = [];
+  const toldWithSteps: OwnedSetup[] = [];
   const held: HeldChange[][] = [];
   let network: SandboxNetwork = "closed";
   const host: SandboxHost = {
@@ -41,8 +45,9 @@ function hostFor(workspace: string, baseImageOf: (owner: SandboxOwner) => string
     canvasOf: () => ({ belongs: () => true, tokenOf: () => "token", handle: () => new Response("canvas") }),
     atWork: () => ({ agents: ["builder"], conversationIds: [] }),
     setupChanged: (owner, setup) => {
-      setups.push(setup);
-      owned.push({ owner, setup });
+      setups.push(withoutSteps(setup));
+      owned.push({ owner, setup: withoutSteps(setup) });
+      toldWithSteps.push({ owner, setup });
     },
     baseImageOf,
     heldChanged: (_, changes) => held.push(changes),
@@ -52,7 +57,7 @@ function hostFor(workspace: string, baseImageOf: (owner: SandboxOwner) => string
     foldersStarted: () => {},
     places: { home: "/nonexistent-home", dataDir: join(scratch, "mirador-data"), checkout: "/nonexistent-checkout", computersOwn: [] },
   };
-  return { host, setups, owned, held, reaches: (now: SandboxNetwork) => (network = now) };
+  return { host, setups, owned, toldWithSteps, held, reaches: (now: SandboxNetwork) => (network = now) };
 }
 
 const agentIn = (workspace: string, changes: Partial<AgentInSandbox> = {}): AgentInSandbox => ({
@@ -122,7 +127,7 @@ describe("a room's sandbox", () => {
     expect(setups.flatMap(({ step }) => (step ? [`${step.at}/${step.of}`] : []))).toEqual(["1/3", "2/3", "3/3"]);
     expect(setups.flatMap(({ tool }) => (tool ? [tool] : []))).toEqual([{ kind: "guard" }, { kind: "bun", version: Bun.version }, { kind: "node", version: "22" }, { kind: "claude", version: "2.1.330" }]);
     expect(cli.callsOf("builder").map(([, sub]) => sub)).toEqual(["status", "start", "stop", "delete"]);
-    expect([...cli.images].filter((name) => !name.startsWith(BASE_IMAGE_NAME))).toEqual(["docker.io/library/node:22-bookworm-slim"]);
+    expect([...cli.images].filter((name) => !name.startsWith(BASE_IMAGE_NAME))).toEqual(["docker.io/library/node:22-bookworm-slim", "docker.io/library/alpine:3.22"]);
     for (const install of cli.ranOnce) expect(install).not.toContain("--network");
     expect(cli.ranOnce.map((install) => install.find((arg) => arg.startsWith("docker.io/")))).toEqual(["docker.io/library/alpine:3.22", "docker.io/library/node:22-bookworm-slim", "docker.io/library/node:22-bookworm-slim", "docker.io/library/node:22-bookworm-slim"]);
     expect(readdirSync(toolsFolderOf(host.dataDir)).toSorted()).toEqual([`bun-${Bun.version}`, "claude-2.1.330", expect.stringMatching(/^guard-[0-9a-f]{10}$/), "node-22"]);
@@ -528,6 +533,11 @@ describe("a sandbox on its owner's own base image", () => {
   const checksOf = (cli: FakeContainerCli) => cli.ranOnce.filter(isBaseCheck);
   const pullsOf = (cli: FakeContainerCli) => cli.callsOf("image").filter(([, sub]) => sub === "pull");
   const stagesOf = (owned: OwnedSetup[], owner: SandboxOwner) => owned.filter((each) => sameOwner(each.owner, owner)).map(({ setup }) => setup.stage);
+  const failedStepsOf = (told: OwnedSetup[]) =>
+    told
+      .findLast((each) => sameOwner(each.owner, ROOM))!
+      .setup.steps!.filter(({ state }) => state === "failed")
+      .map(({ piece }) => piece.kind);
 
   test.skipIf(!RUNS_SANDBOXES)("pulls it once, checks it once as nobody with no network, and runs the VM on it with its PATH, without building Mirador's", async () => {
     const workspace = repository();
@@ -579,7 +589,7 @@ describe("a sandbox on its owner's own base image", () => {
 
   test("that lacks what the agents need fails its own agents alone, saying what it lacks, and is checked once", async () => {
     const workspace = repository();
-    const { host, owned } = hostFor(workspace, teamImageForTheRoom);
+    const { host, owned, toldWithSteps } = hostFor(workspace, teamImageForTheRoom);
     const cli = new FakeContainerCli();
     cli.registry.set(TEAM_IMAGE, TEAM_DIGEST);
     cli.checkSays = () => ({ exitCode: 0, output: "mirador-base-check\nlacks bash\nlacks glibc\nPATH=/usr/bin:/bin", stdout: "" });
@@ -594,6 +604,7 @@ describe("a sandbox on its owner's own base image", () => {
     expect(sandboxes.setupStates()).toEqual(expect.arrayContaining([{ owner: ROOM, setup: expect.objectContaining({ stage: "failed" }) }, { owner: WORKSPACE, setup: { stage: "ready" } }]));
 
     await expect(sandboxes.launch(agentIn(workspace))).rejects.toMatchObject(notReady(unusable));
+    expect(failedStepsOf(toldWithSteps)).toEqual(["base-check"]);
     expect(checksOf(cli)).toHaveLength(1);
     expect(cli.callsOf("run").map((run) => run[run.indexOf("--entrypoint") + 2])).toEqual([expect.stringMatching(new RegExp(`^${BASE_IMAGE_NAME}:`))]);
     await sandboxes.stopAll();
@@ -601,7 +612,7 @@ describe("a sandbox on its owner's own base image", () => {
 
   test.skipIf(!RUNS_SANDBOXES)("on which an agent kind's own program doesn't run fails that kind's agents, saying what it said, checked once for each version, and pi, which Node.js runs, isn't checked", async () => {
     const workspace = repository();
-    const { host } = hostFor(workspace, teamImageForTheRoom);
+    const { host, toldWithSteps } = hostFor(workspace, teamImageForTheRoom);
     const cli = new FakeContainerCli();
     cli.registry.set(TEAM_IMAGE, TEAM_DIGEST);
     const tooOld = "claude: /lib/aarch64-linux-gnu/libc.so.6: version `GLIBC_2.38' not found";
@@ -614,6 +625,7 @@ describe("a sandbox on its owner's own base image", () => {
     const unusable: SandboxNotReadyWhy = { kind: "base-image-unusable", image: "team/dev", problem: { kind: "agent-fails", harness: "claude", version: "2.1.330", cause: tooOld } };
     await failsFor(unusable);
     await failsFor(unusable);
+    expect(failedStepsOf(toldWithSteps)).toEqual(["agent-check"]);
     expect(cli.ranOnce.filter(isAgentCheck)).toHaveLength(2);
     expect(englishProblem({ code: "sandbox-not-ready", why: unusable })).toContain(`Claude Code 2.1.330 doesn't run on the sandbox's base image team/dev: ${tooOld}`);
 
@@ -768,6 +780,152 @@ describe("a sandbox on its owner's own base image", () => {
     expect(pullsOf(cli)).toEqual([]);
     const [run] = cli.callsOf("run");
     expect(run![run!.indexOf("--entrypoint") + 2]).toBe(`docker.io/${pinned}`);
+    await sandboxes.stopAll();
+  });
+});
+
+describe("a sandbox's setup steps", () => {
+  const CLAUDE = { harness: "claude", version: "2.1.330" } as const;
+  const PI = { harness: "pi", version: "1.6.0" } as const;
+  const OTHER = workspaceSandbox("w2");
+  const NODE_INSTALLER = "docker.io/library/node:22-bookworm-slim";
+  const GUARD_INSTALLER = "docker.io/library/alpine:3.22";
+  const until = async (holds: () => boolean) => {
+    for (const started = Date.now(); Date.now() - started < 5_000 && !holds(); ) await Bun.sleep(5);
+    return holds();
+  };
+  const lastOf = (told: OwnedSetup[], owner: SandboxOwner) => told.findLast((each) => sameOwner(each.owner, owner))?.setup;
+  const nameOf = ({ piece }: SetupStep) => (piece.kind === "tool" ? `tool:${piece.tool.kind}` : piece.kind);
+  const statesOf = (setup: SandboxSetup) => setup.steps!.map((step) => `${nameOf(step)} ${step.state}`);
+  const nowOf = (setup: SandboxSetup) => setup.steps!.filter(({ state }) => state === "now").map(nameOf);
+
+  test("lists every step its first VM takes, the one under way and since when, each taken in their order, and then that it is ready", async () => {
+    const { host, toldWithSteps } = hostFor(repository());
+    const sandboxes = new Sandboxes(new FakeVmLauncher(), host, IDLE_STOP_MS);
+
+    sandboxes.prepareInBackground(ROOM, CLAUDE);
+
+    expect(await until(() => lastOf(toldWithSteps, ROOM)?.stage === "ready")).toBe(true);
+    const underWay = toldWithSteps.flatMap(({ setup }) => (setup.steps ? [setup] : []));
+    expect(underWay[0]!.steps![0]!.piece).toEqual({ kind: "service", runtime: "apple-container" });
+    expect(underWay.map(nowOf)).toEqual([["base-build"], ["tool:guard"], ["tool:bun"], ["tool:node"], ["tool:claude"]]);
+    expect(statesOf(underWay.at(-1)!)).toEqual(["service done", "base-build done", "tool:guard done", "tool:bun done", "tool:node done", "tool:claude now"]);
+    expect(underWay.every(({ startedAt, stepStartedAt }) => startedAt! <= stepStartedAt!)).toBe(true);
+    expect(lastOf(toldWithSteps, ROOM)).toEqual({ stage: "ready" });
+  });
+
+  test("says which step of another sandbox's it waits behind, as steps are taken one at a time, and takes its own once that one is over", async () => {
+    const { host, toldWithSteps } = hostFor(repository());
+    const launcher = new FakeVmLauncher();
+    const sandboxes = new Sandboxes(launcher, host, IDLE_STOP_MS);
+    sandboxes.prepareInBackground(ROOM, null);
+    expect(await until(() => lastOf(toldWithSteps, ROOM)?.stage === "ready")).toBe(true);
+    const install = Promise.withResolvers<void>();
+    launcher.runningOnce = install.promise;
+    sandboxes.prepareInBackground(ROOM, CLAUDE);
+    expect(await until(() => launcher.installed().includes("@anthropic-ai/claude-code@2.1.330"))).toBe(true);
+
+    sandboxes.prepareInBackground(OTHER, PI);
+
+    const waiting = lastOf(toldWithSteps, OTHER)!;
+    expect(waiting.waitingBehind).toEqual({ kind: "tool", tool: { kind: "claude", version: "2.1.330" } });
+    expect(statesOf(waiting)).toEqual(["service done", "base-build done", "tool:guard done", "tool:bun done", "tool:node done", "tool:pi waiting"]);
+    expect(waiting.stepStartedAt).toBe(lastOf(toldWithSteps, ROOM)!.stepStartedAt);
+    install.resolve();
+    expect(await until(() => [ROOM, OTHER].every((owner) => lastOf(toldWithSteps, owner)?.stage === "ready"))).toBe(true);
+    const otherUnderWay = toldWithSteps.filter(({ owner, setup }) => sameOwner(owner, OTHER) && setup.steps).map(({ setup }) => setup);
+    expect(otherUnderWay.map(nowOf).at(-1)).toEqual(["tool:pi"]);
+    expect(otherUnderWay.at(-1)!.waitingBehind).toBeUndefined();
+  });
+
+  test("where a step fails, says which, with those before it done", async () => {
+    const { host, toldWithSteps } = hostFor(repository());
+    const launcher = new FakeVmLauncher();
+    launcher.runOnceFailsFor = "@anthropic-ai/claude-code";
+    const sandboxes = new Sandboxes(launcher, host, IDLE_STOP_MS);
+
+    sandboxes.prepareInBackground(ROOM, CLAUDE);
+
+    expect(await until(() => lastOf(toldWithSteps, ROOM)?.stage === "failed")).toBe(true);
+    const failed = lastOf(toldWithSteps, ROOM)!;
+    expect(statesOf(failed)).toEqual(["service done", "base-build done", "tool:guard done", "tool:bun done", "tool:node done", "tool:claude failed"]);
+    expect(failed.waitingBehind).toBeUndefined();
+  });
+
+  test("on an owner's own base image, lists its pull and checks, the checks known once it is pulled", async () => {
+    const { host, toldWithSteps } = hostFor(repository(), () => "team/dev");
+    const launcher = new FakeVmLauncher();
+    launcher.registry.set("docker.io/team/dev:latest", `sha256:${"a".repeat(64)}`);
+    const pull = Promise.withResolvers<void>();
+    launcher.pulling = pull.promise;
+    const sandboxes = new Sandboxes(launcher, host, IDLE_STOP_MS);
+
+    sandboxes.prepareInBackground(ROOM, CLAUDE);
+
+    expect(await until(() => lastOf(toldWithSteps, ROOM)?.stage === "pulling-image")).toBe(true);
+    expect(statesOf(lastOf(toldWithSteps, ROOM)!)).toEqual(["service done", "base-pull now", "tool:guard waiting", "tool:bun waiting", "tool:node waiting", "base-check waiting", "tool:claude waiting", "agent-check waiting"]);
+    pull.resolve();
+    expect(await until(() => lastOf(toldWithSteps, ROOM)?.stage === "ready")).toBe(true);
+    const checking = toldWithSteps.filter(({ setup }) => setup.stage === "checking-image").map(({ setup }) => nowOf(setup));
+    expect(checking).toEqual([["base-check"], ["agent-check"]]);
+  });
+
+  test("a tool whose installer's image isn't here fetches it first, saying how far it got, and the next tool on that image doesn't", async () => {
+    const { host, setups } = hostFor(repository());
+    const launcher = new FakeVmLauncher();
+    launcher.installersMissing.add(NODE_INSTALLER);
+    const sandboxes = new Sandboxes(launcher, host, IDLE_STOP_MS);
+
+    sandboxes.prepareInBackground(ROOM, CLAUDE);
+
+    expect(await until(() => setups.at(-1)?.stage === "ready")).toBe(true);
+    expect(launcher.installersPulled).toEqual([NODE_INSTALLER]);
+    const bun = { kind: "bun", version: Bun.version } as const;
+    expect(setups.filter(({ stage }) => stage === "installing-tool")).toEqual([
+      { stage: "installing-tool", tool: { kind: "guard" } },
+      { stage: "installing-tool", tool: bun },
+      { stage: "installing-tool", tool: bun, fetching: "node:22-bookworm-slim" },
+      { stage: "installing-tool", tool: bun, fetching: "node:22-bookworm-slim", percent: 40 },
+      { stage: "installing-tool", tool: bun, fetching: "node:22-bookworm-slim", percent: 100, unpacking: true },
+      { stage: "installing-tool", tool: bun },
+      { stage: "installing-tool", tool: { kind: "node", version: "22" } },
+      { stage: "installing-tool", tool: { kind: "claude", version: "2.1.330" } },
+    ]);
+  });
+
+  test("on Apple's container, an installer's image here is used as it is, and one missing is pulled once for this Mac's processor, how far told", async () => {
+    const workspace = repository();
+    const { host, setups } = hostFor(workspace);
+    const cli = new FakeContainerCli();
+    cli.images.delete(GUARD_INSTALLER);
+    cli.registry.set(GUARD_INSTALLER, `sha256:${"b".repeat(64)}`);
+    const sandboxes = new Sandboxes(new AppleContainer(cli, AVAILABLE), host, IDLE_STOP_MS);
+
+    (await sandboxes.launch(agentIn(workspace))).gone!();
+    await sandboxes.stop(ROOM);
+    (await sandboxes.launch(agentIn(workspace))).gone!();
+
+    expect(cli.callsOf("image").filter(([, sub]) => sub === "pull")).toEqual([["image", "pull", "--progress", "plain", "--platform", "linux/arm64", GUARD_INSTALLER]]);
+    expect(setups.filter(({ fetching }) => fetching).map(({ percent, unpacking }) => [percent, unpacking])).toEqual([
+      [undefined, undefined],
+      [40, undefined],
+      [undefined, true],
+      [100, true],
+    ]);
+    await sandboxes.stopAll();
+  });
+
+  test("where an installer's image can't be fetched, the setup fails saying which tool and image", async () => {
+    const workspace = repository();
+    const { host, setups } = hostFor(workspace);
+    const cli = new FakeContainerCli();
+    cli.images.delete(GUARD_INSTALLER);
+    const sandboxes = new Sandboxes(new AppleContainer(cli, AVAILABLE), host, IDLE_STOP_MS);
+
+    await expect(sandboxes.launch(agentIn(workspace))).rejects.toMatchObject(notReady({ kind: "setup-failed" }));
+
+    expect(setups.at(-1)?.stage).toBe("failed");
+    expect(setups.at(-1)?.problem).toStartWith("installing mirador-guard: fetching alpine:3.22: ");
     await sandboxes.stopAll();
   });
 });

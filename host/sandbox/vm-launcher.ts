@@ -95,6 +95,11 @@ export interface VmLauncher {
    * none here.
    */
   ownBase(name: string, progress: (setup: SandboxSetup) => void): Promise<OwnBase>;
+  /**
+   * The image a throwaway container runs on is here: pulled only where it is not, so one here serves with no registry
+   * in reach, the pull's start and how far it got told where the runtime says. Throws SetupFailed where the pull fails.
+   */
+  installerImage(image: string, progress: (pulled: SandboxSetup) => void): Promise<void>;
   /** Runs a throwaway container to its end: its exit code and what it said. */
   runOnce(run: ThrowawayRun, timeoutMs: number): Promise<{ exitCode: number; output: string }>;
   /** Starts the VM, once its first process says it is ready; throws SandboxNotReady where it does not get there. */
