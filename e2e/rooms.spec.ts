@@ -144,7 +144,7 @@ test("people write in a room, a tagged agent answers in its thread, and another 
 test("a workspace a room works in stays until the room moves to another, where its agent starts afresh and is introduced again", async ({ page }) => {
   const elsewhere = join(host.root, "elsewhere");
   /** The fake agent's answer to FOLDER, which names the folder as the operating system resolves it. */
-  const workingIn = (folder: string) => `Working in ${realpathSync(folder)}`;
+  const workingIn = (folder: string) => `Working in ${realpathSync.native(folder)}`;
   const moverPrompts = join(host.root, "mover-prompts");
   mkdirSync(elsewhere, { recursive: true });
   writeFileSync(moverPrompts, "");

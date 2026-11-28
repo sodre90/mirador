@@ -235,9 +235,10 @@ const leadsOut = (relativePath: string) => relativePath === ".." || relativePath
 const isWithin = (root: string, place: string) => !leadsOut(relative(root, place));
 const overlap = (one: string, other: string) => isWithin(one, other) || isWithin(other, one);
 
+/** The native call: on Windows, realpathSync keeps a short 8.3 name (RUNNER~1) that the agent's folder spells out in full. */
 function realPathOrNull(path: string) {
   try {
-    return realpathSync(path);
+    return realpathSync.native(path);
   } catch {
     return null;
   }

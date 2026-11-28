@@ -19,7 +19,7 @@ const hookWriting = (marker: string) => ({ UserPromptSubmit: [{ hooks: [{ type: 
 /** The owner's own Claude Code folder, with a hook, an MCP server, a CLAUDE.md and a memory of the workspace. */
 function setUpOwnersClaudeCode() {
   const folder = ownersClaudeFolder();
-  const memory = join(folder, "projects", realpathSync(host.projectDir).replace(/[^A-Za-z0-9]/g, "-"), "memory");
+  const memory = join(folder, "projects", realpathSync.native(host.projectDir).replace(/[^A-Za-z0-9]/g, "-"), "memory");
   mkdirSync(memory, { recursive: true });
   writeFileSync(join(folder, "settings.json"), JSON.stringify({ hooks: hookWriting("OWNERS-HOOK") }));
   writeFileSync(join(folder, ".claude.json"), JSON.stringify({ hasCompletedOnboarding: true, mcpServers: { ownersprobe: probeServer() } }));
