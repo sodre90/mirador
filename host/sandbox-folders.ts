@@ -42,7 +42,7 @@ export class SandboxFolderService {
     private readonly store: Store,
     private readonly hub: Hub,
     private readonly conversations: FolderConversations,
-    private readonly sandboxes: Pick<Sandboxes, "folderRefusal" | "folderStateOf">,
+    private readonly sandboxes: Pick<Sandboxes, "folderRefusal" | "folderStateOf" | "confirmedRunning">,
   ) {}
 
   /** Adds the folder the owner typed with the access they chose, or tells why it can't be added so. */
@@ -85,15 +85,15 @@ export class SandboxFolderService {
     this.conversations.applySandboxFoldersNow(owner);
   }
 
-  /** The sandbox's VM started, mounting some of its folders and leaving out the others. */
-  vmStarted(owner: SandboxOwner) {
+  /** The sandbox's VM started, mounting some of its folders and leaving out the others, or it stopped. */
+  vmChanged(owner: SandboxOwner) {
     this.broadcast(owner);
   }
 
   /** A deleted room's or workspace's folders went with it; a change still waiting is dropped. */
   ownerGone(owner: SandboxOwner) {
     this.conversations.sandboxFoldersGone(owner);
-    this.hub.broadcast({ type: "sandbox.folders", folders: { owner, folders: [], waiting: false } });
+    this.hub.broadcast({ type: "sandbox.folders", folders: { owner, folders: [], waiting: false, running: false } });
   }
 
   all(): SandboxFolders[] {
@@ -114,7 +114,7 @@ export class SandboxFolderService {
 
   private shown(owner: SandboxOwner): SandboxFolders {
     const folders = this.store.sandboxFoldersOf(owner).map((folder) => ({ ...folder, state: this.sandboxes.folderStateOf(owner, folder) }));
-    return { owner, folders, waiting: this.conversations.waitsForSandboxFolders(owner) };
+    return { owner, folders, waiting: this.conversations.waitsForSandboxFolders(owner), running: this.sandboxes.confirmedRunning(owner) };
   }
 
   private broadcast(owner: SandboxOwner) {

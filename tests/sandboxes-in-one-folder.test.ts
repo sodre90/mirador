@@ -58,7 +58,7 @@ function computer({ planLookedAtMs = 60_000 } = {}) {
     foldersOf: (owner) => of(folders, owner, []),
     networkOf: () => "closed",
     otherSandboxes: (owner) => of(others, owner, NO_OTHERS),
-    foldersStarted: () => {},
+    agentsVmChanged: () => {},
     runtimeChanged: () => {},
     places: { home: scratch, dataDir: join(scratch, "mirador-data"), checkout: "/nonexistent-checkout", computersOwn: [] },
   };

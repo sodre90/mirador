@@ -330,6 +330,7 @@ export const rooms: Messages["rooms"] = {
       addLabel: "要添加的文件夹",
       addButton: "添加",
       waiting: "Agent 完成各自的轮次后，沙箱会带着这些文件夹重启。",
+      notRunning: "沙箱现在没有运行。下一轮时它会带着这些文件夹启动。",
       applyNow: "立即应用",
       refused: {
         "not-a-folder": "那里没有文件夹。",

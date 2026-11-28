@@ -348,6 +348,7 @@ export const rooms = {
       addLabel: "Folder to add",
       addButton: "Add",
       waiting: "The sandbox restarts with its folders once the agents finish their turns.",
+      notRunning: "The sandbox isn't running now. It starts with these folders at the next turn.",
       applyNow: "Apply now",
       refused: {
         "not-a-folder": "There is no folder there.",

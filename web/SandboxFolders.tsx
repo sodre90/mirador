@@ -12,7 +12,7 @@ import { withHomeAsTilde } from "./workspace-folder.ts";
 const words = t.rooms.sandbox.folders;
 
 /** The folders the owner gave a room's or workspace's sandbox; none where it has none. */
-export const foldersOfSandbox = (all: SandboxFolders[], owner: SandboxOwner): SandboxFolders => all.find((each) => sameOwner(each.owner, owner)) ?? { owner, folders: [], waiting: false };
+export const foldersOfSandbox = (all: SandboxFolders[], owner: SandboxOwner): SandboxFolders => all.find((each) => sameOwner(each.owner, owner)) ?? { owner, folders: [], waiting: false, running: false };
 
 export function folderRefusalText(refusal: SandboxFolderRefusal) {
   switch (refusal.kind) {
@@ -39,7 +39,11 @@ export function folderRefusalText(refusal: SandboxFolderRefusal) {
   }
 }
 
-const folderStateText = (state: SandboxFolderState) => (state.kind === "refused" ? words.leftOut(folderRefusalText(state.refusal)) : words.states[state.kind]);
+/** Where the folder stands; nothing for one the VM mounts as it next starts, while none runs, as the list says that once. */
+function folderStateText(state: SandboxFolderState, running: boolean) {
+  if (state.kind === "refused") return words.leftOut(folderRefusalText(state.refusal));
+  return state.kind === "in-sandbox" && !running ? "" : words.states[state.kind];
+}
 
 const READ_AND_WRITE = "read-and-write";
 const READ_ONLY = "read-only";
@@ -55,7 +59,7 @@ const setFolderAccess = (owner: SandboxOwner, path: string, writable: boolean) =
   awaitedRefusal((requestId) => ({ type: "sandbox.set-folder-access", requestId, owner, path, writable }), "sandbox.folder-access-set");
 
 /** An added folder with its access, which the owner changes here, where it stands, and why read and write was refused it. */
-function FolderRow({ owner, folder, homeDir }: { owner: SandboxOwner; folder: ShownSandboxFolder; homeDir: string }) {
+function FolderRow({ owner, folder, running, homeDir }: { owner: SandboxOwner; folder: ShownSandboxFolder; running: boolean; homeDir: string }) {
   const shownPath = withHomeAsTilde(folder.path, homeDir);
   const [refusal, setRefusal] = useState<SandboxFolderRefusal | null>(null);
   const changeAccess = (writable: boolean) =>
@@ -70,7 +74,7 @@ function FolderRow({ owner, folder, homeDir }: { owner: SandboxOwner; folder: Sh
         <option value={READ_ONLY}>{words.readOnly}</option>
         <option value={READ_AND_WRITE}>{words.readAndWrite}</option>
       </select>
-      <span className="sandbox-folder-state">{folderStateText(folder.state)}</span>
+      <span className="sandbox-folder-state">{folderStateText(folder.state, running)}</span>
       <button type="button" className="link sandbox-folder-remove" aria-label={words.removeFolder(shownPath)} onClick={() => connection.send({ type: "sandbox.remove-folder", owner, path: folder.path })}>
         {t.rooms.remove}
       </button>
@@ -174,7 +178,7 @@ function AddFolder({ owner, onDone }: { owner: SandboxOwner; onDone: () => void 
  * The folders of this computer the sandbox sees, read only or read and write, each with where it stands, and the
  * control to add one. A change waiting for the agents to finish their turns says so, with the way to apply it at once.
  */
-export function SandboxFolderList({ folders: { owner, folders, waiting }, homeDir }: { folders: SandboxFolders; homeDir: string }) {
+export function SandboxFolderList({ folders: { owner, folders, waiting, running }, homeDir }: { folders: SandboxFolders; homeDir: string }) {
   const [adding, setAdding] = useState(false);
   return (
     <section className="sandbox-folders" aria-label={words.legend}>
@@ -183,10 +187,11 @@ export function SandboxFolderList({ folders: { owner, folders, waiting }, homeDi
       {folders.length > 0 && (
         <ul className="sandbox-folder-rows">
           {folders.map((folder) => (
-            <FolderRow key={folder.path} owner={owner} folder={folder} homeDir={homeDir} />
+            <FolderRow key={folder.path} owner={owner} folder={folder} running={running} homeDir={homeDir} />
           ))}
         </ul>
       )}
+      {folders.length > 0 && !running && !waiting && <p className="hint sandbox-folders-not-running">{words.notRunning}</p>}
       {waiting && (
         <div className="sandbox-folders-waiting" role="status">
           <span>{words.waiting}</span>

@@ -54,7 +54,7 @@ function hostFor(workspace: string, baseImageOf: (owner: SandboxOwner) => string
     foldersOf: () => [],
     networkOf: () => network,
     otherSandboxes: () => ({ workspaces: [], writableFolders: [], writableFoldersOn: [], foldersLeft: [] }),
-    foldersStarted: () => {},
+    agentsVmChanged: () => {},
     runtimeChanged: () => {},
     places: { home: "/nonexistent-home", dataDir: join(scratch, "mirador-data"), checkout: "/nonexistent-checkout", computersOwn: [] },
   };

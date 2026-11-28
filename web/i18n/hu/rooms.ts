@@ -337,6 +337,7 @@ export const rooms: Messages["rooms"] = {
       addLabel: "A hozzáadandó mappa",
       addButton: "Hozzáadás",
       waiting: "A sandbox a mappáival újraindul, amint az ágensek befejezik a körüket.",
+      notRunning: "A sandbox most nem fut. A következő körben ezekkel a mappákkal indul.",
       applyNow: "Alkalmazás most",
       refused: {
         "not-a-folder": "Ott nincs mappa.",

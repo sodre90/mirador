@@ -430,14 +430,15 @@ test("a sandboxed room's Claude agent works in the workspace from its VM, reache
     await folders.getByRole("button", { name: "Add", exact: true }).click();
     await expect.poll(ourVms, { timeout: 120_000, intervals: [100] }).toEqual([]);
     const stopped = Date.now();
-    await expect(folders.locator(`li[data-folder-path="${folderOfThisMac}"] .sandbox-folder-state`)).toHaveText("In the sandbox");
+    await expect(folders.locator(`li[data-folder-path="${folderOfThisMac}"] .sandbox-folder-state`)).toHaveText("");
+    await expect(folders.locator(".sandbox-folders-not-running")).toHaveText("The sandbox isn't running now. It starts with these folders at the next turn.");
     await folders.getByRole("button", { name: "Add a folder" }).click();
     await folders.getByRole("textbox", { name: "Folder to add" }).fill(repositoryOfThisMac);
     await folders.getByRole("radiogroup", { name: "Access" }).getByRole("radio", { name: "Read and write" }).check();
     await folders.getByRole("button", { name: "Add", exact: true }).click();
     const repositoryRow = folders.locator(`li[data-folder-path="${repositoryOfThisMac}"]`);
     await expect(repositoryRow.locator(".sandbox-folder-access")).toHaveValue("read-and-write");
-    await expect(repositoryRow.locator(".sandbox-folder-state")).toHaveText("In the sandbox");
+    await expect(repositoryRow.locator(".sandbox-folder-state")).toHaveText("");
     await settings.getByRole("button", { name: "Close" }).click();
 
     const answers = page.locator(".room-timeline .room-entry .message.agent");

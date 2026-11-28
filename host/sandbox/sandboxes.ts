@@ -137,8 +137,8 @@ export interface SandboxHost {
   networkOf(owner: SandboxOwner): SandboxNetwork;
   /** What the other rooms' and workspaces' sandboxes work in. */
   otherSandboxes(owner: SandboxOwner): OtherSandboxes;
-  /** The sandbox's VM started, with what of its added folders it mounted and what it left out. */
-  foldersStarted(owner: SandboxOwner): void;
+  /** The sandbox's agents' VM started, with what of its added folders it mounted and what it left out, or it stopped. */
+  agentsVmChanged(owner: SandboxOwner): void;
   /** The runtime runs VMs here otherwise than it said before, as one whose daemon started after Mirador. */
   runtimeChanged(): void;
 }
@@ -796,6 +796,7 @@ export class Sandboxes {
     if (halted) this.knownToHaveStopped(vm);
     else this.lingering.add(vm);
     if (this.vms.get(vm.key) === vm) this.vms.delete(vm.key);
+    if (!isBrought(vm)) this.host.agentsVmChanged(vm.owner);
   }
 
   /** VMs that did not stop when they were to, and may run still. */
@@ -1041,7 +1042,7 @@ export class Sandboxes {
     vm.running = true;
     if (!folders) return;
     this.folderStarts.set(ownerKey(vm.owner), { ...folders.started, startedWith: vm.folders.map(({ path, writable }) => ({ path, writable })) });
-    this.host.foldersStarted(vm.owner);
+    this.host.agentsVmChanged(vm.owner);
   }
 
   /**

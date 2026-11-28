@@ -332,7 +332,7 @@ const sandboxes = new Sandboxes(enginesHere.launcher, {
   foldersOf: (owner) => store.sandboxFoldersOf(owner),
   networkOf: (owner) => sandboxSettingOf(owner)?.network ?? "closed",
   otherSandboxes: (owner) => otherSandboxesOf(store, owner),
-  foldersStarted: (owner) => sandboxFolders.vmStarted(owner),
+  agentsVmChanged: (owner) => sandboxFolders.vmChanged(owner),
   runtimeChanged: () => hub.broadcast({ type: "settings.sandbox-engines", sandboxEngines: sandboxEnginesNow() }),
 });
 const sandboxFolders = new SandboxFolderService(store, hub, conversations, sandboxes);

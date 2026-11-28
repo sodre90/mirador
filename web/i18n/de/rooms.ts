@@ -338,6 +338,7 @@ export const rooms: Messages["rooms"] = {
       addLabel: "Hinzuzufügender Ordner",
       addButton: "Hinzufügen",
       waiting: "Die Sandbox startet mit ihren Ordnern neu, sobald die Agenten ihre Runden beendet haben.",
+      notRunning: "Die Sandbox läuft gerade nicht. Sie startet in der nächsten Runde mit diesen Ordnern.",
       applyNow: "Jetzt anwenden",
       refused: {
         "not-a-folder": "Dort gibt es keinen Ordner.",

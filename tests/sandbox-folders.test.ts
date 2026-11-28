@@ -17,7 +17,7 @@ import { SystemNotifications } from "../host/system-notifications.ts";
 import type { Conversation, Profile } from "../shared/model.ts";
 import { ALL_OF_CLAUDE_SETUP } from "../shared/room-agent-setup.ts";
 import { DEFAULT_PERMISSION_PRESET } from "../shared/room-permissions.ts";
-import { NO_SANDBOX, roomSandbox, workspaceSandbox, type HeldChange, type SandboxFolder, type SandboxOwner, type SandboxSetting } from "../shared/sandbox.ts";
+import { NO_SANDBOX, roomSandbox, workspaceSandbox, type HeldChange, type SandboxFolder, type SandboxFolders, type SandboxOwner, type SandboxSetting } from "../shared/sandbox.ts";
 import { FakeContainerCli } from "./fake-container-cli.ts";
 import { guardedIn, mountsOfRun } from "./guard-told.ts";
 import { RUNS_SANDBOXES } from "./sandbox-computer.ts";
@@ -245,7 +245,7 @@ describe("the sandbox's VM", () => {
       foldersOf: () => folders,
       networkOf: () => "closed" as const,
       otherSandboxes: () => others,
-      foldersStarted: (owner) => void started.push(owner),
+      agentsVmChanged: (owner) => void started.push(owner),
       runtimeChanged: () => {},
       places: surroundings.places,
     };
@@ -287,7 +287,7 @@ describe("the sandbox's VM", () => {
     expect(await sandboxes.workspaceRefusal(workspace, ROOM)).toBeNull();
   });
 
-  test.skipIf(!RUNS_SANDBOXES)("mounts each added folder read-only at its own path, says where each stands, and runs on with other folders while an agent works", async () => {
+  test.skipIf(!RUNS_SANDBOXES)("mounts each added folder read-only at its own path, says where each stands, runs on with other folders while an agent works, and says when its VM stops", async () => {
     const { home, cli, sandboxes, launch, setFolders, started, mounts } = sandboxWithFolders();
     const notes = folderIn(home, "notes");
     const docs = folderIn(home, "docs");
@@ -317,8 +317,11 @@ describe("the sandbox's VM", () => {
     expect(mounts(restarted!)).toEqual(expect.arrayContaining([`${notes}:${notes}:ro`, `${docs}:${docs}:ro`]));
     expect(sandboxes.folderStateOf(ROOM, readOnly(docs))).toEqual({ kind: "in-sandbox" });
     expect(sandboxes.runsWithOtherFolders(ROOM)).toBe(false);
+    const toldBeforeStopping = started.length;
     await sandboxes.stopAll();
     expect(sandboxes.mountedFolders(ROOM)).toEqual([]);
+    expect(sandboxes.confirmedRunning(ROOM)).toBe(false);
+    expect(started.slice(toldBeforeStopping)).toEqual([ROOM]);
   });
 
   test.skipIf(!RUNS_SANDBOXES)("guards a folder read and write as it does the workspace: its repository, what its git config includes, and its agent config files", async () => {
@@ -694,6 +697,27 @@ describe("the folders added to a sandbox", () => {
     expect(claudeRoomSessionMeta("as-needed").systemPrompt.append).toBe("");
   });
 
+  test("say whether the sandbox's VM runs now, told again each time it starts or stops", () => {
+    const store = new Store(":memory:");
+    store.insertWorkspace({ id: "w1", name: "project", path: "/home/me/project", defaultLaunch: BUILDER, createdAt: 1 });
+    store.setWorkspaceSandbox("w1", SANDBOX_ON);
+    const owner = workspaceSandbox("w1");
+    const hub = new Hub();
+    const told: SandboxFolders[] = [];
+    hub.broadcast = (message) => void (message.type === "sandbox.folders" && told.push(message.folders));
+    let running = false;
+    const conversations = { sandboxFoldersChanged: async () => {}, waitsForSandboxFolders: () => false, applySandboxFoldersNow: () => {}, sandboxFoldersGone: () => {} };
+    const service = new SandboxFolderService(store, hub, conversations, { folderRefusal: async () => null, folderStateOf: () => ({ kind: "in-sandbox" }), confirmedRunning: () => running });
+    store.addSandboxFolder(owner, { path: "/home/me/notes", writable: false, addedAt: 1 });
+
+    expect(service.all()).toEqual([{ owner, folders: [{ path: "/home/me/notes", writable: false, addedAt: 1, state: { kind: "in-sandbox" } }], waiting: false, running: false }]);
+    running = true;
+    service.vmChanged(owner);
+    running = false;
+    service.vmChanged(owner);
+    expect(told.map((folders) => folders.running)).toEqual([true, false]);
+  });
+
   test("change their access through the same checks as an add, and one no longer read and write keeps its repositories' hooks off for 7 days", async () => {
     const store = new Store(":memory:");
     store.insertWorkspace({ id: "w1", name: "project", path: "/home/me/project", defaultLaunch: BUILDER, createdAt: 1 });
@@ -708,6 +732,7 @@ describe("the folders added to a sandbox", () => {
         return folder.path === "/home/me/notes" ? { kind: "needs-repository" } : null;
       },
       folderStateOf: () => ({ kind: "in-sandbox" }),
+      confirmedRunning: () => true,
     });
     store.addSandboxFolder(owner, { path: "/home/me/notes", writable: false, addedAt: 1 });
     store.addSandboxFolder(owner, { path: "/home/me/library", writable: false, addedAt: 2 });

@@ -65,6 +65,8 @@ const sandboxDialog = (page: Page) => page.getByRole("dialog", { name: "Sandbox 
 const folderList = (dialog: Locator) => dialog.getByRole("region", { name: "Folders from this computer" });
 const folderRow = (dialog: Locator, path: string) => folderList(dialog).locator(`li[data-folder-path="${path}"]`);
 const waitingNote = (dialog: Locator) => folderList(dialog).getByRole("status");
+const notRunningNote = (dialog: Locator) => folderList(dialog).locator(".sandbox-folders-not-running");
+const NOT_RUNNING = "The sandbox isn't running now. It starts with these folders at the next turn.";
 
 /** Each call the fake `container` got, by its arguments. */
 const containerCalls = (): string[][] =>
@@ -165,7 +167,7 @@ test("the owner gives the workspace's sandbox folders of this computer, read onl
     .find((line) => line.startsWith("agent new "))!
     .slice("agent new ".length);
 
-  await test.step("a folder that isn't there, or is a hidden one of home, is refused saying why; one in home goes in, read only, the VM restarting with it at once while no turn runs", async () => {
+  await test.step("a folder that isn't there, or is a hidden one of home, is refused saying why; one in home goes in, read only, the VM stopping at once while no turn runs, to start with it at the next, which the list says", async () => {
     const dialog = await openSandbox(page);
     await addFolder(dialog, "~/gone");
     await expect(folderList(dialog).getByRole("alert")).toHaveText("There is no folder there.");
@@ -175,19 +177,24 @@ test("the owner gives the workspace's sandbox folders of this computer, read onl
     const row = folderRow(dialog, notes);
     await expect(row.locator(".sandbox-folder-path")).toHaveText("~/notes");
     await expect(row.getByRole("combobox", { name: "Access to ~/notes" })).toHaveValue("read-only");
-    await expect(row.locator(".sandbox-folder-state")).toHaveText("In the sandbox");
     await expect(folderList(dialog).getByRole("textbox", { name: "Folder to add" })).toHaveCount(0);
     await expect(waitingNote(dialog)).toHaveCount(0);
     await expect.poll(() => containerCalls().filter(([command]) => command === "stop").length).toBeGreaterThan(0);
+    await expect(notRunningNote(dialog)).toHaveText(NOT_RUNNING);
+    await expect(row.locator(".sandbox-folder-state")).toHaveText("");
     await closeSandbox(dialog);
   });
 
-  await test.step("the agent resumes its session in the new VM, which mounts the folder read-only at its own path, and is given it", async () => {
+  await test.step("the agent resumes its session in the new VM, which mounts the folder read-only at its own path, and is given it, the list saying it is in the sandbox", async () => {
     await sendMessage(page, "ADDED FOLDERS");
     await waitForTurnToEnd(page);
     await expect(lastAgentMessage(page)).toHaveText(`Added folders: ${notes}`);
     expect(mountsOf(containerRuns().at(-1)!)).toContain(`${notes}:${notes}:ro`);
     expect(agentLogLines()).toContain(`agent resumed ${sessionId}`);
+    const dialog = await openSandbox(page);
+    await expect(folderRow(dialog, notes).locator(".sandbox-folder-state")).toHaveText("In the sandbox");
+    await expect(notRunningNote(dialog)).toHaveCount(0);
+    await closeSandbox(dialog);
   });
 
   const turnMayEnd = join(host.root, "turn-may-end");
@@ -297,7 +304,8 @@ test("the owner picks each folder's access: read and write takes only a reposito
     await list.getByRole("radiogroup", { name: "Access" }).getByRole("radio", { name: "Read and write" }).check();
     await addFolder(dialog, "~/library");
     await expect(accessOf(dialog, library, "~/library")).toHaveValue("read-and-write");
-    await expect(folderRow(dialog, library).locator(".sandbox-folder-state")).toHaveText("In the sandbox");
+    await expect(folderRow(dialog, library).locator(".sandbox-folder-state")).toHaveText("");
+    await expect(notRunningNote(dialog)).toHaveText(NOT_RUNNING);
     await closeSandbox(dialog);
     await askAddedFolders(page);
     await expect(lastAgentMessage(page)).toHaveText(`Added folders: ${docs}, ${plain}, ${library}`);

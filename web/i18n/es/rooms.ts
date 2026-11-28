@@ -338,6 +338,7 @@ export const rooms: Messages["rooms"] = {
       addLabel: "Carpeta que añadir",
       addButton: "Añadir",
       waiting: "El sandbox se reinicia con sus carpetas cuando los agentes terminen sus turnos.",
+      notRunning: "El sandbox no está en marcha ahora. Arranca con estas carpetas en el próximo turno.",
       applyNow: "Aplicar ahora",
       refused: {
         "not-a-folder": "Ahí no hay ninguna carpeta.",

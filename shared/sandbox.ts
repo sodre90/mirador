@@ -262,11 +262,12 @@ export interface ShownSandboxFolder extends SandboxFolder {
   state: SandboxFolderState;
 }
 
-/** A sandbox's added folders, oldest first, and whether a change to them waits for its agents' turns to end. */
+/** A sandbox's added folders, oldest first, whether a change to them waits for its agents' turns to end, and whether its VM runs now. */
 export interface SandboxFolders {
   owner: SandboxOwner;
   folders: ShownSandboxFolder[];
   waiting: boolean;
+  running: boolean;
 }
 
 /** Why a room or workspace can't have its sandbox: this computer's reason, and each of a room's agents' and its workspace's. */

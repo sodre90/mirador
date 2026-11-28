@@ -47,7 +47,7 @@ function hostFor(workspaces: { current: string }) {
     foldersOf: () => folders,
     networkOf: () => reached.now,
     otherSandboxes: () => ({ workspaces: [], writableFolders: [], writableFoldersOn: [], foldersLeft: [] }),
-    foldersStarted: () => {},
+    agentsVmChanged: () => {},
     runtimeChanged: () => {},
     places: { home: "/nonexistent-home", dataDir: join(scratch, "mirador-data"), checkout: "/nonexistent-checkout", computersOwn: [] },
   };
@@ -116,11 +116,11 @@ describe("the VM of an agent someone brought into a sandboxed room", () => {
     const { workspace, host, cli, folders, sandboxes } = sandboxedRoom();
     folders.push({ path: repository(), writable: false } as SandboxFolder);
     writeFileSync(join(workspace, "CLAUDE.md"), "The owner's.\n");
-    let foldersStarted = 0;
-    host.foldersStarted = () => void (foldersStarted += 1);
+    let ownVmChanges = 0;
+    host.agentsVmChanged = () => void (ownVmChanges += 1);
     const own = await sandboxes.launch(ownAgent(workspace));
     const launched = await sandboxes.launchForBrought(brought(workspace));
-    expect(foldersStarted).toBe(1);
+    expect(ownVmChanges).toBe(1);
 
     const [ownRun, run] = cli.callsOf("run");
     expect(nameIn(run!)).not.toBe(nameIn(ownRun!));

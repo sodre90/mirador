@@ -96,7 +96,7 @@ function sandboxedWorkspace(sandbox: SandboxSetting = SANDBOX_ON) {
     foldersOf: () => [],
     networkOf: () => "closed" as const,
     otherSandboxes: () => ({ workspaces: [], writableFolders: [], writableFoldersOn: [], foldersLeft: [] }),
-    foldersStarted: () => {},
+    agentsVmChanged: () => {},
     runtimeChanged: () => {},
     places: { home: "/nonexistent-home", dataDir: config.dataDir, checkout: "/nonexistent-checkout", computersOwn: [] },
   };
