@@ -34,7 +34,7 @@ const folders: string[] = [];
 afterEach(() => folders.splice(0).forEach((folder) => rmSync(folder, { recursive: true, force: true })));
 
 const folderNamed = (name: string) => {
-  const folder = realpathSync(mkdtempSync(join(tmpdir(), name)));
+  const folder = realpathSync.native(mkdtempSync(join(tmpdir(), name)));
   folders.push(folder);
   return folder;
 };
