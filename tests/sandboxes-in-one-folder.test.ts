@@ -5,7 +5,7 @@ import { dirname, join } from "node:path";
 import { englishProblem } from "../shared/host-problems.ts";
 import { HELD_CHANGES_MOST, ownerKey, roomSandbox, workspaceSandbox, type HeldChange, type SandboxBlocker, type SandboxFolder, type SandboxNotReadyWhy, type SandboxOwner } from "../shared/sandbox.ts";
 import type { OtherSandboxes } from "../host/sandbox/added-folders.ts";
-import { ANTHROPIC_API } from "../host/sandbox/model-proxy.ts";
+import { ANTHROPIC_API, CLAUDE_FAMILIES } from "../host/sandbox/model-proxy.ts";
 import { Sandboxes, type SandboxHost } from "../host/sandbox/sandboxes.ts";
 import type { VmPlan } from "../host/sandbox/vm-launcher.ts";
 import { FakeVmLauncher } from "./fake-vm-launcher.ts";
@@ -76,7 +76,7 @@ function computer({ planLookedAtMs = 60_000 } = {}) {
       version: "2.1.330",
       workingDirectory: workspace,
       given: { ANTHROPIC_API_KEY: "sk-ant-the-profiles-own-key-1234" },
-      route: { upstream: ANTHROPIC_API, api: "anthropic-messages", key: "sk-ant-the-profiles-own-key-1234", keyHeader: "x-api-key", headers: [] },
+      route: { upstream: ANTHROPIC_API, api: "anthropic-messages", key: "sk-ant-the-profiles-own-key-1234", keyHeader: "x-api-key", headers: [], models: { families: CLAUDE_FAMILIES, ids: [] } },
       agent: ["/usr/local/bin/bun", "agent.js"],
     });
   };
@@ -555,7 +555,7 @@ describe("the held files of a folder several sandboxes work in", () => {
         version: "1.6.0",
         workingDirectory: workspace,
         given: {},
-        route: { upstream: ANTHROPIC_API, api: "anthropic-messages", key: "k", keyHeader: "x-api-key", headers: [] },
+        route: { upstream: ANTHROPIC_API, api: "anthropic-messages", key: "k", keyHeader: "x-api-key", headers: [], models: { families: CLAUDE_FAMILIES, ids: [] } },
         agent: ["/usr/local/bin/bun", "pi-acp.js"],
       });
     await launchPi("pi-one");

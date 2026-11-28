@@ -1070,7 +1070,7 @@ export class Sandboxes {
     await Promise.all(configFolders.map((folder) => mkdir(folder, { recursive: true, mode: 0o700 })));
     const [canvas, model] = [join(socketsFolder, "canvas.sock"), join(socketsFolder, "model.sock")];
     vm.sockets.push(await startCanvasSocket(canvas, CANVAS_RELAY_PORT, this.host.canvasOf(vm.owner)));
-    vm.sockets.push(await startModelProxy(model, MODEL_RELAY_PORT, (profileId) => vm.routes.get(profileId) ?? null));
+    vm.sockets.push(await startModelProxy(model, MODEL_RELAY_PORT, (profileId) => vm.routes.get(profileId) ?? null, () => this.host.networkOf(vm.owner)));
     const writtenThroughGuard = this.launcher.filesOwner !== AGENT_USER;
     return {
       mounts: [...(writtenThroughGuard ? [] : configFolders.map((folder) => atItsOwnPath(folder, false))), atItsOwnPath(agentPackages(), true)],

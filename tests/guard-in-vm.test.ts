@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { roomSandbox, type SandboxFolder } from "../shared/sandbox.ts";
 import { AppleContainer } from "../host/sandbox/apple-container.ts";
-import { ANTHROPIC_API } from "../host/sandbox/model-proxy.ts";
+import { ANTHROPIC_API, CLAUDE_FAMILIES } from "../host/sandbox/model-proxy.ts";
 import { linuxEnginesHere } from "../host/sandbox/engines.ts";
 import { Sandboxes, type SandboxHost } from "../host/sandbox/sandboxes.ts";
 import { agentProgramsInVm, GUARD_IN_VM } from "../host/sandbox/tools-folder.ts";
@@ -91,7 +91,7 @@ function sandboxHere() {
       version: CLAUDE_VERSION,
       workingDirectory: workspace,
       given: {},
-      route: { upstream: ANTHROPIC_API, api: "anthropic-messages", key: "sk-ant-none-1234567890", keyHeader: "x-api-key", headers: [] },
+      route: { upstream: ANTHROPIC_API, api: "anthropic-messages", key: "sk-ant-none-1234567890", keyHeader: "x-api-key", headers: [], models: { families: CLAUDE_FAMILIES, ids: [] } },
       agent,
     });
   const asAgent = async (command: string[], input = "") => {

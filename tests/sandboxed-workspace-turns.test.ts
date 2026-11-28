@@ -24,6 +24,7 @@ import { NO_SANDBOX, ownerKey, roomSandbox, workspaceSandbox, type SandboxOwner,
 import { agentWithModes } from "./agent-with-modes.ts";
 import { FakeVmLauncher } from "./fake-vm-launcher.ts";
 import { prepareProgramsLeavingAMark, programLeavingAMark } from "./program-leaving-a-mark.ts";
+import { CLAUDE_FAMILIES } from "../host/sandbox/model-proxy.ts";
 
 setDefaultTimeout(20_000);
 
@@ -617,7 +618,7 @@ test("one workspace's VM sees neither another workspace's nor a room's: its own 
     version: "2.1.330",
     workingDirectory,
     given: { ANTHROPIC_API_KEY: "sk-ant-kept-on-this-mac", PATH: "/usr/bin" },
-    route: { upstream: "https://api.anthropic.com", api: "anthropic-messages" as const, key: "sk-ant-kept-on-this-mac", keyHeader: "x-api-key" as const, headers: [] },
+    route: { upstream: "https://api.anthropic.com", api: "anthropic-messages" as const, key: "sk-ant-kept-on-this-mac", keyHeader: "x-api-key" as const, headers: [], models: { families: CLAUDE_FAMILIES, ids: [] } },
     agent: ["/usr/local/bin/bun", "agent.js"],
   });
 

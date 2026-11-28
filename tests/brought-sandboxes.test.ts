@@ -8,7 +8,7 @@ import { vmEnvironment, withAnyFolderSafe } from "../host/sandbox/agent-environm
 import { DEFAULT_BASE_PATH } from "../host/sandbox/image.ts";
 import { BUN_FOLDER_IN_VM, BUN_IN_VM, GUARD_IN_VM, NODE_FOLDER_IN_VM } from "../host/sandbox/tools-folder.ts";
 import { mayDial } from "../host/sandbox/dialable-addresses.ts";
-import { ANTHROPIC_API } from "../host/sandbox/model-proxy.ts";
+import { ANTHROPIC_API, CLAUDE_FAMILIES } from "../host/sandbox/model-proxy.ts";
 import { Sandboxes, type AgentInSandbox, type BroughtAgentInSandbox, type SandboxHost } from "../host/sandbox/sandboxes.ts";
 import { FakeContainerCli } from "./fake-container-cli.ts";
 import { FakeVmLauncher } from "./fake-vm-launcher.ts";
@@ -62,7 +62,7 @@ const ownAgent = (workspace: string): AgentInSandbox => ({
   version: "2.1.330",
   workingDirectory: workspace,
   given: { ANTHROPIC_API_KEY: KEY, DEPLOY_TARGET: "staging" },
-  route: { upstream: ANTHROPIC_API, api: "anthropic-messages", key: KEY, keyHeader: "x-api-key", headers: [] },
+  route: { upstream: ANTHROPIC_API, api: "anthropic-messages", key: KEY, keyHeader: "x-api-key", headers: [], models: { families: CLAUDE_FAMILIES, ids: [] } },
   agent: ["/usr/local/bin/bun", "agent.js"],
 });
 

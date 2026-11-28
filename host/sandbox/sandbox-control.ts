@@ -88,7 +88,7 @@ export function modelInSandbox(profile: Profile, choices: EnvironmentChoices, en
   const { harness, name: agent } = profile;
   if (harness === "claude") {
     const how = signInElsewhere(environment);
-    const route = modelRouteOf(environment);
+    const route = modelRouteOf(environment, profile.model);
     const keyVariable = modelKeyVariableOf(environment);
     if (how || !route || !keyVariable) return { blocker: { kind: "agent-signs-in-elsewhere", agent, how: how ?? "subscription" } };
     return { route, kind: { harness, keyVariable } };

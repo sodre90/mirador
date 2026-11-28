@@ -10,6 +10,7 @@ import { otherSandboxesOf, SandboxFolderService } from "../host/sandbox-folders.
 import { addedFolderRefusal, folderToAdd, foldersMounted, type FolderSurroundings, type MountedFolder, type OtherSandboxes } from "../host/sandbox/added-folders.ts";
 import { AppleContainer } from "../host/sandbox/apple-container.ts";
 import { HOOKS_OFF_AFTER_SANDBOX_MS, repositoryHooksOff } from "../host/sandbox/hooks-off.ts";
+import { CLAUDE_FAMILIES } from "../host/sandbox/model-proxy.ts";
 import { NO_SANDBOXES, Sandboxes, type SandboxedAgents, type SandboxHost } from "../host/sandbox/sandboxes.ts";
 import { Store } from "../host/store.ts";
 import { SystemNotifications } from "../host/system-notifications.ts";
@@ -260,7 +261,7 @@ describe("the sandbox's VM", () => {
         version: "2.1.330",
         workingDirectory: surroundings.workspace!,
         given: { ANTHROPIC_API_KEY: KEY },
-        route: { upstream: "https://api.anthropic.com", api: "anthropic-messages", key: KEY, keyHeader: "x-api-key", headers: [] },
+        route: { upstream: "https://api.anthropic.com", api: "anthropic-messages", key: KEY, keyHeader: "x-api-key", headers: [], models: { families: CLAUDE_FAMILIES, ids: [] } },
         agent: ["/usr/local/bin/bun", "agent.js"],
       });
     const setFolders = (...given: (string | MountedFolder)[]) => (folders = given.map((folder, index) => ({ ...(typeof folder === "string" ? { path: folder, writable: false } : folder), addedAt: index })));

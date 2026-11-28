@@ -6,7 +6,7 @@ import { roomSandbox, SANDBOXED_HARNESSES, type SandboxAvailability, type Sandbo
 import { KEY_PLACEHOLDER } from "../host/sandbox/agent-environment.ts";
 import { Docker, ownBaseIn, othersContainersIn, saysNoSuchContainer } from "../host/sandbox/docker.ts";
 import { BASE_IMAGE_NAME, BASE_RECIPE } from "../host/sandbox/image.ts";
-import { ANTHROPIC_API } from "../host/sandbox/model-proxy.ts";
+import { ANTHROPIC_API, CLAUDE_FAMILIES } from "../host/sandbox/model-proxy.ts";
 import { sandboxConfigFolder, Sandboxes, type AgentInSandbox, type SandboxHost } from "../host/sandbox/sandboxes.ts";
 import { BUN_IN_VM, GUARD_IN_VM } from "../host/sandbox/tools-folder.ts";
 import { imageOfRun, isBaseCheck } from "./fake-container-cli.ts";
@@ -58,7 +58,7 @@ const agentIn = (workspace: string, changes: Partial<AgentInSandbox> = {}): Agen
   version: "2.1.330",
   workingDirectory: workspace,
   given: { ANTHROPIC_API_KEY: KEY, DEPLOY_TARGET: "staging" },
-  route: { upstream: ANTHROPIC_API, api: "anthropic-messages", key: KEY, keyHeader: "x-api-key", headers: [] },
+  route: { upstream: ANTHROPIC_API, api: "anthropic-messages", key: KEY, keyHeader: "x-api-key", headers: [], models: { families: CLAUDE_FAMILIES, ids: [] } },
   agent: ["/usr/local/bin/bun", "/checkout/node_modules/@agentclientprotocol/claude-agent-acp/dist/index.js"],
   ...changes,
 });

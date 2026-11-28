@@ -62,7 +62,14 @@ describe("how pi reaches its default model from a sandbox", () => {
 
     const { route, inVm, keyVariables } = throughProxy(files);
 
-    expect(route).toEqual({ upstream: "https://llm-gateway.example/v1", api: "openai-responses", key: GATEWAY_KEY, keyHeader: "authorization", headers: [["X-Team", TEAM]] });
+    expect(route).toEqual({
+      upstream: "https://llm-gateway.example/v1",
+      api: "openai-responses",
+      key: GATEWAY_KEY,
+      keyHeader: "authorization",
+      headers: [["X-Team", TEAM]],
+      models: { families: [], ids: ["gpt-6.1", "mini"] },
+    });
     expect(keyVariables.toSorted()).toEqual(["GATEWAY_TEAM", "LLM_GATEWAY_KEY"]);
     expect(inVm.providerId).toBe("gateway");
     expect(inVm.provider).toEqual({ api: "openai-responses", models: [gatewayModel, { id: "mini", name: "Mini" }] });

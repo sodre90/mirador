@@ -5,7 +5,7 @@ import { dirname, join } from "node:path";
 import { roomSandbox, type SandboxAvailability, type SandboxNotReadyWhy, type SandboxSetup } from "../shared/sandbox.ts";
 import { KEY_PLACEHOLDER } from "../host/sandbox/agent-environment.ts";
 import { BASE_IMAGE_NAME } from "../host/sandbox/image.ts";
-import { ANTHROPIC_API } from "../host/sandbox/model-proxy.ts";
+import { ANTHROPIC_API, CLAUDE_FAMILIES } from "../host/sandbox/model-proxy.ts";
 import { linuxEnginesHere } from "../host/sandbox/engines.ts";
 import { computersOwnOnLinux, containersLabelled, imageNamesIn, othersContainersIn, Podman, writableSourcesIn } from "../host/sandbox/podman.ts";
 import { Sandboxes, type AgentInSandbox, type SandboxHost } from "../host/sandbox/sandboxes.ts";
@@ -58,7 +58,7 @@ const agentIn = (workspace: string, changes: Partial<AgentInSandbox> = {}): Agen
   version: "2.1.330",
   workingDirectory: workspace,
   given: { ANTHROPIC_API_KEY: KEY, DEPLOY_TARGET: "staging", XDG_RUNTIME_DIR: "/run/user/given" },
-  route: { upstream: ANTHROPIC_API, api: "anthropic-messages", key: KEY, keyHeader: "x-api-key", headers: [] },
+  route: { upstream: ANTHROPIC_API, api: "anthropic-messages", key: KEY, keyHeader: "x-api-key", headers: [], models: { families: CLAUDE_FAMILIES, ids: [] } },
   agent: ["/usr/local/bin/bun", "/checkout/node_modules/@agentclientprotocol/claude-agent-acp/dist/index.js"],
   ...changes,
 });

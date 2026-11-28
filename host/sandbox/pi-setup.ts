@@ -142,13 +142,15 @@ export function piSandboxSetupOf({ models, settings, auth }: PiAgentFiles, envir
   if ("elsewhere" in key) return key;
   const headers = headersOf(provider, keyEnvironment);
   if ("elsewhere" in headers) return headers;
+  const modelsInVm = providerModels.filter(goesTheWayOf(provider, chosen));
   const inVm: PiModelInVm = {
     providerId: defaultProvider,
-    provider: { ...without(provider, KEPT_OF_THE_PROVIDER), api, models: providerModels.filter(goesTheWayOf(provider, chosen)).map((model) => without(model, KEPT_OF_A_MODEL)) },
+    provider: { ...without(provider, KEPT_OF_THE_PROVIDER), api, models: modelsInVm.map((model) => without(model, KEPT_OF_A_MODEL)) },
     settings: Object.fromEntries(Object.entries(settings as Named).filter(([name]) => MODEL_SETTINGS.includes(name))),
   };
   const keyHeader = api === "anthropic-messages" && provider.authHeader !== true ? "x-api-key" : "authorization";
-  const route: ModelRoute = { upstream, api, key: key.value, keyHeader, headers: headers.headers };
+  const allowed = { families: [], ids: modelsInVm.flatMap(({ id }) => (typeof id === "string" ? [id] : [])) };
+  const route: ModelRoute = { upstream, api, key: key.value, keyHeader, headers: headers.headers, models: allowed };
   if (holdsASecret(secretsOf(route))(JSON.stringify(inVm))) return { elsewhere: "unsupported-provider" };
   return { route, inVm, keyVariables: [...new Set([...key.variables, ...headers.variables])] };
 }

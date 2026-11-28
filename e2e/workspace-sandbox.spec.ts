@@ -886,7 +886,7 @@ const takenConnection = (socketPath: string) =>
   });
 
 /** What the model proxy answers a request the VM's model relay passes on, by the socket the VM was given. */
-async function askedThroughModelSocket(socketPath: string, path: string, headers: Record<string, string>) {
+async function askedThroughModelSocket(socketPath: string, path: string, headers: Record<string, string>, model: string, rest: object = {}) {
   const socket = await takenConnection(socketPath);
   return new Promise<string>((answered, failed) => {
     const asking = httpRequest({ createConnection: () => socket, path, method: "POST", headers: { host: "127.0.0.1:7702", "content-type": "application/json", connection: "close", ...headers } }, (response) => {
@@ -896,7 +896,7 @@ async function askedThroughModelSocket(socketPath: string, path: string, headers
       response.on("end", () => answered(`${response.statusCode} ${body.trim()}`));
     });
     asking.on("error", failed);
-    asking.end("{}");
+    asking.end(JSON.stringify({ model, ...rest }));
   });
 }
 
@@ -988,8 +988,9 @@ test("a pi profile's agent runs in the sandbox on the pi of this computer, reach
       const socket = run.find((argument) => argument.endsWith(":/run/mirador/model.sock"))!.split(":")[0]!;
       const routed = new URL(providers.gateway!.baseUrl).pathname;
       const inVm = { authorization: "Bearer kept-by-mirador", "x-pi-session-id": "a-session" };
-      expect(await askedThroughModelSocket(socket, `${routed}/chat/completions`, inVm)).toBe(`200 {"answered":true}`);
-      expect(await askedThroughModelSocket(socket, `${routed}/v1/messages`, inVm)).toBe("404 not a path of the model API");
+      expect(await askedThroughModelSocket(socket, `${routed}/chat/completions`, inVm, "e2e-model")).toBe(`200 {"answered":true}`);
+      expect(await askedThroughModelSocket(socket, `${routed}/chat/completions`, inVm, "elsewhere")).toBe(`403 "elsewhere" is not a model this agent may use from its sandbox`);
+      expect(await askedThroughModelSocket(socket, `${routed}/v1/messages`, inVm, "e2e-model")).toBe("404 not a path of the model API");
       expect(provider.requests.map(({ path, headers }) => ({ path, authorization: headers.authorization, team: headers["x-team"], session: headers["x-pi-session-id"] }))).toEqual([
         { path: "/v1/chat/completions", authorization: `Bearer ${PI_KEY}`, team: PI_TEAM, session: "a-session" },
       ]);
@@ -1041,7 +1042,12 @@ test("a Claude Code profile with CLAUDE_CODE_OAUTH_TOKEN runs in the sandbox wit
     const run = calls.findLast(([command, ...rest]) => command === "run" && rest.some((argument) => argument.startsWith("mirador.owner=workspace:")) && JSON.stringify(rest).includes(realpathSync(oauthWorkspace)))!;
     const socket = run.find((argument) => argument.endsWith(":/run/mirador/model.sock"))!.split(":")[0]!;
     const routed = new URL(baseUrlInVm!).pathname;
-    expect(await askedThroughModelSocket(socket, `${routed}/v1/messages?beta=true`, { authorization: "Bearer kept-by-mirador", "anthropic-beta": "claude-code-20250219,oauth-2025-04-20" })).toBe(`200 {"answered":true}`);
+    const oauthsAsking = { authorization: "Bearer kept-by-mirador", "anthropic-beta": "claude-code-20250219,oauth-2025-04-20" };
+    expect(await askedThroughModelSocket(socket, `${routed}/v1/messages?beta=true`, oauthsAsking, "claude-sonnet-5-5")).toBe(`200 {"answered":true}`);
+    const searchingTheWeb = { tools: [{ type: "web_search_20250305", name: "web_search" }] };
+    expect(await askedThroughModelSocket(socket, `${routed}/v1/messages?beta=true`, oauthsAsking, "claude-sonnet-5-5", searchingTheWeb)).toBe(
+      "403 this sandbox's network is closed, so the model's tools that reach the internet are too",
+    );
     expect(provider.requests.map(({ path, headers }) => ({ path, authorization: headers.authorization, beta: headers["anthropic-beta"], xApiKey: headers["x-api-key"] }))).toEqual([
       { path: "/v1/messages?beta=true", authorization: `Bearer ${OAUTH_TOKEN}`, beta: "claude-code-20250219,oauth-2025-04-20", xApiKey: undefined },
     ]);
