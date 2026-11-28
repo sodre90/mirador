@@ -12,6 +12,9 @@ const PROFILE = "advisor";
 const GIVES_UP_ON_STALLED_REPLY = "CLAUDE_ENABLE_BYTE_WATCHDOG=1\nCLAUDE_BYTE_STREAM_IDLE_TIMEOUT_MS=10000";
 /** How claude-agent-acp ends a server tool call that a later reply showed will get no result. */
 const ADVISOR_CALL_GIVEN_UP = "Claude Code replaced the response that made this tool call, and stopped the call.";
+/** A tool call's card draws what it holds once it opens. */
+const openAdvisorCard = (page: Page) =>
+  page.locator(".timeline:visible details.tool").filter({ has: page.locator(".tool-title", { hasText: /^advisor$/ }) }).locator(":scope > summary").click();
 const keptOutLines = () => host.log.split("\n").filter((line) => line.includes("wait outside its running turn"));
 
 /** When the page first hears of the advisor's call ending, and of the agent's own tool starting and finishing. */
@@ -58,6 +61,7 @@ test("an advisor call Claude makes after another tool call in the same reply, le
   const timeline = page.locator(".timeline:visible");
   await expect(timeline).toContainText("ran-42");
   await expect(lastAgentMessage(page)).toContainText("Answered:");
+  await openAdvisorCard(page);
   await expect(timeline).toContainText(ADVISOR_CALL_GIVEN_UP);
   await expect(timeline).not.toContainText("without returning results");
 });
@@ -89,5 +93,6 @@ test("a message sent while the advisor runs joins the turn once Claude Code give
   await expect(lastAgentMessage(page)).toHaveText(new RegExp(`Answered: ${literally(joining)}$`));
   expect(eventsInOrder, "the message joined the turn rather than waiting for it to end").toEqual([stalling, joining, "turn-end"]);
   expect(advisorEndAndAgentTool, "the advisor's call ended once Claude Code asked again, not at the turn's end").toEqual(["agent's tool started", "advisor ended", "agent's tool finished"]);
+  await openAdvisorCard(page);
   await expect(timeline).toContainText(ADVISOR_CALL_GIVEN_UP);
 });
